@@ -21,6 +21,7 @@ pub mod qobject {
         #[qproperty(QString, dir)]
         #[qproperty(i32, current)]
         #[qproperty(QString, shot)]
+        #[qproperty(QString, backlinks)]
         #[qproperty(QString, shot_keys, cxx_name = "shotKeys")]
         type Zett = super::ZettRust;
 
@@ -49,6 +50,10 @@ pub mod qobject {
         fn new_page(self: Pin<&mut Zett>, title: &QString);
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
+        /// opens the page with this title, making it if there is none ([[links]], quick open)
+        #[qinvokable]
+        #[cxx_name = "openTitle"]
+        fn open_title(self: Pin<&mut Zett>, title: &QString);
         /// takes in pages changed on disk by other programs (Neovim, git…)
         #[qinvokable]
         #[cxx_name = "checkDisk"]
@@ -80,6 +85,8 @@ pub struct ZettRust {
     current: i32,
     /// ZETT_SHOT: render, save a picture of the window there, quit (headless checks)
     shot: QString,
+    /// pages that link to the open one: [{title, text}]
+    backlinks: QString,
     /// ZETT_SHOT_KEYS: Vim keys fed into the second block before the capture (tests)
     shot_keys: QString,
     /// the block in Vim normal mode and its editor (undo and registers live here)
@@ -110,6 +117,7 @@ impl Default for ZettRust {
             dir: QString::from(&dir.display().to_string()),
             current: -1,
             shot: QString::from(&std::env::var("ZETT_SHOT").unwrap_or_default()),
+            backlinks: QString::from("[]"),
             vim: None,
             shot_keys: QString::from(&std::env::var("ZETT_SHOT_KEYS").unwrap_or_default()),
         };
@@ -176,6 +184,19 @@ impl ZettRust {
         }).collect();
         self.title = QString::from(&f.ws.text(p));
         self.blocks = QString::from(&serde_json::Value::Array(list).to_string());
+        // backlinks: blocks of other pages that mention [[this page]]
+        let needle = format!("[[{}]]", f.ws.text(p).to_lowercase());
+        let mut back = Vec::new();
+        for q in f.ws.pages() {
+            if q == p { continue; }
+            for b in f.ws.children(q) {
+                let t = f.ws.text(b);
+                if t.to_lowercase().contains(&needle) {
+                    back.push(serde_json::json!({ "title": f.ws.text(q), "text": t }));
+                }
+            }
+        }
+        self.backlinks = QString::from(&serde_json::Value::Array(back).to_string());
     }
 
     fn block(&self, i: i32) -> Option<BlockId> {
@@ -194,13 +215,14 @@ impl ZettRust {
 
 impl qobject::Zett {
     fn publish(mut self: Pin<&mut Self>) {
-        let (blocks, title, pages) = {
+        let (blocks, title, pages, back) = {
             let r = self.as_mut().rust_mut();
             let r = r.get_mut();
             r.refresh_pages();
             r.refresh_page();
-            (r.blocks.clone(), r.title.clone(), r.pages.clone())
+            (r.blocks.clone(), r.title.clone(), r.pages.clone(), r.backlinks.clone())
         };
+        self.as_mut().set_backlinks(back);
         self.as_mut().set_pages(pages);
         self.as_mut().set_title(title);
         self.as_mut().set_blocks(blocks);
@@ -382,5 +404,35 @@ impl qobject::Zett {
         if changed {
             self.publish();
         }
+    }
+}
+
+impl qobject::Zett {
+    fn open_title(mut self: Pin<&mut Self>, title: &QString) {
+        let title = title.to_string().trim().to_string();
+        if title.is_empty() {
+            return;
+        }
+        let idx = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let Some(f) = r.folder.as_mut() else { return };
+            // an existing page (title, any case), else a new one: links create pages
+            let page = f.ws.pages().into_iter().find(|p| f.ws.text(*p).eq_ignore_ascii_case(&title));
+            let page = match page {
+                Some(p) => p,
+                None => {
+                    let Ok(p) = f.new_page(&title) else { return };
+                    let _ = f.ws.append(p, Kind::Paragraph, "");
+                    let _ = f.save_page(p);
+                    p
+                }
+            };
+            r.vim = None;
+            r.refresh_pages();
+            r.order.iter().position(|x| *x == page).map(|i| i as i32).unwrap_or(0)
+        };
+        self.as_mut().set_current(idx);
+        self.publish();
     }
 }

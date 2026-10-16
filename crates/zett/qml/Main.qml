@@ -52,6 +52,12 @@ ApplicationWindow {
         Qt.callLater(() => { const d = list.itemAtIndex(i); if (d) d.focusEditor(0) })
     }
 
+    // [[Page]] → a link (the text is escaped first: it is shown as StyledText)
+    function linkify(s) {
+        const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
+        return esc.replace(/\[\[([^\]]+)\]\]/g, (m, title) => `<a href="${encodeURIComponent(title)}"><u>${title}</u></a>`)
+    }
+
     function focusBlock(i, end) {
         const d = list.itemAtIndex(i)
         if (d) d.focusEditor(end ? -1 : 0)
@@ -296,8 +302,26 @@ ApplicationWindow {
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
+                            // shown instead of the raw text while not editing: [[links]] are clickable
+                            Text {
+                                id: shown
+                                anchors.fill: edit
+                                visible: !edit.activeFocus && edit.text.indexOf("[[") >= 0
+                                text: win.linkify(edit.text)
+                                textFormat: Text.StyledText
+                                wrapMode: Text.Wrap
+                                font: edit.font
+                                color: edit.color
+                                linkColor: t.accent
+                                onLinkActivated: (l) => app.openTitle(decodeURIComponent(l))
+                                HoverHandler { cursorShape: shown.hoveredLink ? Qt.PointingHandCursor : Qt.IBeamCursor }
+                                TapHandler { onTapped: if (!shown.hoveredLink) edit.forceActiveFocus() }
+                                z: 2
+                            }
+
                             TextEdit {
                                 id: edit
+                                opacity: shown.visible ? 0 : 1
                                 anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0 }
                                 text: blockItem.modelData.text
                                 wrapMode: TextEdit.Wrap
@@ -410,16 +434,50 @@ ApplicationWindow {
                     }
                 }
 
-                // a click below the last block continues the page
+                // a click below the last block continues the page; then the pages linking here
                 footer: Item {
                     width: list.width
-                    height: 160
+                    height: 160 + backCol.implicitHeight
+                    ColumnLayout {
+                        id: backCol
+                        x: (list.width - list.column) / 2
+                        y: 140
+                        width: list.column
+                        spacing: 6
+                        readonly property var items: { try { return JSON.parse(app.backlinks) } catch (e) { return [] } }
+                        visible: items.length > 0
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: t.rule; opacity: 0.6 }
+                        Text { text: `Linked from ${backCol.items.length} ${backCol.items.length === 1 ? "place" : "places"}`; color: t.faint; font.family: t.sans; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.topMargin: 6 }
+                        Repeater {
+                            model: backCol.items
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: blCol.implicitHeight + 16
+                                radius: 10
+                                color: blHov.hovered ? t.raised : t.card
+                                ColumnLayout {
+                                    id: blCol
+                                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
+                                    spacing: 2
+                                    Text { text: modelData.title; color: t.accent; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+                                    Text { Layout.fillWidth: true; text: modelData.text; color: t.dim; font.family: t.sans; font.pixelSize: 13; elide: Text.ElideRight }
+                                }
+                                HoverHandler { id: blHov; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: app.openTitle(modelData.title) }
+                            }
+                        }
+                    }
+                    Item {
+                        width: parent.width
+                        height: 130
                     TapHandler {
                         onTapped: {
                             const last = win.blocks.length - 1
                             if (last >= 0 && win.blocks[last].kind === "paragraph" && win.blocks[last].text === "") win.focusBlock(last, false)
                             else win.focusAfter = app.addBlock(-1, "paragraph")
                         }
+                    }
                     }
                 }
             }
@@ -436,10 +494,76 @@ ApplicationWindow {
                     Text { text: `${win.blocks.length} blocks · saved as Markdown`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                     Text { visible: win.vimMode.length > 0; text: win.vimMode; color: win.vimMode === "NORMAL" ? t.accent : t.dim; font.family: t.mono; font.pixelSize: 11; font.weight: Font.Bold }
                     Item { Layout.fillWidth: true }
-                    Text { text: "Esc Vim keys · Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    Text { text: "Ctrl+P go to · [[Page]] links · Esc Vim keys · Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
                 }
             }
         }
     }
+    }
+
+    // ── Ctrl+P: quick open — type to filter, Enter opens, or makes a page with that name ──
+    Shortcut { sequence: "Ctrl+P"; onActivated: { quickField.text = ""; quick.open(); quickField.forceActiveFocus() } }
+    Popup {
+        id: quick
+        x: (win.width - width) / 2
+        y: 80
+        width: Math.min(560, win.width - 80)
+        padding: 10
+        modal: true
+        focus: true
+        background: Rectangle { radius: 16; color: t.raised; border.width: 1; border.color: t.rule }
+        readonly property var matches: {
+            const q = quickField.text.trim().toLowerCase()
+            const all = win.pages.map(p => p.title)
+            const hit = q.length === 0 ? all : all.filter(tl => tl.toLowerCase().includes(q))
+            const exact = all.some(tl => tl.toLowerCase() === q)
+            return q.length > 0 && !exact ? hit.concat([{ create: quickField.text.trim() }]) : hit
+        }
+        property int sel: 0
+        onMatchesChanged: sel = 0
+        function choose(i) {
+            const m = matches[i]
+            if (m === undefined) return
+            app.openTitle(typeof m === "string" ? m : m.create)
+            quick.close()
+        }
+        contentItem: ColumnLayout {
+            spacing: 8
+            TextField {
+                id: quickField
+                Layout.fillWidth: true
+                placeholderText: "Go to a page, or name a new one"
+                font.family: t.sans; font.pixelSize: 16
+                color: t.text
+                placeholderTextColor: t.faint
+                background: Rectangle { radius: 10; color: t.card }
+                Keys.onDownPressed: quick.sel = Math.min(quick.sel + 1, quick.matches.length - 1)
+                Keys.onUpPressed: quick.sel = Math.max(quick.sel - 1, 0)
+                Keys.onReturnPressed: quick.choose(quick.sel)
+                Keys.onEscapePressed: quick.close()
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, 360)
+                clip: true
+                model: quick.matches
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    width: ListView.view.width
+                    height: 36
+                    radius: 8
+                    color: index === quick.sel ? Qt.alpha(t.accent, 0.18) : "transparent"
+                    Text {
+                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                        text: typeof modelData === "string" ? modelData : `+  New page “${modelData.create}”`
+                        color: typeof modelData === "string" ? t.text : t.accent
+                        font.family: t.sans; font.pixelSize: 14
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) quick.sel = index }
+                    TapHandler { onTapped: quick.choose(index) }
+                }
+            }
+        }
     }
 }

@@ -29,5 +29,6 @@ See PLAN.md for the vision and milestones.
 ## Next
 - [ ] watch the folder: reload pages changed by other editors (Neovim, git pull)
 - [ ] undo history per page that survives a restart (through the CRDT)
-- [ ] slash menu, drag to reorder blocks, [[links]] and quick open (M2)
+- [x] [[links]] (click opens or creates the page), backlinks under each page, Ctrl+P quick open
+- [ ] slash menu, drag to reorder blocks, block references ((id)) (M2)
 - [ ] visual mode, text objects, search in the window (M1)
