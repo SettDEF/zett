@@ -5,6 +5,8 @@
 
 pub mod blocks;
 pub mod markdown;
+#[cfg(feature = "fs")]
+pub mod folder;
 pub use blocks::{BlockId, Kind, Workspace};
 
 use ropey::Rope;

@@ -58,6 +58,24 @@ pub fn to_markdown(ws: &Workspace, page: BlockId) -> String {
 pub fn from_markdown(ws: &Workspace, md: &str, fallback_title: &str) -> Result<BlockId> {
     let (title, body) = split_front_matter(md);
     let page = ws.new_page(title.as_deref().unwrap_or(fallback_title))?;
+    read_blocks(ws, page, body)?;
+    Ok(page)
+}
+
+/// Replaces a page's title and blocks with what the Markdown says (after an
+/// edit of its text). The page keeps its id, so links to it stay valid.
+pub fn replace_page(ws: &Workspace, page: BlockId, md: &str) -> Result<()> {
+    let (title, body) = split_front_matter(md);
+    if let Some(t) = title {
+        ws.set_text(page, &t)?;
+    }
+    for b in ws.children(page) {
+        ws.remove(b)?;
+    }
+    read_blocks(ws, page, body)
+}
+
+fn read_blocks(ws: &Workspace, page: BlockId, body: &str) -> Result<()> {
     let lines: Vec<&str> = body.lines().collect();
     let mut i = 0;
     while i < lines.len() {
@@ -124,7 +142,7 @@ pub fn from_markdown(ws: &Workspace, md: &str, fallback_title: &str) -> Result<B
         }
         ws.append(page, Kind::Paragraph, &p.join("\n"))?;
     }
-    Ok(page)
+    Ok(())
 }
 
 fn fence_of(t: &str) -> Option<String> {
@@ -224,5 +242,21 @@ mod tests {
         let ws2 = Workspace::new();
         let p2 = from_markdown(&ws2, &md, "p").unwrap();
         assert_eq!(ws2.text(ws2.children(p2)[0]), "```\nnested\n```");
+    }
+}
+
+#[cfg(test)]
+mod replace_tests {
+    use super::*;
+    use crate::Kind;
+
+    #[test]
+    fn replace_keeps_the_page_id() {
+        let ws = Workspace::new();
+        let p = from_markdown(&ws, "# a\n\nold\n", "t").unwrap();
+        replace_page(&ws, p, "---\ntitle: New\n---\n\n- [x] done\n").unwrap();
+        assert_eq!(ws.text(p), "New");
+        assert_eq!(ws.children(p).iter().map(|b| ws.kind(*b)).collect::<Vec<_>>(), vec![Kind::Todo { checked: true }]);
+        assert_eq!(ws.pages(), vec![p]);
     }
 }
