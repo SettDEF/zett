@@ -141,3 +141,21 @@ colours (tinct), padding and opacity/blur, the tmux-style keys and pane/tab
 bindings, the status/tab bar look, and the ii-decor button overlay. Not a
 line-by-line port: each feature is re-expressed the zash way (`term.lua`), and
 WezTerm-only workarounds are dropped. Do this at T4 (Lua config).
+
+## The bar: better than the best, measured
+
+zash is compared, with numbers, against the best terminals there are, on
+their own strengths. A release that loses a comparison is not done.
+
+| Rival | Its strength | zash must |
+|---|---|---|
+| Ghostty | native feel, correctness, speed | match its vttest/esctest correctness and its throughput |
+| Kitty | graphics + keyboard protocols, kittens | support both protocols fully; Lua does what kittens do |
+| Alacritty | raw throughput, low latency | ≥ its vtebench throughput, ≤ its input latency |
+| WezTerm | Lua config, multiplexing, SSH domains | everything your WezTerm config uses, better (see "Starting config") |
+| Warp | blocks, completions, AI | blocks and popups as good, local-first, no account, no cloud |
+| Neovide | smoothness, cursor animation | equally smooth, in a real terminal |
+
+Measured on every release, on this laptop: input latency (Typometer-style),
+throughput (vtebench), frame time while scrolling at 120 Hz, cold start, memory
+per tab, idle CPU (must be ~0), and correctness (vttest, esctest).
