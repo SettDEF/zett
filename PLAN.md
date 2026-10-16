@@ -125,6 +125,32 @@ code that can read your whole disk).
 - **Built-ins are plugins too**: tables, the canvas, the graph and the Doom
   layer are written against the public API, which keeps that API complete.
 
+## Emacs's applications, the zett way
+
+Emacs is more than an editor because everything is a buffer, so one set of
+skills (search, motions, macros) works in mail, git, files and search results,
+and editing a view changes the world behind it. In zett everything is a block,
+which allows the same one level higher:
+
+- **Edit the view, change the world.** A folder block where renaming a line
+  renames the file (dired), search results you edit to change every file
+  (wgrep), a git status block where deleting a line unstages it.
+- **A git view as good as Magit**: stage lines and hunks with Vim keys,
+  commit, rebase, history as blocks you can link.
+- **Capture and time tracking**: `SPC x` capture templates (also from the
+  desktop through Dotos's Super+R), a clock on any task, reports as queries.
+- **Agenda**: every task with a date across the workspace, plus Dotos and
+  Kalends, in one view (Org agenda).
+- **Export**: a page as slides, PDF, or a website (with "publish").
+- **Remote workspaces**: open a zett folder over SSH as if it were local
+  (TRAMP), naturally with `zett -t` on the other side.
+- **Tables with formulas** (Org tables) as part of the databases.
+- **Mail and feeds as sources**: a query block shows "unread from X" or new
+  posts next to the notes about them.
+
+Not needed: a window manager (the quickshell desktop is that, and blocks can
+be shell widgets) and a built-in browser (tela-zen).
+
 ## How a workspace is stored
 
 - **A folder of Markdown files** stays the truth you can see: one `.md` per
