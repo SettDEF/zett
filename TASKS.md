@@ -19,3 +19,15 @@ See PLAN.md for the vision and milestones.
 - [x] operation-based undo (cost of the change, not of the file): x/dd/p/u 2–4 µs in 100k lines
 - [x] Neovim comparison harness (scripts-nvim-compare.sh)
 - [ ] M1: undo/redo cursor placement matches Neovim (diff: `abc` + `ofoo<Esc>Obar<Esc>uu<C-r>` → nvim 1:1, zett 1:3)
+
+## Done the night of 2026-10-16/17
+- [x] folder mirror: a workspace is a folder of .md files (~/zett or $ZETT_DIR)
+- [x] CLI: ls, show, new, add, edit (Vim keys), completions, --json
+- [x] the first window: pages sidebar, block page view, Markdown shortcuts, autosave, tinct colours
+- [x] Vim normal mode in the window (Esc): zett-edit per block, block cursor, NORMAL/INSERT, j/k across blocks
+
+## Next
+- [ ] watch the folder: reload pages changed by other editors (Neovim, git pull)
+- [ ] undo history per page that survives a restart (through the CRDT)
+- [ ] slash menu, drag to reorder blocks, [[links]] and quick open (M2)
+- [ ] visual mode, text objects, search in the window (M1)
