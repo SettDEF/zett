@@ -6,14 +6,13 @@ EU/DPMA still to check by hand before anything permanent.
 
 ## The idea in one paragraph
 
-Take the best thing each great terminal does — Ghostty's correctness and
-native feel, Kitty's graphics and hints, WezTerm's Lua power and sessions,
-Alacritty's speed, Warp's blocks and completions, Wave's previews, iTerm2's
-triggers and instant replay, foot's instant start — put them in one terminal
-that is **fast enough to beat Alacritty and smooth as Neovide**, and add what
-none of them has: Vim everywhere, smart output from normal commands, per-pane
-power limits, commands as notes in a workspace, and agents you can watch.
-Local-first: no account, no cloud.
+One terminal that is correct, native-feeling, **among the fastest there are
+and perfectly smooth**, with images and precise keyboard input, Lua all the
+way down, sessions that never die, commands as blocks, a completion popup with
+previews, smart output, triggers and instant replay, and instant new windows —
+plus what no terminal has today: Vim everywhere, smart output from normal
+commands, per-pane power limits, commands as notes in a workspace, and agents
+you can watch. Local-first: no account, no cloud.
 
 ## Principles
 
@@ -34,30 +33,30 @@ Local-first: no account, no cloud.
 - VT/xterm emulation (vte parser, own grid), 24-bit colour, undercurl and
   coloured underlines, hyperlinks (OSC 8), clipboard (OSC 52), cwd (OSC 7),
   shell marks (OSC 133), notifications (OSC 9/777), synchronized output.
-- **Kitty keyboard protocol** and **Kitty graphics protocol**, Sixel, iTerm2
-  images. *(Kitty, Ghostty)*
+- the **Kitty keyboard and graphics protocols** (the standards for precise keys and images), Sixel, iTerm2
+  images.
 - Reflow on resize, unlimited compressed scrollback.
 - Ligatures (rustybuzz), font fallback chains, emoji, Nerd Font symbols;
   box drawing and powerline glyphs drawn pixel-perfect by zash, not the font.
-  *(Ghostty, WezTerm)*
+ 
 
 ### 2. Speed and smoothness
 - wgpu renderer with a glyph atlas and damage tracking: only changed cells redraw.
-- Throughput ≥ Alacritty (vtebench), input latency ≤ Alacritty. *(Alacritty)*
+- Throughput and input latency among the best of any terminal (measured with vtebench and a latency probe).
 - **Server mode:** one zash process serves every window, so a new window opens
-  instantly. *(foot)*
+  instantly.
 - Pixel-smooth scrolling with momentum, at the display refresh rate.
-- **Animated cursor**: Neovide-style trail, any curve, configurable or off.
-  *(Neovide)*
+- **Animated cursor**: a smooth trail, any curve, configurable or off.
+ 
 - Smooth resize and font zoom.
 
 ### 3. Native feel
 - Native-looking window and tabs, tinct-themed live (changes with the
-  wallpaper), ii-decor window buttons, blur and transparency. *(Ghostty)*
+  wallpaper), ii-decor window buttons, blur and transparency.
 - Ships many themes; any theme can follow tinct instead.
 - Zero config needed: good fonts, padding and keys out of the box.
 
-### 4. Blocks: commands as units *(Warp, iTerm2)*
+### 4. Blocks: commands as units
 - Shell integration (zsh first, bash and fish next) marks every prompt,
   command and output: a **block**.
 - Jump between prompts, select or copy a whole output, collapse it, a sticky
@@ -65,7 +64,7 @@ Local-first: no account, no cloud.
 - Rerun, edit-and-rerun, **compare two runs**, search all past output.
 - Send a block to a zett page, link it, share it as a snippet.
 
-### 5. The command line as an editor *(Warp, plus Vim)*
+### 5. The command line as an editor
 - The line you type is edited by **zett-edit**: real Vim grammar (or plain
   editing for non-Vim users), with mouse selection, multi-line editing and
   syntax highlighting of the command.
@@ -74,46 +73,46 @@ Local-first: no account, no cloud.
   **preview pane** (file contents or image, branch log, the man-page line for a
   flag), fuzzy filtering, multi-select. Position, size, columns, icons and
   animation all styleable.
-- **Ghost text** from history, accepted with →. *(fish, zsh-autosuggestions)*
+- **Ghost text** from history, accepted with →.
 - Optional suggestions from an agent (local model or Claude), clearly marked.
 
-### 6. Smart output from normal commands *(new; Nushell-like without a new shell)*
+### 6. Smart output from normal commands
 - Recognised outputs become **tables you can sort, filter and click**: `ls`,
   `ps`, `git log`, `git status`, `docker ps`, `kubectl get`, `df`, JSON, CSV.
   The raw text is always one key away.
 - **Hints**: two keys grab or open any URL, path, hash, IP or `file:line`.
-  *(Kitty hints, WezTerm quick-select)*
-- Hover a path for a preview (text, image, PDF page, directory). *(Wave)*
+ 
+- Hover a path for a preview (text, image, PDF page, directory).
 - **Error lens**: compiler and test errors are highlighted; one key opens the
   line in zett (or Neovim), another hands the error to an agent.
 - Custom renderers in Lua: "when a command prints X, show it as Y".
 
 ### 7. Scrollback and history
 - **Vim in the scrollback**: `v`, `y`, `/`, `n`, text objects over output.
-  *(Alacritty vi mode, WezTerm copy mode)*
+ 
 - **Instant replay / time travel**: scrub back through a session like a video
-  and see the screen at any moment. *(iTerm2)*
+  and see the screen at any moment.
 - Sessions **survive reboots**, scrollback included.
 
-### 8. Panes, tabs, sessions *(WezTerm, tmux)*
+### 8. Panes, tabs, sessions
 - Splits, tabs, workspaces, zoom a pane, swap and move panes, saved layouts
   per project, all on the `SPC` leader (zett's which-key tree).
 - Background session server: closing the window never kills work; attach from
   another window, the TUI, or over SSH.
 - **SSH that brings zash with it**: shell integration, completions and images
-  work on remote machines (nuke). *(Kitty ssh kitten, WezTerm SSH domains)*
-- Broadcast input to several panes. *(iTerm2)*
+  work on remote machines (nuke).
+- Broadcast input to several panes.
 - Drop-down (Quake) terminal, scratch panes, a floating pane pinned over the
   desktop.
 
-### 9. Programmable *(WezTerm, Kitty)*
+### 9. Programmable
 - `term.lua` (part of zett's config): every setting, keymap, popup style,
   status segment, theme rule, renderer, trigger and hook.
-- **Triggers**: a regex on output runs an action. *(iTerm2)*
+- **Triggers**: a regex on output runs an action.
 - **Hooks**: `command.start`, `command.end` (notify when a long command
   finishes while you are elsewhere), `cwd.changed`, `prompt`, `output`, `bell`.
 - **Remote control**: everything zash does is a zett command, so scripts,
-  keys, the palette and agents all drive it. *(Kitty remote control)*
+  keys, the palette and agents all drive it.
 - Plugins: Lua for quick ones, WASM for heavy ones (the same system as zett).
 
 ### 10. What only zash has
@@ -163,8 +162,8 @@ draws in the standalone window, inside zett, and (simplified) in the TUI.
 
 | What | Budget |
 |---|---|
-| key → pixels | < 8 ms p99 (≤ Alacritty) |
-| throughput (vtebench) | ≥ Alacritty |
+| key → pixels | < 8 ms p99 |
+| throughput (vtebench) | among the best measured on this machine |
 | scrolling / cursor animation | 120 Hz, no dropped frames |
 | new window (server running) | < 50 ms |
 | cold start | < 150 ms |
@@ -173,21 +172,12 @@ draws in the standalone window, inside zett, and (simplified) in the TUI.
 | idle CPU | ~0 % |
 | correctness | vttest + esctest pass |
 
-## The bar: better than the best, measured
+## The bar
 
-| Rival | Its strength | zash must |
-|---|---|---|
-| Ghostty | native feel, correctness, speed | match its correctness and throughput |
-| Kitty | graphics + keyboard protocols, kittens, remote control | support both protocols fully; Lua does what kittens do |
-| Alacritty | raw throughput, low latency | ≥ its throughput, ≤ its latency |
-| WezTerm | Lua config, multiplexing, SSH domains | everything the user's WezTerm config uses, better |
-| Warp | blocks, completions, AI | as good, local-first, no account, no cloud |
-| Wave | inline previews and widgets | previews and renderers in the terminal itself |
-| iTerm2 | triggers, instant replay, broadcast | all three |
-| foot | instant start (server mode) | server mode |
-| Neovide | smoothness, cursor animation | equally smooth, in a real terminal |
-
-A release that loses one of these comparisons is not done.
+Before each release zash is measured against the best terminals installed on
+this machine, on correctness (vttest, esctest, replayed sessions), throughput,
+input latency, frame times while scrolling, start time, memory and idle CPU.
+A release that is worse than the best on any of them is not done.
 
 ## Milestones
 
@@ -212,7 +202,7 @@ A release that loses one of these comparisons is not done.
 - **T8 — zett and the desktop.** zash panes and live terminal blocks in zett,
   commands as notes, agents in watched panes, per-pane Vitals, shell widgets.
 
-T0–T2 make it a terminal you can switch to; T3–T5 make it better than Warp;
+T0–T2 make it a terminal you can switch to; T3–T5 make it the smartest one;
 T6–T8 make it something no other terminal is.
 
 ## Testing
