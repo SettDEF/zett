@@ -3,6 +3,10 @@
 //! Positions are char indices into the whole text (what ropey indexes by), or
 //! (line, column) pairs in chars for the editor. Lines include their "\n".
 
+pub mod blocks;
+pub mod markdown;
+pub use blocks::{BlockId, Kind, Workspace};
+
 use ropey::Rope;
 use std::path::{Path, PathBuf};
 
@@ -36,6 +40,7 @@ impl Buffer {
         Self { text: Rope::from_str(s), ..Self::default() }
     }
 
+    #[cfg(feature = "fs")]
     /// Opens a file; a path that does not exist yet is an empty buffer for it.
     pub fn open(path: impl AsRef<Path>) -> std::io::Result<Self> {
         let path = path.as_ref();
@@ -47,6 +52,7 @@ impl Buffer {
         Ok(Self { text, path: Some(path.to_path_buf()), dirty: false })
     }
 
+    #[cfg(feature = "fs")]
     /// Writes to its file, through a temporary file so a crash never leaves half a file.
     pub fn save(&mut self) -> std::io::Result<()> {
         let Some(path) = self.path.clone() else {
@@ -185,6 +191,7 @@ mod tests {
         assert_eq!(b.to_char(Pos::new(3, 3)), 0);
     }
 
+    #[cfg(feature = "fs")]
     #[test]
     fn save_and_open_roundtrip() {
         let dir = std::env::temp_dir().join(format!("zett-test-{}", std::process::id()));

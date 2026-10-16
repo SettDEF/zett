@@ -9,5 +9,6 @@ license = "MIT"
 
 [workspace.dependencies]
 ropey = "1.6"
+loro = "1.16"
 zett-core = { path = "crates/zett-core" }
 zett-edit = { path = "crates/zett-edit" }

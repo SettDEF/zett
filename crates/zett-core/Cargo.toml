@@ -7,3 +7,9 @@ license.workspace = true
 
 [dependencies]
 ropey.workspace = true
+loro.workspace = true
+
+[features]
+# file I/O for the plain-file buffer; off for the WASM build (browser extension, web viewer)
+default = ["fs"]
+fs = []

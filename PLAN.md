@@ -22,6 +22,43 @@ works offline, syncs between your devices without a server, and can run code.
 | AI | Notion AI (cloud, paid) | plugins | **agents as collaborators**: Claude works in a page like a person, edits blocks with undo, asks inline; Dotos's agents land here |
 | Interop | export only | plain text | **Markdown mirror**: every page is also a `.md` file, kept in sync both ways, so git, grep and Neovim keep working |
 
+## The graph: see how everything connects
+
+A **graph view** of the whole workspace (pages, blocks, tags, projects as
+nodes; links, embeds and references as edges), force-directed, coloured by
+project or tag, clusters you can zoom into. Like Obsidian's graph, but live,
+filterable by any query, and it works **in the terminal too**: drawn with the
+Kitty graphics protocol where the terminal has it (and zett's own terminal
+does), Braille dots everywhere else. Click or `hjkl` to a node and open it.
+
+## zett term: a terminal written in Rust, built into zett
+
+zett has its **own terminal emulator, fully Rust**: VT/xterm parsing (the
+`vte` / `alacritty_terminal` crates), GPU text rendering shared with the
+editor, ligatures, Kitty graphics and keyboard protocols, true colour,
+tinct-themed. It runs as a pane or tab inside zett and as a standalone
+`zett term`, a replacement for WezTerm on this desktop.
+
+Because it lives inside a workspace, it can do what no other terminal can:
+
+- **Commands are blocks.** Every command and its output is a block: link it
+  from a page, embed it, search all past output, rerun it, diff two runs.
+- **Vim everywhere in the scrollback**: the same modal engine moves, selects
+  and yanks through output; `/` searches it.
+- **Live terminal blocks in pages**: a page can hold a running terminal
+  (a dev server, a log tail) next to its notes, and keep it across restarts.
+- **Agents in the terminal**: an agent block can run commands in a pane you
+  watch, each step undoable or approvable.
+- Splits, tabs and sessions that persist (tmux's job), with zett's `SPC`
+  leader instead of a prefix key.
+
+## Front ends
+
+- **Window**: QML through cxx-qt (the main app)
+- **Terminal**: `zett` in any terminal, a full TUI on the same core
+  (ratatui), so it runs over SSH and on machines without the app, like Neovim
+- **Browser**: the WASM build (extension, web viewer)
+
 ## The Doom Emacs layer: great out of the box
 
 Emacs is powerful but empty; Doom Emacs made it loved by shipping an
@@ -130,10 +167,13 @@ Each one is usable on its own; order chosen so the data model is right first.
    branches and merge.
 9. **M8 — agents and plugins.** Agents as collaborators (Claude via `zett
    serve`), WASM plugins.
-10. **M9 — everywhere.** Firefox extension (modal editing in every text field,
+10. **M8½ — terminal and graph.** zett term (VT parsing, rendering, panes,
+    command blocks, scrollback with Vim keys), the graph view in the window
+    and in the terminal, the TUI front end.
+11. **M9 — everywhere.** Firefox extension (modal editing in every text field,
     link hints, clipper, native-messaging bridge), tela-zen integration,
     Neovim plugin, CLI verbs.
-11. **M10 — on the web.** Project website with docs; publish pages and canvases
+12. **M10 — on the web.** Project website with docs; publish pages and canvases
     as static sites; the WASM web viewer.
 
 The Firefox extension's editing part can start early (after M1): it needs only
