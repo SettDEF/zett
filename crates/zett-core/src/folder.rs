@@ -14,6 +14,9 @@ pub struct Folder {
     pub ws: Workspace,
     /// which file each page came from (or will be written to)
     pub files: HashMap<BlockId, PathBuf>,
+    /// per page: the file's change time and content as zett last read or wrote it,
+    /// so a change on disk by someone else can be told from zett's own
+    synced: std::cell::RefCell<HashMap<BlockId, (Option<std::time::SystemTime>, String)>>,
 }
 
 /// A file name for a title: lowercase words joined by '-', safe on every system.
@@ -39,13 +42,15 @@ impl Folder {
         paths.sort();
         let ws = Workspace::new();
         let mut files = HashMap::new();
+        let mut synced = HashMap::new();
         for p in paths {
             let text = std::fs::read_to_string(&p)?;
             let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
             let page = markdown::from_markdown(&ws, &text, &stem).map_err(|e| std::io::Error::other(e.to_string()))?;
+            synced.insert(page, (mtime(&p), text));
             files.insert(page, p);
         }
-        Ok(Folder { dir, ws, files })
+        Ok(Folder { dir, ws, files, synced: std::cell::RefCell::new(synced) })
     }
 
     /// A new page, with the file it will be saved to.
@@ -74,8 +79,60 @@ impl Folder {
             return Ok(());
         }
         let tmp = path.with_extension("md.zett-tmp");
-        std::fs::write(&tmp, md)?;
-        std::fs::rename(tmp, path)
+        std::fs::write(&tmp, &md)?;
+        std::fs::rename(tmp, path)?;
+        self.synced_set(page, mtime(path), md);
+        Ok(())
+    }
+
+    fn synced_set(&self, page: BlockId, t: Option<std::time::SystemTime>, md: String) {
+        // interior: saving takes &self (the window saves from many places)
+        self.synced.borrow_mut().insert(page, (t, md));
+    }
+
+    /// Takes in what changed on disk since zett last read or wrote it: pages
+    /// edited elsewhere (Neovim, `zett add`, a git pull) are reloaded, new files
+    /// become pages, deleted files go. Returns whether anything changed.
+    /// Cheap when nothing did: one stat per file.
+    pub fn sync_from_disk(&mut self) -> bool {
+        let mut changed = false;
+        let pages: Vec<(BlockId, PathBuf)> = self.files.iter().map(|(b, p)| (*b, p.clone())).collect();
+        for (page, path) in pages {
+            let now = mtime(&path);
+            let (seen_t, seen_md) = self.synced.borrow().get(&page).cloned().unwrap_or((None, String::new()));
+            if now.is_none() {
+                if path.exists() { continue; }
+                // deleted elsewhere
+                let _ = self.ws.remove(page);
+                self.files.remove(&page);
+                self.synced.borrow_mut().remove(&page);
+                changed = true;
+                continue;
+            }
+            if now == seen_t { continue; }
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            if text != seen_md {
+                let _ = markdown::replace_page(&self.ws, page, &text);
+                changed = true;
+            }
+            self.synced.borrow_mut().insert(page, (now, text));
+        }
+        // files that appeared
+        let known: std::collections::HashSet<PathBuf> = self.files.values().cloned().collect();
+        if let Ok(rd) = std::fs::read_dir(&self.dir) {
+            for p in rd.flatten().map(|e| e.path()) {
+                if p.extension().is_some_and(|e| e == "md") && p.is_file() && !known.contains(&p) {
+                    let Ok(text) = std::fs::read_to_string(&p) else { continue };
+                    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    if let Ok(page) = markdown::from_markdown(&self.ws, &text, &stem) {
+                        self.synced.borrow_mut().insert(page, (mtime(&p), text));
+                        self.files.insert(page, p);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
     }
 
     pub fn save_all(&self) -> std::io::Result<()> {
@@ -131,6 +188,43 @@ mod tests {
         let again = Folder::open(&d).unwrap();
         let p = again.find("Ideas").unwrap();
         assert_eq!(again.ws.children(p).len(), 3);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+}
+
+fn mtime(p: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+    use crate::Kind;
+
+    #[test]
+    fn picks_up_changes_made_elsewhere_but_not_its_own() {
+        let d = std::env::temp_dir().join(format!("zett-sync-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("a.md"), "---\ntitle: A\n---\n\none\n").unwrap();
+        let mut f = Folder::open(&d).unwrap();
+        let a = f.find("A").unwrap();
+        // zett's own save: not a change from outside
+        f.ws.append(a, Kind::Paragraph, "two").unwrap();
+        f.save_page(a).unwrap();
+        assert!(!f.sync_from_disk(), "its own write is not reloaded");
+        // someone else edits the file (mtime must move on)
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(d.join("a.md"), "---\ntitle: A\n---\n\nfrom neovim\n").unwrap();
+        assert!(f.sync_from_disk());
+        assert_eq!(f.ws.children(a).iter().map(|b| f.ws.text(*b)).collect::<Vec<_>>(), vec!["from neovim"]);
+        // a new file, then a deleted one
+        std::fs::write(d.join("b.md"), "# B\n").unwrap();
+        assert!(f.sync_from_disk());
+        assert!(f.find("b").is_some());
+        std::fs::remove_file(d.join("a.md")).unwrap();
+        assert!(f.sync_from_disk());
+        assert!(f.find("A").is_none());
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

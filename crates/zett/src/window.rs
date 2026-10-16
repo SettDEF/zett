@@ -49,6 +49,10 @@ pub mod qobject {
         fn new_page(self: Pin<&mut Zett>, title: &QString);
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
+        /// takes in pages changed on disk by other programs (Neovim, git…)
+        #[qinvokable]
+        #[cxx_name = "checkDisk"]
+        fn check_disk(self: Pin<&mut Zett>);
         /// Vim: normal mode on a block (Esc); returns {text, cursor, mode}
         #[qinvokable]
         #[cxx_name = "vimBegin"]
@@ -361,5 +365,22 @@ impl qobject::Zett {
             r.vim = None;
         }
         state
+    }
+}
+
+impl qobject::Zett {
+    fn check_disk(mut self: Pin<&mut Self>) {
+        let changed = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            // the block in Vim mode keeps its own text until it leaves; reload after
+            if r.vim.is_some() {
+                return;
+            }
+            r.folder.as_mut().is_some_and(|f| f.sync_from_disk())
+        };
+        if changed {
+            self.publish();
+        }
     }
 }

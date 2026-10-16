@@ -57,6 +57,9 @@ ApplicationWindow {
         if (d) d.focusEditor(end ? -1 : 0)
     }
 
+    // pages edited elsewhere (Neovim, zett add, git) show up within two seconds
+    Timer { interval: 2000; running: true; repeat: true; onTriggered: app.checkDisk() }
+
     Timer {
         running: app.shot.length > 0
         interval: 1500
