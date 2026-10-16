@@ -20,9 +20,11 @@ use crate::blocks::{BlockId, Kind, Result, Workspace};
 
 /// A page as Markdown.
 pub fn to_markdown(ws: &Workspace, page: BlockId) -> String {
-    let mut out = format!("---\ntitle: {}\n---\n", yaml_str(&ws.text(page)));
+    let blocks = ws.children(page);
+    let mut out = String::with_capacity(64 + blocks.len() * 48);
+    out += &format!("---\ntitle: {}\n---\n", yaml_str(&ws.text(page)));
     let mut prev_list = false;
-    for b in ws.children(page) {
+    for b in blocks {
         let kind = ws.kind(b);
         let text = ws.text(b);
         let list = matches!(kind, Kind::Todo { .. } | Kind::Bullet);

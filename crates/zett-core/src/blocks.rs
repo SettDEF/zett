@@ -143,7 +143,8 @@ impl Workspace {
 
     fn init(&self, id: BlockId, kind: &Kind, text: &str) -> Result<()> {
         self.set_kind(id, kind)?;
-        self.set_text(id, text)
+        // a new block's text is empty: insert, no diff needed
+        if text.is_empty() { Ok(()) } else { self.insert_text(id, 0, text) }
     }
 
     fn meta(&self, id: BlockId) -> Result<LoroMap> {

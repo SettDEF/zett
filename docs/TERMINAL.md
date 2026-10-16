@@ -4,7 +4,7 @@ A terminal emulator **written entirely in Rust**, part of zett and usable on
 its own. As smooth as Neovide, more useful than Warp, as customizable as Emacs,
 and replacing WezTerm + tmux on this desktop.
 
-Working name below: **`zash`** (zett + shell). See "Name" at the end.
+Name: **zash** (zett + shell), chosen 2026-10-16. Clear on the US register; EU/DPMA still to check by hand before anything permanent.
 
 ## What it must be
 

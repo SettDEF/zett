@@ -39,9 +39,20 @@ struct Register {
     linewise: bool,
 }
 
+/// One edit: at `at`, `removed` was taken out and `inserted` put in.
 #[derive(Clone, Debug)]
-struct Snapshot {
-    text: String,
+struct Edit {
+    at: usize,
+    removed: String,
+    inserted: String,
+}
+
+/// One undo step: the edits of one change (a whole insert session is one).
+/// Only what changed is kept, never a copy of the text: undo costs the size
+/// of the change, not the size of the file.
+#[derive(Clone, Debug, Default)]
+struct Change {
+    edits: Vec<Edit>,
     cursor: usize,
 }
 
@@ -57,8 +68,10 @@ pub struct Editor {
     /// a key waiting for its second key: `g`, `r`
     prefix: Option<char>,
     reg: Register,
-    undo: Vec<Snapshot>,
-    redo: Vec<Snapshot>,
+    undo: Vec<Change>,
+    redo: Vec<Change>,
+    /// the change being recorded, closed by the next one or by `u`
+    open: Option<Change>,
 }
 
 fn class(c: char) -> u8 {
@@ -79,6 +92,7 @@ impl Editor {
             reg: Register::default(),
             undo: Vec::new(),
             redo: Vec::new(),
+            open: None,
         }
     }
 
@@ -371,8 +385,8 @@ impl Editor {
             'a' => { let at = (self.cursor + 1).min(self.line_end(line)); self.start_insert(at) }
             'I' => self.start_insert(self.first_non_blank(line)),
             'A' => self.start_insert(self.line_end(line)),
-            'o' => { self.snapshot(); let e = self.line_end(line); self.buf.insert(e, "\n"); self.mode = Mode::Insert; self.cursor = e + 1; }
-            'O' => { self.snapshot(); let s = self.line_start(line); self.buf.insert(s, "\n"); self.mode = Mode::Insert; self.cursor = s; }
+            'o' => { self.begin(); let e = self.line_end(line); self.ins(e, "\n"); self.mode = Mode::Insert; self.cursor = e + 1; }
+            'O' => { self.begin(); let s = self.line_start(line); self.ins(s, "\n"); self.mode = Mode::Insert; self.cursor = s; }
 
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
             _ => { self.count = None; self.op = None; }
@@ -416,8 +430,8 @@ impl Editor {
                 if op == Op::Yank {
                     self.cursor = a;
                 } else {
-                    self.snapshot();
-                    self.buf.remove(a, b);
+                    self.begin();
+                    self.rem(a, b);
                     self.cursor = a;
                     if op == Op::Change {
                         self.mode = Mode::Insert;
@@ -437,20 +451,20 @@ impl Editor {
                 match op {
                     Op::Yank => self.cursor = s.min(self.cursor),
                     Op::Delete => {
-                        self.snapshot();
+                        self.begin();
                         // the last lines take the line break BEFORE them
                         let (s2, e2) = if e == self.buf.len_chars() && s > 0 { (s - 1, e) } else { (s, e) };
-                        self.buf.remove(s2, e2);
+                        self.rem(s2, e2);
                         let line = l1.min(self.buf.len_lines() - 1);
                         self.cursor = self.first_non_blank(line);
                     }
                     Op::Change => {
-                        self.snapshot();
+                        self.begin();
                         let indent = self.first_non_blank(l1) - s;
                         let keep = self.buf.slice(s, s + indent);
                         let end = self.line_end(l2);
-                        self.buf.remove(s, end);
-                        self.buf.insert(s, &keep);
+                        self.rem(s, end);
+                        self.ins(s, &keep);
                         self.cursor = s + indent;
                         self.mode = Mode::Insert;
                         return;
@@ -466,17 +480,17 @@ impl Editor {
         if self.reg.text.is_empty() {
             return;
         }
-        self.snapshot();
+        self.begin();
         let text = self.reg.text.repeat(n);
         let line = self.cur_line();
         if self.reg.linewise {
             let last = line + 1 >= self.buf.len_lines();
-            let no_final_break = !self.buf.text().ends_with('\n');
+            let no_final_break = self.buf.len_chars() > 0 && self.buf.char_at(self.buf.len_chars() - 1) != Some('\n');
             let at = if after && last && no_final_break {
                 // after the last line of a file without a final line break: the
                 // break goes BEFORE the new lines, so the file still has none
                 let e = self.buf.len_chars();
-                self.buf.insert(e, &format!("\n{}", text.strip_suffix('\n').unwrap_or(&text)));
+                self.ins(e, &format!("\n{}", text.strip_suffix('\n').unwrap_or(&text)));
                 e + 1
             } else {
                 let at = if after {
@@ -484,7 +498,7 @@ impl Editor {
                 } else {
                     self.line_start(line)
                 };
-                self.buf.insert(at, &text);
+                self.ins(at, &text);
                 at
             };
             self.cursor = at;
@@ -492,14 +506,14 @@ impl Editor {
             self.cursor = self.first_non_blank(l);
         } else {
             let at = if after && self.buf.line_len(line) > 0 { self.cursor + 1 } else { self.cursor };
-            self.buf.insert(at, &text);
+            self.ins(at, &text);
             self.cursor = at + text.chars().count() - 1;
         }
         self.clamp();
     }
 
     fn join(&mut self, times: usize) {
-        self.snapshot();
+        self.begin();
         for _ in 0..times {
             let line = self.cur_line();
             if line + 1 >= self.buf.len_lines() {
@@ -508,10 +522,10 @@ impl Editor {
             let e = self.line_end(line);
             let next = self.first_non_blank(line + 1);
             let joined_at = e;
-            self.buf.remove(e, next);
+            self.rem(e, next);
             let needs_space = joined_at > self.line_start(line) && self.char(joined_at).is_some_and(|c| c != '\n' && c != ')');
             if needs_space {
-                self.buf.insert(joined_at, " ");
+                self.ins(joined_at, " ");
             }
             self.cursor = joined_at;
         }
@@ -524,16 +538,16 @@ impl Editor {
         if self.cursor + n > self.line_end(line) {
             return;
         }
-        self.snapshot();
-        self.buf.remove(self.cursor, self.cursor + n);
-        self.buf.insert(self.cursor, &ch.to_string().repeat(n));
+        self.begin();
+        self.rem(self.cursor, self.cursor + n);
+        self.ins(self.cursor, &ch.to_string().repeat(n));
         self.cursor += n - 1;
     }
 
     // ── insert mode ──
 
     fn start_insert(&mut self, at: usize) {
-        self.snapshot();
+        self.begin();
         self.count = None;
         self.mode = Mode::Insert;
         self.cursor = at;
@@ -551,52 +565,86 @@ impl Editor {
                 self.want_col = self.cursor().col;
             }
             Code::Enter => {
-                self.buf.insert(self.cursor, "\n");
+                self.ins(self.cursor, "\n");
                 self.cursor += 1;
             }
             Code::Tab => {
-                self.buf.insert(self.cursor, "\t");
+                self.ins(self.cursor, "\t");
                 self.cursor += 1;
             }
             Code::Backspace => {
                 if self.cursor > 0 {
-                    self.buf.remove(self.cursor - 1, self.cursor);
+                    self.rem(self.cursor - 1, self.cursor);
                     self.cursor -= 1;
                 }
             }
             Code::Delete => {
-                self.buf.remove(self.cursor, self.cursor + 1);
+                self.rem(self.cursor, self.cursor + 1);
             }
             Code::Left => self.cursor = self.cursor.saturating_sub(1).max(self.line_start(self.cur_line())),
             Code::Right => self.cursor = (self.cursor + 1).min(self.line_end(self.cur_line())),
             Code::Char(c) if !k.ctrl && !k.alt => {
-                self.buf.insert(self.cursor, &c.to_string());
+                self.ins(self.cursor, &c.to_string());
                 self.cursor += 1;
             }
             _ => {}
         }
     }
 
-    // ── undo: one snapshot per change (a whole insert session is one change) ──
+    // ── undo: changes made of edits (a whole insert session is one change) ──
 
-    fn snapshot(&mut self) {
-        self.undo.push(Snapshot { text: self.buf.text(), cursor: self.cursor });
+    /// Starts recording a new change; the previous one is finished.
+    fn begin(&mut self) {
+        self.close();
+        self.open = Some(Change { edits: Vec::new(), cursor: self.cursor });
         self.redo.clear();
     }
+    fn close(&mut self) {
+        if let Some(c) = self.open.take() {
+            if !c.edits.is_empty() {
+                self.undo.push(c);
+            }
+        }
+    }
+    /// Inserts, recording the edit in the open change.
+    fn ins(&mut self, at: usize, s: &str) {
+        self.buf.insert(at, s);
+        if let Some(c) = self.open.as_mut() {
+            c.edits.push(Edit { at, removed: String::new(), inserted: s.to_string() });
+        }
+    }
+    /// Removes `a..b`, recording the edit in the open change.
+    fn rem(&mut self, a: usize, b: usize) -> String {
+        let gone = self.buf.remove(a, b);
+        if let Some(c) = self.open.as_mut() {
+            c.edits.push(Edit { at: a.min(b), removed: gone.clone(), inserted: String::new() });
+        }
+        gone
+    }
     fn undo_once(&mut self) {
-        if let Some(s) = self.undo.pop() {
-            self.redo.push(Snapshot { text: self.buf.text(), cursor: self.cursor });
-            self.buf.set_text(&s.text);
-            self.cursor = s.cursor;
+        self.close();
+        if let Some(c) = self.undo.pop() {
+            for e in c.edits.iter().rev() {
+                self.buf.remove(e.at, e.at + e.inserted.chars().count());
+                self.buf.insert(e.at, &e.removed);
+            }
+            self.cursor = c.cursor;
+            self.mode = Mode::Normal;
             self.clamp();
+            self.redo.push(c);
         }
     }
     fn redo_once(&mut self) {
-        if let Some(s) = self.redo.pop() {
-            self.undo.push(Snapshot { text: self.buf.text(), cursor: self.cursor });
-            self.buf.set_text(&s.text);
-            self.cursor = s.cursor;
+        self.close();
+        if let Some(c) = self.redo.pop() {
+            for e in &c.edits {
+                self.buf.remove(e.at, e.at + e.removed.chars().count());
+                self.buf.insert(e.at, &e.inserted);
+            }
+            // Vim puts the cursor where the change starts
+            self.cursor = c.edits.first().map_or(c.cursor, |e| e.at);
             self.clamp();
+            self.undo.push(c);
         }
     }
 }
