@@ -41,6 +41,29 @@ ApplicationWindow {
     property bool showSource: false
     property string vimMode: ""          // NORMAL or INSERT while Vim keys are in use
 
+    // the slash menu: "/" at the start of an empty block offers the block kinds
+    property int slashFor: -1
+    property string slashQuery: ""
+    property int slashSel: 0
+    property real slashX: 0
+    property real slashY: 0
+    readonly property var slashItems: [
+        { k: "paragraph", label: "Text", hint: "" }, { k: "h1", label: "Heading 1", hint: "#" }, { k: "h2", label: "Heading 2", hint: "##" },
+        { k: "h3", label: "Heading 3", hint: "###" }, { k: "todo", label: "To-do", hint: "[ ]" }, { k: "bullet", label: "Bullet", hint: "-" },
+        { k: "quote", label: "Quote", hint: ">" }, { k: "code", label: "Code", hint: "```" }
+    ]
+    readonly property var slashMatches: slashItems.filter(i => i.label.toLowerCase().includes(slashQuery.toLowerCase()) || i.k.startsWith(slashQuery.toLowerCase()))
+    onSlashQueryChanged: slashSel = 0
+    function slashApply(i) {
+        const m = slashMatches[i]
+        const b = slashFor
+        slashFor = -1
+        if (!m || b < 0) return
+        focusAfter = b
+        app.setText(b, "")
+        app.setKind(b, m.k)
+    }
+
     function vimEnter(i) {
         const d = list.itemAtIndex(i)
         if (d) d.vimHere()
@@ -49,7 +72,12 @@ ApplicationWindow {
     onBlocksChanged: if (focusAfter >= 0) {
         const i = focusAfter
         focusAfter = -1
-        Qt.callLater(() => { const d = list.itemAtIndex(i); if (d) d.focusEditor(0) })
+        Qt.callLater(() => {
+            const d = list.itemAtIndex(i)
+            if (!d) return
+            d.focusEditor(0)
+            if (typeAfter.length > 0) { d.typeForTest(typeAfter); typeAfter = "" }
+        })
     }
 
     // [[Page]] → a link (the text is escaped first: it is shown as StyledText)
@@ -70,12 +98,16 @@ ApplicationWindow {
         running: app.shot.length > 0
         interval: 1500
         onTriggered: {
+            if (app.shotType.length > 0) {
+                win.typeAfter = app.shotType
+                win.focusAfter = app.addBlock(-1, "paragraph")
+            }
             if (app.shotKeys.length > 0) {
                 win.vimEnter(1)
                 const d = list.itemAtIndex(1)
                 for (const k of app.shotKeys.split(" ")) d.vimKeyForTest(k)
             }
-            Qt.callLater(() => rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }))
+            grabLater.start()
         }
     }
 
@@ -83,6 +115,9 @@ ApplicationWindow {
     id: rootRow
     anchors.fill: parent
     color: t.bg
+    Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }
+    property string typeAfter: ""   // test hook: typed into the block focused next
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -252,6 +287,7 @@ ApplicationWindow {
                     height: body.implicitHeight + (modelData.kind === "heading" ? 14 : 6)
 
                     function vimKeyForTest(k) { edit.applyVim(app.vimKey(k)) }
+                    function typeForTest(s) { edit.forceActiveFocus(); edit.text = s }
 
                     function vimHere() {
                         edit.forceActiveFocus()
@@ -369,6 +405,17 @@ ApplicationWindow {
                                 Timer { id: saveLater; interval: 350; onTriggered: app.setText(blockItem.index, edit.text) }
                                 onTextChanged: {
                                     if (!activeFocus || applying) return
+                                    // "/word" in an empty text block: the slash menu, filtered by what follows
+                                    if (blockItem.kind === "paragraph" && text.startsWith("/") && !/\s/.test(text)) {
+                                        const p = edit.mapToItem(rootRow, 0, edit.height)
+                                        win.slashX = p.x
+                                        win.slashY = p.y + 6
+                                        win.slashQuery = text.slice(1)
+                                        win.slashFor = blockItem.index
+                                        return
+                                    } else if (win.slashFor === blockItem.index) {
+                                        win.slashFor = -1
+                                    }
                                     // Markdown shortcuts at the start of an empty block turn it into another kind
                                     const shortcuts = [["# ", "h1"], ["## ", "h2"], ["### ", "h3"], ["- [ ] ", "todo"], ["[] ", "todo"], ["- ", "bullet"], ["* ", "bullet"], ["> ", "quote"], ["```", "code"]]
                                     if (blockItem.kind === "paragraph") {
@@ -400,6 +447,12 @@ ApplicationWindow {
                                         else if ((k === "k" || k === "<Up>") && cursorPosition === before && blockItem.index > 0) win.vimEnter(blockItem.index - 1)
                                         e.accepted = true
                                         return
+                                    }
+                                    if (win.slashFor === blockItem.index) {
+                                        if (e.key === Qt.Key_Down) { win.slashSel = Math.min(win.slashSel + 1, win.slashMatches.length - 1); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Up) { win.slashSel = Math.max(win.slashSel - 1, 0); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { win.slashApply(win.slashSel); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Escape) { win.slashFor = -1; e.accepted = true; return }
                                     }
                                     if (e.key === Qt.Key_Escape) {
                                         saveLater.stop()
@@ -562,6 +615,45 @@ ApplicationWindow {
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) quick.sel = index }
                     TapHandler { onTapped: quick.choose(index) }
+                }
+            }
+        }
+    }
+
+    // the slash menu, drawn over the page; the block keeps the keyboard
+    Rectangle {
+        parent: rootRow
+        z: 100
+        visible: win.slashFor >= 0 && win.slashMatches.length > 0
+        x: win.slashX
+        y: win.slashY
+        width: 240
+        height: slashCol.implicitHeight + 12
+        radius: 12
+        color: t.raised
+        border.width: 1
+        border.color: t.rule
+        ColumnLayout {
+            id: slashCol
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
+            spacing: 1
+            Text { text: "Turn into"; color: t.faint; font.family: t.sans; font.pixelSize: 11; Layout.leftMargin: 8; Layout.topMargin: 2; Layout.bottomMargin: 2 }
+            Repeater {
+                model: win.slashMatches
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    implicitHeight: 32
+                    radius: 8
+                    color: index === win.slashSel ? Qt.alpha(t.accent, 0.18) : "transparent"
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                        Text { Layout.fillWidth: true; text: modelData.label; color: t.text; font.family: t.sans; font.pixelSize: 14 }
+                        Text { text: modelData.hint; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) win.slashSel = index }
+                    TapHandler { onTapped: win.slashApply(index) }
                 }
             }
         }

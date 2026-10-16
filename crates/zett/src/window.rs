@@ -23,6 +23,7 @@ pub mod qobject {
         #[qproperty(QString, shot)]
         #[qproperty(QString, backlinks)]
         #[qproperty(QString, shot_keys, cxx_name = "shotKeys")]
+        #[qproperty(QString, shot_type, cxx_name = "shotType")]
         type Zett = super::ZettRust;
 
         /// opens page `index` of the list
@@ -89,6 +90,8 @@ pub struct ZettRust {
     backlinks: QString,
     /// ZETT_SHOT_KEYS: Vim keys fed into the second block before the capture (tests)
     shot_keys: QString,
+    /// ZETT_SHOT_TYPE: text typed into a new block at the end before the capture (tests)
+    shot_type: QString,
     /// the block in Vim normal mode and its editor (undo and registers live here)
     vim: Option<(i32, zett_edit::Editor)>,
 }
@@ -120,6 +123,7 @@ impl Default for ZettRust {
             backlinks: QString::from("[]"),
             vim: None,
             shot_keys: QString::from(&std::env::var("ZETT_SHOT_KEYS").unwrap_or_default()),
+            shot_type: QString::from(&std::env::var("ZETT_SHOT_TYPE").unwrap_or_default()),
         };
         z.refresh_pages();
         // open the page worked on last: the most recently changed file
