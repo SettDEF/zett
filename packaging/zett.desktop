@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=zett
+GenericName=Notes and editor
+Comment=Pages, blocks and Vim everywhere, saved as Markdown
+Exec=zett
+Icon=zett
+Terminal=false
+Categories=Office;TextEditor;Utility;
+StartupWMClass=zett

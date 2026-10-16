@@ -1,0 +1,377 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Window
+import dev.zett.app
+
+// zett's first window: the pages of a workspace folder and the open page as
+// blocks. Every edit goes to Rust (window.rs) and is saved to its .md file.
+ApplicationWindow {
+    id: win
+    width: 1180
+    height: 760
+    visible: true
+    title: app.title.length ? `${app.title} — zett` : "zett"
+    color: t.bg
+
+    Zett { id: app }
+
+    // ── colours from tinct (same file the shell and the other apps read) ──
+    QtObject {
+        id: t
+        readonly property var c: { try { return JSON.parse(app.theme) } catch (e) { return {} } }
+        function pick(k, d) { return c[k] ?? d }
+        readonly property color bg: pick("surface", "#1a1c1e")
+        readonly property color panel: pick("surface_container_low", "#1e2023")
+        readonly property color card: pick("surface_container", "#232528")
+        readonly property color raised: pick("surface_container_high", "#2a2c30")
+        readonly property color text: pick("on_surface", "#e3e2e5")
+        readonly property color dim: pick("on_surface_variant", "#c2c7ce")
+        readonly property color faint: Qt.alpha(pick("on_surface_variant", "#c2c7ce"), 0.55)
+        readonly property color accent: pick("primary", "#a8caeb")
+        readonly property color onAccent: pick("on_primary", "#0b334e")
+        readonly property color rule: pick("outline_variant", "#42474d")
+        readonly property string sans: "Google Sans Flex"
+        readonly property string mono: "MonaspiceNe Nerd Font"
+    }
+
+    readonly property var pages: { try { return JSON.parse(app.pages) } catch (e) { return [] } }
+    readonly property var blocks: { try { return JSON.parse(app.blocks) } catch (e) { return [] } }
+    property int focusAfter: -1          // a block to focus once the list is rebuilt
+    property bool showSource: false
+
+    onBlocksChanged: if (focusAfter >= 0) {
+        const i = focusAfter
+        focusAfter = -1
+        Qt.callLater(() => { const d = list.itemAtIndex(i); if (d) d.focusEditor(0) })
+    }
+
+    function focusBlock(i, end) {
+        const d = list.itemAtIndex(i)
+        if (d) d.focusEditor(end ? -1 : 0)
+    }
+
+    Timer {
+        running: app.shot.length > 0
+        interval: 1500
+        onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })
+    }
+
+    Rectangle {
+    id: rootRow
+    anchors.fill: parent
+    color: t.bg
+    RowLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        // ───────── sidebar ─────────
+        Rectangle {
+            Layout.fillHeight: true
+            implicitWidth: 260
+            color: t.panel
+            ColumnLayout {
+                anchors { fill: parent; margins: 12; topMargin: 16 }
+                spacing: 4
+                RowLayout {
+                    Layout.leftMargin: 6
+                    Layout.bottomMargin: 12
+                    spacing: 10
+                    Rectangle {
+                        implicitWidth: 34; implicitHeight: 34; radius: 10
+                        color: t.accent
+                        Text { anchors.centerIn: parent; text: "z"; color: t.onAccent; font.family: t.sans; font.pixelSize: 20; font.weight: Font.Bold }
+                    }
+                    ColumnLayout {
+                        spacing: 0
+                        Text { text: "zett"; color: t.text; font.family: t.sans; font.pixelSize: 17; font.weight: Font.DemiBold }
+                        Text { text: `${win.pages.length} pages`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                }
+                // new page
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 8
+                    implicitHeight: 38
+                    radius: 19
+                    color: newHov.hovered ? Qt.lighter(t.accent, 1.08) : t.accent
+                    Text { anchors.centerIn: parent; text: "+  New page"; color: t.onAccent; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    HoverHandler { id: newHov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: { app.newPage("Untitled"); win.focusAfter = 0 } }
+                }
+                ListView {
+                    id: pageList
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 2
+                    model: win.pages
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        width: ListView.view.width
+                        height: 36
+                        radius: 9
+                        readonly property bool sel: index === app.current
+                        color: sel ? Qt.alpha(t.accent, 0.16) : rowHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        Rectangle { visible: parent.sel; anchors { left: parent.left; verticalCenter: parent.verticalCenter } width: 3; height: 16; radius: 1.5; color: t.accent }
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.title || "Untitled"
+                                elide: Text.ElideRight
+                                color: parent.parent.sel ? t.text : t.dim
+                                font.family: t.sans; font.pixelSize: 14
+                                font.weight: parent.parent.sel ? Font.DemiBold : Font.Normal
+                            }
+                            Text { text: modelData.blocks; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                        }
+                        HoverHandler { id: rowHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: app.open(index) }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: app.dir
+                    elide: Text.ElideLeft
+                    color: t.faint
+                    font.family: t.mono; font.pixelSize: 11
+                }
+            }
+            Rectangle { anchors { right: parent.right; top: parent.top; bottom: parent.bottom } width: 1; color: t.rule; opacity: 0.6 }
+        }
+
+        // ───────── the page ─────────
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 0
+
+            // toolbar: title, and the tools below the window-button corner
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: 64
+                RowLayout {
+                    anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 28 }
+                    spacing: 6
+                    Rectangle {
+                        implicitWidth: srcRow.implicitWidth + 24; implicitHeight: 30; radius: 15
+                        color: win.showSource ? t.accent : (srcHov.hovered ? t.raised : t.card)
+                        RowLayout { id: srcRow; anchors.centerIn: parent; Text { text: "Markdown"; color: win.showSource ? t.onAccent : t.dim; font.family: t.sans; font.pixelSize: 13 } }
+                        HoverHandler { id: srcHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: win.showSource = !win.showSource }
+                    }
+                }
+                Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 1; color: t.rule; opacity: 0.6 }
+            }
+
+            // empty workspace
+            ColumnLayout {
+                visible: win.pages.length === 0
+                Layout.alignment: Qt.AlignCenter
+                Layout.fillHeight: true
+                spacing: 10
+                Text { Layout.alignment: Qt.AlignHCenter; text: "No pages yet"; color: t.text; font.family: t.sans; font.pixelSize: 22; font.weight: Font.DemiBold }
+                Text { Layout.alignment: Qt.AlignHCenter; text: "Make one with  + New page, or drop .md files into " + app.dir; color: t.dim; font.family: t.sans; font.pixelSize: 14 }
+            }
+
+            // Markdown source (read-only view of what is on disk)
+            ScrollView {
+                visible: win.showSource && win.pages.length > 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                TextArea {
+                    readOnly: true
+                    text: win.showSource ? (app.blocks, app.title, app.markdown()) : ""
+                    color: t.text
+                    font.family: t.mono; font.pixelSize: 14
+                    leftPadding: 48; topPadding: 24
+                    background: null
+                    wrapMode: TextEdit.Wrap
+                }
+            }
+
+            ListView {
+                id: list
+                visible: !win.showSource && win.pages.length > 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 2
+                topMargin: 28
+                bottomMargin: 120
+                model: win.blocks
+                boundsBehavior: Flickable.StopAtBounds
+                readonly property real column: Math.min(760, width - 96)
+
+                header: Item {
+                    width: list.width
+                    height: titleEdit.implicitHeight + 18
+                    TextInput {
+                        id: titleEdit
+                        x: (list.width - list.column) / 2
+                        width: list.column
+                        text: app.title
+                        color: t.text
+                        font.family: t.sans; font.pixelSize: 34; font.weight: Font.Bold
+                        selectByMouse: true
+                        onEditingFinished: if (text !== app.title) app.renamePage(text)
+                        Keys.onReturnPressed: { app.renamePage(text); win.focusBlock(0, false) }
+                        Keys.onDownPressed: win.focusBlock(0, false)
+                    }
+                }
+
+                delegate: Item {
+                    id: blockItem
+                    required property var modelData
+                    required property int index
+                    width: list.width
+                    height: body.implicitHeight + (modelData.kind === "heading" ? 14 : 6)
+
+                    function focusEditor(pos) {
+                        edit.forceActiveFocus()
+                        edit.cursorPosition = pos < 0 ? edit.length : pos
+                    }
+
+                    readonly property string kind: modelData.kind
+                    readonly property int level: modelData.level ?? 1
+                    readonly property bool checked: modelData.checked ?? false
+
+                    RowLayout {
+                        id: body
+                        x: (list.width - list.column) / 2
+                        width: list.column
+                        y: blockItem.kind === "heading" ? 10 : 2
+                        spacing: 10
+
+                        // the block's marker: checkbox, bullet, quote bar
+                        Item {
+                            visible: ["todo", "bullet", "quote"].includes(blockItem.kind)
+                            Layout.preferredWidth: 20
+                            Layout.fillHeight: blockItem.kind === "quote"
+                            Layout.alignment: Qt.AlignTop
+                            implicitHeight: 24
+                            Rectangle {
+                                visible: blockItem.kind === "todo"
+                                anchors.centerIn: parent
+                                width: 18; height: 18; radius: 5
+                                color: blockItem.checked ? t.accent : "transparent"
+                                border.width: blockItem.checked ? 0 : 2
+                                border.color: t.dim
+                                Text { anchors.centerIn: parent; visible: blockItem.checked; text: "✓"; color: t.onAccent; font.pixelSize: 13; font.weight: Font.Bold }
+                                TapHandler { onTapped: app.toggle(blockItem.index) }
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            }
+                            Rectangle { visible: blockItem.kind === "bullet"; anchors.centerIn: parent; width: 6; height: 6; radius: 3; color: t.dim }
+                            Rectangle { visible: blockItem.kind === "quote"; anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: 6 } width: 3; radius: 1.5; color: t.accent }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: edit.implicitHeight + (blockItem.kind === "code" ? 24 : 0)
+                            radius: 10
+                            color: blockItem.kind === "code" ? t.card : "transparent"
+
+                            TextEdit {
+                                id: edit
+                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0 }
+                                text: blockItem.modelData.text
+                                wrapMode: TextEdit.Wrap
+                                selectByMouse: true
+                                color: blockItem.kind === "todo" && blockItem.checked ? t.faint : blockItem.kind === "quote" ? t.dim : t.text
+                                font.family: blockItem.kind === "code" ? t.mono : t.sans
+                                font.pixelSize: blockItem.kind === "heading" ? [0, 28, 22, 18, 16, 15, 14][blockItem.level] : blockItem.kind === "code" ? 14 : 16
+                                font.weight: blockItem.kind === "heading" ? Font.DemiBold : Font.Normal
+                                font.italic: blockItem.kind === "quote"
+                                font.strikeout: blockItem.kind === "todo" && blockItem.checked
+                                selectionColor: Qt.alpha(t.accent, 0.4)
+                                selectedTextColor: t.text
+
+                                // a placeholder on an empty, focused block
+                                Text {
+                                    visible: edit.length === 0 && edit.activeFocus
+                                    text: blockItem.kind === "heading" ? "Heading" : "Type, or start with  # · - [ ] · - · > · ```"
+                                    color: t.faint
+                                    font: edit.font
+                                }
+
+                                // saved a moment after typing stops
+                                Timer { id: saveLater; interval: 350; onTriggered: app.setText(blockItem.index, edit.text) }
+                                onTextChanged: {
+                                    if (!activeFocus) return
+                                    // Markdown shortcuts at the start of an empty block turn it into another kind
+                                    const shortcuts = [["# ", "h1"], ["## ", "h2"], ["### ", "h3"], ["- [ ] ", "todo"], ["[] ", "todo"], ["- ", "bullet"], ["* ", "bullet"], ["> ", "quote"], ["```", "code"]]
+                                    if (blockItem.kind === "paragraph") {
+                                        for (const [p, k] of shortcuts) {
+                                            if (text === p) {
+                                                win.focusAfter = blockItem.index
+                                                app.setText(blockItem.index, "")
+                                                app.setKind(blockItem.index, k)
+                                                return
+                                            }
+                                        }
+                                    }
+                                    saveLater.restart()
+                                }
+                                onActiveFocusChanged: if (!activeFocus && saveLater.running) { saveLater.stop(); app.setText(blockItem.index, edit.text) }
+
+                                Keys.onPressed: (e) => {
+                                    const code = blockItem.kind === "code"
+                                    if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier) && !code) {
+                                        // Enter: a new block after this one (a list continues as a list)
+                                        saveLater.stop()
+                                        app.setText(blockItem.index, edit.text)
+                                        const next = ["todo", "bullet"].includes(blockItem.kind) && edit.length > 0 ? blockItem.kind : "paragraph"
+                                        win.focusAfter = app.addBlock(blockItem.index, next)
+                                        e.accepted = true
+                                    } else if (e.key === Qt.Key_Backspace && edit.length === 0) {
+                                        // Backspace in an empty block: a list item becomes text, text goes away
+                                        if (blockItem.kind !== "paragraph") { win.focusAfter = blockItem.index; app.setKind(blockItem.index, "paragraph") }
+                                        else if (blockItem.index > 0) { const prev = blockItem.index - 1; app.remove(blockItem.index); Qt.callLater(() => win.focusBlock(prev, true)) }
+                                        e.accepted = true
+                                    } else if (e.key === Qt.Key_Up && edit.cursorRectangle.y < 4 && blockItem.index > 0) {
+                                        win.focusBlock(blockItem.index - 1, true); e.accepted = true
+                                    } else if (e.key === Qt.Key_Down && edit.cursorRectangle.y + edit.cursorRectangle.height > edit.height - 4 && blockItem.index < win.blocks.length - 1) {
+                                        win.focusBlock(blockItem.index + 1, false); e.accepted = true
+                                    } else if (e.key === Qt.Key_Escape) {
+                                        edit.focus = false; e.accepted = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // a click below the last block continues the page
+                footer: Item {
+                    width: list.width
+                    height: 160
+                    TapHandler {
+                        onTapped: {
+                            const last = win.blocks.length - 1
+                            if (last >= 0 && win.blocks[last].kind === "paragraph" && win.blocks[last].text === "") win.focusBlock(last, false)
+                            else win.focusAfter = app.addBlock(-1, "paragraph")
+                        }
+                    }
+                }
+            }
+
+            // status bar
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 26
+                color: t.panel
+                Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: t.rule; opacity: 0.6 }
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
+                    Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 3.5; color: "#5fb98a" }
+                    Text { text: `${win.blocks.length} blocks · saved as Markdown`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Item { Layout.fillWidth: true }
+                    Text { text: "Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                }
+            }
+        }
+    }
+    }
+}

@@ -3,6 +3,8 @@
 //!
 //! A workspace is a folder of Markdown files: `--dir`, $ZETT_DIR, or ~/zett.
 
+mod window;
+
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 use zett_core::folder::Folder;
@@ -74,8 +76,11 @@ fn main() {
     let cli = Cli::parse();
     let dir = cli.dir.clone().unwrap_or_else(|| std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("zett"));
     let Some(cmd) = cli.cmd else {
-        println!("The zett window is not built yet — the command line works now.\n");
-        let _ = Cli::command().print_help();
+        // no command: the window, on the same workspace folder
+        if std::env::var_os("ZETT_DIR").is_none() {
+            unsafe { std::env::set_var("ZETT_DIR", &dir) };
+        }
+        window::run();
         return;
     };
     if let Cmd::Completions { shell } = cmd {

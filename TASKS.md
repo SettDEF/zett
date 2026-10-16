@@ -9,9 +9,9 @@ See PLAN.md for the vision and milestones.
 - [x] Markdown mirror: page ⇄ .md (headings, paragraphs, bullets, todos, code, quotes, front matter) + tests
 - [ ] Markdown mirror: whole folder ⇄ workspace, watching both sides
 - [ ] zett-edit: key parsing, normal/insert, first motions and edits over a block's text
-- [ ] zett: `--exec` headless (open workspace, run keys/commands, print or save)
-- [ ] zett-app: cxx-qt bridge; QML window with sidebar (pages) and page view
-- [ ] tinct palette in the window; app id `zett`
+- [x] CLI: ls, show, new, add, edit (Vim keys on a page), completions, --json
+- [x] window (cxx-qt + QML): sidebar of pages, page view with blocks, Markdown shortcuts, Enter/Backspace/arrows between blocks, saved to .md; self-capture via ZETT_SHOT
+- [x] tinct palette in the window; icon + launcher (install.sh)
 - [ ] tests: core + mirror round-trips + headless window capture
 - [x] file I/O behind the `fs` feature; core builds for wasm32 without it
 - [ ] check `cargo build -p zett-core -p zett-edit --target wasm32-unknown-unknown` in the test script
