@@ -33,7 +33,7 @@ does), Braille dots everywhere else. Click or `hjkl` to a node and open it.
 
 ## zett term: a terminal written in Rust, built into zett
 
-Full plan: [docs/TERMINAL.md](docs/TERMINAL.md).
+zash is its own project: /mnt/storage/dev/projects/zash (plan: its PLAN.md). zett embeds it as a pane.
 
 zett has its **own terminal emulator, fully Rust**: VT/xterm parsing (the
 `vte` / `alacritty_terminal` crates), GPU text rendering shared with the
