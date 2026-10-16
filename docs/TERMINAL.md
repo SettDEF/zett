@@ -132,3 +132,12 @@ hand; ask before anything permanent):
 | **kastl** | from Zettelkasten, the box the notes live in |
 
 Taken for software: kasten, kast, flint, glint, wick, ember, tinder.
+
+## Starting config: from WezTerm
+
+zash's default configuration starts from the user's WezTerm setup
+(`~/.config/wezterm/`), **only its important features**: fonts and sizes,
+colours (tinct), padding and opacity/blur, the tmux-style keys and pane/tab
+bindings, the status/tab bar look, and the ii-decor button overlay. Not a
+line-by-line port: each feature is re-expressed the zash way (`term.lua`), and
+WezTerm-only workarounds are dropped. Do this at T4 (Lua config).
