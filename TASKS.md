@@ -7,7 +7,7 @@ See PLAN.md for the vision and milestones.
 - [x] zett-core: rope buffer for plain files (open, save atomically, edit, positions) + tests
 - [x] zett-core: block tree on Loro (ids, types, rich text, children, move, export/import, merge) + tests
 - [x] Markdown mirror: page ⇄ .md (headings, paragraphs, bullets, todos, code, quotes, front matter) + tests
-- [ ] Markdown mirror: whole folder ⇄ workspace, watching both sides
+- [x] Markdown mirror: whole folder ⇄ workspace, watching both sides
 - [ ] zett-edit: key parsing, normal/insert, first motions and edits over a block's text
 - [x] CLI: ls, show, new, add, edit (Vim keys on a page), completions, --json
 - [x] window (cxx-qt + QML): sidebar of pages, page view with blocks, Markdown shortcuts, Enter/Backspace/arrows between blocks, saved to .md; self-capture via ZETT_SHOT
@@ -27,8 +27,11 @@ See PLAN.md for the vision and milestones.
 - [x] Vim normal mode in the window (Esc): zett-edit per block, block cursor, NORMAL/INSERT, j/k across blocks
 
 ## Next
-- [ ] watch the folder: reload pages changed by other editors (Neovim, git pull)
+- [x] watch the folder: reload pages changed by other editors (Neovim, git pull)
 - [ ] undo history per page that survives a restart (through the CRDT)
 - [x] [[links]] (click opens or creates the page), backlinks under each page, Ctrl+P quick open
-- [ ] slash menu, drag to reorder blocks, block references ((id)) (M2)
+- [~] slash menu (written, not verified on screen yet)
+- [ ] drag to reorder blocks, block references ((id)) (M2)
 - [ ] visual mode, text objects, search in the window (M1)
+- [ ] M2½: `zett -t` terminal front end (ratatui), read-only first
+- [ ] SPC leader + which-key popup, then init.lua

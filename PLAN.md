@@ -31,35 +31,113 @@ filterable by any query, and it works **in the terminal too**: drawn with the
 Kitty graphics protocol where the terminal has it (and zett's own terminal
 does), Braille dots everywhere else. Click or `hjkl` to a node and open it.
 
-## zett term: a terminal written in Rust, built into zett
+## zett and zash: the terminal is a neighbour, not a copy
 
-zash is its own project: /mnt/storage/dev/projects/zash (plan: its PLAN.md). zett embeds it as a pane.
+The terminal is **zash**, its own project (/mnt/storage/dev/projects/zash,
+plan in its PLAN.md): Rust, GPU-drawn, tinct-themed, with shell marks, a
+completion popup and (planned) native splits and a Neovim mode. zett does not
+grow a second terminal; it **embeds zash's engine as a pane** (a `zash-core`
+crate split out of zash: session, emulation, renderer), so both get every
+improvement at once. What the pairing adds:
 
-zett has its **own terminal emulator, fully Rust**: VT/xterm parsing (the
-`vte` / `alacritty_terminal` crates), GPU text rendering shared with the
-editor, ligatures, Kitty graphics and keyboard protocols, true colour,
-tinct-themed. It runs as a pane or tab inside zett and as a standalone
-`zett term`, a replacement for WezTerm on this desktop.
+- **Commands are blocks.** zash already knows where each command, its output
+  and its exit status are (OSC 133 marks). In zett a finished command becomes
+  a block: link it from a page, embed it, search all past output, rerun it,
+  diff two runs.
+- **Vim in the scrollback**: zett-edit's grammar moves, selects and yanks
+  through output; `/` searches it.
+- **Live terminal blocks**: a page holds a running terminal (a dev server, a
+  log tail) next to its notes, and keeps it across restarts.
+- **Agents in the terminal**: an agent block runs commands in a pane you
+  watch, each step approvable and undoable.
+- **zett inside zash**: the terminal version of zett (below) runs in a zash
+  pane and draws images, the graph and rich rows through zash's protocols.
 
-Because it lives inside a workspace, it can do what no other terminal can:
+## Two front ends on one engine: the window and the terminal
 
-- **Commands are blocks.** Every command and its output is a block: link it
-  from a page, embed it, search all past output, rerun it, diff two runs.
-- **Vim everywhere in the scrollback**: the same modal engine moves, selects
-  and yanks through output; `/` searches it.
-- **Live terminal blocks in pages**: a page can hold a running terminal
-  (a dev server, a log tail) next to its notes, and keep it across restarts.
-- **Agents in the terminal**: an agent block can run commands in a pane you
-  watch, each step undoable or approvable.
-- Splits, tabs and sessions that persist (tmux's job), with zett's `SPC`
-  leader instead of a prefix key.
+zett is **one engine with two faces**, like Neovim with a GUI. Everything
+below the screen (blocks, editing, commands, Lua, plugins, sync) is shared
+code; only drawing and input differ. A plugin written once works in both.
 
-## Front ends
+| | **zett** (window) | **zett** in a terminal (`zett -t`, or automatic over SSH / without a display) |
+|---|---|---|
+| Drawn with | QML through cxx-qt, GPU | ratatui on any terminal; richer in zash (images, true sizes) |
+| Pages | blocks with real typography, images, embeds | the same blocks as styled text: headings bold and coloured, tasks as `☐/☑`, code highlighted, images as Kitty graphics or a placeholder |
+| Editing | Vim grammar in every block, mouse too | the identical Vim grammar (same zett-edit), keyboard first, mouse where the terminal reports it |
+| Navigation | sidebar, tabs, splits, Ctrl+P, `SPC` | the same `SPC` tree and which-key popup, splits and tabs drawn with box lines |
+| Canvas / graph | full canvas, zoom, drag | the graph in Braille dots or Kitty graphics; canvas as a read-mostly map with `hjkl` between cards |
+| Databases | tables, boards, calendars | tables and boards in cells, sortable and editable |
+| Where it shines | daily work on this desktop | SSH, servers, a tmux / zash pane next to code, a 10 ms start |
 
-- **Window**: QML through cxx-qt (the main app)
-- **Terminal**: `zett` in any terminal, a full TUI on the same core
-  (ratatui), so it runs over SSH and on machines without the app, like Neovim
-- **Browser**: the WASM build (extension, web viewer)
+Both open the **same folder at the same time**: an edit in one shows up in
+the other within a moment (the folder mirror already does this for the window
+and Neovim).
+
+**Browser**: the WASM build of the same engine (extension, web viewer).
+
+## Plugins and extensions: as deep as Vim's, safer than Vim's
+
+Vim and Emacs last because users can change anything. zett aims for that
+reach without the usual cost (slow starts, plugins that break each other,
+code that can read your whole disk).
+
+**Three levels**, from a line of config to a full program:
+
+1. **`init.lua`** — settings, keymaps, small commands, hooks. Reloads live.
+   ```lua
+   zett.map("n", "<leader>td", function() zett.page.add_block("todo", os.date("%F")) end)
+   zett.on("page.saved", function(p) if p.tags.journal then zett.git.commit(p) end end)
+   ```
+2. **Lua plugins** — a folder with `plugin.toml` and Lua files. Commands,
+   keymaps, block types (with a declarative layout), views, sources for
+   queries, themes, snippets, language support. Lazy-loaded on first use.
+3. **WASM plugins** — Rust (or anything that compiles to WASM) for heavy work:
+   parsers, renderers, sync backends, data sources. Run in wasmtime with a
+   fuel/memory limit, so a plugin cannot freeze the app.
+
+**What a plugin can add** (each through the same API the built-ins use):
+
+| Extension point | Example |
+|---|---|
+| Commands + keymaps | `SPC g b` blame the block's file, a `:Translate` command |
+| Block types | a Mermaid diagram, a chess board, a stock chart, a Kanban card |
+| Views | a timeline view, a mind map, a Gantt chart |
+| Sources (for queries / tables) | GitHub issues, RSS, a SQLite file, Home Assistant |
+| Text features | snippets, abbreviations, spell check, an LSP client for code blocks |
+| Themes | colours (tinct is the default), fonts, spacing |
+| Exporters / publishers | PDF, a blog, slides from a page |
+| Agents | a review agent, a summariser, a research helper |
+
+**Safety and order**, the things that make large Vim setups painful:
+
+- **Permissions in the manifest** (`net = ["api.github.com"]`, `fs = ["~/Notes"]`,
+  `run = ["git"]`), asked once and shown in the plugin page; WASM plugins
+  cannot reach anything not granted. Lua plugins run with the same checks on
+  the zett API (the raw `io`/`os` modules are off unless granted).
+- **A lockfile** (`zett.lock`): exact versions and hashes; `zett sync`
+  installs, updates and rolls back; a broken update is one command to undo.
+- **Measured cost**: `zett doctor` and `SPC h p` show each plugin's start
+  time and memory; a plugin that slows the start past the budget is named.
+- **Sources**: a git URL, a local folder, or a plain registry (a git repo of
+  manifests); no account needed.
+- **Hot reload** while developing a plugin, a REPL (`SPC :` for Lua), and
+  `zett plugin new` to scaffold one with tests.
+- **Built-ins are plugins too**: tables, the canvas, the graph and the Doom
+  layer are written against the public API, which keeps that API complete.
+
+## How a workspace is stored
+
+- **A folder of Markdown files** stays the truth you can see: one `.md` per
+  page, readable and editable by anything (git, grep, Neovim). Already working.
+- **`.zett/` next to it** keeps what Markdown cannot: block ids, the CRDT
+  history (Loro snapshots + updates), canvas layouts, database schemas, the
+  search index. Deleting it loses history, never text.
+- **Block ids in Markdown** only where something points at a block (a short
+  `^id` at the end of the line, as in other Markdown tools), so files stay clean.
+- **Edits from outside** are merged into the CRDT as a change by "disk", so
+  undo and history cover them too.
+- **Attachments** (images, PDFs) live in `assets/` with content-hash names;
+  the same file is stored once.
 
 ## The Doom Emacs layer: great out of the box
 
@@ -140,50 +218,94 @@ crates/
   zett-script   Lua 5.4 (mlua) API + WASM plugins (wasmtime): commands,
                 block types, views, hooks
   zett-sync     device-to-device sync of the CRDT (LAN discovery, encrypted)
+  zett-search   full-text index (tantivy) over blocks, kept incremental
   zett-app      cxx-qt bridge and the QML window (sidebar, tabs, splits,
                 page / canvas / table / text views), tinct-themed
-  zett          binary: `zett [path]`, `zett --exec`, `zett serve` (agents, scripts)
+  zett-tui      the terminal front end (ratatui) over the same core
+  zett          binary: `zett [path]`, `zett -t`, `zett --exec`, `zett serve` (agents, scripts)
+  (zash-core)   from the zash project: terminal panes inside zett
 ```
+
+Today `zett-core`, `zett-edit` and `zett` (CLI + window) exist; the rest are
+split out when their milestone starts, not before.
 
 ## Milestones
 
 Each one is usable on its own; order chosen so the data model is right first.
+✅ done · 🟡 started · ⬜ not yet (status 2026-10-17)
 
-1. **M0 — foundation.** Block tree on Loro with the Markdown mirror; a window
-   that shows a workspace as pages; `zett --exec` headless; tests.
-2. **M1 — editing.** Vim grammar in blocks (normal / insert / visual / `:`),
-   block-level motions (move, indent, fold, zoom into a block), slash menu,
-   drag to reorder; undo through the CRDT. The `SPC` leader tree with the
-   which-key popup and `SPC h` help.
-3. **M2 — linking.** `[[pages]]`, `((block refs))`, embeds that edit both
-   ways, backlinks, tags, quick open, full-text search.
-4. **M3 — databases.** Properties, table / kanban / calendar / gallery views,
+1. ✅ **M0 — foundation.** Block tree on Loro with the Markdown mirror; the
+   folder mirror (both directions, edits from other programs picked up); a
+   window that shows a workspace as pages; the CLI (`ls show new add edit`);
+   performance budgets measured and met.
+2. 🟡 **M1 — editing.** Vim grammar in blocks (normal ✅ / insert ✅ /
+   visual ⬜ / `:` ⬜), block-level motions (move, indent, fold, zoom into a
+   block), slash menu (written, not yet verified on screen), drag to reorder;
+   undo through the CRDT. The `SPC` leader tree with the which-key popup and
+   `SPC h` help.
+3. 🟡 **M2 — linking.** `[[pages]]` ✅ (click opens or creates), backlinks ✅,
+   quick open ✅ (Ctrl+P), `((block refs))`, embeds that edit both ways, tags,
+   full-text search.
+4. ⬜ **M2½ — zett in the terminal.** `zett -t`: the same pages, blocks, Vim
+   keys and `SPC` tree in ratatui; images and true sizes inside zash. Early on
+   purpose: it keeps the engine honest (nothing may depend on QML), and it is
+   what runs over SSH.
+5. **M3 — databases.** Properties, table / kanban / calendar / gallery views,
    relations, rollups, formulas; SQL over the workspace.
-5. **M4 — canvas.** Cards, arrows, groups, zoom, live widgets; keyboard-driven.
-6. **M5 — programmable.** `init.lua` with Doom-style modules and flags,
+6. **M4 — canvas.** Cards, arrows, groups, zoom, live widgets; keyboard-driven.
+7. **M5 — programmable.** `init.lua` with Doom-style modules and flags,
    `zett doctor`, `zett sync` with a lockfile; commands, keymaps, hooks;
    custom block types in Lua; live code blocks with stored output; a REPL.
-7. **M6 — live data.** Sources (folder, git, HTTP, Dotos, Kalends, Vitals,
+8. **M6 — live data.** Sources (folder, git, HTTP, Dotos, Kalends, Vitals,
    Quarry, Reel), charts, dashboards; shell widgets from blocks.
-8. **M7 — sync and history.** Device-to-device sync, time-travel slider,
+9. **M7 — sync and history.** Device-to-device sync, time-travel slider,
    branches and merge.
-9. **M8 — agents and plugins.** Agents as collaborators (Claude via `zett
+10. **M8 — agents and plugins.** Agents as collaborators (Claude via `zett
    serve`), WASM plugins.
-10. **M8½ — terminal and graph.** zett term (VT parsing, rendering, panes,
-    command blocks, scrollback with Vim keys), the graph view in the window
-    and in the terminal, the TUI front end.
-11. **M9 — everywhere.** Firefox extension (modal editing in every text field,
+11. **M8½ — terminal panes and graph.** zash panes inside zett (command
+    blocks, scrollback with Vim keys, live terminal blocks), the graph view in
+    the window and in the terminal.
+12. **M9 — everywhere.** Firefox extension (modal editing in every text field,
     link hints, clipper, native-messaging bridge), tela-zen integration,
     Neovim plugin, CLI verbs.
-12. **M10 — on the web.** Project website with docs; publish pages and canvases
+13. **M10 — on the web.** Project website with docs; publish pages and canvases
     as static sites; the WASM web viewer.
 
 The Firefox extension's editing part can start early (after M1): it needs only
 `zett-edit` compiled to WASM, not the rest of the app.
 
+## Next up (in order)
+
+1. Verify the slash menu on screen; fix what the capture shows.
+2. Visual mode (`v`, `V`) and text objects (`iw`, `ap`, `i"`…) in zett-edit,
+   checked against Neovim with the comparison harness.
+3. Block motions: move a block (`Alt+j/k`), indent / outdent (`>>` `<<`),
+   fold, zoom into a block.
+4. Undo that survives a restart (history from the CRDT in `.zett/`).
+5. `zett -t`: the terminal front end, first read-only, then editing.
+6. The `SPC` tree with which-key, then `init.lua` (the start of M5).
+
+## Quality: how we know it is good
+
+- **Neovim as the referee.** Every editing feature runs the same keys in
+  zett-edit and headless Neovim (`scripts-nvim-compare.sh`); a difference is a
+  bug unless written down as deliberate. Today: 38/38 cases equal.
+- **Budgets, measured** (docs/PERFORMANCE.md): keypress to screen < 8 ms,
+  cold start < 150 ms, 100k-block workspaces; `examples/perf.rs` fails a
+  release that misses one.
+- **Headless captures** of the window (`ZETT_SHOT`) for every visual change,
+  read before anything is called done; the same for the terminal front end.
+- **Round-trip tests**: Markdown → blocks → Markdown is byte-identical for
+  everything zett writes; CRDT merges fuzzed with random concurrent edits.
+- **The WASM check**: `zett-core` and `zett-edit` build for
+  `wasm32-unknown-unknown` in the test script, so the browser pieces never rot.
+
 ## Decided
 
 - Rust everywhere; QML window through cxx-qt (one binary).
+- The terminal is zash (own project); zett embeds its engine, never a copy.
+- Two front ends (window, terminal) on one engine; plugins work in both.
+- Plugins: `init.lua` → Lua plugins → WASM plugins, with permissions and a lockfile.
 - Lua for configuration and quick extensions; WASM for heavy plugins.
 - Loro as the CRDT; Markdown files mirror pages for interop.
 - `zett-core` and `zett-edit` stay WASM-clean: no file system, threads or
