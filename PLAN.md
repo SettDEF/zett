@@ -33,6 +33,8 @@ does), Braille dots everywhere else. Click or `hjkl` to a node and open it.
 
 ## zett term: a terminal written in Rust, built into zett
 
+Full plan: [docs/TERMINAL.md](docs/TERMINAL.md).
+
 zett has its **own terminal emulator, fully Rust**: VT/xterm parsing (the
 `vte` / `alacritty_terminal` crates), GPU text rendering shared with the
 editor, ligatures, Kitty graphics and keyboard protocols, true colour,
