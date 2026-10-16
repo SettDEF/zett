@@ -21,6 +21,7 @@ pub mod qobject {
         #[qproperty(QString, dir)]
         #[qproperty(i32, current)]
         #[qproperty(QString, shot)]
+        #[qproperty(QString, shot_keys, cxx_name = "shotKeys")]
         type Zett = super::ZettRust;
 
         /// opens page `index` of the list
@@ -48,6 +49,14 @@ pub mod qobject {
         fn new_page(self: Pin<&mut Zett>, title: &QString);
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
+        /// Vim: normal mode on a block (Esc); returns {text, cursor, mode}
+        #[qinvokable]
+        #[cxx_name = "vimBegin"]
+        fn vim_begin(self: Pin<&mut Zett>, block: i32, text: &QString, cursor: i32) -> QString;
+        /// one key in Vim notation (<Esc>, <C-r>, x…); returns {text, cursor, mode}
+        #[qinvokable]
+        #[cxx_name = "vimKey"]
+        fn vim_key(self: Pin<&mut Zett>, key: &QString) -> QString;
     }
 }
 
@@ -67,6 +76,10 @@ pub struct ZettRust {
     current: i32,
     /// ZETT_SHOT: render, save a picture of the window there, quit (headless checks)
     shot: QString,
+    /// ZETT_SHOT_KEYS: Vim keys fed into the second block before the capture (tests)
+    shot_keys: QString,
+    /// the block in Vim normal mode and its editor (undo and registers live here)
+    vim: Option<(i32, zett_edit::Editor)>,
 }
 
 pub fn workspace_dir() -> std::path::PathBuf {
@@ -93,6 +106,8 @@ impl Default for ZettRust {
             dir: QString::from(&dir.display().to_string()),
             current: -1,
             shot: QString::from(&std::env::var("ZETT_SHOT").unwrap_or_default()),
+            vim: None,
+            shot_keys: QString::from(&std::env::var("ZETT_SHOT_KEYS").unwrap_or_default()),
         };
         z.refresh_pages();
         // open the page worked on last: the most recently changed file
@@ -306,5 +321,45 @@ pub fn run() {
     }
     if let Some(app) = app.as_mut() {
         app.exec();
+    }
+}
+
+fn vim_state(e: &zett_edit::Editor) -> QString {
+    let p = e.cursor();
+    let cursor = e.buf.to_char(p);
+    let mode = match e.mode() { zett_edit::Mode::Normal => "normal", zett_edit::Mode::Insert => "insert" };
+    QString::from(&serde_json::json!({ "text": e.text(), "cursor": cursor, "mode": mode }).to_string())
+}
+
+impl qobject::Zett {
+    fn vim_begin(mut self: Pin<&mut Self>, block: i32, text: &QString, cursor: i32) -> QString {
+        let mut e = zett_edit::Editor::from_str(&text.to_string());
+        // Esc steps back onto the last typed character, as in Vim
+        let at = e.buf.to_pos((cursor.max(0) as usize).saturating_sub(1));
+        e.set_cursor(at);
+        let state = vim_state(&e);
+        self.as_mut().rust_mut().get_mut().vim = Some((block, e));
+        state
+    }
+
+    fn vim_key(mut self: Pin<&mut Self>, key: &QString) -> QString {
+        let r = self.as_mut().rust_mut();
+        let r = r.get_mut();
+        let Some((block, e)) = r.vim.as_mut() else { return QString::from("{}") };
+        let before = e.text();
+        e.feed(&key.to_string());
+        let state = vim_state(e);
+        let (block, after, insert) = (*block, e.text(), e.mode() == zett_edit::Mode::Insert);
+        if after != before {
+            if let (Some(b), Some(f)) = (r.block(block), r.folder.as_ref()) {
+                let _ = f.ws.set_text(b, &after);
+            }
+            r.save();
+        }
+        if insert {
+            // insert mode belongs to the text field again
+            r.vim = None;
+        }
+        state
     }
 }

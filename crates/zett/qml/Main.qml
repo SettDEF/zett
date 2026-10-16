@@ -39,6 +39,12 @@ ApplicationWindow {
     readonly property var blocks: { try { return JSON.parse(app.blocks) } catch (e) { return [] } }
     property int focusAfter: -1          // a block to focus once the list is rebuilt
     property bool showSource: false
+    property string vimMode: ""          // NORMAL or INSERT while Vim keys are in use
+
+    function vimEnter(i) {
+        const d = list.itemAtIndex(i)
+        if (d) d.vimHere()
+    }
 
     onBlocksChanged: if (focusAfter >= 0) {
         const i = focusAfter
@@ -54,7 +60,14 @@ ApplicationWindow {
     Timer {
         running: app.shot.length > 0
         interval: 1500
-        onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })
+        onTriggered: {
+            if (app.shotKeys.length > 0) {
+                win.vimEnter(1)
+                const d = list.itemAtIndex(1)
+                for (const k of app.shotKeys.split(" ")) d.vimKeyForTest(k)
+            }
+            Qt.callLater(() => rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }))
+        }
     }
 
     Rectangle {
@@ -229,6 +242,13 @@ ApplicationWindow {
                     width: list.width
                     height: body.implicitHeight + (modelData.kind === "heading" ? 14 : 6)
 
+                    function vimKeyForTest(k) { edit.applyVim(app.vimKey(k)) }
+
+                    function vimHere() {
+                        edit.forceActiveFocus()
+                        edit.applyVim(app.vimBegin(index, edit.text, 1))
+                    }
+
                     function focusEditor(pos) {
                         edit.forceActiveFocus()
                         edit.cursorPosition = pos < 0 ? edit.length : pos
@@ -285,8 +305,30 @@ ApplicationWindow {
                                 font.weight: blockItem.kind === "heading" ? Font.DemiBold : Font.Normal
                                 font.italic: blockItem.kind === "quote"
                                 font.strikeout: blockItem.kind === "todo" && blockItem.checked
-                                selectionColor: Qt.alpha(t.accent, 0.4)
-                                selectedTextColor: t.text
+                                selectionColor: normal ? t.accent : Qt.alpha(t.accent, 0.4)
+                                selectedTextColor: normal ? t.onAccent : t.text
+                                // Vim normal mode: keys go to zett-edit (window.rs), the cursor is a block
+                                property bool normal: false
+                                property bool applying: false
+                                function applyVim(json) {
+                                    const s = JSON.parse(json)
+                                    if (s.text === undefined) return
+                                    applying = true
+                                    if (s.text !== text) text = s.text
+                                    applying = false
+                                    normal = s.mode === "normal"
+                                    win.vimMode = normal ? "NORMAL" : "INSERT"
+                                    cursorPosition = Math.min(s.cursor, length)
+                                    if (normal && length > 0) select(Math.min(s.cursor, length - 1), Math.min(s.cursor, length - 1) + 1)
+                                    else deselect()
+                                }
+                                function vimKeyName(e) {
+                                    const named = { [Qt.Key_Escape]: "Esc", [Qt.Key_Return]: "CR", [Qt.Key_Enter]: "CR", [Qt.Key_Backspace]: "BS", [Qt.Key_Left]: "Left", [Qt.Key_Right]: "Right", [Qt.Key_Up]: "Up", [Qt.Key_Down]: "Down", [Qt.Key_Home]: "Home", [Qt.Key_End]: "End", [Qt.Key_Delete]: "Del", [Qt.Key_Tab]: "Tab" }
+                                    if (named[e.key]) return `<${named[e.key]}>`
+                                    if (e.modifiers & Qt.ControlModifier && e.key >= Qt.Key_A && e.key <= Qt.Key_Z) return `<C-${String.fromCharCode(e.key + 32)}>`
+                                    if (!e.text) return ""
+                                    return e.text === "<" ? "<lt>" : e.text
+                                }
 
                                 // a placeholder on an empty, focused block
                                 Text {
@@ -299,7 +341,7 @@ ApplicationWindow {
                                 // saved a moment after typing stops
                                 Timer { id: saveLater; interval: 350; onTriggered: app.setText(blockItem.index, edit.text) }
                                 onTextChanged: {
-                                    if (!activeFocus) return
+                                    if (!activeFocus || applying) return
                                     // Markdown shortcuts at the start of an empty block turn it into another kind
                                     const shortcuts = [["# ", "h1"], ["## ", "h2"], ["### ", "h3"], ["- [ ] ", "todo"], ["[] ", "todo"], ["- ", "bullet"], ["* ", "bullet"], ["> ", "quote"], ["```", "code"]]
                                     if (blockItem.kind === "paragraph") {
@@ -314,9 +356,31 @@ ApplicationWindow {
                                     }
                                     saveLater.restart()
                                 }
-                                onActiveFocusChanged: if (!activeFocus && saveLater.running) { saveLater.stop(); app.setText(blockItem.index, edit.text) }
+                                onActiveFocusChanged: if (!activeFocus) {
+                                    if (saveLater.running) { saveLater.stop(); app.setText(blockItem.index, edit.text) }
+                                    if (normal) { normal = false; deselect(); win.vimMode = "" }
+                                }
 
                                 Keys.onPressed: (e) => {
+                                    if (normal) {
+                                        if (e.key === Qt.Key_Escape) { normal = false; deselect(); win.vimMode = ""; edit.focus = false; e.accepted = true; return }
+                                        const k = vimKeyName(e)
+                                        if (!k) return
+                                        const before = cursorPosition
+                                        applyVim(app.vimKey(k))
+                                        // j on the last line, k on the first: on to the next or previous block
+                                        if ((k === "j" || k === "<Down>") && cursorPosition === before && blockItem.index < win.blocks.length - 1) win.vimEnter(blockItem.index + 1)
+                                        else if ((k === "k" || k === "<Up>") && cursorPosition === before && blockItem.index > 0) win.vimEnter(blockItem.index - 1)
+                                        e.accepted = true
+                                        return
+                                    }
+                                    if (e.key === Qt.Key_Escape) {
+                                        saveLater.stop()
+                                        app.setText(blockItem.index, edit.text)
+                                        applyVim(app.vimBegin(blockItem.index, edit.text, cursorPosition))
+                                        e.accepted = true
+                                        return
+                                    }
                                     const code = blockItem.kind === "code"
                                     if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier) && !code) {
                                         // Enter: a new block after this one (a list continues as a list)
@@ -367,8 +431,9 @@ ApplicationWindow {
                     anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
                     Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 3.5; color: "#5fb98a" }
                     Text { text: `${win.blocks.length} blocks · saved as Markdown`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Text { visible: win.vimMode.length > 0; text: win.vimMode; color: win.vimMode === "NORMAL" ? t.accent : t.dim; font.family: t.mono; font.pixelSize: 11; font.weight: Font.Bold }
                     Item { Layout.fillWidth: true }
-                    Text { text: "Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    Text { text: "Esc Vim keys · Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
                 }
             }
         }
