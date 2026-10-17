@@ -7,4 +7,5 @@ license.workspace = true
 
 [dependencies]
 zett-core = { workspace = true, features = ["fs"] }
+zett-edit.workspace = true
 mlua = { version = "0.10", features = ["lua54", "vendored"] }

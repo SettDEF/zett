@@ -5,12 +5,13 @@
 //!
 //! M0 covers the core grammar: counts, `h j k l w b e 0 ^ $ gg G`, operators
 //! `d c y` with those motions (and doubled for lines), `x X D C r p P J`,
-//! insert entries `i a I A o O`, undo and redo; visual `v` `V` with operators, case,
+//! insert entries `i a I A o O`, undo and redo as a tree (`u C-r g- g+`); visual `v` `V` with operators, case,
 //! replace and put; text objects (words, quotes, brackets, paragraphs); `f t F T ; ,`.
 //! Every case in tests/nvim-cases.tsv behaves exactly as in Neovim. Still to come:
 //! registers by name, dot-repeat, macros and search.
 
 pub mod keys;
+mod undo;
 pub use keys::{Code, Key};
 
 use zett_core::{Buffer, Pos};
@@ -45,22 +46,7 @@ struct Register {
     linewise: bool,
 }
 
-/// One edit: at `at`, `removed` was taken out and `inserted` put in.
-#[derive(Clone, Debug)]
-struct Edit {
-    at: usize,
-    removed: String,
-    inserted: String,
-}
-
-/// One undo step: the edits of one change (a whole insert session is one).
-/// Only what changed is kept, never a copy of the text: undo costs the size
-/// of the change, not the size of the file.
-#[derive(Clone, Debug, Default)]
-struct Change {
-    edits: Vec<Edit>,
-    cursor: usize,
-}
+use undo::{Change, Edit};
 
 pub struct Editor {
     pub buf: Buffer,
@@ -74,8 +60,7 @@ pub struct Editor {
     /// a key waiting for its second key: `g`, `r`
     prefix: Option<char>,
     reg: Register,
-    undo: Vec<Change>,
-    redo: Vec<Change>,
+    undo: undo::Tree,
     /// the change being recorded, closed by the next one or by `u`
     open: Option<Change>,
     /// visual mode: where the selection started
@@ -102,8 +87,7 @@ impl Editor {
             op_count: None,
             prefix: None,
             reg: Register::default(),
-            undo: Vec::new(),
-            redo: Vec::new(),
+            undo: undo::Tree::default(),
             open: None,
         }
     }
@@ -285,6 +269,15 @@ impl Editor {
         // second key of a two-key command
         if let Some(p) = self.prefix.take() {
             match (p, c) {
+                // g- g+: back and forth in time, across branches
+                ('g', '-') => {
+                    let n = self.take_count();
+                    return self.undo_goto(self.undo.cur.saturating_sub(n));
+                }
+                ('g', '+') => {
+                    let n = self.take_count();
+                    return self.undo_goto((self.undo.cur + n).min(self.undo.nodes.len() - 1));
+                }
                 ('g', 'g') => {
                     let line = self.count.take().map(|n| n.saturating_sub(1)).unwrap_or(0);
                     return self.motion(Span::Lines(self.cur_line(), line.min(self.buf.len_lines() - 1)), Some(self.first_non_blank(line.min(self.buf.len_lines() - 1))));
@@ -1133,7 +1126,6 @@ impl Editor {
     fn begin(&mut self) {
         self.close();
         self.open = Some(Change { edits: Vec::new(), cursor: self.cursor });
-        self.redo.clear();
     }
     fn close(&mut self) {
         if let Some(c) = self.open.take() {
@@ -1159,29 +1151,84 @@ impl Editor {
     }
     fn undo_once(&mut self) {
         self.close();
-        if let Some(c) = self.undo.pop() {
-            for e in c.edits.iter().rev() {
-                self.buf.remove(e.at, e.at + e.inserted.chars().count());
-                self.buf.insert(e.at, &e.removed);
-            }
-            self.cursor = c.cursor;
-            self.mode = Mode::Normal;
-            self.clamp();
-            self.redo.push(c);
+        let n = self.undo.cur;
+        if n == 0 {
+            return;
         }
+        self.undo.nodes[n].change.revert(&mut self.buf);
+        self.cursor = self.undo.nodes[n].change.cursor;
+        let p = self.undo.nodes[n].parent;
+        self.undo.nodes[p].redo = Some(n);
+        self.undo.cur = p;
+        self.mode = Mode::Normal;
+        self.clamp();
     }
     fn redo_once(&mut self) {
         self.close();
-        if let Some(c) = self.redo.pop() {
-            for e in &c.edits {
-                self.buf.remove(e.at, e.at + e.removed.chars().count());
-                self.buf.insert(e.at, &e.inserted);
-            }
+        if let Some(n) = self.undo.nodes[self.undo.cur].redo {
+            self.forward(n);
             // Vim puts the cursor where the change starts
+            let c = &self.undo.nodes[n].change;
             self.cursor = c.edits.first().map_or(c.cursor, |e| e.at);
             self.clamp();
-            self.undo.push(c);
         }
+    }
+    /// Applies child `n` of the current node.
+    fn forward(&mut self, n: usize) {
+        self.undo.nodes[n].change.apply(&mut self.buf);
+        let p = self.undo.nodes[n].parent;
+        self.undo.nodes[p].redo = Some(n);
+        self.undo.cur = n;
+    }
+
+    // ── the undo tree, for undotree-like views ──
+
+    /// Every state: (its parent, when it was made in seconds since the epoch). State 0 is
+    /// the text as opened; a state's number is its place in time.
+    pub fn undo_states(&mut self) -> Vec<(usize, u64)> {
+        // a finished change counts at once; one still being typed does not
+        if self.mode != Mode::Insert {
+            self.close();
+        }
+        self.undo.nodes.iter().map(|n| (n.parent, n.time)).collect()
+    }
+    /// `u` and `C-r` once, for scripts.
+    pub fn undo(&mut self) {
+        self.undo_once();
+    }
+    pub fn redo(&mut self) {
+        self.redo_once();
+    }
+    /// The state the text is in.
+    pub fn undo_current(&mut self) -> usize {
+        if self.mode != Mode::Insert {
+            self.close();
+        }
+        self.undo.cur
+    }
+    /// The text as it is at state `n`, without going there.
+    pub fn text_at(&mut self, n: usize) -> String {
+        if self.mode != Mode::Insert {
+            self.close();
+        }
+        if n >= self.undo.nodes.len() { self.text() } else { self.undo.text_at(&self.text(), n) }
+    }
+    /// Goes to state `n`, along the tree (undoing up to the common state, then redoing down).
+    pub fn undo_goto(&mut self, n: usize) {
+        self.close();
+        if n >= self.undo.nodes.len() || n == self.undo.cur {
+            return;
+        }
+        let (up, down) = self.undo.path(self.undo.cur, n);
+        for _ in up {
+            self.undo_once();
+        }
+        for d in down {
+            self.forward(d);
+            self.cursor = self.undo.nodes[d].change.edits.first().map_or(self.cursor, |e| e.at);
+        }
+        self.mode = Mode::Normal;
+        self.clamp();
     }
 }
 
@@ -1315,5 +1362,32 @@ mod apply_tests {
         assert_eq!(e.buf.line(1).trim_end(), "bar + bar");
         e.feed("u");
         assert_eq!(e.buf.line(1).trim_end(), "foo + foo");
+    }
+}
+
+#[cfg(test)]
+mod undo_tree_tests {
+    use super::*;
+
+    #[test]
+    fn branches_are_kept() {
+        let mut e = Editor::from_str("a\n");
+        e.feed("Ab<Esc>"); // 1: ab
+        e.feed("Ac<Esc>"); // 2: abc
+        e.feed("u"); // back to 1
+        e.feed("Ad<Esc>"); // 3: abd, a branch beside 2
+        assert_eq!(e.text(), "abd\n");
+        assert_eq!(e.undo_states().iter().map(|s| s.0).collect::<Vec<_>>(), vec![0, 0, 1, 1]);
+        assert_eq!(e.text_at(2), "abc\n");
+        e.undo_goto(2);
+        assert_eq!(e.text(), "abc\n");
+        e.undo_goto(0);
+        assert_eq!(e.text(), "a\n");
+        e.feed("<C-r><C-r>"); // redo follows the branch last visited
+        assert_eq!(e.text(), "abc\n");
+        e.feed("g-"); // in time: 2 → 1
+        assert_eq!(e.text(), "ab\n");
+        e.feed("g+g+"); // 1 → 2 → 3
+        assert_eq!(e.text(), "abd\n");
     }
 }

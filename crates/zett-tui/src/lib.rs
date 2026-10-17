@@ -2,7 +2,9 @@
 
 mod doom;
 mod lsp;
-use doom::{Pick, Tree, WTree, Win};
+mod panels;
+mod cmdline;
+use doom::{project_of, Pick, WTree, Win};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::crossterm::{cursor::SetCursorStyle, execute};
@@ -17,7 +19,7 @@ use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Scop
 use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
 use zett_core::{Buffer, Pos};
 use zett_edit::{Code, Editor, Key, Mode};
-use zett_script::{Effect, Engine, Feed, MenuItem};
+use zett_script::{Effect, Engine, Feed, MenuItem, PanelView};
 
 const TAB: usize = 4;
 
@@ -282,8 +284,17 @@ struct App {
     started_ms: u128,
     /// visual mode: a g waiting for its c
     vis_g: bool,
-    /// the project tree sidebar
-    side: Tree,
+    /// a script's question on the input line (zett.input), instead of `:`
+    prompt: Option<String>,
+    /// the chosen suggestion under `:`
+    cmd_sel: usize,
+    /// plugin panels: where each is scrolled to and was drawn, the last click (for double)
+    panel_tops: std::collections::HashMap<String, usize>,
+    panel_rects: Vec<(String, Rect)>,
+    last_click: Option<(Instant, String, usize)>,
+    /// for buf_enter and text_changed: the buffer and text the hooks last heard about
+    seen_doc: Option<(usize, String)>,
+    seen_rev: u64,
     lsp: zett_lsp::Servers,
     lsp_status: String,
     comp: Option<lsp::Comp>,
@@ -369,7 +380,13 @@ impl App {
             branch_at: Instant::now() - Duration::from_secs(60),
             started_ms: 0,
             vis_g: false,
-            side: Tree::default(),
+            prompt: None,
+            cmd_sel: 0,
+            panel_tops: Default::default(),
+            panel_rects: Vec::new(),
+            last_click: None,
+            seen_doc: None,
+            seen_rev: 0,
             lsp: zett_lsp::Servers::new(),
             lsp_status: String::new(),
             comp: None,
@@ -404,6 +421,7 @@ impl App {
         let mut shape = None;
         while !self.quit {
             self.lsp_tick();
+            self.watch_buffer();
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.picker.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
@@ -419,11 +437,12 @@ impl App {
                 if !self.keyseq.is_empty() && self.key_at.elapsed() >= Duration::from_millis(900) {
                     // keys that are exactly a mapping run now; a prefix alone keeps its menu open
                     // until the next key (as which-key does)
-                    match self.engine.timeout("n", &self.keyseq) {
+                    let seq = self.keyseq.clone();
+                    match self.with_lua(|e| e.timeout("n", &seq)) {
                         Feed::Ran(fx) => {
                             self.keyseq.clear();
                             self.menu.clear();
-                            self.effects(fx);
+                            self.after_lua(fx);
                         }
                         _ => self.key_at = Instant::now() + Duration::from_secs(3600),
                     }
@@ -458,8 +477,8 @@ impl App {
         if self.cmdline.is_some() {
             return self.cmdline_key(k);
         }
-        if self.side.open && self.side.focused {
-            return self.tree_key(k);
+        if self.panel_key(k) {
+            return;
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         // Ctrl+S saves in any mode, Ctrl+P finds a file
@@ -518,7 +537,7 @@ impl App {
             }
             let mut seq = std::mem::take(&mut self.keyseq);
             seq.push(tok);
-            let feed = self.engine.feed("n", &seq);
+            let feed = self.with_lua(|e| e.feed("n", &seq));
             return self.after_feed(feed, seq);
         }
         // the completion popup takes its keys first
@@ -552,7 +571,7 @@ impl App {
         match feed {
             Feed::Ran(fx) => {
                 self.menu.clear();
-                self.effects(fx);
+                self.after_lua(fx);
             }
             Feed::Pending(menu) => {
                 self.keyseq = seq;
@@ -603,6 +622,23 @@ impl App {
                         self.open(&p);
                     }
                     "toggleSidebar" | "focusBlock" => {}
+                    "openFile" => {
+                        let (how, path) = arg.split_once('\t').unwrap_or(("", arg.as_str()));
+                        match how {
+                            "right" | "below" => {
+                                self.engine.focus_panel(None);
+                                self.doom_ui("split", how);
+                            }
+                            _ => {}
+                        }
+                        self.open(Path::new(path));
+                    }
+                    "clipboard" => {
+                        let ok = std::process::Command::new("wl-copy").arg(&arg).status().is_ok_and(|s| s.success());
+                        if !ok {
+                            self.say("could not copy (wl-copy)");
+                        }
+                    }
                     other => self.say(format!("{other}: only in the window (zett --gui)")),
                 },
                 Effect::Open(_) | Effect::Refresh => {}
@@ -686,25 +722,37 @@ impl App {
     fn cmdline_key(&mut self, k: KeyEvent) {
         let Some(line) = self.cmdline.as_mut() else { return };
         match k.code {
-            KeyCode::Esc => self.cmdline = None,
+            KeyCode::Esc => {
+                self.cmdline = None;
+                if self.prompt.take().is_some() {
+                    let fx = self.with_lua(|e| e.input_done(None));
+                    self.after_lua(fx);
+                }
+            }
             KeyCode::Enter => {
                 let l = std::mem::take(line);
                 self.cmdline = None;
+                if self.prompt.take().is_some() {
+                    let fx = self.with_lua(|e| e.input_done(Some(l)));
+                    return self.after_lua(fx);
+                }
                 self.command(l.trim());
             }
             KeyCode::Backspace => {
-                if line.pop().is_none() {
+                if line.pop().is_none() && self.prompt.is_none() {
                     self.cmdline = None;
                 }
             }
-            KeyCode::Tab => {
-                // complete a command name
-                let q = line.clone();
-                if let Some((n, _, _)) = self.engine.commands().into_iter().find(|(n, _, _)| n.starts_with(&q)) {
-                    *self.cmdline.as_mut().unwrap() = n;
-                }
+            KeyCode::Tab if self.prompt.is_some() => {}
+            KeyCode::Tab => self.complete_cmdline(),
+            KeyCode::Down => self.cmd_sel += 1,
+            KeyCode::Up => self.cmd_sel = self.cmd_sel.saturating_sub(1),
+            KeyCode::Char('n') if k.modifiers.contains(KeyModifiers::CONTROL) => self.cmd_sel += 1,
+            KeyCode::Char('p') if k.modifiers.contains(KeyModifiers::CONTROL) => self.cmd_sel = self.cmd_sel.saturating_sub(1),
+            KeyCode::Char(c) => {
+                line.push(c);
+                self.cmd_sel = 0;
             }
-            KeyCode::Char(c) => line.push(c),
             _ => {}
         }
     }
@@ -722,6 +770,7 @@ impl App {
             }
             "compile" => self.compile(arg),
             "h" | "help" => self.open_help(arg),
+            "set" | "se" => self.set_command(arg),
             "rename" => self.lsp_rename(arg),
             "wa" | "wall" => {
                 let keep = self.cur;
@@ -787,9 +836,9 @@ impl App {
                     self.say(format!("project: {}", self.root.display()));
                 }
             }
-            "lua" => match self.engine.eval(arg) {
+            "lua" => match self.with_lua(|e| e.eval(arg)) {
                 Ok((out, fx)) => {
-                    self.effects(fx);
+                    self.after_lua(fx);
                     if out != "nil" {
                         self.say(out);
                     }
@@ -802,8 +851,8 @@ impl App {
                 let last = self.docs[self.cur].ed.buf.len_lines().saturating_sub(1);
                 self.doc().ed.set_cursor(Pos { line: line.saturating_sub(1).min(last), col: 0 });
             }
-            other => match self.engine.run(other) {
-                Ok(fx) => self.effects(fx),
+            other => match self.with_lua(|e| e.run(other)) {
+                Ok(fx) => self.after_lua(fx),
                 Err(_) => self.say(format!("not a command: {other}")),
             },
         }
@@ -827,6 +876,7 @@ impl App {
                 self.say(m);
                 let i = self.cur;
                 self.lsp_saved(i);
+                self.emit("write");
             }
             Err(e) => self.say(format!("could not save: {e}")),
         }
@@ -848,6 +898,12 @@ impl App {
     }
 
     fn mouse(&mut self, m: ratatui::crossterm::event::MouseEvent) {
+        if self.panel_mouse(&m) {
+            return;
+        }
+        if let MouseEventKind::Down(_) = m.kind {
+            self.engine.focus_panel(None);
+        }
         // a click in another window focuses it first
         if let MouseEventKind::Down(_) = m.kind {
             if let Some(&(id, r)) = self.win_rects.iter().find(|(_, r)| m.column >= r.x && m.column < r.right() && m.row >= r.y && m.row < r.bottom()) {
@@ -914,16 +970,8 @@ impl App {
         if let Some(w) = self.wins.get_mut(self.focus).and_then(|w| w.as_mut()) {
             w.doc = self.cur;
         }
-        // the project tree takes the left side
-        let body = if self.side.open && body.width > 50 {
-            let [side, sep, rest] = Layout::horizontal([Constraint::Length(30), Constraint::Length(1), Constraint::Min(20)]).areas(body);
-            self.draw_tree(f, side);
-            let bar: Vec<Line> = (0..sep.height).map(|_| Line::from(Span::styled("│", Style::default().fg(Color::Indexed(8))))).collect();
-            f.render_widget(Paragraph::new(bar), sep);
-            rest
-        } else {
-            body
-        };
+        // plugin panels take the sides
+        let body = self.draw_panels(f, body);
         let mut placed = Vec::new();
         let mut seps = Vec::new();
         self.tree.place(body, &mut placed, &mut seps);
@@ -957,6 +1005,7 @@ impl App {
             self.draw_modeline(f, line, di, focused);
         }
         self.draw_cmd(f, cmd);
+        self.draw_suggestions(f, cmd);
         if !self.menu.is_empty() {
             self.draw_menu(f, body);
         }
@@ -1088,8 +1137,9 @@ impl App {
 
     fn draw_cmd(&mut self, f: &mut Frame, a: Rect) {
         if let Some(l) = &self.cmdline {
-            f.render_widget(Paragraph::new(format!(":{l}")), a);
-            f.set_cursor_position(Position { x: a.x + 1 + l.chars().count() as u16, y: a.y });
+            let p = self.prompt.clone().unwrap_or_else(|| ":".into());
+            f.render_widget(Paragraph::new(Line::from(vec![Span::styled(p.clone(), Style::default().fg(Color::Indexed(4))), Span::raw(l.as_str())])), a);
+            f.set_cursor_position(Position { x: a.x + (p.chars().count() + l.chars().count()) as u16, y: a.y });
             return;
         }
         if let Some((m, at)) = &self.msg {

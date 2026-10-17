@@ -20,12 +20,16 @@ zett --gui notes/    # the notes window
 - **SPC** with which-key, Doom's tree and keys: `SPC SPC` find file, `SPC ,`
   buffers, `SPC .` files here, `SPC /` search the project (ripgrep), `SPC :` M-x,
   `SPC f r` recent files, `SPC p p` projects, `SPC w v/s/h/j/k/l` windows,
-  `SPC o p` project tree, `SPC o t` a terminal below, `SPC g g` lazygit,
+  `SPC e` explorer, `SPC s u` undo tree, `SPC o t` a terminal below, `SPC g g` lazygit,
   `SPC c c` compile, `SPC t l` line numbers, `SPC h k` every key, `gcc`/`gc` comments.
 - **Language servers** (rust-analyzer, clangd, typescript, … when installed):
   errors in the gutter and the modeline, the line's message at the bottom,
   completion while typing, `gd` definition, `K` documentation, `]e` `[e`, `SPC c x`.
-- **The dashboard, the doom-modeline, the project tree**; colours from the
+- **Undo as a tree** (`u` `C-r` `g-` `g+`, nothing lost when you undo and change).
+- **Built-in plugins in Lua**: the explorer (git marks, add/rename/trash/copy,
+  filter) and the undo tree (branches, diffs), set with `:set` or `zett.opt.NAME`.
+- **`:` shows what fits as you type**, with an example each; `:help` for the docs.
+- **The dashboard, the doom-modeline**; colours from the
   terminal's 16, so in zash it follows the wallpaper.
 - **With zeit and zash**: the terminal opens as a zeit pane, a compile is a zeit
   job (its line in the bar, a note when done).

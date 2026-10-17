@@ -9,6 +9,9 @@
 //! a plugin can do anything the app itself does.
 
 pub mod docs;
+mod host;
+
+pub use host::{diff_lines, file_icon, PanelView};
 
 use mlua::{Function, Lua, RegistryKey, Table, Value};
 use std::cell::RefCell;
@@ -85,6 +88,7 @@ struct State {
     /// who is loading right now (for command sources)
     loading: String,
     leader: String,
+    host: host::Host,
 }
 
 pub struct Engine {
@@ -97,6 +101,9 @@ pub struct Engine {
 const DEFAULTS: &str = include_str!("defaults.lua");
 /// The code editor's layer (Doom's SPC tree), on top of the defaults when `frontend` is "editor".
 const EDITOR: &str = include_str!("editor.lua");
+/// Plugins that come with zett (editor only). A plugin of the same name in the config's
+/// plugins/ folder replaces one; `zett.opt.NAME = false` turns it off.
+const BUNDLED: &[(&str, &str)] = &[("explorer", include_str!("../plugins/explorer.lua")), ("undotree", include_str!("../plugins/undotree.lua"))];
 
 /// Splits Vim key notation into keys: `<leader>pn` → `<leader>`, `p`, `n`; `<C-s>` stays one.
 pub fn keys(s: &str) -> Vec<String> {
@@ -238,10 +245,16 @@ impl Engine {
     /// Built-in defaults, then plugins, then the user's init.lua (the user has the last word).
     pub fn load_config(&mut self, dir: &Path) {
         self.exec_named(DEFAULTS, "zett", "defaults.lua");
+        let plugins = dir.join("plugins");
         if self.frontend() == "editor" {
             self.exec_named(EDITOR, "zett", "editor.lua");
+            for (name, code) in BUNDLED {
+                if !plugins.join(name).join("init.lua").is_file() {
+                    self.exec_named(code, name, &format!("{name}.lua (built in)"));
+                    self.plugins.push(format!("{name} (built in)"));
+                }
+            }
         }
-        let plugins = dir.join("plugins");
         let mut names: Vec<PathBuf> = std::fs::read_dir(&plugins).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.join("init.lua").is_file()).collect()).unwrap_or_default();
         names.sort();
         for p in names {
@@ -754,6 +767,7 @@ impl Engine {
         })?)?;
         z.set("page", page)?;
 
+        self.install_host(&z)?;
         lua.globals().set("zett", z)?;
         // print() goes to the host's notices, not to a terminal nobody sees
         let st = self.st.clone();

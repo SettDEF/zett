@@ -9,6 +9,7 @@ An editor you live in: Vim's editing, Emacs's programmability, Doom's keys.
 - `keys`      the SPC tree and Vim's keys, how to find any key
 - `lsp`       language servers: errors, completion, definitions, rename
 - `config`    init.lua: options, keys, commands, hooks, plugins
+- `plugins`   the explorer, the undo tree, :set, writing your own
 - `terminal`  zett with zeit and zash: terminals, compiling, web pages
 - `cli`       zett on the command line and in scripts
 - `commands`  every command and its keys (made from your config)

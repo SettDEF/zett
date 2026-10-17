@@ -7,6 +7,7 @@ pub const TOPICS: &[(&str, &str, &str)] = &[
     ("keys", "the SPC tree and changing keys", include_str!("../docs/keys.md")),
     ("lsp", "language servers: errors, completion, rename", include_str!("../docs/lsp.md")),
     ("config", "init.lua: options, keys, commands, hooks", include_str!("../docs/config.md")),
+    ("plugins", "explorer, undo tree, settings, writing one", include_str!("../docs/plugins.md")),
     ("terminal", "zett with zeit and zash", include_str!("../docs/terminal.md")),
     ("cli", "zett on the command line", include_str!("../docs/cli.md")),
 ];

@@ -2579,6 +2579,7 @@ version = "0.1.0"
 dependencies = [
  "mlua",
  "zett-core",
+ "zett-edit",
 ]
 
 [[package]]

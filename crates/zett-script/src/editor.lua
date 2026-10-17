@@ -56,8 +56,6 @@ ui("find-references", "Find references", "references")
 ui("symbols", "Symbols in this file", "symbols")
 ui("rename-symbol", "Rename", "rename")
 ui("format-buffer", "Format buffer", "format")
-ui("project-tree", "Project tree", "tree")
-ui("reveal-in-tree", "This file in the project tree", "tree", "reveal")
 ui("quit-no-save", "Quit without saving", "quit", "force")
 
 -- ── the SPC tree ──
@@ -121,8 +119,6 @@ map("<leader>ot", "open-terminal", "Terminal below")
 map("<leader>oT", "open-terminal-window", "Terminal window")
 map("<leader>od", "dashboard", "Dashboard")
 map("<leader>hd", "documentation-topics", "Documentation")
-map("<leader>op", "project-tree", "Project tree")
-map("<leader>oP", "reveal-in-tree", "Find file in tree")
 
 z.group("<leader>g", "git")
 map("<leader>gg", "git", "Status (lazygit)")

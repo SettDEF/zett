@@ -22,7 +22,8 @@ file finder in that folder, plain `zett` the dashboard.
 
 - `SPC /`     search the project (ripgrep), `SPC s s` this buffer
 - `SPC s i`   symbols in this file (with a language server)
-- `SPC o p`   the project tree (`SPC o P` shows this file in it)
+- `SPC e`     the explorer (`SPC o P` shows this file in it); see `plugins`
+- `SPC s u`   the undo tree
 
 ## Editing
 
@@ -32,5 +33,5 @@ objects, visual mode, counts, registers, undo. `gcc` / `gc` comment lines.
 ## The command line
 
 `:w` `:q` `:wq` `:wa` `:e FILE` `:bn` `:bp` `:ls` `:sp` `:vs` `:only` `:42`
-`:lua CODE` `:compile CMD` `:rename NAME` `:help TOPIC`, and every command
-by name (`SPC :` lists them).
+`:lua CODE` `:compile CMD` `:rename NAME` `:help TOPIC` `:set NAME VALUE`, and every command
+by name. Typing after `:` lists what fits, with an example; Tab completes.
