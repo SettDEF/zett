@@ -1,0 +1,10 @@
+[package]
+name = "zett-script"
+description = "zett's Lua engine: commands, keymaps, hooks, init.lua and plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zett-core = { workspace = true, features = ["fs"] }
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
