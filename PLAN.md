@@ -265,7 +265,7 @@ Each one is usable on its own; order chosen so the data model is right first.
    window that shows a workspace as pages; the CLI (`ls show new add edit`);
    performance budgets measured and met.
 2. 🟡 **M1 — editing.** Vim grammar in blocks (normal ✅ / insert ✅ /
-   visual ⬜ / `:` ⬜), block-level motions (move, indent, fold, zoom into a
+   visual ✅ / `:` ⬜), block-level motions (move, indent, fold, zoom into a
    block), slash menu ✅, drag to reorder;
    undo through the CRDT. The `SPC` leader tree with the which-key popup and
    `SPC h` help.

@@ -32,7 +32,8 @@ See PLAN.md for the vision and milestones.
 - [x] [[links]] (click opens or creates the page), backlinks under each page, Ctrl+P quick open
 - [x] slash menu (verified: /to → To-do)
 - [ ] drag to reorder blocks, block references ((id)) (M2)
-- [ ] visual mode, text objects, search in the window (M1)
+- [x] visual mode + text objects + f/t in zett-edit (95/95 = Neovim) and in the window (selection drawn, VISUAL / V-LINE)
+- [ ] search in a block and across the page (/ ? n N), dot-repeat, registers, macros (M1)
 - [ ] M2½: `zett -t` terminal front end (ratatui), read-only first
 - [x] Lua engine (zett-script): init.lua, plugins (require), commands, keymaps with leader + which-key + timeout, hooks, zett.* API
 - [x] window: SPC tree with which-key panel, `:` command line (lua …, page …, capture …), help for keys/commands, notices; CLI run/lua/commands/keys

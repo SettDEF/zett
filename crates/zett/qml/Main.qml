@@ -450,8 +450,9 @@ ApplicationWindow {
                                 font.weight: blockItem.kind === "heading" ? Font.DemiBold : Font.Normal
                                 font.italic: blockItem.kind === "quote"
                                 font.strikeout: blockItem.kind === "todo" && blockItem.checked
-                                selectionColor: normal ? t.accent : Qt.alpha(t.accent, 0.4)
-                                selectedTextColor: normal ? t.onAccent : t.text
+                                readonly property bool visualSel: win.vimMode === "VISUAL" || win.vimMode === "V-LINE"
+                                selectionColor: visualSel ? Qt.alpha(t.accent, 0.42) : normal ? t.accent : Qt.alpha(t.accent, 0.4)
+                                selectedTextColor: normal && !visualSel ? t.onAccent : t.text
                                 // Vim normal mode: keys go to zett-edit (window.rs), the cursor is a block
                                 property bool normal: false
                                 property bool applying: false
@@ -461,10 +462,12 @@ ApplicationWindow {
                                     applying = true
                                     if (s.text !== text) text = s.text
                                     applying = false
-                                    normal = s.mode === "normal"
-                                    win.vimMode = normal ? "NORMAL" : "INSERT"
+                                    // visual modes are normal-mode keys with a selection drawn
+                                    normal = s.mode !== "insert"
+                                    win.vimMode = ({ normal: "NORMAL", insert: "INSERT", visual: "VISUAL", "visual-line": "V-LINE" })[s.mode] || ""
                                     cursorPosition = Math.min(s.cursor, length)
-                                    if (normal && length > 0) select(Math.min(s.cursor, length - 1), Math.min(s.cursor, length - 1) + 1)
+                                    if (s.sel) select(Math.min(s.sel[0], length), Math.min(Math.max(s.sel[1], s.sel[0] + 1), length))
+                                    else if (normal && length > 0) select(Math.min(s.cursor, length - 1), Math.min(s.cursor, length - 1) + 1)
                                     else deselect()
                                 }
                                 // one key for Vim in normal mode
@@ -632,7 +635,7 @@ ApplicationWindow {
                     anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
                     Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 3.5; color: "#5fb98a" }
                     Text { text: `${win.blocks.length} blocks · saved as Markdown`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
-                    Text { visible: win.vimMode.length > 0; text: win.vimMode; color: win.vimMode === "NORMAL" ? t.accent : t.dim; font.family: t.mono; font.pixelSize: 11; font.weight: Font.Bold }
+                    Text { visible: win.vimMode.length > 0; text: win.vimMode; color: win.vimMode === "INSERT" ? t.dim : t.accent; font.family: t.mono; font.pixelSize: 11; font.weight: Font.Bold }
                     Item { Layout.fillWidth: true }
                     Text { text: "Ctrl+P go to · [[Page]] links · Esc Vim keys · Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
                 }

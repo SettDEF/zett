@@ -405,8 +405,14 @@ pub fn run() {
 fn vim_state(e: &zett_edit::Editor) -> QString {
     let p = e.cursor();
     let cursor = e.buf.to_char(p);
-    let mode = match e.mode() { zett_edit::Mode::Normal => "normal", zett_edit::Mode::Insert => "insert" };
-    QString::from(&serde_json::json!({ "text": e.text(), "cursor": cursor, "mode": mode }).to_string())
+    let mode = match e.mode() {
+        zett_edit::Mode::Normal => "normal",
+        zett_edit::Mode::Insert => "insert",
+        zett_edit::Mode::Visual => "visual",
+        zett_edit::Mode::VisualLine => "visual-line",
+    };
+    let sel = e.selection_range().map(|(a, b)| serde_json::json!([a, b])).unwrap_or(serde_json::Value::Null);
+    QString::from(&serde_json::json!({ "text": e.text(), "cursor": cursor, "mode": mode, "sel": sel }).to_string())
 }
 
 impl qobject::Zett {
