@@ -19,13 +19,14 @@ anything there can be changed or removed from init.lua.
 ## Colours: highlight groups
 
 Everything zett draws has a group, as in Neovim: syntax (`Comment`, `String`,
-`Keyword`, `Function`, `Type`, …), the editor (`LineNr`, `CursorLineNr`,
+`Keyword`, `Function`, `Type`, …), the editor (`LineNr`, `CursorLineNr`, `CursorLine` and its fade `CursorLineGlow`, `CursorLineGlow2`,
 `StatusLine`, `ModeNormal`, `Pmenu`, `FloatBorder`, `DiagnosticError`, …) and
 plugins (`Directory`, `GitModified`, `Title`, …). `:hi` lists them all.
 
     zett.hl("Comment", { fg = 8, italic = true })      -- a terminal colour (0-15)
     zett.hl("Keyword", { fg = "#c678dd", bold = true }) -- or any colour
     zett.hl("GitUntracked", { link = "Changed" })        -- or another group's look
+    zett.hl("CursorLine", { bg = "+20" })                -- the theme's background lifted 20%
     zett.hl("Comment")                                    -- how it is now
 
 Try one first: `:hi Comment fg=red italic` (adds to the group; `clear` resets).
