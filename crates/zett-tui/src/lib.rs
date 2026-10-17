@@ -1,7 +1,7 @@
 //! zett in the terminal: the code editor, Doom-style, in the terminal's own colours.
 
 mod doom;
-use doom::{Pick, WTree, Win};
+use doom::{Pick, Tree, WTree, Win};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::crossterm::{cursor::SetCursorStyle, execute};
@@ -275,6 +275,10 @@ struct App {
     branch: Option<String>,
     branch_at: Instant,
     started_ms: u128,
+    /// visual mode: a g waiting for its c
+    vis_g: bool,
+    /// the project tree sidebar
+    side: Tree,
 }
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
@@ -351,6 +355,8 @@ impl App {
             branch: None,
             branch_at: Instant::now() - Duration::from_secs(60),
             started_ms: 0,
+            vis_g: false,
+            side: Tree::default(),
         };
         // a folder: the file finder; nothing: the dashboard
         if !opened_files {
@@ -427,6 +433,9 @@ impl App {
         if self.cmdline.is_some() {
             return self.cmdline_key(k);
         }
+        if self.side.open && self.side.focused {
+            return self.tree_key(k);
+        }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         // Ctrl+S saves in any mode, Ctrl+P finds a file
         if ctrl && k.code == KeyCode::Char('s') {
@@ -437,6 +446,19 @@ impl App {
         }
         let Some(ek) = to_key(&k) else { return };
         let mode = self.docs[self.cur].ed.mode();
+        // gc in visual mode comments the selection (the engine only sees normal-mode keys)
+        if matches!(mode, Mode::Visual | Mode::VisualLine) && !ctrl {
+            if self.vis_g {
+                self.vis_g = false;
+                if k.code == KeyCode::Char('c') {
+                    return self.comment();
+                }
+                self.edit_key(Key::ch('g'));
+            } else if k.code == KeyCode::Char('g') {
+                self.vis_g = true;
+                return;
+            }
+        }
         // the dashboard's own keys (the SPC tree works there too)
         if self.dash && mode == Mode::Normal && self.keyseq.is_empty() && !ctrl {
             match k.code {
@@ -822,6 +844,16 @@ impl App {
         if let Some(w) = self.wins.get_mut(self.focus).and_then(|w| w.as_mut()) {
             w.doc = self.cur;
         }
+        // the project tree takes the left side
+        let body = if self.side.open && body.width > 50 {
+            let [side, sep, rest] = Layout::horizontal([Constraint::Length(30), Constraint::Length(1), Constraint::Min(20)]).areas(body);
+            self.draw_tree(f, side);
+            let bar: Vec<Line> = (0..sep.height).map(|_| Line::from(Span::styled("│", Style::default().fg(Color::Indexed(8))))).collect();
+            f.render_widget(Paragraph::new(bar), sep);
+            rest
+        } else {
+            body
+        };
         let mut placed = Vec::new();
         let mut seps = Vec::new();
         self.tree.place(body, &mut placed, &mut seps);

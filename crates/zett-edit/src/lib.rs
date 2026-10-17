@@ -1060,6 +1060,41 @@ impl Editor {
         }
     }
 
+    /// Comments lines `from..=to` out with `prefix` (`//`, `#`), or back in when every
+    /// non-empty one already is (evil-commentary's gc). One undo step; leaves visual mode.
+    pub fn toggle_comment(&mut self, from: usize, to: usize, prefix: &str) {
+        let last = self.buf.len_lines().saturating_sub(1);
+        let (from, to) = (from.min(last), to.min(last));
+        let lines: Vec<(usize, String)> = (from..=to).map(|l| (l, self.buf.line(l))).collect();
+        let body = |s: &str| s.trim_end_matches(['\n', '\r']).to_string();
+        let filled: Vec<&(usize, String)> = lines.iter().filter(|(_, t)| !body(t).trim().is_empty()).collect();
+        if filled.is_empty() {
+            return;
+        }
+        let commented = filled.iter().all(|(_, t)| body(t).trim_start().starts_with(prefix));
+        let indent = filled.iter().map(|(_, t)| body(t).len() - body(t).trim_start().len()).min().unwrap_or(0);
+        self.begin();
+        // bottom up, so earlier char positions stay right
+        for (l, t) in filled.iter().rev() {
+            let t = body(t);
+            let start = self.buf.to_char(Pos { line: *l, col: 0 });
+            if commented {
+                let lead = t.chars().count() - t.trim_start().chars().count();
+                let mut n = prefix.chars().count();
+                if t.trim_start()[prefix.len()..].starts_with(' ') {
+                    n += 1;
+                }
+                self.rem(start + lead, start + lead + n);
+            } else {
+                self.ins(start + t.chars().take(indent).count(), &format!("{prefix} "));
+            }
+        }
+        self.close();
+        self.mode = Mode::Normal;
+        let p = self.cursor();
+        self.set_cursor(p);
+    }
+
     // ── undo: changes made of edits (a whole insert session is one change) ──
 
     /// Starts recording a new change; the previous one is finished.
@@ -1209,5 +1244,25 @@ mod tests {
     fn escape_cancels_pending() {
         assert_eq!(run("abc", "d<Esc>x"), ("bc".into(), (0, 0)));
         assert_eq!(run("abc", "3<Esc>x"), ("bc".into(), (0, 0)));
+    }
+}
+
+#[cfg(test)]
+mod comment_tests {
+    use super::*;
+
+    #[test]
+    fn gc_comments_and_uncomments() {
+        let mut e = Editor::from_str("fn a() {\n    one();\n\n    two();\n}\n");
+        e.toggle_comment(1, 3, "//");
+        assert_eq!(e.buf.line(1).trim_end(), "    // one();");
+        assert_eq!(e.buf.line(2).trim_end(), "");
+        assert_eq!(e.buf.line(3).trim_end(), "    // two();");
+        e.toggle_comment(1, 3, "//");
+        assert_eq!(e.buf.line(1).trim_end(), "    one();");
+        assert_eq!(e.buf.line(3).trim_end(), "    two();");
+        // one undo step brings the comments back
+        e.feed("u");
+        assert_eq!(e.buf.line(1).trim_end(), "    // one();");
     }
 }

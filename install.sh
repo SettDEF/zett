@@ -17,4 +17,4 @@ if command -v rsvg-convert >/dev/null; then
 fi
 sed "s|^Exec=zett|Exec=$HOME/.local/bin/zett|" packaging/zett.desktop > "$HOME/.local/share/applications/zett.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-say "installed: run 'zett' (window) or 'zett --help' (command line)"
+say "installed: 'zett' (the editor, in the terminal), 'zett --gui' (the window), 'zett --help'"

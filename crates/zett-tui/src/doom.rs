@@ -435,6 +435,8 @@ impl App {
                     _ => {}
                 }
             }
+            "comment" => self.comment(),
+            "tree" => self.tree_toggle(arg == "reveal"),
             "quit" => {
                 if arg != "force" && self.docs.iter().any(|d| d.dirty()) {
                     self.say("unsaved changes: SPC q Q quits anyway, :wqa saves them");
@@ -576,5 +578,195 @@ impl App {
         spans.extend(right);
         let bg = if focused { Color::Indexed(0) } else { Color::Reset };
         f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(bg)), a);
+    }
+}
+
+/// The line-comment marker for a file, by its extension.
+pub(crate) fn comment_prefix(name: &str) -> &'static str {
+    match Path::new(name).extension().and_then(|e| e.to_str()).unwrap_or("") {
+        "py" | "sh" | "zsh" | "bash" | "fish" | "toml" | "yaml" | "yml" | "conf" | "nix" | "rb" | "pl" | "r" | "ini" | "cfg" | "mk" | "cmake" => "#",
+        "lua" | "sql" | "hs" | "elm" => "--",
+        "vim" => "\"",
+        "tex" | "sty" => "%",
+        "el" | "lisp" | "clj" | "scm" => ";;",
+        _ if name.ends_with("Makefile") || name.ends_with(".gitignore") => "#",
+        _ => "//",
+    }
+}
+
+impl App {
+    /// gcc / visual gc: the line, or the selected lines, commented out or back in.
+    pub(crate) fn comment(&mut self) {
+        let prefix = comment_prefix(&self.docs[self.cur].name);
+        let d = &mut self.docs[self.cur];
+        let (from, to) = match d.ed.selection_range() {
+            Some((a, b)) => (d.ed.buf.to_pos(a).line, d.ed.buf.to_pos(b.saturating_sub(1).max(a)).line),
+            None => (d.ed.cursor().line, d.ed.cursor().line),
+        };
+        let before = d.ed.cursor().line;
+        d.ed.toggle_comment(from, to, prefix);
+        d.touched(before.min(from));
+    }
+}
+
+/// The project tree in a sidebar (Treemacs-style): folders open in place.
+#[derive(Default)]
+pub(crate) struct Tree {
+    pub open: bool,
+    pub focused: bool,
+    pub root: PathBuf,
+    pub expanded: std::collections::HashSet<PathBuf>,
+    pub hidden: bool,
+    /// (depth, path, is folder)
+    pub rows: Vec<(usize, PathBuf, bool)>,
+    pub sel: usize,
+    pub top: usize,
+}
+
+const SKIP: &[&str] = &[".git", "target", "node_modules", "__pycache__", ".cache", "build", "dist"];
+
+impl Tree {
+    pub(crate) fn rebuild(&mut self) {
+        let mut rows = Vec::new();
+        let root = self.root.clone();
+        self.walk(&root, 0, &mut rows);
+        self.rows = rows;
+        self.sel = self.sel.min(self.rows.len().saturating_sub(1));
+    }
+
+    fn walk(&self, dir: &Path, depth: usize, out: &mut Vec<(usize, PathBuf, bool)>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut entries: Vec<(PathBuf, bool)> = rd
+            .flatten()
+            .filter(|e| {
+                let n = e.file_name().to_string_lossy().to_string();
+                (self.hidden || !n.starts_with('.')) && !SKIP.contains(&n.as_str())
+            })
+            .map(|e| {
+                let p = e.path();
+                let d = p.is_dir();
+                (p, d)
+            })
+            .collect();
+        entries.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.file_name().map(|n| n.to_ascii_lowercase()).cmp(&b.0.file_name().map(|n| n.to_ascii_lowercase()))));
+        for (p, d) in entries {
+            out.push((depth, p.clone(), d));
+            if d && self.expanded.contains(&p) {
+                self.walk(&p, depth + 1, out);
+            }
+        }
+    }
+
+    /// Opens the folders down to `file` and selects it.
+    pub(crate) fn reveal(&mut self, file: &Path) {
+        let mut d = file.parent();
+        while let Some(x) = d {
+            if !x.starts_with(&self.root) || x == self.root {
+                break;
+            }
+            self.expanded.insert(x.to_path_buf());
+            d = x.parent();
+        }
+        self.rebuild();
+        if let Some(i) = self.rows.iter().position(|r| r.1 == file) {
+            self.sel = i;
+        }
+    }
+}
+
+impl App {
+    pub(crate) fn tree_toggle(&mut self, reveal: bool) {
+        let root = project_of(&self.root).unwrap_or(self.root.clone());
+        let root = std::fs::canonicalize(&root).unwrap_or(root);
+        if self.side.root != root {
+            self.side = Tree { root, ..Default::default() };
+        }
+        if self.side.open && !reveal {
+            self.side.open = false;
+            self.side.focused = false;
+            return;
+        }
+        self.side.open = true;
+        self.side.focused = true;
+        let cur = std::fs::canonicalize(&self.docs[self.cur].name).unwrap_or_else(|_| PathBuf::from(&self.docs[self.cur].name));
+        if reveal && cur.is_file() {
+            self.side.reveal(&cur);
+        } else {
+            self.side.rebuild();
+        }
+    }
+
+    pub(crate) fn tree_key(&mut self, k: KeyEvent) {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let n = self.side.rows.len();
+        match k.code {
+            KeyCode::Char('j') | KeyCode::Down => self.side.sel = (self.side.sel + 1).min(n.saturating_sub(1)),
+            KeyCode::Char('k') | KeyCode::Up => self.side.sel = self.side.sel.saturating_sub(1),
+            KeyCode::Char('g') => self.side.sel = 0,
+            KeyCode::Char('G') => self.side.sel = n.saturating_sub(1),
+            KeyCode::Char('q') => {
+                self.side.open = false;
+                self.side.focused = false;
+            }
+            KeyCode::Char('H') => {
+                self.side.hidden = !self.side.hidden;
+                self.side.rebuild();
+            }
+            KeyCode::Char('R') => self.side.rebuild(),
+            KeyCode::Char('l') if ctrl => self.side.focused = false,
+            KeyCode::Esc | KeyCode::Tab => self.side.focused = false,
+            KeyCode::Char('h') | KeyCode::Left => {
+                let Some((depth, p, dir)) = self.side.rows.get(self.side.sel).cloned() else { return };
+                if dir && self.side.expanded.remove(&p) {
+                    self.side.rebuild();
+                } else if depth > 0 {
+                    // to the folder it is in
+                    if let Some(i) = self.side.rows[..self.side.sel].iter().rposition(|r| r.2 && r.0 + 1 == depth) {
+                        self.side.sel = i;
+                    }
+                }
+            }
+            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Char('o') | KeyCode::Right => {
+                let Some((_, p, dir)) = self.side.rows.get(self.side.sel).cloned() else { return };
+                if dir {
+                    if !self.side.expanded.remove(&p) {
+                        self.side.expanded.insert(p);
+                    }
+                    self.side.rebuild();
+                } else {
+                    self.open(&p);
+                    self.side.focused = false;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn draw_tree(&mut self, f: &mut Frame, a: Rect) {
+        let h = a.height.saturating_sub(1) as usize;
+        let t = &mut self.side;
+        if t.sel < t.top {
+            t.top = t.sel;
+        } else if t.sel >= t.top + h.max(1) {
+            t.top = t.sel + 1 - h.max(1);
+        }
+        let name = t.root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let mut lines = vec![Line::from(Span::styled(format!(" \u{f07c} {name}"), Style::default().fg(Color::Indexed(4)).add_modifier(Modifier::BOLD)))];
+        let cur = std::fs::canonicalize(&self.docs[self.cur].name).unwrap_or_else(|_| PathBuf::from(&self.docs[self.cur].name));
+        for (i, (depth, p, dir)) in t.rows.iter().enumerate().skip(t.top).take(h) {
+            let fname = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let icon = if *dir { if t.expanded.contains(p) { "\u{f07c}" } else { "\u{f07b}" } } else { file_icon(&fname) };
+            let mut st = if *dir { Style::default().fg(Color::Indexed(4)) } else { Style::default() };
+            if *p == cur {
+                st = st.add_modifier(Modifier::BOLD).fg(Color::Indexed(3));
+            }
+            if i == t.sel && t.focused {
+                st = st.bg(Color::Indexed(0)).add_modifier(Modifier::BOLD);
+            }
+            let text: String = format!(" {}{icon} {fname}", "  ".repeat(*depth)).chars().take(a.width as usize).collect();
+            let pad = (a.width as usize).saturating_sub(text.chars().count());
+            lines.push(Line::from(Span::styled(format!("{text}{}", " ".repeat(pad)), st)));
+        }
+        f.render_widget(Paragraph::new(lines), a);
     }
 }
