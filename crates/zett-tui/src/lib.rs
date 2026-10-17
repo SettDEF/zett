@@ -718,6 +718,17 @@ impl App {
                 }
             }
             "compile" => self.compile(arg),
+            "rename" => self.lsp_rename(arg),
+            "wa" | "wall" => {
+                let keep = self.cur;
+                for i in 0..self.docs.len() {
+                    if self.docs[i].dirty() && self.docs[i].ed.buf.path().is_some() {
+                        self.cur = i;
+                        self.save(None);
+                    }
+                }
+                self.cur = keep;
+            }
             "sp" | "split" => {
                 self.doom_ui("split", "below");
             }

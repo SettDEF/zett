@@ -255,6 +255,12 @@ impl App {
 
     // ── pickers ──
 
+    /// A picker over a ready list (references, symbols).
+    pub(crate) fn pick_list(&mut self, kind: Pick, title: &str, items: Vec<String>) {
+        self.dash = false;
+        self.picker = Some(Picker { query: String::new(), files: items, sel: 0, kind, title: title.into() });
+    }
+
     pub(crate) fn pick(&mut self, kind: Pick) {
         let (title, items): (String, Vec<String>) = match &kind {
             Pick::Files(root) => (format!("Find file · {}", home_short(&root.display().to_string())), list_files(root)),
@@ -461,6 +467,13 @@ impl App {
             "hover" => self.lsp_hover(),
             "diag" => self.next_diag(arg != "prev"),
             "diagnostics" => self.pick(Pick::Diagnostics),
+            "references" => self.lsp_references(),
+            "symbols" => self.lsp_symbols(),
+            "format" => self.lsp_format(),
+            "rename" => {
+                let w = self.word_at_cursor();
+                self.cmdline = Some(format!("rename {w}"));
+            }
             "tree" => self.tree_toggle(arg == "reveal"),
             "quit" => {
                 if arg != "force" && self.docs.iter().any(|d| d.dirty()) {

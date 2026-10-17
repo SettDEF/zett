@@ -51,6 +51,9 @@ impl App {
                     None => self.say("no definition found"),
                 },
                 Event::Completion(line, items) => self.comp_arrived(line, items),
+                Event::References(locs) => self.show_locations("References", locs),
+                Event::Symbols(syms) => self.show_symbols(syms),
+                Event::Edits(e) => self.apply_workspace(e),
                 Event::Hover(text) => {
                     let rows: Vec<(String, String)> = text.lines().filter(|l| !l.starts_with("```")).map(|l| (String::new(), l.to_string())).collect();
                     if rows.iter().all(|r| r.1.trim().is_empty()) {
@@ -350,5 +353,142 @@ impl App {
             })
             .collect();
         f.render_widget(Paragraph::new(lines), a);
+    }
+}
+
+impl App {
+    fn lsp_ready(&mut self) -> Option<(PathBuf, usize, usize)> {
+        if !self.docs[self.cur].lsp {
+            self.say("no language server for this file");
+            return None;
+        }
+        self.edit_at = Instant::now() - Duration::from_secs(1);
+        self.lsp_sync();
+        self.lsp_pos()
+    }
+
+    pub(crate) fn lsp_references(&mut self) {
+        let Some((path, line, col)) = self.lsp_ready() else { return };
+        if let Some(c) = self.client_for(self.cur) {
+            c.references(&path, line, col);
+        }
+    }
+
+    pub(crate) fn lsp_symbols(&mut self) {
+        let Some((path, _, _)) = self.lsp_ready() else { return };
+        if let Some(c) = self.client_for(self.cur) {
+            c.symbols(&path);
+        }
+    }
+
+    pub(crate) fn lsp_rename(&mut self, name: &str) {
+        if name.trim().is_empty() {
+            return;
+        }
+        let Some((path, line, col)) = self.lsp_ready() else { return };
+        if let Some(c) = self.client_for(self.cur) {
+            c.rename(&path, line, col, name.trim());
+        }
+    }
+
+    pub(crate) fn lsp_format(&mut self) {
+        let Some((path, _, _)) = self.lsp_ready() else { return };
+        if let Some(c) = self.client_for(self.cur) {
+            c.format(&path, TAB);
+        }
+    }
+
+    /// The word under the cursor (what a rename starts from).
+    pub(crate) fn word_at_cursor(&self) -> String {
+        let d = &self.docs[self.cur];
+        let c = d.ed.cursor();
+        let text: Vec<char> = d.ed.buf.line(c.line).chars().collect();
+        let (mut a, mut b) = (c.col.min(text.len()), c.col.min(text.len()));
+        while a > 0 && ident(text[a - 1]) {
+            a -= 1;
+        }
+        while b < text.len() && ident(text[b]) {
+            b += 1;
+        }
+        text[a..b].iter().collect()
+    }
+
+    pub(crate) fn show_locations(&mut self, title: &str, locs: Vec<zett_lsp::Location>) {
+        if locs.is_empty() {
+            return self.say("nothing found");
+        }
+        let root = format!("{}/", self.root.display());
+        let rows: Vec<String> = locs
+            .iter()
+            .map(|l| {
+                let text = std::fs::read_to_string(&l.path).ok().and_then(|t| t.lines().nth(l.line).map(|s| s.trim().to_string())).unwrap_or_default();
+                let p = l.path.display().to_string();
+                format!("{}:{}: {text}", p.strip_prefix(&root).unwrap_or(&p), l.line + 1)
+            })
+            .collect();
+        self.pick_list(Pick::Diagnostics, title, rows);
+    }
+
+    pub(crate) fn show_symbols(&mut self, syms: Vec<(String, u8, usize, usize, usize)>) {
+        if syms.is_empty() {
+            return self.say("no symbols");
+        }
+        let kind = |k: u8| match k {
+            5 => "class",
+            6 => "method",
+            8 => "field",
+            9 => "constructor",
+            10 => "enum",
+            11 => "interface",
+            12 => "function",
+            13 => "variable",
+            14 => "constant",
+            22 => "variant",
+            23 => "struct",
+            26 => "type",
+            2 => "module",
+            _ => "",
+        };
+        let rows = syms.iter().map(|(n, k, line, _, depth)| format!("{:>5}│ {}{n}  {}", line + 1, "  ".repeat(*depth), kind(*k))).collect();
+        self.pick_list(Pick::Lines, "Symbols", rows);
+    }
+
+    /// A rename or a format: open buffers change in place (one undo step each); files
+    /// not open yet are opened, changed and left unsaved to look at (:wa saves).
+    pub(crate) fn apply_workspace(&mut self, edits: Vec<(PathBuf, Vec<(usize, usize, usize, usize, String)>)>) {
+        let utf16 = self.client_for(self.cur).map(|c| c.utf16()).unwrap_or(true);
+        if edits.iter().all(|(_, l)| l.is_empty()) {
+            return self.say(if self.lsp_status.is_empty() { "nothing to change" } else { "nothing changed: the language server is still loading" });
+        }
+        let back = self.cur;
+        let mut files = 0;
+        for (path, list) in edits {
+            if list.is_empty() {
+                continue;
+            }
+            let di = match self.docs.iter().position(|d| d.abs_path().as_deref() == Some(path.as_path())) {
+                Some(i) => i,
+                None => {
+                    self.open(&path);
+                    self.cur
+                }
+            };
+            let d = &mut self.docs[di];
+            let conv = |line: usize, col: usize| {
+                let t = d.ed.buf.line(line.min(d.ed.buf.len_lines().saturating_sub(1)));
+                Pos { line, col: if utf16 { zett_lsp::from_utf16(&t, col) } else { col } }
+            };
+            let edits: Vec<(Pos, Pos, String)> = list.into_iter().map(|(l1, c1, l2, c2, t)| (conv(l1, c1), conv(l2, c2), t)).collect();
+            let before = d.ed.cursor().line;
+            d.ed.apply_edits(edits);
+            d.states.clear();
+            d.touched(before);
+            files += 1;
+        }
+        self.show_doc(back.min(self.docs.len() - 1));
+        self.edit_at = Instant::now();
+        if files > 1 {
+            self.say(format!("changed {files} files (unsaved: :wa saves them)"));
+        }
     }
 }

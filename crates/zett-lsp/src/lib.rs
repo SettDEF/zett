@@ -79,6 +79,11 @@ pub enum Event {
     /// an answer to `definition` (empty: none found)
     Definition(Vec<Location>),
     Hover(String),
+    References(Vec<Location>),
+    /// a file's symbols: (name, kind, line, col, depth)
+    Symbols(Vec<(String, u8, usize, usize, usize)>),
+    /// edits to make (a rename, a format): per file, (start line, col, end line, col, text)
+    Edits(Vec<(PathBuf, Vec<(usize, usize, usize, usize, String)>)>),
     /// completions at a position: (line, col in chars as asked) and the items
     Completion(usize, Vec<Item>),
     /// progress and log lines worth a glance
@@ -89,6 +94,9 @@ pub enum Event {
 enum Pending {
     Definition,
     Hover,
+    References,
+    Symbols,
+    Edits(Option<PathBuf>),
     Completion(usize),
     Init,
 }
@@ -154,6 +162,10 @@ impl Client {
                     "publishDiagnostics": { "relatedInformation": false },
                     "hover": { "contentFormat": ["plaintext", "markdown"] },
                     "completion": { "completionItem": { "snippetSupport": false, "documentationFormat": ["plaintext"] } },
+                    "references": {},
+                    "documentSymbol": { "hierarchicalDocumentSymbolSupport": true },
+                    "rename": { "prepareSupport": false },
+                    "formatting": {},
                     "definition": { "linkSupport": true }
                 },
                 "window": { "workDoneProgress": true }
@@ -214,6 +226,26 @@ impl Client {
     pub fn definition(&mut self, path: &Path, line: usize, col: usize) {
         let id = self.request("textDocument/definition", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col } }));
         self.pending.lock().unwrap().insert(id, Pending::Definition);
+    }
+
+    pub fn references(&mut self, path: &Path, line: usize, col: usize) {
+        let id = self.request("textDocument/references", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col }, "context": { "includeDeclaration": true } }));
+        self.pending.lock().unwrap().insert(id, Pending::References);
+    }
+
+    pub fn symbols(&mut self, path: &Path) {
+        let id = self.request("textDocument/documentSymbol", json!({ "textDocument": { "uri": uri(path) } }));
+        self.pending.lock().unwrap().insert(id, Pending::Symbols);
+    }
+
+    pub fn rename(&mut self, path: &Path, line: usize, col: usize, name: &str) {
+        let id = self.request("textDocument/rename", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col }, "newName": name }));
+        self.pending.lock().unwrap().insert(id, Pending::Edits(None));
+    }
+
+    pub fn format(&mut self, path: &Path, tab: usize) {
+        let id = self.request("textDocument/formatting", json!({ "textDocument": { "uri": uri(path) }, "options": { "tabSize": tab, "insertSpaces": true } }));
+        self.pending.lock().unwrap().insert(id, Pending::Edits(Some(path.to_path_buf())));
     }
 
     /// `line` is echoed back with the answer, so a late one can be told apart.
@@ -359,6 +391,26 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
                         let list = if res.is_array() { res.clone() } else { res["items"].clone() };
                         let items = list.as_array().map(|a| a.iter().map(item).collect()).unwrap_or_default();
                         let _ = events.send(Event::Completion(line, items));
+                    }
+                    Some(Pending::References) => {
+                        let locs = res.as_array().map(|a| a.iter().filter_map(location).collect()).unwrap_or_default();
+                        let _ = events.send(Event::References(locs));
+                    }
+                    Some(Pending::Symbols) => {
+                        let mut out = Vec::new();
+                        if let Some(a) = res.as_array() {
+                            for s in a {
+                                symbols(s, 0, &mut out);
+                            }
+                        }
+                        let _ = events.send(Event::Symbols(out));
+                    }
+                    Some(Pending::Edits(file)) => {
+                        if let Some(e) = msg.get("error") {
+                            let _ = events.send(Event::Status(format!("{name}: {}", e["message"].as_str().unwrap_or("refused"))));
+                        } else {
+                            let _ = events.send(Event::Edits(edits(res, file)));
+                        }
                     }
                     Some(Pending::Hover) => {
                         let c = &res["contents"];
@@ -507,4 +559,51 @@ mod snippet_tests {
         assert_eq!(super::strip_snippet("vec![$0]"), "vec![]");
         assert_eq!(super::strip_snippet("a\\$b"), "a$b");
     }
+}
+
+fn location(l: &Value) -> Option<Location> {
+    let uri = l["uri"].as_str().or(l["targetUri"].as_str())?;
+    let range = if l["range"].is_object() { &l["range"] } else { &l["targetSelectionRange"] };
+    Some(Location { path: path_of(uri), line: range["start"]["line"].as_u64()? as usize, col: range["start"]["character"].as_u64()? as usize })
+}
+
+/// DocumentSymbol trees (children nested) or flat SymbolInformation.
+fn symbols(s: &Value, depth: usize, out: &mut Vec<(String, u8, usize, usize, usize)>) {
+    let name = s["name"].as_str().unwrap_or("").to_string();
+    let kind = s["kind"].as_u64().unwrap_or(0) as u8;
+    let r = if s["selectionRange"].is_object() { &s["selectionRange"] } else { &s["location"]["range"] };
+    let (line, col) = (r["start"]["line"].as_u64().unwrap_or(0) as usize, r["start"]["character"].as_u64().unwrap_or(0) as usize);
+    out.push((name, kind, line, col, depth));
+    if let Some(ch) = s["children"].as_array() {
+        for c in ch {
+            symbols(c, depth + 1, out);
+        }
+    }
+}
+
+/// A WorkspaceEdit (changes or documentChanges), or a format's plain edit list for `file`.
+fn edits(res: &Value, file: Option<PathBuf>) -> Vec<(PathBuf, Vec<(usize, usize, usize, usize, String)>)> {
+    let conv = |list: &Value| -> Vec<(usize, usize, usize, usize, String)> {
+        let n = |v: &Value| v.as_u64().unwrap_or(0) as usize;
+        list.as_array()
+            .map(|a| a.iter().map(|e| (n(&e["range"]["start"]["line"]), n(&e["range"]["start"]["character"]), n(&e["range"]["end"]["line"]), n(&e["range"]["end"]["character"]), e["newText"].as_str().unwrap_or("").to_string())).collect())
+            .unwrap_or_default()
+    };
+    if let Some(f) = file {
+        return vec![(f, conv(res))];
+    }
+    let mut out = Vec::new();
+    if let Some(m) = res["changes"].as_object() {
+        for (u, list) in m {
+            out.push((path_of(u), conv(list)));
+        }
+    }
+    if let Some(a) = res["documentChanges"].as_array() {
+        for d in a {
+            if let Some(u) = d["textDocument"]["uri"].as_str() {
+                out.push((path_of(u), conv(&d["edits"])));
+            }
+        }
+    }
+    out
 }

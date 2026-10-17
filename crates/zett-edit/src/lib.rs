@@ -1105,6 +1105,28 @@ impl Editor {
         self.set_cursor(p);
     }
 
+    /// Replaces ranges (from, to, new text) as one undo step: a rename or a format
+    /// from a language server. Ranges must not overlap; any order.
+    pub fn apply_edits(&mut self, mut edits: Vec<(Pos, Pos, String)>) {
+        if edits.is_empty() {
+            return;
+        }
+        let keep = self.cursor();
+        // last first, so earlier positions stay right
+        edits.sort_by(|a, b| (b.0.line, b.0.col).cmp(&(a.0.line, a.0.col)));
+        self.begin();
+        for (a, b, text) in edits {
+            let (s, e) = (self.buf.to_char(a), self.buf.to_char(b));
+            if e > s {
+                self.rem(s, e);
+            }
+            self.ins(s, &text);
+        }
+        self.close();
+        self.mode = Mode::Normal;
+        self.set_cursor(keep);
+    }
+
     // ── undo: changes made of edits (a whole insert session is one change) ──
 
     /// Starts recording a new change; the previous one is finished.
@@ -1274,5 +1296,24 @@ mod comment_tests {
         // one undo step brings the comments back
         e.feed("u");
         assert_eq!(e.buf.line(1).trim_end(), "    // one();");
+    }
+}
+
+#[cfg(test)]
+mod apply_tests {
+    use super::*;
+
+    #[test]
+    fn edits_apply_as_one_change() {
+        let mut e = Editor::from_str("let foo = 1;\nfoo + foo\n");
+        e.apply_edits(vec![
+            (Pos { line: 0, col: 4 }, Pos { line: 0, col: 7 }, "bar".into()),
+            (Pos { line: 1, col: 0 }, Pos { line: 1, col: 3 }, "bar".into()),
+            (Pos { line: 1, col: 6 }, Pos { line: 1, col: 9 }, "bar".into()),
+        ]);
+        assert_eq!(e.buf.line(0).trim_end(), "let bar = 1;");
+        assert_eq!(e.buf.line(1).trim_end(), "bar + bar");
+        e.feed("u");
+        assert_eq!(e.buf.line(1).trim_end(), "foo + foo");
     }
 }

@@ -22,6 +22,9 @@ fn main() {
             println!("encoding: {}", c.encoding.lock().unwrap());
             c.hover(&file, 7, 20);
             c.definition(&file, 7, 20);
+            c.rename(&file, 0, 4, "sum");
+            c.references(&file, 0, 4);
+            c.symbols(&file);
         }
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
