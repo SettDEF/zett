@@ -34,6 +34,8 @@ cmd("search", "Search every page", function() z.ui("search") end)
 -- ── the SPC tree (which-key shows the group names) ──
 local function map(keys, command, desc) z.map("n", keys, command, { desc = desc }) end
 
+-- the notes window's tree; the code editor (zett in a terminal) loads editor.lua instead
+if z.frontend ~= "editor" then
 z.group("<leader>p", "pages")
 map("<leader><leader>", "find-page", "Find page")
 map("<leader>:", "command-line", "Command")
@@ -49,6 +51,7 @@ map("<leader>ih", "add-heading", "Heading")
 
 z.group("<leader>t", "toggle")
 map("<leader>tz", "toggle-zen", "Zen (sidebar)")
+end
 
 z.group("<leader>h", "help")
 map("<leader>hk", "help-keys", "Keys")

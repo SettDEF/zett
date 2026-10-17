@@ -1,12 +1,7 @@
-//! zett in the terminal: the code editor.
-//!
-//! The same engines as the window: zett-edit for editing (Vim's grammar, checked
-//! against Neovim) and zett-script for keys, commands and the user's init.lua
-//! (`SPC` with which-key, `:`). What is here is only the screen: buffers, the
-//! gutter, syntax colours, the statusline, the command line, the file finder.
-//!
-//! Colours are the terminal's own 16 (syntax included), so in zash, or any
-//! terminal themed by tinct, the editor follows the wallpaper by itself.
+//! zett in the terminal: the code editor, Doom-style, in the terminal's own colours.
+
+mod doom;
+use doom::{Pick, WTree, Win};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::crossterm::{cursor::SetCursorStyle, execute};
@@ -174,11 +169,14 @@ struct Picker {
     query: String,
     files: Vec<String>,
     sel: usize,
+    kind: Pick,
+    title: String,
 }
 
 impl Picker {
     fn matches(&self) -> Vec<&String> {
-        if self.query.is_empty() {
+        // ripgrep already matched them
+        if self.query.is_empty() || self.kind == Pick::Grep(PathBuf::new()) || matches!(self.kind, Pick::Grep(_)) {
             return self.files.iter().take(200).collect();
         }
         let q: Vec<char> = self.query.to_lowercase().chars().collect();
@@ -261,6 +259,22 @@ struct App {
     /// editor area from the last draw (for the mouse and scrolling)
     area: Rect,
     gutter: u16,
+    /// windows (by id; closed ones are None), their split tree, the focused one
+    wins: Vec<Option<Win>>,
+    tree: WTree,
+    focus: usize,
+    win_rects: Vec<(usize, Rect)>,
+    /// the dashboard shows (no file yet) and its chosen button
+    dash: bool,
+    dash_sel: usize,
+    last_doc: Option<usize>,
+    last_compile: Option<String>,
+    numbers: bool,
+    relative: bool,
+    tabs: bool,
+    branch: Option<String>,
+    branch_at: Instant,
+    started_ms: u128,
 }
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
@@ -276,6 +290,7 @@ pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
 
 impl App {
     fn new(paths: Vec<PathBuf>) -> App {
+        let started = Instant::now();
         let ss = SyntaxSet::load_defaults_newlines();
         let mut root = std::env::current_dir().unwrap_or_default();
         let mut docs = Vec::new();
@@ -300,6 +315,7 @@ impl App {
             docs.push(Doc::scratch());
         }
         let mut engine = Engine::new(None);
+        engine.set_frontend("editor");
         engine.load_config(&zett_script::config_dir());
         if let Some(e) = engine.errors.first() {
             msg = Some((e.clone(), Instant::now()));
@@ -321,11 +337,30 @@ impl App {
             quit: false,
             area: Rect::default(),
             gutter: 4,
+            wins: vec![Some(Win::default())],
+            tree: WTree::Leaf(0),
+            focus: 0,
+            win_rects: Vec::new(),
+            dash: false,
+            dash_sel: 0,
+            last_doc: None,
+            last_compile: None,
+            numbers: true,
+            relative: false,
+            tabs: false,
+            branch: None,
+            branch_at: Instant::now() - Duration::from_secs(60),
+            started_ms: 0,
         };
-        // a folder (or nothing): start in the file finder
+        // a folder: the file finder; nothing: the dashboard
         if !opened_files {
-            app.open_picker();
+            if paths.iter().any(|p| p.is_dir()) {
+                app.open_picker();
+            } else {
+                app.dash = true;
+            }
         }
+        app.started_ms = started.elapsed().as_millis();
         app
     }
 
@@ -402,6 +437,25 @@ impl App {
         }
         let Some(ek) = to_key(&k) else { return };
         let mode = self.docs[self.cur].ed.mode();
+        // the dashboard's own keys (the SPC tree works there too)
+        if self.dash && mode == Mode::Normal && self.keyseq.is_empty() && !ctrl {
+            match k.code {
+                KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => {
+                    self.dash_sel = (self.dash_sel + 1) % App::dash_len();
+                    return;
+                }
+                KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => {
+                    self.dash_sel = (self.dash_sel + App::dash_len() - 1) % App::dash_len();
+                    return;
+                }
+                KeyCode::Enter => return self.dash_run(),
+                KeyCode::Char('q') => {
+                    self.quit = true;
+                    return;
+                }
+                _ => {}
+            }
+        }
         if mode == Mode::Normal {
             let tok = token(&k);
             if tok.is_empty() {
@@ -423,7 +477,10 @@ impl App {
     /// What the engine did with keys: ran a mapping, waits for more, or left them to Vim.
     fn after_feed(&mut self, feed: Feed, seq: Vec<String>) {
         match feed {
-            Feed::Ran(fx) => self.effects(fx),
+            Feed::Ran(fx) => {
+                self.menu.clear();
+                self.effects(fx);
+            }
             Feed::Pending(menu) => {
                 self.keyseq = seq;
                 self.menu = menu;
@@ -450,12 +507,14 @@ impl App {
         for e in fx {
             match e {
                 Effect::Notify(m) => self.say(m),
+                Effect::Ui(name, arg) if self.doom_ui(&name, &arg) => {}
                 Effect::Ui(name, arg) => match name.as_str() {
                     "quickOpen" | "search" => self.open_picker(),
                     "commandLine" => self.cmdline = Some(arg),
                     "help" => self.help(&arg),
                     "reload" => {
                         let mut e = Engine::new(None);
+                        e.set_frontend("editor");
                         e.load_config(&zett_script::config_dir());
                         let n = e.plugins.len();
                         self.engine = e;
@@ -491,8 +550,11 @@ impl App {
         // already open: show it
         let name = p.display().to_string();
         if let Some(i) = self.docs.iter().position(|d| d.name == name) {
-            self.cur = i;
+            self.show_doc(i);
             return;
+        }
+        if p.is_file() {
+            doom::remember(p);
         }
         match Doc::open(p, &self.ss) {
             Ok(d) => {
@@ -501,14 +563,15 @@ impl App {
                     self.docs.clear();
                 }
                 self.docs.push(d);
-                self.cur = self.docs.len() - 1;
+                let i = self.docs.len() - 1;
+                self.show_doc(i);
             }
             Err(e) => self.say(format!("{}: {e}", p.display())),
         }
     }
 
     fn open_picker(&mut self) {
-        self.picker = Some(Picker { query: String::new(), files: list_files(&self.root), sel: 0 });
+        self.pick(Pick::Files(self.root.clone()));
     }
 
     fn picker_key(&mut self, k: KeyEvent) {
@@ -518,10 +581,10 @@ impl App {
             KeyCode::Esc => self.picker = None,
             KeyCode::Enter => {
                 let chosen = p.matches().get(p.sel).map(|s| s.to_string());
+                let kind = p.kind.clone();
                 self.picker = None;
                 if let Some(f) = chosen {
-                    let path = self.root.join(f);
-                    self.open(&path);
+                    self.picked(kind, f);
                 }
             }
             KeyCode::Down | KeyCode::Tab => p.sel = (p.sel + 1).min(p.matches().len().saturating_sub(1)),
@@ -531,10 +594,12 @@ impl App {
             KeyCode::Backspace => {
                 p.query.pop();
                 p.sel = 0;
+                self.grep_update();
             }
             KeyCode::Char(c) if !ctrl => {
                 p.query.push(c);
                 p.sel = 0;
+                self.grep_update();
             }
             _ => {}
         }
@@ -572,7 +637,21 @@ impl App {
         match cmd {
             "" => {}
             "w" => self.save((!arg.is_empty()).then(|| PathBuf::from(arg))),
-            "q" | "quit" => self.close(false),
+            "q" | "quit" => {
+                if !self.close_win() {
+                    self.close(false);
+                }
+            }
+            "compile" => self.compile(arg),
+            "sp" | "split" => {
+                self.doom_ui("split", "below");
+            }
+            "vs" | "vsplit" => {
+                self.doom_ui("split", "right");
+            }
+            "only" => {
+                self.doom_ui("onlyWin", "");
+            }
             "q!" | "quit!" => self.close(true),
             "qa" | "qall" => {
                 if self.docs.iter().any(|d| d.dirty()) {
@@ -604,8 +683,8 @@ impl App {
                 self.open(&p);
             }
             "e" | "edit" | "find" | "files" => self.open_picker(),
-            "bn" | "bnext" => self.cur = (self.cur + 1) % self.docs.len(),
-            "bp" | "bprevious" => self.cur = (self.cur + self.docs.len() - 1) % self.docs.len(),
+            "bn" | "bnext" => self.show_doc((self.cur + 1) % self.docs.len()),
+            "bp" | "bprevious" => self.show_doc((self.cur + self.docs.len() - 1) % self.docs.len()),
             "bd" | "bdelete" => self.close(false),
             "ls" | "buffers" => {
                 let list: Vec<String> = self.docs.iter().enumerate().map(|(i, d)| format!("{}{}{}", if i == self.cur { "%" } else { " " }, d.name, if d.dirty() { " [+]" } else { "" })).collect();
@@ -665,15 +744,31 @@ impl App {
         if self.docs[self.cur].dirty() && !force {
             return self.say("unsaved changes: :w saves, :q! drops them");
         }
-        self.docs.remove(self.cur);
+        let gone = self.cur;
+        self.docs.remove(gone);
         if self.docs.is_empty() {
             self.quit = true;
             self.docs.push(Doc::scratch());
         }
         self.cur = self.cur.min(self.docs.len() - 1);
+        self.doc_removed(gone);
+        self.last_doc = None;
     }
 
     fn mouse(&mut self, m: ratatui::crossterm::event::MouseEvent) {
+        // a click in another window focuses it first
+        if let MouseEventKind::Down(_) = m.kind {
+            if let Some(&(id, r)) = self.win_rects.iter().find(|(_, r)| m.column >= r.x && m.column < r.right() && m.row >= r.y && m.row < r.bottom()) {
+                if id != self.focus {
+                    self.focus_win(id);
+                    self.area = Rect { height: r.height.saturating_sub(1), ..r };
+                    if let Some(Some(w)) = self.wins.get(id) {
+                        self.docs[self.cur].top = w.top;
+                        self.docs[self.cur].left = w.left;
+                    }
+                }
+            }
+        }
         let a = self.area;
         match m.kind {
             MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
@@ -713,19 +808,52 @@ impl App {
     // ── drawing ──
 
     fn draw(&mut self, f: &mut Frame) {
-        let tabs = self.docs.len() > 1;
-        let [tabline, body, status, cmd] = Layout::vertical([
-            Constraint::Length(if tabs { 1 } else { 0 }),
-            Constraint::Min(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .areas(f.area());
+        let tabs = self.tabs && self.docs.len() > 1;
+        let [tabline, body, cmd] = Layout::vertical([Constraint::Length(if tabs { 1 } else { 0 }), Constraint::Min(2), Constraint::Length(1)]).areas(f.area());
         if tabs {
             self.draw_tabs(f, tabline);
         }
-        self.draw_text(f, body);
-        self.draw_status(f, status);
+        if self.branch_at.elapsed() > Duration::from_secs(3) {
+            self.branch = doom::git_branch(&self.root);
+            self.branch_at = Instant::now();
+        }
+        // the focused window shows the current buffer
+        self.cur = self.cur.min(self.docs.len() - 1);
+        if let Some(w) = self.wins.get_mut(self.focus).and_then(|w| w.as_mut()) {
+            w.doc = self.cur;
+        }
+        let mut placed = Vec::new();
+        let mut seps = Vec::new();
+        self.tree.place(body, &mut placed, &mut seps);
+        self.win_rects = placed.clone();
+        for s in seps {
+            let bar: Vec<Line> = (0..s.height).map(|_| Line::from(Span::styled("│", Style::default().fg(Color::Indexed(8))))).collect();
+            f.render_widget(Paragraph::new(bar), s);
+        }
+        for (id, r) in placed {
+            let Some(w) = self.wins.get(id).and_then(|w| w.clone()) else { continue };
+            let focused = id == self.focus;
+            let di = w.doc.min(self.docs.len() - 1);
+            let text = Rect { height: r.height.saturating_sub(1), ..r };
+            let line = Rect { y: r.bottom().saturating_sub(1), height: 1, ..r };
+            if focused && self.dash && di == self.cur && self.docs[di].name == "[scratch]" && !self.docs[di].dirty() {
+                self.area = text;
+                self.draw_dashboard(f, text);
+            } else {
+                if focused {
+                    self.dash = false;
+                }
+                // a window keeps its own scroll position, even on a buffer shown twice
+                self.docs[di].top = w.top;
+                self.docs[di].left = w.left;
+                self.draw_text(f, text, di, focused);
+                if let Some(Some(w)) = self.wins.get_mut(id) {
+                    w.top = self.docs[di].top;
+                    w.left = self.docs[di].left;
+                }
+            }
+            self.draw_modeline(f, line, di, focused);
+        }
         self.draw_cmd(f, cmd);
         if !self.menu.is_empty() {
             self.draw_menu(f, body);
@@ -750,14 +878,19 @@ impl App {
         f.render_widget(Paragraph::new(Line::from(spans)), a);
     }
 
-    fn draw_text(&mut self, f: &mut Frame, a: Rect) {
-        self.area = a;
+    fn draw_text(&mut self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
+        if focused {
+            self.area = a;
+        }
         let (ss, theme) = (&self.ss, &self.theme);
         let hl = Highlighter::new(theme);
-        let d = &mut self.docs[self.cur];
+        let (numbers, relative) = (self.numbers, self.relative);
+        let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
-        let gutter = (lines.to_string().len() + 2).max(4) as u16;
-        self.gutter = gutter;
+        let gutter = if numbers { (lines.to_string().len() + 2).max(4) as u16 } else { 1 };
+        if focused {
+            self.gutter = gutter;
+        }
         let width = a.width.saturating_sub(gutter) as usize;
         let height = a.height as usize;
         // keep the cursor in view (a few lines of margin, like scrolloff)
@@ -785,7 +918,8 @@ impl App {
                 continue;
             }
             let num_style = if ln == c.line { Style::default().fg(Color::Indexed(3)).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Indexed(8)) };
-            let mut spans = vec![Span::styled(format!("{:>w$} ", ln + 1, w = gutter as usize - 1), num_style)];
+            let shown = if relative && ln != c.line { ln.abs_diff(c.line) } else { ln + 1 };
+            let mut spans = vec![if numbers { Span::styled(format!("{:>w$} ", shown, w = gutter as usize - 1), num_style) } else { Span::raw(" ") }];
             // the selection on this line, in screen columns
             let line_text = d.ed.buf.line(ln);
             let sel_cols = sel.and_then(|(s, e)| {
@@ -814,38 +948,11 @@ impl App {
             out.push(Line::from(spans));
         }
         f.render_widget(Paragraph::new(out), a);
-        if self.cmdline.is_none() && self.picker.is_none() && self.popup.is_none() {
+        if focused && self.cmdline.is_none() && self.picker.is_none() && self.popup.is_none() {
             let x = a.x + gutter + (ccol - d.left) as u16;
             let y = a.y + (c.line - d.top) as u16;
             f.set_cursor_position(Position { x: x.min(a.right().saturating_sub(1)), y });
         }
-    }
-
-    fn draw_status(&self, f: &mut Frame, a: Rect) {
-        let d = &self.docs[self.cur];
-        let (label, color) = match d.ed.mode() {
-            Mode::Normal => ("NORMAL", 4),
-            Mode::Insert => ("INSERT", 2),
-            Mode::Visual => ("VISUAL", 5),
-            Mode::VisualLine => ("V-LINE", 5),
-        };
-        let c = d.ed.cursor();
-        let lines = d.ed.buf.len_lines().max(1);
-        let pct = if lines <= 1 { 100 } else { c.line * 100 / (lines - 1) };
-        let rel = d.name.strip_prefix(&format!("{}/", self.root.display())).unwrap_or(&d.name).to_string();
-        let left = vec![
-            Span::styled(format!(" {label} "), Style::default().fg(Color::Black).bg(Color::Indexed(color)).add_modifier(Modifier::BOLD)),
-            Span::raw(" "),
-            Span::styled(rel, Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(if d.dirty() { " ●" } else { "" }, Style::default().fg(Color::Indexed(3))),
-        ];
-        let right = format!("{}  {}:{}  {pct}% ", d.syntax, c.line + 1, c.col + 1);
-        let used: usize = left.iter().map(|s| s.content.chars().count()).sum();
-        let pad = (a.width as usize).saturating_sub(used + right.chars().count());
-        let mut spans = left;
-        spans.push(Span::raw(" ".repeat(pad)));
-        spans.push(Span::styled(right, Style::default().fg(Color::Indexed(8))));
-        f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Indexed(0))), a);
     }
 
     fn draw_cmd(&mut self, f: &mut Frame, a: Rect) {
@@ -912,7 +1019,7 @@ impl App {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Indexed(4)))
-            .title(format!(" Files · {} ", self.root.display()))
+            .title(format!(" {} ", p.title))
             .title_bottom(format!(" {} of {} ", matches.len(), p.files.len()));
         let inner = block.inner(a);
         f.render_widget(block, a);

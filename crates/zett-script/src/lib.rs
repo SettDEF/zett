@@ -93,6 +93,8 @@ pub struct Engine {
 }
 
 const DEFAULTS: &str = include_str!("defaults.lua");
+/// The code editor's layer (Doom's SPC tree), on top of the defaults when `frontend` is "editor".
+const EDITOR: &str = include_str!("editor.lua");
 
 /// Splits Vim key notation into keys: `<leader>pn` → `<leader>`, `p`, `n`; `<C-s>` stays one.
 pub fn keys(s: &str) -> Vec<String> {
@@ -219,9 +221,24 @@ impl Engine {
         e
     }
 
+    /// Which front end loads the config (`zett.frontend` in Lua): "editor" (the terminal
+    /// code editor) or "window" (the notes window). Set before load_config.
+    pub fn set_frontend(&mut self, name: &str) {
+        if let Ok(z) = self.lua.globals().get::<Table>("zett") {
+            let _ = z.set("frontend", name);
+        }
+    }
+
+    pub fn frontend(&self) -> String {
+        self.lua.globals().get::<Table>("zett").and_then(|z| z.get::<String>("frontend")).unwrap_or_default()
+    }
+
     /// Built-in defaults, then plugins, then the user's init.lua (the user has the last word).
     pub fn load_config(&mut self, dir: &Path) {
         self.exec_named(DEFAULTS, "zett", "defaults.lua");
+        if self.frontend() == "editor" {
+            self.exec_named(EDITOR, "zett", "editor.lua");
+        }
         let plugins = dir.join("plugins");
         let mut names: Vec<PathBuf> = std::fs::read_dir(&plugins).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.join("init.lua").is_file()).collect()).unwrap_or_default();
         names.sort();
