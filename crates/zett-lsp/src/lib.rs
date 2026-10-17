@@ -79,6 +79,8 @@ pub enum Event {
     /// an answer to `definition` (empty: none found)
     Definition(Vec<Location>),
     Hover(String),
+    /// completions at a position: (line, col in chars as asked) and the items
+    Completion(usize, Vec<Item>),
     /// progress and log lines worth a glance
     Status(String),
     Exited(String),
@@ -87,6 +89,7 @@ pub enum Event {
 enum Pending {
     Definition,
     Hover,
+    Completion(usize),
     Init,
 }
 
@@ -150,6 +153,7 @@ impl Client {
                     "synchronization": { "didSave": true },
                     "publishDiagnostics": { "relatedInformation": false },
                     "hover": { "contentFormat": ["plaintext", "markdown"] },
+                    "completion": { "completionItem": { "snippetSupport": false, "documentationFormat": ["plaintext"] } },
                     "definition": { "linkSupport": true }
                 },
                 "window": { "workDoneProgress": true }
@@ -210,6 +214,12 @@ impl Client {
     pub fn definition(&mut self, path: &Path, line: usize, col: usize) {
         let id = self.request("textDocument/definition", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col } }));
         self.pending.lock().unwrap().insert(id, Pending::Definition);
+    }
+
+    /// `line` is echoed back with the answer, so a late one can be told apart.
+    pub fn completion(&mut self, path: &Path, line: usize, col: usize) {
+        let id = self.request("textDocument/completion", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col } }));
+        self.pending.lock().unwrap().insert(id, Pending::Completion(line));
     }
 
     pub fn hover(&mut self, path: &Path, line: usize, col: usize) {
@@ -345,6 +355,11 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
                             .collect();
                         let _ = events.send(Event::Definition(locs));
                     }
+                    Some(Pending::Completion(line)) => {
+                        let list = if res.is_array() { res.clone() } else { res["items"].clone() };
+                        let items = list.as_array().map(|a| a.iter().map(item).collect()).unwrap_or_default();
+                        let _ = events.send(Event::Completion(line, items));
+                    }
                     Some(Pending::Hover) => {
                         let c = &res["contents"];
                         let text = match c {
@@ -415,5 +430,81 @@ mod tests {
         assert_eq!(to_utf16("a😀b", 2), 3);
         assert_eq!(from_utf16("a😀b", 3), 2);
         assert_eq!(path_of("file:///tmp/a%20b.rs"), PathBuf::from("/tmp/a b.rs"));
+    }
+}
+
+/// A completion: what the list shows, what goes in, a hint beside it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Item {
+    pub label: String,
+    pub insert: String,
+    pub detail: String,
+    /// LSP's CompletionItemKind (2 method, 3 function, 5 field, 6 variable, 9 module, 14 keyword …)
+    pub kind: u8,
+    pub sort: String,
+}
+
+fn item(v: &Value) -> Item {
+    let label = v["label"].as_str().unwrap_or("").to_string();
+    let insert = v["textEdit"]["newText"].as_str().or(v["insertText"].as_str()).unwrap_or(&label).to_string();
+    Item {
+        detail: v["detail"].as_str().or(v["labelDetails"]["description"].as_str()).unwrap_or("").to_string(),
+        kind: v["kind"].as_u64().unwrap_or(0) as u8,
+        sort: v["sortText"].as_str().unwrap_or(&label).to_string(),
+        insert: strip_snippet(&insert),
+        label,
+    }
+}
+
+/// `foo(${1:x}, $2)$0` → `foo(x, )`: what a snippet means without its jumps.
+pub fn strip_snippet(s: &str) -> String {
+    let mut out = String::new();
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == '\\' {
+            if let Some(n) = it.next() {
+                out.push(n);
+            }
+        } else if c == '$' {
+            if it.peek() == Some(&'{') {
+                it.next();
+                let mut depth = 1;
+                let mut inner = String::new();
+                for d in it.by_ref() {
+                    match d {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    inner.push(d);
+                }
+                // ${1:default} keeps the default; ${1} nothing
+                if let Some((_, def)) = inner.split_once(':') {
+                    out.push_str(&strip_snippet(def));
+                }
+            } else {
+                while it.peek().is_some_and(|d| d.is_ascii_digit()) {
+                    it.next();
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod snippet_tests {
+    #[test]
+    fn snippets_become_text() {
+        assert_eq!(super::strip_snippet("add(${1:a}, ${2:b})$0"), "add(a, b)");
+        assert_eq!(super::strip_snippet("vec![$0]"), "vec![]");
+        assert_eq!(super::strip_snippet("a\\$b"), "a$b");
     }
 }

@@ -93,3 +93,7 @@ a.b.c.d	$dF.
 a.b.c.d	$dT.
 a.b.c.d	ct.X<Esc>
 a.b.c.d	fzx
+  a\nb	oo<Esc>
+  a\nb	Ox<Esc>
+    if x {\n    }	A\ry<Esc>
+	foo	oz<Esc>

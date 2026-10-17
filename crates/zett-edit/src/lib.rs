@@ -228,6 +228,12 @@ impl Editor {
         i
     }
 
+    /// The whitespace a line starts with.
+    fn indent_of(&self, line: usize) -> String {
+        let s = self.line_start(line);
+        self.buf.slice(s, self.first_non_blank(line).max(s))
+    }
+
     fn first_non_blank(&self, line: usize) -> usize {
         let s = self.line_start(line);
         let len = self.buf.line_len(line);
@@ -420,8 +426,9 @@ impl Editor {
             'a' => { let at = (self.cursor + 1).min(self.line_end(line)); self.start_insert(at) }
             'I' => self.start_insert(self.first_non_blank(line)),
             'A' => self.start_insert(self.line_end(line)),
-            'o' => { self.begin(); let e = self.line_end(line); self.ins(e, "\n"); self.mode = Mode::Insert; self.cursor = e + 1; }
-            'O' => { self.begin(); let s = self.line_start(line); self.ins(s, "\n"); self.mode = Mode::Insert; self.cursor = s; }
+            // autoindent (Neovim's default): the new line starts at this one's indent
+            'o' => { self.begin(); let ind = self.indent_of(line); let e = self.line_end(line); self.ins(e, &format!("\n{ind}")); self.mode = Mode::Insert; self.cursor = e + 1 + ind.chars().count(); }
+            'O' => { self.begin(); let ind = self.indent_of(line); let s = self.line_start(line); self.ins(s, &format!("{ind}\n")); self.mode = Mode::Insert; self.cursor = s + ind.chars().count(); }
 
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
             _ => { self.count = None; self.op = None; }
@@ -1034,8 +1041,11 @@ impl Editor {
                 self.want_col = self.cursor().col;
             }
             Code::Enter => {
-                self.ins(self.cursor, "\n");
-                self.cursor += 1;
+                // autoindent: the indent before the cursor carries over
+                let l = self.cur_line();
+                let ind: String = self.indent_of(l).chars().take(self.cursor - self.line_start(l)).collect();
+                self.ins(self.cursor, &format!("\n{ind}"));
+                self.cursor += 1 + ind.chars().count();
             }
             Code::Tab => {
                 self.ins(self.cursor, "\t");

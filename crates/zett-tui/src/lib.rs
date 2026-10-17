@@ -286,6 +286,10 @@ struct App {
     side: Tree,
     lsp: zett_lsp::Servers,
     lsp_status: String,
+    comp: Option<lsp::Comp>,
+    comp_due: Option<Instant>,
+    /// where the cursor was drawn (the completion popup sits there)
+    cursor_xy: (u16, u16),
     /// the latest edit (servers hear about it once typing pauses)
     edit_at: Instant,
 }
@@ -368,6 +372,9 @@ impl App {
             side: Tree::default(),
             lsp: zett_lsp::Servers::new(),
             lsp_status: String::new(),
+            comp: None,
+            comp_due: None,
+            cursor_xy: (0, 0),
             edit_at: Instant::now(),
         };
         // a folder: the file finder; nothing: the dashboard
@@ -511,7 +518,30 @@ impl App {
             let feed = self.engine.feed("n", &seq);
             return self.after_feed(feed, seq);
         }
+        // the completion popup takes its keys first
+        if mode == Mode::Insert && self.comp.is_some() {
+            let n = self.comp.as_ref().map(|c| c.shown.len()).unwrap_or(0);
+            let c = self.comp.as_mut().unwrap();
+            match k.code {
+                KeyCode::Tab | KeyCode::Down => return c.sel = (c.sel + 1) % n.max(1),
+                KeyCode::Char('n') if ctrl => return c.sel = (c.sel + 1) % n.max(1),
+                KeyCode::BackTab | KeyCode::Up => return c.sel = (c.sel + n.max(1) - 1) % n.max(1),
+                KeyCode::Char('p') if ctrl => return c.sel = (c.sel + n.max(1) - 1) % n.max(1),
+                KeyCode::Enter => return self.comp_accept(),
+                KeyCode::Char('y') if ctrl => return self.comp_accept(),
+                KeyCode::Esc => self.comp = None,
+                _ => {}
+            }
+        }
+        let typed = match k.code {
+            KeyCode::Char(c) if !ctrl => Some(c),
+            KeyCode::Backspace => None,
+            _ => Some('\0'),
+        };
         self.edit_key(ek);
+        if mode == Mode::Insert {
+            self.comp_after_key(typed);
+        }
     }
 
     /// What the engine did with keys: ran a mapping, waits for more, or left them to Vim.
@@ -915,6 +945,9 @@ impl App {
         if !self.menu.is_empty() {
             self.draw_menu(f, body);
         }
+        if self.comp.is_some() {
+            self.draw_comp(f);
+        }
         if self.picker.is_some() {
             self.draw_picker(f);
         }
@@ -1033,6 +1066,7 @@ impl App {
         if focused && self.cmdline.is_none() && self.picker.is_none() && self.popup.is_none() {
             let x = a.x + gutter + (ccol - d.left) as u16;
             let y = a.y + (c.line - d.top) as u16;
+            self.cursor_xy = (x, y);
             f.set_cursor_position(Position { x: x.min(a.right().saturating_sub(1)), y });
         }
     }

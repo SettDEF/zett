@@ -31,7 +31,7 @@ impl App {
         }
     }
 
-    fn client_for(&mut self, di: usize) -> Option<&mut zett_lsp::Client> {
+    pub(crate) fn client_for(&mut self, di: usize) -> Option<&mut zett_lsp::Client> {
         let path = self.docs[di].abs_path()?;
         let root = doom::project_of(&path).unwrap_or_else(|| path.parent().map(Path::to_path_buf).unwrap_or_default());
         self.lsp.for_file(&path, &root).map(|(c, _)| c)
@@ -50,6 +50,7 @@ impl App {
                     Some(l) => self.goto_location(l.clone()),
                     None => self.say("no definition found"),
                 },
+                Event::Completion(line, items) => self.comp_arrived(line, items),
                 Event::Hover(text) => {
                     let rows: Vec<(String, String)> = text.lines().filter(|l| !l.starts_with("```")).map(|l| (String::new(), l.to_string())).collect();
                     if rows.iter().all(|r| r.1.trim().is_empty()) {
@@ -65,10 +66,16 @@ impl App {
                 }
             }
         }
+        self.comp_tick();
         // text changed since the server last saw it, and the typing paused
         if self.edit_at.elapsed() < Duration::from_millis(250) {
             return;
         }
+        self.lsp_sync();
+    }
+
+    /// Sends changed text to the servers.
+    pub(crate) fn lsp_sync(&mut self) {
         for di in 0..self.docs.len() {
             let d = &self.docs[di];
             if !d.lsp || d.ed.buf.rev() == d.lsp_rev {
@@ -98,7 +105,7 @@ impl App {
     }
 
     /// The cursor's position in the server's column units.
-    fn lsp_pos(&mut self) -> Option<(PathBuf, usize, usize)> {
+    pub(crate) fn lsp_pos(&mut self) -> Option<(PathBuf, usize, usize)> {
         let di = self.cur;
         let path = self.docs[di].abs_path()?;
         let c = self.docs[di].ed.cursor();
@@ -177,5 +184,171 @@ pub(crate) fn severity_color(s: u8) -> Color {
         2 => Color::Indexed(3),
         3 => Color::Indexed(4),
         _ => Color::Indexed(8),
+    }
+}
+
+/// The completion popup in insert mode.
+pub(crate) struct Comp {
+    pub items: Vec<zett_lsp::Item>,
+    /// indexes into `items`, filtered by what is typed
+    pub shown: Vec<usize>,
+    pub sel: usize,
+    pub line: usize,
+    /// where the word being completed starts
+    pub start: usize,
+}
+
+fn ident(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+impl App {
+    /// After a key in insert mode: refine the popup, ask for one, or close it.
+    pub(crate) fn comp_after_key(&mut self, typed: Option<char>) {
+        if !self.docs[self.cur].lsp || self.docs[self.cur].ed.mode() != Mode::Insert {
+            self.comp = None;
+            return;
+        }
+        match typed {
+            Some(c) if ident(c) => {
+                if self.comp.is_some() {
+                    self.comp_filter();
+                } else {
+                    self.comp_due = Some(Instant::now() + Duration::from_millis(120));
+                }
+            }
+            Some('.') | Some(':') => {
+                self.comp = None;
+                self.comp_due = Some(Instant::now() + Duration::from_millis(60));
+            }
+            None if self.comp.is_some() => self.comp_filter(),
+            _ => {
+                self.comp = None;
+                self.comp_due = None;
+            }
+        }
+    }
+
+    /// Asks the server when the pause after typing is over.
+    pub(crate) fn comp_tick(&mut self) {
+        if self.comp_due.is_none_or(|t| Instant::now() < t) {
+            return;
+        }
+        self.comp_due = None;
+        if self.docs[self.cur].ed.mode() != Mode::Insert {
+            return;
+        }
+        self.edit_at = Instant::now() - Duration::from_secs(1);
+        self.lsp_sync();
+        let Some((path, line, col)) = self.lsp_pos() else { return };
+        if let Some(c) = self.client_for(self.cur) {
+            c.completion(&path, line, col);
+        }
+    }
+
+    pub(crate) fn comp_arrived(&mut self, line: usize, items: Vec<zett_lsp::Item>) {
+        let d = &self.docs[self.cur];
+        let c = d.ed.cursor();
+        if d.ed.mode() != Mode::Insert || c.line != line || items.is_empty() {
+            return;
+        }
+        let text: Vec<char> = d.ed.buf.line(c.line).chars().collect();
+        let mut start = c.col.min(text.len());
+        while start > 0 && ident(text[start - 1]) {
+            start -= 1;
+        }
+        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start });
+        self.comp_filter();
+    }
+
+    fn comp_filter(&mut self) {
+        let d = &self.docs[self.cur];
+        let c = d.ed.cursor();
+        let Some(comp) = self.comp.as_mut() else { return };
+        if c.line != comp.line || c.col < comp.start {
+            self.comp = None;
+            return;
+        }
+        let prefix: String = d.ed.buf.line(c.line).chars().skip(comp.start).take(c.col - comp.start).collect::<String>().to_lowercase();
+        let q: Vec<char> = prefix.chars().collect();
+        let mut scored: Vec<(bool, String, usize)> = comp
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(i, it)| {
+                let l = it.label.to_lowercase();
+                let starts = l.starts_with(&prefix);
+                (starts || fuzzy(&q, &l).is_some()).then(|| (!starts, it.sort.clone(), i))
+            })
+            .collect();
+        scored.sort();
+        comp.shown = scored.into_iter().take(60).map(|s| s.2).collect();
+        comp.sel = comp.sel.min(comp.shown.len().saturating_sub(1));
+        if comp.shown.is_empty() {
+            self.comp = None;
+        }
+    }
+
+    /// Enter / Tab on the popup: the typed part becomes the item.
+    pub(crate) fn comp_accept(&mut self) {
+        let Some(comp) = self.comp.take() else { return };
+        let Some(&i) = comp.shown.get(comp.sel) else { return };
+        let insert = comp.items[i].insert.clone();
+        let typed = self.docs[self.cur].ed.cursor().col.saturating_sub(comp.start);
+        for _ in 0..typed {
+            self.edit_key(Key::code(Code::Backspace));
+        }
+        for ch in insert.chars() {
+            self.edit_key(if ch == '\n' { Key::code(Code::Enter) } else { Key::ch(ch) });
+        }
+        self.comp_due = None;
+    }
+
+    pub(crate) fn draw_comp(&self, f: &mut Frame) {
+        let Some(comp) = &self.comp else { return };
+        let (cx, cy) = self.cursor_xy;
+        let area = f.area();
+        let rows = comp.shown.len().min(10) as u16;
+        let kind = |k: u8| match k {
+            2 | 3 | 4 => "ƒ",
+            5 | 10 => "◆",
+            6 => "v",
+            7 | 22 => "S",
+            8 => "I",
+            9 => "▤",
+            13 | 20 => "E",
+            14 => "k",
+            21 => "c",
+            _ => "·",
+        };
+        let labels: Vec<(String, String)> = comp.shown.iter().map(|&i| (comp.items[i].label.clone(), comp.items[i].detail.clone())).collect();
+        let lw = labels.iter().map(|l| l.0.chars().count()).max().unwrap_or(4).min(40);
+        let dw = labels.iter().map(|l| l.1.chars().count()).max().unwrap_or(0).min(30);
+        let w = (lw + dw + 6).min(area.width as usize) as u16;
+        let x = cx.saturating_sub((self.docs[self.cur].ed.cursor().col - comp.start) as u16 + 2).min(area.width.saturating_sub(w));
+        let below = cy + 1 + rows <= area.bottom().saturating_sub(2);
+        let y = if below { cy + 1 } else { cy.saturating_sub(rows) };
+        let a = Rect { x, y, width: w, height: rows };
+        f.render_widget(Clear, a);
+        let first = comp.sel.saturating_sub(rows as usize - 1);
+        let lines: Vec<Line> = comp
+            .shown
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(rows as usize)
+            .map(|(n, &i)| {
+                let it = &comp.items[i];
+                let base = if n == comp.sel { Style::default().bg(Color::Indexed(4)).fg(Color::Black) } else { Style::default().bg(Color::Indexed(0)) };
+                let label: String = it.label.chars().take(lw).collect();
+                let detail: String = it.detail.chars().take(dw).collect();
+                Line::from(vec![
+                    Span::styled(format!(" {} ", kind(it.kind)), base.fg(if n == comp.sel { Color::Black } else { Color::Indexed(5) })),
+                    Span::styled(format!("{label:<lw$} "), base),
+                    Span::styled(format!("{detail:>dw$} "), if n == comp.sel { base } else { base.fg(Color::Indexed(8)) }),
+                ])
+            })
+            .collect();
+        f.render_widget(Paragraph::new(lines), a);
     }
 }
