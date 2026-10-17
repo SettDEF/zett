@@ -48,6 +48,8 @@ pub(crate) struct Host {
     /// a question for the user: (prompt, default, what gets the answer)
     pub input: Option<(String, String, RegistryKey)>,
     pub asking: Option<RegistryKey>,
+    /// the open buffers' paths (zett.buffers)
+    pub buffers: Vec<String>,
     /// a g waiting for its second g
     pub g: bool,
 }
@@ -181,6 +183,11 @@ impl Engine {
         r
     }
 
+    /// The open buffers' paths, for `zett.buffers()`.
+    pub fn set_buffers(&mut self, paths: Vec<String>) {
+        self.st.borrow_mut().host.buffers = paths;
+    }
+
     pub fn panels(&self) -> Vec<PanelView> {
         let st = self.st.borrow();
         st.host
@@ -220,7 +227,7 @@ impl Engine {
     /// q closes. None: no panel has the keyboard, or the key means nothing there.
     pub fn panel_key(&mut self, key: &str, page: usize) -> Option<Vec<Effect>> {
         let id = self.focused_panel()?;
-        let key = super::keys(key).into_iter().next().unwrap_or_default();
+        let key = if key == "<lt>" { "<".to_string() } else { super::keys(key).concat() };
         let key = key.as_str();
         let (handler, row, len) = {
             let st = self.st.borrow();
@@ -537,7 +544,9 @@ impl Engine {
             Ok(())
         })?)?;
         // zett.key_name("<cr>") == "<Enter>": one spelling per key
-        z.set("key_name", lua.create_function(|_, k: String| Ok(super::keys(&k).into_iter().next().unwrap_or_default()))?)?;
+        z.set("key_name", lua.create_function(|_, k: String| Ok(super::keys(&k).concat()))?)?;
+        let st = self.st.clone();
+        z.set("buffers", lua.create_function(move |_, ()| Ok(st.borrow().host.buffers.clone()))?)?;
         z.set("icon", lua.create_function(|_, name: String| Ok(file_icon(&name)))?)?;
         // zett.diff(a, b): { {"+", line}, {"-", line}, {" ", line}, … }
         z.set("diff", lua.create_function(|lua, (a, b): (String, String)| {
@@ -565,6 +574,15 @@ impl Engine {
             Ok(t)
         })?)?;
         fs.set("exists", lua.create_function(|_, p: String| Ok(Path::new(&p).exists()))?)?;
+        // zett.fs.stat(path): { size=, mtime=, dir= } or nil
+        fs.set("stat", lua.create_function(|lua, p: String| {
+            let Ok(m) = std::fs::metadata(&p) else { return Ok(None) };
+            let t = lua.create_table()?;
+            t.set("size", m.len())?;
+            t.set("mtime", m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs()))?;
+            t.set("dir", m.is_dir())?;
+            Ok(Some(t))
+        })?)?;
         fs.set("is_dir", lua.create_function(|_, p: String| Ok(Path::new(&p).is_dir()))?)?;
         let res = |r: std::io::Result<()>| Ok(match r {
             Ok(()) => (true, None),

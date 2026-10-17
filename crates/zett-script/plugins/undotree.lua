@@ -203,6 +203,7 @@ z.command("undotree", function()
 end, { desc = "Undo tree" })
 z.map("n", "<leader>su", "undotree", { desc = "Undo history" })
 z.map("n", "<leader>tu", "undotree", { desc = "Undo tree" })
+z.map("n", "<leader>u", "undotree", { desc = "Undo tree" })
 z.on("text_changed", function() M.refresh() end)
 z.on("buf_enter", function() M.refresh() end)
 

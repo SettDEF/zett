@@ -85,7 +85,7 @@ function z.config(name, defaults)
     for k, v in pairs(a) do out[name(k)] = v end
     for k, v in pairs(b or {}) do
       k = name(k)
-      if type(v) == "table" and type(out[k]) == "table" and #v == 0 then out[k] = merge(out[k], v, k == "keys") else out[k] = v end
+      if type(v) == "table" and type(out[k]) == "table" and #v == 0 then out[k] = merge(out[k], v, k == "keys" or k == "mappings") else out[k] = v end
     end
     return out
   end

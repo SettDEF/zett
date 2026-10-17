@@ -10,6 +10,7 @@
 
 pub mod docs;
 mod host;
+pub mod hl;
 
 pub use host::{diff_lines, file_icon, PanelView};
 
@@ -89,6 +90,9 @@ struct State {
     loading: String,
     leader: String,
     host: host::Host,
+    /// highlight groups (zett.hl, :hi) and a counter that moves when one changes
+    hl: HashMap<String, hl::Hl>,
+    hl_rev: u64,
 }
 
 pub struct Engine {
@@ -222,7 +226,7 @@ pub fn config_dir() -> PathBuf {
 impl Engine {
     pub fn new(folder: Option<Rc<RefCell<Folder>>>) -> Engine {
         let lua = Lua::new();
-        let st = Rc::new(RefCell::new(State { folder, leader: "<Space>".into(), loading: "zett".into(), ..Default::default() }));
+        let st = Rc::new(RefCell::new(State { folder, leader: "<Space>".into(), loading: "zett".into(), hl: hl::defaults(), hl_rev: 1, ..Default::default() }));
         let mut e = Engine { lua, st, errors: Vec::new(), plugins: Vec::new() };
         if let Err(err) = e.install_api() {
             e.errors.push(format!("zett API: {err}"));
@@ -768,6 +772,7 @@ impl Engine {
         z.set("page", page)?;
 
         self.install_host(&z)?;
+        self.install_hl(&z)?;
         lua.globals().set("zett", z)?;
         // print() goes to the host's notices, not to a terminal nobody sees
         let st = self.st.clone();

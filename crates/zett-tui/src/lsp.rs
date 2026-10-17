@@ -182,12 +182,13 @@ impl App {
 
 /// The colour of a diagnostic's severity.
 pub(crate) fn severity_color(s: u8) -> Color {
-    match s {
-        1 => Color::Indexed(1),
-        2 => Color::Indexed(3),
-        3 => Color::Indexed(4),
-        _ => Color::Indexed(8),
-    }
+    let g = match s {
+        1 => "DiagnosticError",
+        2 => "DiagnosticWarn",
+        3 => "DiagnosticInfo",
+        _ => "DiagnosticHint",
+    };
+    hl(g).fg.unwrap_or(Color::Reset)
 }
 
 /// The completion popup in insert mode.
@@ -342,13 +343,13 @@ impl App {
             .take(rows as usize)
             .map(|(n, &i)| {
                 let it = &comp.items[i];
-                let base = if n == comp.sel { Style::default().bg(Color::Indexed(4)).fg(Color::Black) } else { Style::default().bg(Color::Indexed(0)) };
+                let base = if n == comp.sel { hl("PmenuSel") } else { hl("Pmenu") };
                 let label: String = it.label.chars().take(lw).collect();
                 let detail: String = it.detail.chars().take(dw).collect();
                 Line::from(vec![
-                    Span::styled(format!(" {} ", kind(it.kind)), base.fg(if n == comp.sel { Color::Black } else { Color::Indexed(5) })),
+                    Span::styled(format!(" {} ", kind(it.kind)), if n == comp.sel { base } else { base.patch(hl("PmenuKind")) }),
                     Span::styled(format!("{label:<lw$} "), base),
-                    Span::styled(format!("{detail:>dw$} "), if n == comp.sel { base } else { base.fg(Color::Indexed(8)) }),
+                    Span::styled(format!("{detail:>dw$} "), if n == comp.sel { base } else { base.patch(hl("PmenuExtra")) }),
                 ])
             })
             .collect();

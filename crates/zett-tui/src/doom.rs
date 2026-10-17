@@ -591,21 +591,21 @@ impl App {
             lines.push(Line::raw(""));
         }
         for b in BANNER {
-            lines.push(Line::from(Span::styled(*b, Style::default().fg(Color::Indexed(4)).add_modifier(Modifier::BOLD))).centered());
+            lines.push(Line::from(Span::styled(*b, hl("DashboardHeader"))).centered());
         }
         lines.push(Line::raw(""));
         lines.push(Line::raw(""));
         for (i, (icon, label, keys, _)) in DASH.iter().enumerate() {
             let sel = i == self.dash_sel;
-            let st = if sel { Style::default().fg(Color::Indexed(4)).add_modifier(Modifier::BOLD) } else { Style::default() };
+            let st = if sel { hl("DashboardHeader") } else { Style::default() };
             let text = format!("{icon}  {label:<30}");
-            lines.push(Line::from(vec![Span::styled(text, st), Span::styled(format!("{keys:>8}"), Style::default().fg(Color::Indexed(3)))]).centered());
+            lines.push(Line::from(vec![Span::styled(text, st), Span::styled(format!("{keys:>8}"), hl("DashboardKey"))]).centered());
             lines.push(Line::raw(""));
         }
         lines.push(Line::raw(""));
         let n = self.engine.plugins.len();
         let foot = format!("zett loaded {n} plugin{} in {} ms · {}", if n == 1 { "" } else { "s" }, self.started_ms, home_short(&self.root.display().to_string()));
-        lines.push(Line::from(Span::styled(foot, Style::default().fg(Color::Indexed(8)))).centered());
+        lines.push(Line::from(Span::styled(foot, hl("DashboardFooter"))).centered());
         f.render_widget(Paragraph::new(lines), a);
     }
 
@@ -626,42 +626,42 @@ impl App {
     pub(crate) fn draw_modeline(&self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
         let d = &self.docs[di];
         let (label, color) = match d.ed.mode() {
-            Mode::Normal => ("N", 4),
-            Mode::Insert => ("I", 2),
-            Mode::Visual => ("V", 5),
-            Mode::VisualLine => ("L", 5),
+            Mode::Normal => ("N", "ModeNormal"),
+            Mode::Insert => ("I", "ModeInsert"),
+            Mode::Visual => ("V", "ModeVisual"),
+            Mode::VisualLine => ("L", "ModeVisual"),
         };
         let c = d.ed.cursor();
         let lines = d.ed.buf.len_lines().max(1);
         let place = if d.top == 0 && lines <= a.height as usize { "All".to_string() } else if c.line == 0 { "Top".into() } else if c.line + 1 >= lines { "Bot".into() } else { format!("{}%", c.line * 100 / (lines - 1).max(1)) };
         let rel = d.name.strip_prefix(&format!("{}/", self.root.display())).unwrap_or(&d.name).to_string();
-        let dim = Style::default().fg(Color::Indexed(8));
+        let dim = hl("StatusLineDim");
         let mut left = vec![];
         if focused {
-            left.push(Span::styled(format!(" {label} "), Style::default().fg(Color::Black).bg(Color::Indexed(color)).add_modifier(Modifier::BOLD)));
+            left.push(Span::styled(format!(" {label} "), hl(color)));
         } else {
             left.push(Span::styled(format!(" {label} "), dim));
         }
         left.push(Span::raw(" "));
-        left.push(Span::styled(format!("{} ", file_icon(&d.name)), if focused { Style::default().fg(Color::Indexed(4)) } else { dim }));
+        left.push(Span::styled(format!("{} ", file_icon(&d.name)), if focused { hl("StatusLineFile") } else { dim }));
         left.push(Span::styled(rel, if focused { Style::default().add_modifier(Modifier::BOLD) } else { dim }));
         if d.dirty() {
-            left.push(Span::styled(" ●", Style::default().fg(Color::Indexed(1))));
+            left.push(Span::styled(" ●", hl("Modified")));
         }
         left.push(Span::styled(format!("  {}:{}", c.line + 1, c.col + 1), dim));
         let mut right: Vec<Span> = Vec::new();
         let (errs, warns) = (d.diags.iter().filter(|x| x.severity == 1).count(), d.diags.iter().filter(|x| x.severity == 2).count());
         if errs > 0 {
-            right.push(Span::styled(format!("\u{f00d} {errs}  "), Style::default().fg(Color::Indexed(1))));
+            right.push(Span::styled(format!("\u{f00d} {errs}  "), hl("DiagnosticError")));
         }
         if warns > 0 {
-            right.push(Span::styled(format!("\u{f071} {warns}  "), Style::default().fg(Color::Indexed(3))));
+            right.push(Span::styled(format!("\u{f071} {warns}  "), hl("DiagnosticWarn")));
         }
         if d.lsp && errs + warns == 0 && focused {
-            right.push(Span::styled("\u{f00c}  ", Style::default().fg(Color::Indexed(2))));
+            right.push(Span::styled("\u{f00c}  ", hl("DiagnosticOk")));
         }
         if let Some(b) = &self.branch {
-            right.push(Span::styled(format!("\u{e725} {b}  "), if focused { Style::default().fg(Color::Indexed(5)) } else { dim }));
+            right.push(Span::styled(format!("\u{e725} {b}  "), if focused { hl("StatusLineBranch") } else { dim }));
         }
         right.push(Span::styled(format!("{}  ", d.syntax), if focused { Style::default() } else { dim }));
         right.push(Span::styled(format!("{place} "), dim));
@@ -669,8 +669,7 @@ impl App {
         let mut spans = left;
         spans.push(Span::raw(" ".repeat((a.width as usize).saturating_sub(used))));
         spans.extend(right);
-        let bg = if focused { Color::Indexed(0) } else { Color::Reset };
-        f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(bg)), a);
+        f.render_widget(Paragraph::new(Line::from(spans)).style(hl(if focused { "StatusLine" } else { "StatusLineNC" })), a);
     }
 }
 

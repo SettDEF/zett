@@ -4,20 +4,7 @@ use super::*;
 
 /// How a highlight group a plugin names is drawn (terminal colours, so the theme follows).
 pub(crate) fn group_style(g: &str) -> Style {
-    let fg = |n: u8| Style::default().fg(Color::Indexed(n));
-    match g {
-        "Title" => fg(4).add_modifier(Modifier::BOLD),
-        "Directory" => fg(4),
-        "Current" => fg(3).add_modifier(Modifier::BOLD),
-        "Accent" => fg(6),
-        "Muted" | "Comment" => fg(8),
-        "Added" | "GitAdded" => fg(2),
-        "Removed" | "GitDeleted" | "Error" | "GitConflict" => fg(1),
-        "Changed" | "GitModified" | "GitRenamed" | "Warn" => fg(3),
-        "GitUntracked" => fg(5),
-        "Bold" => Style::default().add_modifier(Modifier::BOLD),
-        _ => Style::default(),
-    }
+    hl(g)
 }
 
 impl App {
@@ -28,6 +15,8 @@ impl App {
         let path = self.docs[cur].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
         let root = project_of(&self.root).unwrap_or(self.root.clone());
         let root = std::fs::canonicalize(&root).unwrap_or(root);
+        let open: Vec<String> = self.docs.iter().filter_map(|d| d.abs_path()).map(|p| p.display().to_string()).collect();
+        self.engine.set_buffers(open);
         let rev = self.docs[cur].ed.buf.rev();
         let r = self.engine.lend_buffer(&mut self.docs[cur].ed, &path, &root, f);
         if self.docs[cur].ed.buf.rev() != rev {
@@ -124,7 +113,7 @@ impl App {
                 (a, s, b)
             };
             rest = other;
-            let bar: Vec<Line> = (0..sep.height).map(|_| Line::from(Span::styled("│", Style::default().fg(Color::Indexed(8))))).collect();
+            let bar: Vec<Line> = (0..sep.height).map(|_| Line::from(Span::styled("│", hl("WinSeparator")))).collect();
             f.render_widget(Paragraph::new(bar), sep);
             // fixed heights first, the rest shared
             let fixed: u16 = ps.iter().map(|p| p.height.min(col.height / 2)).sum();
@@ -150,7 +139,7 @@ impl App {
         let mut lines = Vec::new();
         let mut body_h = a.height as usize;
         if !p.title.is_empty() {
-            let st = if p.focused { group_style("Title") } else { group_style("Title").remove_modifier(Modifier::BOLD).fg(Color::Indexed(8)) };
+            let st = hl(if p.focused { "Title" } else { "TitleNC" });
             lines.push(Line::from(Span::styled(format!(" {}", p.title), st)));
             body_h -= 1;
         }
@@ -174,13 +163,13 @@ impl App {
                 used += t.chars().count();
                 let mut st = group_style(g);
                 if sel {
-                    st = st.bg(Color::Indexed(0)).add_modifier(Modifier::BOLD);
+                    st = st.patch(hl("PanelSel"));
                 }
                 spans.push(Span::styled(t, st));
             }
             if sel {
-                spans[0] = Span::styled(" ", Style::default().bg(Color::Indexed(0)));
-                spans.push(Span::styled(" ".repeat((a.width as usize).saturating_sub(used)), Style::default().bg(Color::Indexed(0))));
+                spans[0] = Span::styled(" ", hl("PanelSel"));
+                spans.push(Span::styled(" ".repeat((a.width as usize).saturating_sub(used)), hl("PanelSel")));
             }
             lines.push(Line::from(spans));
         }

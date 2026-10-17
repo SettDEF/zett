@@ -20,6 +20,7 @@ pub(crate) const EX: &[(&str, &str, &str, &str)] = &[
     ("cd", "<folder>", "the project folder", "cd ~/code/zett"),
     ("help", "[topic]", "the documentation", "help lsp"),
     ("set", "<setting> <value>", "change a setting (no value: on)", "set explorer.width 40"),
+    ("hi", "<group> [fg= bg= bold …]", "colours: show or change a group", "hi Comment fg=#7f8c8d italic"),
     ("compile", "<command>", "run a build as a zeit job", "compile cargo build"),
     ("rename", "<name>", "rename the symbol (language server)", "rename parse_line"),
     ("lua", "<code>", "run Lua with the zett API", "lua zett.notify(\"hi\")"),
@@ -67,6 +68,16 @@ impl App {
                         .chain([("number", "on / nonumber", "line numbers"), ("relativenumber", "on / norelativenumber", "relative line numbers"), ("tabs", "on / notabs", "buffer tabs")].map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())))
                         .collect(),
                 ),
+                "hi" | "highlight" => {
+                    let items: Vec<Suggestion> = self
+                        .engine
+                        .highlights()
+                        .into_iter()
+                        .filter(|(n, _, _)| n.to_lowercase().starts_with(&arg.split(' ').next().unwrap_or("").to_lowercase()))
+                        .map(|(n, raw, _)| Suggestion { fill: format!("hi {n} "), example: format!("hi {n} {}", if raw.starts_with("link") { "fg=3 bold".to_string() } else { raw.clone() }), name: n, args: raw, about: String::new() })
+                        .collect();
+                    items
+                }
                 "h" | "help" => pick(zett_script::docs::TOPICS.iter().map(|(n, about, _)| (n.to_string(), String::new(), about.to_string())).chain([("commands".to_string(), String::new(), "every command and its keys".to_string())]).collect()),
                 "compile" => {
                     let root = doom::project_of(&self.root).unwrap_or(self.root.clone());
@@ -131,25 +142,25 @@ impl App {
         let mut lines = Vec::new();
         for (i, s) in all.iter().enumerate().skip(first).take(shown) {
             let on = i == self.cmd_sel;
-            let bg = if on { Style::default().bg(Color::Indexed(0)) } else { Style::default() };
+            let bg = if on { hl("SuggestSel") } else { Style::default() };
             let used = s.name.chars().count() + 1 + s.args.chars().count();
             lines.push(Line::from(vec![
-                Span::styled(format!(" {}", s.name), bg.fg(Color::Indexed(6)).add_modifier(if on { Modifier::BOLD } else { Modifier::empty() })),
-                Span::styled(format!(" {}", s.args), bg.fg(Color::Indexed(8))),
+                Span::styled(format!(" {}", s.name), bg.patch(hl("SuggestName")).add_modifier(if on { Modifier::BOLD } else { Modifier::empty() })),
+                Span::styled(format!(" {}", s.args), bg.patch(hl("SuggestArgs"))),
                 Span::styled(" ".repeat(name_w.saturating_sub(used) + 2), bg),
-                Span::styled(format!("{:<width$}", s.about, width = (w as usize).saturating_sub(name_w + 6)), bg.fg(if on { Color::Reset } else { Color::Indexed(7) })),
+                Span::styled(format!("{:<width$}", s.about, width = (w as usize).saturating_sub(name_w + 6)), bg.patch(hl(if on { "File" } else { "MsgArea" }))),
             ]));
         }
         if foot == 1 {
-            lines.push(Line::from(vec![Span::styled(" e.g.  ", Style::default().fg(Color::Indexed(8))), Span::styled(format!(":{}", sel.example), Style::default().fg(Color::Indexed(2)))]));
+            lines.push(Line::from(vec![Span::styled(" e.g.  ", hl("Muted")), Span::styled(format!(":{}", sel.example), hl("SuggestExample"))]));
         }
         f.render_widget(Clear, a);
         let more = if all.len() > shown { format!(" {}/{} ", self.cmd_sel + 1, all.len()) } else { String::new() };
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Indexed(8)))
-            .title_bottom(Line::from(Span::styled(format!(" Tab completes · ↑↓ choose{more}"), Style::default().fg(Color::Indexed(8)))).right_aligned());
+            .border_style(hl("FloatBorderDim"))
+            .title_bottom(Line::from(Span::styled(format!(" Tab completes · ↑↓ choose{more}"), hl("FloatBorderDim"))).right_aligned());
         f.render_widget(Paragraph::new(lines).block(block), a);
     }
 
@@ -202,6 +213,30 @@ impl App {
                 self.say(m);
                 self.emit("option_set");
             }
+            Err(e) => self.say(e),
+        }
+    }
+}
+
+impl App {
+    /// `:hi` (every group), `:hi NAME` (how it looks), `:hi NAME fg=3 bold` (change it).
+    pub(crate) fn hi_command(&mut self, arg: &str) {
+        let (name, args) = arg.split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((arg.trim(), ""));
+        if name.is_empty() {
+            let rows = self.engine.highlights().into_iter().map(|(n, raw, _)| (n, raw)).collect();
+            self.popup = Some(Popup::Help("Highlight groups (:hi NAME fg=… bg=… bold)".into(), rows));
+            return;
+        }
+        if args.is_empty() {
+            let m = match self.engine.highlights().into_iter().find(|h| h.0 == name) {
+                Some((n, raw, look)) if raw != look => format!("{n} {raw} → {look}"),
+                Some((n, raw, _)) => format!("{n} {raw}"),
+                None => format!("no group {name} (:hi lists them)"),
+            };
+            return self.say(m);
+        }
+        match self.engine.set_highlight(name, args) {
+            Ok(m) => self.say(format!("{m} (for good: zett.hl(\"{name}\", {{ … }}) in init.lua)")),
             Err(e) => self.say(e),
         }
     }

@@ -3,6 +3,8 @@
 mod doom;
 mod lsp;
 mod panels;
+mod hl;
+use hl::hl;
 mod cmdline;
 use doom::{project_of, Pick, WTree, Win};
 
@@ -31,43 +33,66 @@ fn ansi(n: u8) -> syntect::highlighting::Color {
 }
 
 fn to_color(c: syntect::highlighting::Color) -> Color {
-    if c.a == 0 { Color::Indexed(c.r) } else { Color::Reset }
+    match c.a {
+        0 => Color::Indexed(c.r),
+        255 => Color::Rgb(c.r, c.g, c.b),
+        _ => Color::Reset,
+    }
 }
 
-/// Scopes mapped onto the 16 colours (like most terminal colour schemes do).
+/// A highlight group's colour in syntect's terms (see `ansi`).
+fn group_color(name: &str) -> Option<syntect::highlighting::Color> {
+    match hl::fg(name)? {
+        Color::Indexed(n) => Some(ansi(n)),
+        Color::Rgb(r, g, b) => Some(syntect::highlighting::Color { r, g, b, a: 255 }),
+        _ => None,
+    }
+}
+
+/// Scopes mapped onto highlight groups (Comment, String, Keyword, …), whose colours are the
+/// terminal's 16 unless a config says otherwise.
 fn palette_theme() -> Theme {
     use syntect::highlighting::FontStyle;
-    let item = |scope: &str, color: Option<u8>, style: FontStyle| ThemeItem {
-        scope: scope.parse::<ScopeSelectors>().unwrap_or_default(),
-        style: StyleModifier { foreground: color.map(ansi), background: None, font_style: Some(style) },
+    let item = |scope: &str, group: &str| {
+        let st = hl(group);
+        let mut fs = FontStyle::empty();
+        if st.add_modifier.contains(Modifier::BOLD) {
+            fs |= FontStyle::BOLD;
+        }
+        if st.add_modifier.contains(Modifier::ITALIC) {
+            fs |= FontStyle::ITALIC;
+        }
+        if st.add_modifier.contains(Modifier::UNDERLINED) {
+            fs |= FontStyle::UNDERLINE;
+        }
+        ThemeItem { scope: scope.parse::<ScopeSelectors>().unwrap_or_default(), style: StyleModifier { foreground: group_color(group), background: None, font_style: Some(fs) } }
     };
-    let n = FontStyle::empty();
     Theme {
         name: Some("terminal".into()),
         author: None,
         settings: ThemeSettings { foreground: Some(syntect::highlighting::Color { r: 0, g: 0, b: 0, a: 1 }), ..Default::default() },
         scopes: vec![
-            item("comment, punctuation.definition.comment", Some(8), FontStyle::ITALIC),
-            item("string, punctuation.definition.string", Some(2), n),
-            item("constant.numeric, constant.language, constant.character", Some(3), n),
-            item("constant.other, variable.other.constant", Some(11), n),
-            item("keyword, storage.modifier, storage.type.function, keyword.control", Some(5), n),
-            item("keyword.operator", Some(6), n),
-            item("storage.type, entity.name.type, support.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait", Some(3), n),
-            item("entity.name.function, support.function, meta.function-call variable.function, variable.function", Some(4), n),
-            item("entity.name.tag", Some(1), n),
-            item("entity.other.attribute-name", Some(3), n),
-            item("support.macro, entity.name.macro, meta.macro", Some(6), n),
-            item("variable.parameter", Some(9), n),
-            item("variable.language", Some(1), FontStyle::ITALIC),
-            item("markup.heading, entity.name.section", Some(4), FontStyle::BOLD),
-            item("markup.bold", None, FontStyle::BOLD),
-            item("markup.italic", None, FontStyle::ITALIC),
-            item("markup.raw, markup.inline.raw", Some(2), n),
-            item("markup.underline.link, string.other.link", Some(6), FontStyle::UNDERLINE),
-            item("markup.list.unnumbered, markup.list.numbered, punctuation.definition.list", Some(5), n),
-            item("markup.quote", Some(8), FontStyle::ITALIC),
-            item("invalid", Some(1), FontStyle::UNDERLINE),
+            item("comment, punctuation.definition.comment", "Comment"),
+            item("string, punctuation.definition.string", "String"),
+            item("constant.numeric, constant.language, constant.character", "Number"),
+            item("constant.other, variable.other.constant", "Constant"),
+            item("keyword, storage.modifier, storage.type.function, keyword.control", "Keyword"),
+            item("keyword.operator", "Operator"),
+            item("storage.type, entity.name.type, support.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait", "Type"),
+            item("entity.name.function, support.function, meta.function-call variable.function, variable.function", "Function"),
+            item("entity.name.tag", "Tag"),
+            item("entity.other.attribute-name", "Attribute"),
+            item("support.macro, entity.name.macro, meta.macro", "Macro"),
+            item("variable.parameter", "Parameter"),
+            item("variable.language", "Special"),
+            item("markup.heading, entity.name.section", "Heading"),
+            item("markup.bold", "Bold"),
+            item("markup.italic", "Italic"),
+            item("markup.raw, markup.inline.raw", "Raw"),
+            item("markup.underline.link, string.other.link", "Link"),
+            item("markup.list.unnumbered, markup.list.numbered, punctuation.definition.list", "ListMarker"),
+            item("markup.quote", "Quote"),
+            item("invalid", "Invalid"),
         ],
     }
 }
@@ -771,6 +796,7 @@ impl App {
             "compile" => self.compile(arg),
             "h" | "help" => self.open_help(arg),
             "set" | "se" => self.set_command(arg),
+            "hi" | "highlight" => self.hi_command(arg),
             "rename" => self.lsp_rename(arg),
             "wa" | "wall" => {
                 let keep = self.cur;
@@ -956,6 +982,13 @@ impl App {
     // ── drawing ──
 
     fn draw(&mut self, f: &mut Frame) {
+        // a highlight group changed (zett.hl, :hi): new styles, and the syntax colours again
+        if hl::sync(&self.engine) {
+            self.theme = palette_theme();
+            for d in self.docs.iter_mut() {
+                d.states.clear();
+            }
+        }
         let tabs = self.tabs && self.docs.len() > 1;
         let [tabline, body, cmd] = Layout::vertical([Constraint::Length(if tabs { 1 } else { 0 }), Constraint::Min(2), Constraint::Length(1)]).areas(f.area());
         if tabs {
@@ -977,7 +1010,7 @@ impl App {
         self.tree.place(body, &mut placed, &mut seps);
         self.win_rects = placed.clone();
         for s in seps {
-            let bar: Vec<Line> = (0..s.height).map(|_| Line::from(Span::styled("│", Style::default().fg(Color::Indexed(8))))).collect();
+            let bar: Vec<Line> = (0..s.height).map(|_| Line::from(Span::styled("│", hl("WinSeparator")))).collect();
             f.render_widget(Paragraph::new(bar), s);
         }
         for (id, r) in placed {
@@ -1025,7 +1058,7 @@ impl App {
         for (i, d) in self.docs.iter().enumerate() {
             let name = Path::new(&d.name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(d.name.clone());
             let label = format!(" {name}{} ", if d.dirty() { " ●" } else { "" });
-            let st = if i == self.cur { Style::default().fg(Color::Black).bg(Color::Indexed(4)).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Indexed(8)) };
+            let st = if i == self.cur { hl("TabLineSel") } else { hl("TabLine") };
             spans.push(Span::styled(label, st));
             spans.push(Span::raw(" "));
         }
@@ -1068,10 +1101,10 @@ impl App {
         for row in 0..height {
             let ln = d.top + row;
             if ln >= lines {
-                out.push(Line::from(Span::styled(format!("{:>w$} ", "~", w = gutter as usize - 1), Style::default().fg(Color::Indexed(8)))));
+                out.push(Line::from(Span::styled(format!("{:>w$} ", "~", w = gutter as usize - 1), hl::hl("NonText"))));
                 continue;
             }
-            let num_style = if ln == c.line { Style::default().fg(Color::Indexed(3)).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Indexed(8)) };
+            let num_style = if ln == c.line { hl::hl("CursorLineNr") } else { hl::hl("LineNr") };
             let shown = if relative && ln != c.line { ln.abs_diff(c.line) } else { ln + 1 };
             let line_text = d.ed.buf.line(ln);
             // diagnostics: a sign in the gutter, the ranges underlined (in screen columns)
@@ -1138,27 +1171,27 @@ impl App {
     fn draw_cmd(&mut self, f: &mut Frame, a: Rect) {
         if let Some(l) = &self.cmdline {
             let p = self.prompt.clone().unwrap_or_else(|| ":".into());
-            f.render_widget(Paragraph::new(Line::from(vec![Span::styled(p.clone(), Style::default().fg(Color::Indexed(4))), Span::raw(l.as_str())])), a);
+            f.render_widget(Paragraph::new(Line::from(vec![Span::styled(p.clone(), hl("Prompt")), Span::raw(l.as_str())])), a);
             f.set_cursor_position(Position { x: a.x + (p.chars().count() + l.chars().count()) as u16, y: a.y });
             return;
         }
         if let Some((m, at)) = &self.msg {
             if at.elapsed() < Duration::from_secs(6) {
-                f.render_widget(Paragraph::new(m.as_str()).style(Style::default().fg(Color::Indexed(7))), a);
+                f.render_widget(Paragraph::new(m.as_str()).style(hl("MsgArea")), a);
                 return;
             }
             self.msg = None;
         }
         if !self.keyseq.is_empty() {
             let shown: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
-            f.render_widget(Paragraph::new(shown.join(" ")).style(Style::default().fg(Color::Indexed(4))), a);
+            f.render_widget(Paragraph::new(shown.join(" ")).style(hl("KeySeq")), a);
             return;
         }
         // the error on this line (as Doom shows it), else what a language server is doing
         if let Some((sev, m)) = self.line_diag() {
             f.render_widget(Paragraph::new(m).style(Style::default().fg(lsp::severity_color(sev))), a);
         } else if !self.lsp_status.is_empty() {
-            f.render_widget(Paragraph::new(self.lsp_status.as_str()).style(Style::default().fg(Color::Indexed(8))), a);
+            f.render_widget(Paragraph::new(self.lsp_status.as_str()).style(hl("StatusLineDim")), a);
         }
     }
 
@@ -1170,7 +1203,7 @@ impl App {
         let a = Rect { x: body.x, y: body.bottom().saturating_sub(h), width: body.width, height: h };
         f.render_widget(Clear, a);
         let title: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
-        let block = Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Indexed(8))).title(format!(" {} … ", title.join(" ")));
+        let block = Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(hl("FloatBorderDim")).title(format!(" {} … ", title.join(" ")));
         let inner = block.inner(a);
         f.render_widget(block, a);
         let colw = inner.width as usize / cols;
@@ -1184,10 +1217,10 @@ impl App {
                 let cell = format!(" {key:>3}  {desc}");
                 let cell: String = cell.chars().take(colw.saturating_sub(1)).collect();
                 let pad = colw.saturating_sub(cell.chars().count());
-                spans.push(Span::styled(format!(" {key:>3} "), Style::default().fg(Color::Indexed(3)).add_modifier(Modifier::BOLD)));
+                spans.push(Span::styled(format!(" {key:>3} "), hl("WhichKeyKey")));
                 let d: String = format!(" {desc}").chars().take(colw.saturating_sub(6)).collect();
                 let dpad = colw.saturating_sub(5 + d.chars().count());
-                spans.push(Span::styled(d, if m.group { Style::default().fg(Color::Indexed(4)) } else { Style::default() }));
+                spans.push(Span::styled(d, if m.group { hl("WhichKeyGroup") } else { Style::default() }));
                 spans.push(Span::raw(" ".repeat(dpad.min(pad + 5))));
             }
             lines.push(Line::from(spans));
@@ -1206,13 +1239,13 @@ impl App {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Indexed(4)))
+            .border_style(hl("FloatBorder"))
             .title(format!(" {} ", p.title))
             .title_bottom(format!(" {} of {} ", matches.len(), p.files.len()));
         let inner = block.inner(a);
         f.render_widget(block, a);
         let [input, list] = Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
-        f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" ❯ ", Style::default().fg(Color::Indexed(4))), Span::raw(p.query.as_str())])), input);
+        f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" ❯ ", hl("PickerPrompt")), Span::raw(p.query.as_str())])), input);
         f.set_cursor_position(Position { x: input.x + 3 + p.query.chars().count() as u16, y: input.y });
         let rows = list.height as usize;
         let first = p.sel.saturating_sub(rows.saturating_sub(1));
@@ -1223,10 +1256,10 @@ impl App {
             .take(rows)
             .map(|(i, m)| {
                 let (dir, name) = m.rsplit_once('/').map(|(d, n)| (format!("{d}/"), n.to_string())).unwrap_or((String::new(), m.to_string()));
-                let base = if i == p.sel { Style::default().bg(Color::Indexed(0)).add_modifier(Modifier::BOLD) } else { Style::default() };
+                let base = if i == p.sel { hl("PickerSel") } else { Style::default() };
                 Line::from(vec![
-                    Span::styled(if i == p.sel { " ▌ " } else { "   " }, base.fg(Color::Indexed(4))),
-                    Span::styled(dir, base.fg(Color::Indexed(8))),
+                    Span::styled(if i == p.sel { " ▌ " } else { "   " }, base.patch(hl("PickerPrompt"))),
+                    Span::styled(dir, base.patch(hl("PickerDir"))),
                     Span::styled(name, base),
                 ])
             })
@@ -1244,14 +1277,14 @@ fn draw_help(f: &mut Frame, title: &str, rows: &[(String, String)]) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Indexed(4)))
+        .border_style(hl("FloatBorder"))
         .title(format!(" {title} "))
         .title_bottom(" any key closes · change them in ~/.config/zett/init.lua ");
     let inner = block.inner(a);
     f.render_widget(block, a);
     let lines: Vec<Line> = rows
         .iter()
-        .map(|(k, d)| Line::from(vec![Span::styled(format!(" {k:<18}"), Style::default().fg(Color::Indexed(3))), Span::raw(d.as_str())]))
+        .map(|(k, d)| Line::from(vec![Span::styled(format!(" {k:<18}"), hl("HelpKey")), Span::raw(d.as_str())]))
         .collect();
     f.render_widget(Paragraph::new(lines), inner);
 }
