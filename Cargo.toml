@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/zett-core", "crates/zett-edit", "crates/zett-script", "crates/zett"]
+members = ["crates/zett-core", "crates/zett-edit", "crates/zett-script", "crates/zett-tui", "crates/zett"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,3 +13,4 @@ loro = "1.16"
 zett-core = { path = "crates/zett-core" }
 zett-edit = { path = "crates/zett-edit" }
 zett-script = { path = "crates/zett-script" }
+zett-tui = { path = "crates/zett-tui" }

@@ -1,0 +1,1051 @@
+//! zett in the terminal: the code editor.
+//!
+//! The same engines as the window: zett-edit for editing (Vim's grammar, checked
+//! against Neovim) and zett-script for keys, commands and the user's init.lua
+//! (`SPC` with which-key, `:`). What is here is only the screen: buffers, the
+//! gutter, syntax colours, the statusline, the command line, the file finder.
+//!
+//! Colours are the terminal's own 16 (syntax included), so in zash, or any
+//! terminal themed by tinct, the editor follows the wallpaper by itself.
+
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
+use ratatui::crossterm::{cursor::SetCursorStyle, execute};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
+use ratatui::{DefaultTerminal, Frame};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, ScopeSelectors, StyleModifier, Theme, ThemeItem, ThemeSettings};
+use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
+use zett_core::{Buffer, Pos};
+use zett_edit::{Code, Editor, Key, Mode};
+use zett_script::{Effect, Engine, Feed, MenuItem};
+
+const TAB: usize = 4;
+
+// ── syntax colours from the terminal's palette ──
+
+/// A syntect colour that means "ANSI colour n" (alpha 0) or "the default" (alpha 1).
+fn ansi(n: u8) -> syntect::highlighting::Color {
+    syntect::highlighting::Color { r: n, g: 0, b: 0, a: 0 }
+}
+
+fn to_color(c: syntect::highlighting::Color) -> Color {
+    if c.a == 0 { Color::Indexed(c.r) } else { Color::Reset }
+}
+
+/// Scopes mapped onto the 16 colours (like most terminal colour schemes do).
+fn palette_theme() -> Theme {
+    use syntect::highlighting::FontStyle;
+    let item = |scope: &str, color: Option<u8>, style: FontStyle| ThemeItem {
+        scope: scope.parse::<ScopeSelectors>().unwrap_or_default(),
+        style: StyleModifier { foreground: color.map(ansi), background: None, font_style: Some(style) },
+    };
+    let n = FontStyle::empty();
+    Theme {
+        name: Some("terminal".into()),
+        author: None,
+        settings: ThemeSettings { foreground: Some(syntect::highlighting::Color { r: 0, g: 0, b: 0, a: 1 }), ..Default::default() },
+        scopes: vec![
+            item("comment, punctuation.definition.comment", Some(8), FontStyle::ITALIC),
+            item("string, punctuation.definition.string", Some(2), n),
+            item("constant.numeric, constant.language, constant.character", Some(3), n),
+            item("constant.other, variable.other.constant", Some(11), n),
+            item("keyword, storage.modifier, storage.type.function, keyword.control", Some(5), n),
+            item("keyword.operator", Some(6), n),
+            item("storage.type, entity.name.type, support.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait", Some(3), n),
+            item("entity.name.function, support.function, meta.function-call variable.function, variable.function", Some(4), n),
+            item("entity.name.tag", Some(1), n),
+            item("entity.other.attribute-name", Some(3), n),
+            item("support.macro, entity.name.macro, meta.macro", Some(6), n),
+            item("variable.parameter", Some(9), n),
+            item("variable.language", Some(1), FontStyle::ITALIC),
+            item("markup.heading, entity.name.section", Some(4), FontStyle::BOLD),
+            item("markup.bold", None, FontStyle::BOLD),
+            item("markup.italic", None, FontStyle::ITALIC),
+            item("markup.raw, markup.inline.raw", Some(2), n),
+            item("markup.underline.link, string.other.link", Some(6), FontStyle::UNDERLINE),
+            item("markup.list.unnumbered, markup.list.numbered, punctuation.definition.list", Some(5), n),
+            item("markup.quote", Some(8), FontStyle::ITALIC),
+            item("invalid", Some(1), FontStyle::UNDERLINE),
+        ],
+    }
+}
+
+// ── a buffer on screen ──
+
+struct Doc {
+    ed: Editor,
+    name: String,
+    syntax: String,
+    top: usize,
+    left: usize,
+    /// highlight state at the start of each line computed so far
+    states: Vec<(ParseState, HighlightState)>,
+    /// to see what an edit touched: (lines, chars, cursor line)
+    shape: (usize, usize, usize),
+}
+
+impl Doc {
+    fn open(path: &Path, ss: &SyntaxSet) -> std::io::Result<Doc> {
+        let buf = Buffer::open(path)?;
+        let name = path.display().to_string();
+        let syntax = ss.find_syntax_for_file(path).ok().flatten().map(|s| s.name.clone()).unwrap_or_else(|| {
+            let first = buf.line(0);
+            ss.find_syntax_by_first_line(&first).map(|s| s.name.clone()).unwrap_or_else(|| "Plain Text".into())
+        });
+        Ok(Doc::new(Editor::new(buf), name, syntax))
+    }
+
+    fn scratch() -> Doc {
+        Doc::new(Editor::from_str(""), "[scratch]".into(), "Plain Text".into())
+    }
+
+    fn new(ed: Editor, name: String, syntax: String) -> Doc {
+        let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape }
+    }
+
+    fn dirty(&self) -> bool {
+        self.ed.buf.is_dirty()
+    }
+
+    /// After a key: drop highlight states from where the text may have changed.
+    fn touched(&mut self, before_line: usize) {
+        let now = (self.ed.buf.len_lines(), self.ed.buf.len_chars(), self.ed.cursor().line);
+        if (now.0, now.1) != (self.shape.0, self.shape.1) {
+            let from = before_line.min(now.2).saturating_sub(1);
+            self.states.truncate(from + 1);
+        }
+        self.shape = now;
+    }
+
+    /// Highlighted spans of one line (tabs expanded), computing states up to it.
+    fn spans(&mut self, line: usize, ss: &SyntaxSet, hl: &Highlighter) -> Vec<(Style, String)> {
+        let syntax: &SyntaxReference = ss.find_syntax_by_name(&self.syntax).unwrap_or_else(|| ss.find_syntax_plain_text());
+        if self.states.is_empty() {
+            self.states.push((ParseState::new(syntax), HighlightState::new(hl, ScopeStack::new())));
+        }
+        while self.states.len() <= line {
+            let i = self.states.len() - 1;
+            let (mut ps, mut hs) = self.states[i].clone();
+            let text = format!("{}\n", self.ed.buf.line(i));
+            if let Ok(ops) = ps.parse_line(&text, ss) {
+                for _ in HighlightIterator::new(&mut hs, &ops, &text, hl) {}
+            }
+            self.states.push((ps, hs));
+        }
+        let (mut ps, mut hs) = self.states[line].clone();
+        let text = format!("{}\n", self.ed.buf.line(line));
+        let Ok(ops) = ps.parse_line(&text, ss) else { return vec![(Style::default(), expand(&text))] };
+        HighlightIterator::new(&mut hs, &ops, &text, hl)
+            .map(|(st, s)| {
+                let mut style = Style::default().fg(to_color(st.foreground));
+                use syntect::highlighting::FontStyle as F;
+                if st.font_style.contains(F::BOLD) {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                if st.font_style.contains(F::ITALIC) {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                if st.font_style.contains(F::UNDERLINE) {
+                    style = style.add_modifier(Modifier::UNDERLINED);
+                }
+                (style, expand(s.trim_end_matches('\n')))
+            })
+            .collect()
+    }
+}
+
+fn expand(s: &str) -> String {
+    s.replace('\t', &" ".repeat(TAB))
+}
+
+/// The screen column of a character column in a line (tabs count as TAB).
+fn screen_col(line: &str, col: usize) -> usize {
+    line.chars().take(col).map(|c| if c == '\t' { TAB } else { 1 }).sum()
+}
+
+// ── the file finder ──
+
+struct Picker {
+    query: String,
+    files: Vec<String>,
+    sel: usize,
+}
+
+impl Picker {
+    fn matches(&self) -> Vec<&String> {
+        if self.query.is_empty() {
+            return self.files.iter().take(200).collect();
+        }
+        let q: Vec<char> = self.query.to_lowercase().chars().collect();
+        let mut scored: Vec<(i32, &String)> = self.files.iter().filter_map(|f| fuzzy(&q, f).map(|s| (s, f))).collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.len().cmp(&b.1.len())));
+        scored.into_iter().take(200).map(|(_, f)| f).collect()
+    }
+}
+
+/// Subsequence match: letters in order; runs and starts of names score higher.
+fn fuzzy(q: &[char], s: &str) -> Option<i32> {
+    let chars: Vec<char> = s.to_lowercase().chars().collect();
+    let name_start = s.rfind('/').map(|i| s[..i + 1].chars().count()).unwrap_or(0);
+    let (mut qi, mut score, mut last) = (0, 0i32, None::<usize>);
+    for (i, c) in chars.iter().enumerate() {
+        if qi < q.len() && *c == q[qi] {
+            score += 1;
+            if last == Some(i.wrapping_sub(1)) {
+                score += 4;
+            }
+            if i == name_start || i == 0 || matches!(chars.get(i.wrapping_sub(1)), Some('/' | '_' | '-' | '.')) {
+                score += 6;
+            }
+            if i >= name_start {
+                score += 2;
+            }
+            last = Some(i);
+            qi += 1;
+        }
+    }
+    (qi == q.len()).then_some(score)
+}
+
+fn list_files(root: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || matches!(name.as_str(), "target" | "node_modules" | "__pycache__" | "build" | "dist") {
+                continue;
+            }
+            let p = e.path();
+            match e.file_type() {
+                Ok(t) if t.is_dir() => stack.push(p),
+                Ok(t) if t.is_file() => out.push(p.strip_prefix(root).unwrap_or(&p).display().to_string()),
+                _ => {}
+            }
+            if out.len() > 50_000 {
+                return out;
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+// ── the app ──
+
+enum Popup {
+    Help(String, Vec<(String, String)>),
+}
+
+struct App {
+    docs: Vec<Doc>,
+    cur: usize,
+    root: PathBuf,
+    ss: SyntaxSet,
+    theme: Theme,
+    engine: Engine,
+    keyseq: Vec<String>,
+    menu: Vec<MenuItem>,
+    key_at: Instant,
+    cmdline: Option<String>,
+    msg: Option<(String, Instant)>,
+    picker: Option<Picker>,
+    popup: Option<Popup>,
+    quit: bool,
+    /// editor area from the last draw (for the mouse and scrolling)
+    area: Rect,
+    gutter: u16,
+}
+
+/// Opens the editor in the terminal: files (or a folder) from the command line.
+pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
+    let mut app = App::new(paths);
+    let mut term = ratatui::init();
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture);
+    let r = app.main_loop(&mut term);
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture, SetCursorStyle::DefaultUserShape);
+    ratatui::restore();
+    r
+}
+
+impl App {
+    fn new(paths: Vec<PathBuf>) -> App {
+        let ss = SyntaxSet::load_defaults_newlines();
+        let mut root = std::env::current_dir().unwrap_or_default();
+        let mut docs = Vec::new();
+        let mut msg = None;
+        for p in &paths {
+            if p.is_dir() {
+                root = p.clone();
+            } else {
+                if let Some(parent) = p.parent().filter(|d| !d.as_os_str().is_empty() && paths.len() == 1) {
+                    if !root.join(p).exists() || p.is_absolute() {
+                        root = std::fs::canonicalize(parent).unwrap_or(parent.to_path_buf());
+                    }
+                }
+                match Doc::open(p, &ss) {
+                    Ok(d) => docs.push(d),
+                    Err(e) => msg = Some((format!("{}: {e}", p.display()), Instant::now())),
+                }
+            }
+        }
+        let opened_files = !docs.is_empty();
+        if docs.is_empty() {
+            docs.push(Doc::scratch());
+        }
+        let mut engine = Engine::new(None);
+        engine.load_config(&zett_script::config_dir());
+        if let Some(e) = engine.errors.first() {
+            msg = Some((e.clone(), Instant::now()));
+        }
+        let mut app = App {
+            docs,
+            cur: 0,
+            root,
+            ss,
+            theme: palette_theme(),
+            engine,
+            keyseq: Vec::new(),
+            menu: Vec::new(),
+            key_at: Instant::now(),
+            cmdline: None,
+            msg,
+            picker: None,
+            popup: None,
+            quit: false,
+            area: Rect::default(),
+            gutter: 4,
+        };
+        // a folder (or nothing): start in the file finder
+        if !opened_files {
+            app.open_picker();
+        }
+        app
+    }
+
+    fn doc(&mut self) -> &mut Doc {
+        &mut self.docs[self.cur]
+    }
+
+    fn say(&mut self, m: impl Into<String>) {
+        self.msg = Some((m.into(), Instant::now()));
+    }
+
+    fn main_loop(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
+        let mut shape = None;
+        while !self.quit {
+            term.draw(|f| self.draw(f))?;
+            // the cursor's shape follows the mode
+            let bar = self.cmdline.is_some() || self.picker.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
+            if shape != Some(bar) {
+                let _ = execute!(std::io::stdout(), if bar { SetCursorStyle::SteadyBar } else { SetCursorStyle::SteadyBlock });
+                shape = Some(bar);
+            }
+            // a pending key sequence ends after a moment (Neovim's timeoutlen)
+            let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { Duration::from_millis(900).saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
+            if !event::poll(wait)? {
+                if !self.keyseq.is_empty() && self.key_at.elapsed() >= Duration::from_millis(900) {
+                    // keys that are exactly a mapping run now; a prefix alone keeps its menu open
+                    // until the next key (as which-key does)
+                    match self.engine.timeout("n", &self.keyseq) {
+                        Feed::Ran(fx) => {
+                            self.keyseq.clear();
+                            self.menu.clear();
+                            self.effects(fx);
+                        }
+                        _ => self.key_at = Instant::now() + Duration::from_secs(3600),
+                    }
+                }
+                continue;
+            }
+            match event::read()? {
+                Event::Key(k) if k.kind != KeyEventKind::Release => self.key(k),
+                Event::Mouse(m) => self.mouse(m),
+                Event::Paste(s) => {
+                    for c in s.chars() {
+                        self.doc().ed.key(if c == '\n' { Key::code(Code::Enter) } else { Key::ch(c) });
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    // ── input ──
+
+    fn key(&mut self, k: KeyEvent) {
+        if let Some(p) = self.popup.take() {
+            // any key closes help (Esc and q too)
+            let _ = p;
+            return;
+        }
+        if self.picker.is_some() {
+            return self.picker_key(k);
+        }
+        if self.cmdline.is_some() {
+            return self.cmdline_key(k);
+        }
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        // Ctrl+S saves in any mode, Ctrl+P finds a file
+        if ctrl && k.code == KeyCode::Char('s') {
+            return self.save(None);
+        }
+        if ctrl && k.code == KeyCode::Char('p') {
+            return self.open_picker();
+        }
+        let Some(ek) = to_key(&k) else { return };
+        let mode = self.docs[self.cur].ed.mode();
+        if mode == Mode::Normal {
+            let tok = token(&k);
+            if tok.is_empty() {
+                return;
+            }
+            if tok == "<Esc>" && !self.keyseq.is_empty() {
+                self.keyseq.clear();
+                self.menu.clear();
+                return;
+            }
+            let mut seq = std::mem::take(&mut self.keyseq);
+            seq.push(tok);
+            let feed = self.engine.feed("n", &seq);
+            return self.after_feed(feed, seq);
+        }
+        self.edit_key(ek);
+    }
+
+    /// What the engine did with keys: ran a mapping, waits for more, or left them to Vim.
+    fn after_feed(&mut self, feed: Feed, seq: Vec<String>) {
+        match feed {
+            Feed::Ran(fx) => self.effects(fx),
+            Feed::Pending(menu) => {
+                self.keyseq = seq;
+                self.menu = menu;
+                self.key_at = Instant::now();
+            }
+            Feed::None => {
+                self.menu.clear();
+                for t in seq {
+                    for k in zett_edit::keys::parse(&t) {
+                        self.edit_key(k);
+                    }
+                }
+            }
+        }
+    }
+
+    fn edit_key(&mut self, k: Key) {
+        let before = self.docs[self.cur].ed.cursor().line;
+        self.doc().ed.key(k);
+        self.doc().touched(before);
+    }
+
+    fn effects(&mut self, fx: Vec<Effect>) {
+        for e in fx {
+            match e {
+                Effect::Notify(m) => self.say(m),
+                Effect::Ui(name, arg) => match name.as_str() {
+                    "quickOpen" | "search" => self.open_picker(),
+                    "commandLine" => self.cmdline = Some(arg),
+                    "help" => self.help(&arg),
+                    "reload" => {
+                        let mut e = Engine::new(None);
+                        e.load_config(&zett_script::config_dir());
+                        let n = e.plugins.len();
+                        self.engine = e;
+                        self.say(format!("config reloaded ({n} plugins)"));
+                    }
+                    "openConfig" => {
+                        let p = zett_script::config_dir().join("init.lua");
+                        let _ = std::fs::create_dir_all(zett_script::config_dir());
+                        self.open(&p);
+                    }
+                    "toggleSidebar" | "focusBlock" => {}
+                    other => self.say(format!("{other}: only in the window (zett --gui)")),
+                },
+                Effect::Open(_) | Effect::Refresh => {}
+            }
+        }
+        for e in std::mem::take(&mut self.engine.errors) {
+            self.say(e);
+        }
+    }
+
+    fn help(&mut self, what: &str) {
+        let rows: Vec<(String, String)> = if what == "commands" {
+            self.engine.commands().into_iter().map(|(n, d, _)| (n, d)).collect()
+        } else {
+            let leader = self.engine.leader();
+            self.engine.bindings("n").into_iter().map(|(k, d)| (k.replace("<leader>", if leader == "<Space>" { "SPC " } else { &leader }), d)).collect()
+        };
+        self.popup = Some(Popup::Help(if what == "commands" { "Commands".into() } else { "Keys".into() }, rows));
+    }
+
+    fn open(&mut self, p: &Path) {
+        // already open: show it
+        let name = p.display().to_string();
+        if let Some(i) = self.docs.iter().position(|d| d.name == name) {
+            self.cur = i;
+            return;
+        }
+        match Doc::open(p, &self.ss) {
+            Ok(d) => {
+                // an untouched scratch buffer gives way
+                if self.docs.len() == 1 && self.docs[0].name == "[scratch]" && !self.docs[0].dirty() {
+                    self.docs.clear();
+                }
+                self.docs.push(d);
+                self.cur = self.docs.len() - 1;
+            }
+            Err(e) => self.say(format!("{}: {e}", p.display())),
+        }
+    }
+
+    fn open_picker(&mut self) {
+        self.picker = Some(Picker { query: String::new(), files: list_files(&self.root), sel: 0 });
+    }
+
+    fn picker_key(&mut self, k: KeyEvent) {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let Some(p) = self.picker.as_mut() else { return };
+        match k.code {
+            KeyCode::Esc => self.picker = None,
+            KeyCode::Enter => {
+                let chosen = p.matches().get(p.sel).map(|s| s.to_string());
+                self.picker = None;
+                if let Some(f) = chosen {
+                    let path = self.root.join(f);
+                    self.open(&path);
+                }
+            }
+            KeyCode::Down | KeyCode::Tab => p.sel = (p.sel + 1).min(p.matches().len().saturating_sub(1)),
+            KeyCode::Char('n') | KeyCode::Char('j') if ctrl => p.sel = (p.sel + 1).min(p.matches().len().saturating_sub(1)),
+            KeyCode::Up | KeyCode::BackTab => p.sel = p.sel.saturating_sub(1),
+            KeyCode::Char('p') | KeyCode::Char('k') if ctrl => p.sel = p.sel.saturating_sub(1),
+            KeyCode::Backspace => {
+                p.query.pop();
+                p.sel = 0;
+            }
+            KeyCode::Char(c) if !ctrl => {
+                p.query.push(c);
+                p.sel = 0;
+            }
+            _ => {}
+        }
+    }
+
+    fn cmdline_key(&mut self, k: KeyEvent) {
+        let Some(line) = self.cmdline.as_mut() else { return };
+        match k.code {
+            KeyCode::Esc => self.cmdline = None,
+            KeyCode::Enter => {
+                let l = std::mem::take(line);
+                self.cmdline = None;
+                self.command(l.trim());
+            }
+            KeyCode::Backspace => {
+                if line.pop().is_none() {
+                    self.cmdline = None;
+                }
+            }
+            KeyCode::Tab => {
+                // complete a command name
+                let q = line.clone();
+                if let Some((n, _, _)) = self.engine.commands().into_iter().find(|(n, _, _)| n.starts_with(&q)) {
+                    *self.cmdline.as_mut().unwrap() = n;
+                }
+            }
+            KeyCode::Char(c) => line.push(c),
+            _ => {}
+        }
+    }
+
+    /// A `:` line: Vim's file commands, then zett's commands and `lua …`.
+    fn command(&mut self, l: &str) {
+        let (cmd, arg) = l.split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((l, ""));
+        match cmd {
+            "" => {}
+            "w" => self.save((!arg.is_empty()).then(|| PathBuf::from(arg))),
+            "q" | "quit" => self.close(false),
+            "q!" | "quit!" => self.close(true),
+            "qa" | "qall" => {
+                if self.docs.iter().any(|d| d.dirty()) {
+                    self.say("unsaved changes: :wqa saves them, :qa! drops them");
+                } else {
+                    self.quit = true;
+                }
+            }
+            "qa!" | "qall!" => self.quit = true,
+            "wq" | "x" => {
+                self.save(None);
+                if !self.docs[self.cur].dirty() {
+                    self.close(false);
+                }
+            }
+            "wqa" | "xa" => {
+                for i in 0..self.docs.len() {
+                    self.cur = i;
+                    if self.docs[i].dirty() {
+                        self.save(None);
+                    }
+                }
+                if !self.docs.iter().any(|d| d.dirty()) {
+                    self.quit = true;
+                }
+            }
+            "e" | "edit" if !arg.is_empty() => {
+                let p = if Path::new(arg).is_absolute() { PathBuf::from(arg) } else { self.root.join(arg) };
+                self.open(&p);
+            }
+            "e" | "edit" | "find" | "files" => self.open_picker(),
+            "bn" | "bnext" => self.cur = (self.cur + 1) % self.docs.len(),
+            "bp" | "bprevious" => self.cur = (self.cur + self.docs.len() - 1) % self.docs.len(),
+            "bd" | "bdelete" => self.close(false),
+            "ls" | "buffers" => {
+                let list: Vec<String> = self.docs.iter().enumerate().map(|(i, d)| format!("{}{}{}", if i == self.cur { "%" } else { " " }, d.name, if d.dirty() { " [+]" } else { "" })).collect();
+                self.say(list.join("   "));
+            }
+            "cd" if !arg.is_empty() => {
+                let p = PathBuf::from(arg);
+                if p.is_dir() {
+                    self.root = std::fs::canonicalize(&p).unwrap_or(p);
+                    self.say(format!("project: {}", self.root.display()));
+                }
+            }
+            "lua" => match self.engine.eval(arg) {
+                Ok((out, fx)) => {
+                    self.effects(fx);
+                    if out != "nil" {
+                        self.say(out);
+                    }
+                }
+                Err(e) => self.say(e),
+            },
+            n if n.chars().all(|c| c.is_ascii_digit()) => {
+                // :42 goes to line 42
+                let line: usize = n.parse().unwrap_or(1);
+                let last = self.docs[self.cur].ed.buf.len_lines().saturating_sub(1);
+                self.doc().ed.set_cursor(Pos { line: line.saturating_sub(1).min(last), col: 0 });
+            }
+            other => match self.engine.run(other) {
+                Ok(fx) => self.effects(fx),
+                Err(_) => self.say(format!("not a command: {other}")),
+            },
+        }
+    }
+
+    fn save(&mut self, to: Option<PathBuf>) {
+        let root = self.root.clone();
+        let d = self.doc();
+        if let Some(p) = to {
+            let p = if p.is_absolute() { p } else { root.join(p) };
+            d.name = p.display().to_string();
+            d.ed.buf.set_path(p);
+        }
+        if d.ed.buf.path().is_none() {
+            return self.say("no file name: :w name");
+        }
+        let lines = d.ed.buf.len_lines();
+        match d.ed.buf.save() {
+            Ok(()) => {
+                let m = format!("\"{}\" {lines} lines written", d.name);
+                self.say(m);
+            }
+            Err(e) => self.say(format!("could not save: {e}")),
+        }
+    }
+
+    fn close(&mut self, force: bool) {
+        if self.docs[self.cur].dirty() && !force {
+            return self.say("unsaved changes: :w saves, :q! drops them");
+        }
+        self.docs.remove(self.cur);
+        if self.docs.is_empty() {
+            self.quit = true;
+            self.docs.push(Doc::scratch());
+        }
+        self.cur = self.cur.min(self.docs.len() - 1);
+    }
+
+    fn mouse(&mut self, m: ratatui::crossterm::event::MouseEvent) {
+        let a = self.area;
+        match m.kind {
+            MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                let d = &mut self.docs[self.cur];
+                let last = d.ed.buf.len_lines().saturating_sub(1);
+                if m.kind == MouseEventKind::ScrollDown { d.top = (d.top + 3).min(last) } else { d.top = d.top.saturating_sub(3) }
+                // the cursor stays on screen, as in Vim
+                let c = d.ed.cursor();
+                let bottom = d.top + a.height.saturating_sub(1) as usize;
+                if c.line < d.top || c.line > bottom {
+                    let line = c.line.clamp(d.top, bottom.min(last));
+                    d.ed.set_cursor(Pos { line, col: c.col });
+                }
+            }
+            MouseEventKind::Down(_) if m.row >= a.y && m.row < a.y + a.height && m.column >= a.x + self.gutter => {
+                let d = &mut self.docs[self.cur];
+                let line = (d.top + (m.row - a.y) as usize).min(d.ed.buf.len_lines().saturating_sub(1));
+                let want = d.left + (m.column - a.x - self.gutter) as usize;
+                // screen column back to a character column (tabs are wide)
+                let text = d.ed.buf.line(line);
+                let mut sc = 0;
+                let mut col = 0;
+                for ch in text.chars() {
+                    let w = if ch == '\t' { TAB } else { 1 };
+                    if sc + w > want {
+                        break;
+                    }
+                    sc += w;
+                    col += 1;
+                }
+                d.ed.set_cursor(Pos { line, col });
+            }
+            _ => {}
+        }
+    }
+
+    // ── drawing ──
+
+    fn draw(&mut self, f: &mut Frame) {
+        let tabs = self.docs.len() > 1;
+        let [tabline, body, status, cmd] = Layout::vertical([
+            Constraint::Length(if tabs { 1 } else { 0 }),
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .areas(f.area());
+        if tabs {
+            self.draw_tabs(f, tabline);
+        }
+        self.draw_text(f, body);
+        self.draw_status(f, status);
+        self.draw_cmd(f, cmd);
+        if !self.menu.is_empty() {
+            self.draw_menu(f, body);
+        }
+        if self.picker.is_some() {
+            self.draw_picker(f);
+        }
+        if let Some(Popup::Help(title, rows)) = &self.popup {
+            draw_help(f, title, rows);
+        }
+    }
+
+    fn draw_tabs(&self, f: &mut Frame, a: Rect) {
+        let mut spans = Vec::new();
+        for (i, d) in self.docs.iter().enumerate() {
+            let name = Path::new(&d.name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(d.name.clone());
+            let label = format!(" {name}{} ", if d.dirty() { " ●" } else { "" });
+            let st = if i == self.cur { Style::default().fg(Color::Black).bg(Color::Indexed(4)).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Indexed(8)) };
+            spans.push(Span::styled(label, st));
+            spans.push(Span::raw(" "));
+        }
+        f.render_widget(Paragraph::new(Line::from(spans)), a);
+    }
+
+    fn draw_text(&mut self, f: &mut Frame, a: Rect) {
+        self.area = a;
+        let (ss, theme) = (&self.ss, &self.theme);
+        let hl = Highlighter::new(theme);
+        let d = &mut self.docs[self.cur];
+        let lines = d.ed.buf.len_lines();
+        let gutter = (lines.to_string().len() + 2).max(4) as u16;
+        self.gutter = gutter;
+        let width = a.width.saturating_sub(gutter) as usize;
+        let height = a.height as usize;
+        // keep the cursor in view (a few lines of margin, like scrolloff)
+        let c = d.ed.cursor();
+        let margin = 3.min(height / 4);
+        if c.line < d.top + margin {
+            d.top = c.line.saturating_sub(margin);
+        } else if c.line + margin >= d.top + height {
+            d.top = (c.line + margin + 1).saturating_sub(height);
+        }
+        d.top = d.top.min(lines.saturating_sub(1));
+        let cur_line_text = d.ed.buf.line(c.line);
+        let ccol = screen_col(&cur_line_text, c.col);
+        if ccol < d.left {
+            d.left = ccol;
+        } else if ccol >= d.left + width.max(1) {
+            d.left = ccol + 1 - width.max(1);
+        }
+        let sel = d.ed.selection_range();
+        let mut out: Vec<Line> = Vec::with_capacity(height);
+        for row in 0..height {
+            let ln = d.top + row;
+            if ln >= lines {
+                out.push(Line::from(Span::styled(format!("{:>w$} ", "~", w = gutter as usize - 1), Style::default().fg(Color::Indexed(8)))));
+                continue;
+            }
+            let num_style = if ln == c.line { Style::default().fg(Color::Indexed(3)).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Indexed(8)) };
+            let mut spans = vec![Span::styled(format!("{:>w$} ", ln + 1, w = gutter as usize - 1), num_style)];
+            // the selection on this line, in screen columns
+            let line_text = d.ed.buf.line(ln);
+            let sel_cols = sel.and_then(|(s, e)| {
+                let ls = d.ed.buf.to_char(Pos { line: ln, col: 0 });
+                let le = ls + line_text.chars().count();
+                let (a, b) = (s.max(ls), e.min(le + 1));
+                (a < b).then(|| (screen_col(&line_text, a - ls), screen_col(&line_text, b.min(le) - ls) + usize::from(b > le)))
+            });
+            let mut x = 0usize;
+            for (st, text) in d.spans(ln, ss, &hl) {
+                for ch in text.chars() {
+                    if x >= d.left && x < d.left + width {
+                        let mut s = st;
+                        if sel_cols.is_some_and(|(a, b)| x >= a && x < b) {
+                            s = s.add_modifier(Modifier::REVERSED);
+                        }
+                        spans.push(Span::styled(ch.to_string(), s));
+                    }
+                    x += 1;
+                }
+            }
+            // a selection over the line end shows one cell for the line break
+            if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && x >= d.left && x < d.left + width {
+                spans.push(Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
+            }
+            out.push(Line::from(spans));
+        }
+        f.render_widget(Paragraph::new(out), a);
+        if self.cmdline.is_none() && self.picker.is_none() && self.popup.is_none() {
+            let x = a.x + gutter + (ccol - d.left) as u16;
+            let y = a.y + (c.line - d.top) as u16;
+            f.set_cursor_position(Position { x: x.min(a.right().saturating_sub(1)), y });
+        }
+    }
+
+    fn draw_status(&self, f: &mut Frame, a: Rect) {
+        let d = &self.docs[self.cur];
+        let (label, color) = match d.ed.mode() {
+            Mode::Normal => ("NORMAL", 4),
+            Mode::Insert => ("INSERT", 2),
+            Mode::Visual => ("VISUAL", 5),
+            Mode::VisualLine => ("V-LINE", 5),
+        };
+        let c = d.ed.cursor();
+        let lines = d.ed.buf.len_lines().max(1);
+        let pct = if lines <= 1 { 100 } else { c.line * 100 / (lines - 1) };
+        let rel = d.name.strip_prefix(&format!("{}/", self.root.display())).unwrap_or(&d.name).to_string();
+        let left = vec![
+            Span::styled(format!(" {label} "), Style::default().fg(Color::Black).bg(Color::Indexed(color)).add_modifier(Modifier::BOLD)),
+            Span::raw(" "),
+            Span::styled(rel, Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(if d.dirty() { " ●" } else { "" }, Style::default().fg(Color::Indexed(3))),
+        ];
+        let right = format!("{}  {}:{}  {pct}% ", d.syntax, c.line + 1, c.col + 1);
+        let used: usize = left.iter().map(|s| s.content.chars().count()).sum();
+        let pad = (a.width as usize).saturating_sub(used + right.chars().count());
+        let mut spans = left;
+        spans.push(Span::raw(" ".repeat(pad)));
+        spans.push(Span::styled(right, Style::default().fg(Color::Indexed(8))));
+        f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Indexed(0))), a);
+    }
+
+    fn draw_cmd(&mut self, f: &mut Frame, a: Rect) {
+        if let Some(l) = &self.cmdline {
+            f.render_widget(Paragraph::new(format!(":{l}")), a);
+            f.set_cursor_position(Position { x: a.x + 1 + l.chars().count() as u16, y: a.y });
+            return;
+        }
+        if let Some((m, at)) = &self.msg {
+            if at.elapsed() < Duration::from_secs(6) {
+                f.render_widget(Paragraph::new(m.as_str()).style(Style::default().fg(Color::Indexed(7))), a);
+                return;
+            }
+            self.msg = None;
+        }
+        if !self.keyseq.is_empty() {
+            let shown: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
+            f.render_widget(Paragraph::new(shown.join(" ")).style(Style::default().fg(Color::Indexed(4))), a);
+        }
+    }
+
+    fn draw_menu(&self, f: &mut Frame, body: Rect) {
+        let n = self.menu.len();
+        let cols = (body.width as usize / 28).clamp(1, 4);
+        let rows = n.div_ceil(cols);
+        let h = (rows as u16 + 2).min(body.height);
+        let a = Rect { x: body.x, y: body.bottom().saturating_sub(h), width: body.width, height: h };
+        f.render_widget(Clear, a);
+        let title: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
+        let block = Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Indexed(8))).title(format!(" {} … ", title.join(" ")));
+        let inner = block.inner(a);
+        f.render_widget(block, a);
+        let colw = inner.width as usize / cols;
+        let mut lines: Vec<Line> = Vec::new();
+        for r in 0..rows {
+            let mut spans = Vec::new();
+            for c in 0..cols {
+                let Some(m) = self.menu.get(c * rows + r) else { continue };
+                let key = if m.key == "<Space>" { "SPC".to_string() } else { m.key.clone() };
+                let desc = if m.group { format!("+{}", m.desc) } else { m.desc.clone() };
+                let cell = format!(" {key:>3}  {desc}");
+                let cell: String = cell.chars().take(colw.saturating_sub(1)).collect();
+                let pad = colw.saturating_sub(cell.chars().count());
+                spans.push(Span::styled(format!(" {key:>3} "), Style::default().fg(Color::Indexed(3)).add_modifier(Modifier::BOLD)));
+                let d: String = format!(" {desc}").chars().take(colw.saturating_sub(6)).collect();
+                let dpad = colw.saturating_sub(5 + d.chars().count());
+                spans.push(Span::styled(d, if m.group { Style::default().fg(Color::Indexed(4)) } else { Style::default() }));
+                spans.push(Span::raw(" ".repeat(dpad.min(pad + 5))));
+            }
+            lines.push(Line::from(spans));
+        }
+        f.render_widget(Paragraph::new(lines), inner);
+    }
+
+    fn draw_picker(&self, f: &mut Frame) {
+        let Some(p) = &self.picker else { return };
+        let area = f.area();
+        let w = (area.width * 7 / 10).max(40).min(area.width);
+        let h = (area.height * 7 / 10).max(10).min(area.height);
+        let a = Rect { x: area.x + (area.width - w) / 2, y: area.y + (area.height - h) / 3, width: w, height: h };
+        f.render_widget(Clear, a);
+        let matches = p.matches();
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Indexed(4)))
+            .title(format!(" Files · {} ", self.root.display()))
+            .title_bottom(format!(" {} of {} ", matches.len(), p.files.len()));
+        let inner = block.inner(a);
+        f.render_widget(block, a);
+        let [input, list] = Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
+        f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" ❯ ", Style::default().fg(Color::Indexed(4))), Span::raw(p.query.as_str())])), input);
+        f.set_cursor_position(Position { x: input.x + 3 + p.query.chars().count() as u16, y: input.y });
+        let rows = list.height as usize;
+        let first = p.sel.saturating_sub(rows.saturating_sub(1));
+        let lines: Vec<Line> = matches
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(rows)
+            .map(|(i, m)| {
+                let (dir, name) = m.rsplit_once('/').map(|(d, n)| (format!("{d}/"), n.to_string())).unwrap_or((String::new(), m.to_string()));
+                let base = if i == p.sel { Style::default().bg(Color::Indexed(0)).add_modifier(Modifier::BOLD) } else { Style::default() };
+                Line::from(vec![
+                    Span::styled(if i == p.sel { " ▌ " } else { "   " }, base.fg(Color::Indexed(4))),
+                    Span::styled(dir, base.fg(Color::Indexed(8))),
+                    Span::styled(name, base),
+                ])
+            })
+            .collect();
+        f.render_widget(Paragraph::new(lines), list);
+    }
+}
+
+fn draw_help(f: &mut Frame, title: &str, rows: &[(String, String)]) {
+    let area = f.area();
+    let w = (area.width * 6 / 10).max(40).min(area.width);
+    let h = ((rows.len() as u16) + 4).min(area.height.saturating_sub(2)).max(5);
+    let a = Rect { x: area.x + (area.width - w) / 2, y: area.y + (area.height.saturating_sub(h)) / 3, width: w, height: h };
+    f.render_widget(Clear, a);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Indexed(4)))
+        .title(format!(" {title} "))
+        .title_bottom(" any key closes · change them in ~/.config/zett/init.lua ");
+    let inner = block.inner(a);
+    f.render_widget(block, a);
+    let lines: Vec<Line> = rows
+        .iter()
+        .map(|(k, d)| Line::from(vec![Span::styled(format!(" {k:<18}"), Style::default().fg(Color::Indexed(3))), Span::raw(d.as_str())]))
+        .collect();
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
+/// A terminal key as zett-edit's key.
+fn to_key(k: &KeyEvent) -> Option<Key> {
+    let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = k.modifiers.contains(KeyModifiers::ALT);
+    let code = match k.code {
+        KeyCode::Char(c) => Code::Char(c),
+        KeyCode::Esc => Code::Esc,
+        KeyCode::Enter => Code::Enter,
+        KeyCode::Backspace => Code::Backspace,
+        KeyCode::Delete => Code::Delete,
+        KeyCode::Tab => Code::Tab,
+        KeyCode::Left => Code::Left,
+        KeyCode::Right => Code::Right,
+        KeyCode::Up => Code::Up,
+        KeyCode::Down => Code::Down,
+        KeyCode::Home => Code::Home,
+        KeyCode::End => Code::End,
+        _ => return None,
+    };
+    Some(Key { code, ctrl, alt })
+}
+
+/// A terminal key in the engine's notation (`a`, `<Space>`, `<C-w>`, `<CR>`).
+fn token(k: &KeyEvent) -> String {
+    let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = k.modifiers.contains(KeyModifiers::ALT);
+    let named = |n: &str| {
+        let mut m = String::new();
+        if ctrl {
+            m.push_str("C-");
+        }
+        if alt {
+            m.push_str("A-");
+        }
+        format!("<{m}{n}>")
+    };
+    match k.code {
+        KeyCode::Char(' ') => named("Space"),
+        KeyCode::Char('<') if !ctrl && !alt => "<lt>".into(),
+        KeyCode::Char(c) if ctrl || alt => named(&c.to_lowercase().to_string()),
+        KeyCode::Char(c) => c.to_string(),
+        KeyCode::Esc => named("Esc"),
+        KeyCode::Enter => named("CR"),
+        KeyCode::Backspace => named("BS"),
+        KeyCode::Tab => named("Tab"),
+        KeyCode::Up => named("Up"),
+        KeyCode::Down => named("Down"),
+        KeyCode::Left => named("Left"),
+        KeyCode::Right => named("Right"),
+        _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fuzzy_prefers_name_starts_and_runs() {
+        let q: Vec<char> = "main".chars().collect();
+        let a = fuzzy(&q, "src/main.rs").unwrap();
+        let b = fuzzy(&q, "src/my_animation.rs").unwrap();
+        assert!(a > b, "{a} vs {b}");
+        assert!(fuzzy(&q, "src/lib.rs").is_none());
+    }
+
+    #[test]
+    fn highlights_rust_with_terminal_colours() {
+        let ss = SyntaxSet::load_defaults_newlines();
+        let theme = palette_theme();
+        let hl = Highlighter::new(&theme);
+        let mut d = Doc::new(Editor::from_str("// hi\nfn main() { let s = \"x\"; }\n"), "t.rs".into(), "Rust".into());
+        let l0 = d.spans(0, &ss, &hl);
+        assert_eq!(l0[0].0.fg, Some(Color::Indexed(8)), "comments are colour 8: {l0:?}");
+        let l1 = d.spans(1, &ss, &hl);
+        assert!(l1.iter().any(|(s, t)| t.contains("fn") && s.fg == Some(Color::Indexed(5))), "{l1:?}");
+        assert!(l1.iter().any(|(s, t)| t.contains("\"x\"") || (t.contains('x') && s.fg == Some(Color::Indexed(2)))), "{l1:?}");
+    }
+
+    #[test]
+    fn keys_in_engine_notation() {
+        let k = |code, m| KeyEvent::new(code, m);
+        assert_eq!(token(&k(KeyCode::Char(' '), KeyModifiers::NONE)), "<Space>");
+        assert_eq!(token(&k(KeyCode::Char('w'), KeyModifiers::CONTROL)), "<C-w>");
+        assert_eq!(token(&k(KeyCode::Char('<'), KeyModifiers::NONE)), "<lt>");
+        assert_eq!(token(&k(KeyCode::Enter, KeyModifiers::NONE)), "<CR>");
+    }
+}

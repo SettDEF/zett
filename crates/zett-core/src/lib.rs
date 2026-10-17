@@ -75,6 +75,11 @@ impl Buffer {
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }
+    /// Where `save` writes (`:w name` on a new buffer); marks it changed.
+    pub fn set_path(&mut self, p: PathBuf) {
+        self.path = Some(p);
+        self.dirty = true;
+    }
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }

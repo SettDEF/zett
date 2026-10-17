@@ -149,7 +149,8 @@ ApplicationWindow {
         notes = notes.concat([{ text: text, at: Date.now() }]).slice(-4)
         noteClear.restart()
     }
-    Timer { id: keyWait; interval: 900; onTriggered: { const s = win.keySeq; win.keySeq = []; win.whichKey = []; win.applyScript(JSON.parse(app.keyTimeout(s.join("\u001f")))) } }
+    // keys that are exactly a mapping run after a moment; a prefix alone keeps its menu open
+    Timer { id: keyWait; interval: 900; onTriggered: { const r = JSON.parse(app.keyTimeout(win.keySeq.join("\u001f"))); if (r.state === "ran") { win.keySeq = []; win.whichKey = []; win.applyScript(r) } } }
     Timer { id: noteClear; interval: 4000; onTriggered: win.notes = [] }
 
     // [[Page]] → a link (the text is escaped first: it is shown as StyledText)

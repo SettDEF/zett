@@ -11,6 +11,9 @@ use zett_core::folder::Folder;
 use zett_core::{markdown, Kind};
 
 const EXAMPLES: &str = "Examples:
+  zett                              the editor in this terminal (the folder you are in)
+  zett src/main.rs                  open files; a folder opens its file finder
+  zett --gui                        the window (pages, blocks)
   zett new \"Ideas\"
   zett add ideas \"build zash\" --todo
   zett ls
@@ -21,8 +24,13 @@ const EXAMPLES: &str = "Examples:
 A workspace is a folder of Markdown files: --dir, $ZETT_DIR, or ~/zett.";
 
 #[derive(Parser)]
-#[command(name = "zett", version, about = "An editor you live in — pages, blocks, Vim everywhere", after_help = EXAMPLES)]
+#[command(name = "zett", version, about = "An editor you live in — code, pages, Vim everywhere", after_help = EXAMPLES, args_conflicts_with_subcommands = true)]
 struct Cli {
+    /// files or a folder to open (in the terminal; with --gui in the window)
+    paths: Vec<PathBuf>,
+    /// the window instead of the terminal
+    #[arg(long)]
+    gui: bool,
     /// the workspace folder
     #[arg(long, global = true, env = "ZETT_DIR")]
     dir: Option<PathBuf>,
@@ -97,11 +105,18 @@ fn main() {
     let cli = Cli::parse();
     let dir = cli.dir.clone().unwrap_or_else(|| std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("zett"));
     let Some(cmd) = cli.cmd else {
-        // no command: the window, on the same workspace folder
-        if std::env::var_os("ZETT_DIR").is_none() {
-            unsafe { std::env::set_var("ZETT_DIR", &dir) };
+        if cli.gui {
+            // the window, on the workspace folder
+            if std::env::var_os("ZETT_DIR").is_none() {
+                unsafe { std::env::set_var("ZETT_DIR", &dir) };
+            }
+            window::run();
+            return;
         }
-        window::run();
+        // no command: the editor in this terminal (files, a folder, or here)
+        if let Err(e) = zett_tui::run(cli.paths) {
+            fail(&e.to_string(), 1);
+        }
         return;
     };
     if let Cmd::Completions { shell } = cmd {
