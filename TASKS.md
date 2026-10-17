@@ -34,4 +34,7 @@ See PLAN.md for the vision and milestones.
 - [ ] drag to reorder blocks, block references ((id)) (M2)
 - [ ] visual mode, text objects, search in the window (M1)
 - [ ] M2½: `zett -t` terminal front end (ratatui), read-only first
-- [ ] SPC leader + which-key popup, then init.lua
+- [x] Lua engine (zett-script): init.lua, plugins (require), commands, keymaps with leader + which-key + timeout, hooks, zett.* API
+- [x] window: SPC tree with which-key panel, `:` command line (lua …, page …, capture …), help for keys/commands, notices; CLI run/lua/commands/keys
+- [ ] plugin manifest (plugin.toml: permissions, version), lockfile, `zett sync`, `zett doctor`
+- [ ] more API: blocks by id, cursor/selection, async jobs, timers, UI panels from Lua

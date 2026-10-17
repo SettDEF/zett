@@ -80,6 +80,60 @@ ApplicationWindow {
         })
     }
 
+    // ── the Lua engine: keys (SPC tree, :, user maps), which-key, commands ──
+    property var keySeq: []          // keys typed so far in a pending sequence
+    property var whichKey: []        // what can follow them
+    property var notes: []           // notices shown in the corner
+    property bool sidebarHidden: false
+    function keyToken(e) {
+        const named = { [Qt.Key_Escape]: "<Esc>", [Qt.Key_Return]: "<CR>", [Qt.Key_Enter]: "<CR>", [Qt.Key_Backspace]: "<BS>", [Qt.Key_Tab]: "<Tab>", [Qt.Key_Left]: "<Left>", [Qt.Key_Right]: "<Right>", [Qt.Key_Up]: "<Up>", [Qt.Key_Down]: "<Down>", [Qt.Key_Space]: "<Space>" }
+        if (named[e.key]) return named[e.key]
+        if (e.modifiers & Qt.ControlModifier && e.key >= Qt.Key_A && e.key <= Qt.Key_Z) return `<C-${String.fromCharCode(e.key + 32)}>`
+        if (e.modifiers & Qt.AltModifier && e.text) return `<A-${e.text}>`
+        return e.text === "<" ? "<lt>" : (e.text || "")
+    }
+    // A key in normal mode goes to the engine first. Returns true when the engine took it;
+    // otherwise `replay` gets every key of the sequence (they were Vim's after all).
+    function engineKey(e, replay) {
+        return engineTok(keyToken(e), replay)
+    }
+    function engineTok(tok, replay) {
+        if (!tok) return false
+        if (tok === "<Esc>" && keySeq.length > 0) { keySeq = []; whichKey = []; keyWait.stop(); return true }
+        const seq = keySeq.concat([tok])
+        const r = JSON.parse(app.feedKeys(seq.join("\u001f")))
+        if (r.state === "pending") { keySeq = seq; whichKey = r.menu; keyWait.restart(); return true }
+        keySeq = []; whichKey = []; keyWait.stop()
+        applyScript(r)
+        if (r.state === "ran") return true
+        if (replay) for (const k of seq) replay(k)
+        return replay !== null && replay !== undefined
+    }
+    // what scripts asked for: UI to open, notices to show
+    function applyScript(r) {
+        for (const n of (r.notes || [])) note(n)
+        for (const u of (r.ui || [])) {
+            switch (u.name) {
+            case "quickOpen": quickField.text = ""; quick.open(); quickField.forceActiveFocus(); break
+            case "search": quickField.text = ""; quick.open(); quickField.forceActiveFocus(); break
+            case "commandLine": openCommandLine(u.arg); break
+            case "help": openHelp(u.arg); break
+            case "reload": applyScript(JSON.parse(app.reloadConfig())); break
+            case "openConfig": Qt.openUrlExternally("file://" + app.configPath()); break
+            case "toggleSidebar": sidebarHidden = !sidebarHidden; break
+            case "focusBlock": focusAfter = parseInt(u.arg) - 1; break
+            default: note(`unknown UI request: ${u.name}`)
+            }
+        }
+    }
+    function note(text) {
+        if (!text) return
+        notes = notes.concat([{ text: text, at: Date.now() }]).slice(-4)
+        noteClear.restart()
+    }
+    Timer { id: keyWait; interval: 900; onTriggered: { const s = win.keySeq; win.keySeq = []; win.whichKey = []; win.applyScript(JSON.parse(app.keyTimeout(s.join("\u001f")))) } }
+    Timer { id: noteClear; interval: 4000; onTriggered: win.notes = [] }
+
     // [[Page]] → a link (the text is escaped first: it is shown as StyledText)
     function linkify(s) {
         const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
@@ -102,6 +156,11 @@ ApplicationWindow {
                 win.typeAfter = app.shotType
                 win.focusAfter = app.addBlock(-1, "paragraph")
             }
+            if (app.shotEngine.length > 0) {
+                for (const k of app.shotEngine.split(" ")) win.engineTok(k, null)
+                keyWait.stop()
+                console.log(`zett-probe: seq=[${win.keySeq}] whichKey=${win.whichKey.length} cmdLine=${cmdLine.opened} quick=${quick.opened} help=${helpPop.opened} commands=${cmdLine.commands.length} notes=${JSON.stringify(win.notes.map(n => n.text))}`)
+            }
             if (app.shotKeys.length > 0) {
                 win.vimEnter(1)
                 const d = list.itemAtIndex(1)
@@ -115,6 +174,9 @@ ApplicationWindow {
     id: rootRow
     anchors.fill: parent
     color: t.bg
+    // with no block being edited, keys go to the engine (SPC, :, the user's maps)
+    focus: true
+    Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }
     property string typeAfter: ""   // test hook: typed into the block focused next
 
@@ -125,6 +187,7 @@ ApplicationWindow {
         // ───────── sidebar ─────────
         Rectangle {
             Layout.fillHeight: true
+            visible: !win.sidebarHidden
             implicitWidth: 260
             color: t.panel
             ColumnLayout {
@@ -385,6 +448,17 @@ ApplicationWindow {
                                     if (normal && length > 0) select(Math.min(s.cursor, length - 1), Math.min(s.cursor, length - 1) + 1)
                                     else deselect()
                                 }
+                                // one key for Vim in normal mode
+                                function vimTok(k) {
+                                    if (k === "<Esc>") { normal = false; deselect(); win.vimMode = ""; rootRow.forceActiveFocus(); return }
+                                    if (k === "<Space>") k = " "
+                                    if (k === "<CR>" && !normal) return
+                                    const before = cursorPosition
+                                    applyVim(app.vimKey(k))
+                                    // j on the last line, k on the first: on to the next or previous block
+                                    if ((k === "j" || k === "<Down>") && cursorPosition === before && blockItem.index < win.blocks.length - 1) win.vimEnter(blockItem.index + 1)
+                                    else if ((k === "k" || k === "<Up>") && cursorPosition === before && blockItem.index > 0) win.vimEnter(blockItem.index - 1)
+                                }
                                 function vimKeyName(e) {
                                     const named = { [Qt.Key_Escape]: "Esc", [Qt.Key_Return]: "CR", [Qt.Key_Enter]: "CR", [Qt.Key_Backspace]: "BS", [Qt.Key_Left]: "Left", [Qt.Key_Right]: "Right", [Qt.Key_Up]: "Up", [Qt.Key_Down]: "Down", [Qt.Key_Home]: "Home", [Qt.Key_End]: "End", [Qt.Key_Delete]: "Del", [Qt.Key_Tab]: "Tab" }
                                     if (named[e.key]) return `<${named[e.key]}>`
@@ -437,14 +511,8 @@ ApplicationWindow {
 
                                 Keys.onPressed: (e) => {
                                     if (normal) {
-                                        if (e.key === Qt.Key_Escape) { normal = false; deselect(); win.vimMode = ""; edit.focus = false; e.accepted = true; return }
-                                        const k = vimKeyName(e)
-                                        if (!k) return
-                                        const before = cursorPosition
-                                        applyVim(app.vimKey(k))
-                                        // j on the last line, k on the first: on to the next or previous block
-                                        if ((k === "j" || k === "<Down>") && cursorPosition === before && blockItem.index < win.blocks.length - 1) win.vimEnter(blockItem.index + 1)
-                                        else if ((k === "k" || k === "<Up>") && cursorPosition === before && blockItem.index > 0) win.vimEnter(blockItem.index - 1)
+                                        // the engine first (SPC tree, :, the user's own maps); what it leaves is Vim's
+                                        win.engineKey(e, vimTok)
                                         e.accepted = true
                                         return
                                     }
@@ -655,6 +723,194 @@ ApplicationWindow {
                     HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) win.slashSel = index }
                     TapHandler { onTapped: win.slashApply(index) }
                 }
+            }
+        }
+    }
+
+    // ── which-key: what the keys typed so far can continue with ──
+    Rectangle {
+        parent: rootRow
+        z: 90
+        visible: win.whichKey.length > 0
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 14 }
+        height: wkFlow.implicitHeight + 46
+        radius: 16
+        color: t.raised
+        border.width: 1
+        border.color: t.rule
+        Text {
+            id: wkHead
+            x: 18; y: 12
+            text: win.keySeq.map(k => k === "<Space>" ? "SPC" : k).join(" ") + "  …"
+            color: t.accent; font.family: t.mono; font.pixelSize: 12; font.weight: Font.Bold
+        }
+        Flow {
+            id: wkFlow
+            anchors { left: parent.left; right: parent.right; top: wkHead.bottom; margins: 18; topMargin: 8 }
+            spacing: 6
+            Repeater {
+                model: win.whichKey
+                delegate: Row {
+                    required property var modelData
+                    width: Math.max(200, (wkFlow.width - 12) / 4)
+                    spacing: 10
+                    Rectangle {
+                        width: Math.max(26, keyText.implicitWidth + 12); height: 24; radius: 7
+                        color: t.card
+                        Text { id: keyText; anchors.centerIn: parent; text: modelData.key === "<Space>" ? "SPC" : modelData.key; color: t.text; font.family: t.mono; font.pixelSize: 13; font.weight: Font.Bold }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.group ? "+" + modelData.desc : modelData.desc
+                        color: modelData.group ? t.accent : t.dim
+                        font.family: t.sans; font.pixelSize: 13
+                    }
+                }
+            }
+        }
+    }
+
+    // ── : the command line — any command by name, `lua …`, `page Title`, `capture text` ──
+    function openCommandLine(prefill) {
+        cmdLine.commands = JSON.parse(app.commandList()).commands || []
+        cmdField.text = prefill || ""
+        cmdLine.sel = 0
+        cmdLine.open()
+        cmdField.forceActiveFocus()
+    }
+    Popup {
+        id: cmdLine
+        x: (win.width - width) / 2
+        y: 80
+        width: Math.min(620, win.width - 80)
+        padding: 10
+        modal: true
+        focus: true
+        property var commands: []
+        property int sel: 0
+        readonly property var matches: {
+            const q = cmdField.text.trim().toLowerCase()
+            if (q.includes(" ")) return []
+            return commands.filter(c => c.name.includes(q) || c.desc.toLowerCase().includes(q)).slice(0, 12)
+        }
+        background: Rectangle { radius: 16; color: t.raised; border.width: 1; border.color: t.rule }
+        function accept(line) {
+            cmdLine.close()
+            if (line.trim().length > 0) win.applyScript(JSON.parse(app.runCommand(line)))
+        }
+        contentItem: ColumnLayout {
+            spacing: 8
+            RowLayout {
+                spacing: 8
+                Text { text: ":"; color: t.accent; font.family: t.mono; font.pixelSize: 18; font.weight: Font.Bold }
+                TextField {
+                    id: cmdField
+                    Layout.fillWidth: true
+                    placeholderText: "command, lua …, page Title, capture text"
+                    font.family: t.mono; font.pixelSize: 15
+                    color: t.text
+                    placeholderTextColor: t.faint
+                    background: Rectangle { radius: 10; color: t.card }
+                    Keys.onDownPressed: cmdLine.sel = Math.min(cmdLine.sel + 1, cmdLine.matches.length - 1)
+                    Keys.onUpPressed: cmdLine.sel = Math.max(cmdLine.sel - 1, 0)
+                    Keys.onTabPressed: { const m = cmdLine.matches[cmdLine.sel]; if (m) text = m.name }
+                    Keys.onReturnPressed: {
+                        const m = cmdLine.matches[cmdLine.sel]
+                        // the picked command, unless what was typed is already a full line
+                        const typed = text.trim()
+                        cmdLine.accept(m && !cmdLine.commands.some(c => c.name === typed) && !typed.includes(" ") ? m.name : typed)
+                    }
+                    Keys.onEscapePressed: cmdLine.close()
+                }
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, 380)
+                clip: true
+                model: cmdLine.matches
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    width: ListView.view.width
+                    height: 34
+                    radius: 8
+                    color: index === cmdLine.sel ? Qt.alpha(t.accent, 0.18) : "transparent"
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                        spacing: 12
+                        Text { text: modelData.name; color: t.text; font.family: t.mono; font.pixelSize: 13; Layout.preferredWidth: 170 }
+                        Text { Layout.fillWidth: true; text: modelData.desc; color: t.dim; font.family: t.sans; font.pixelSize: 13; elide: Text.ElideRight }
+                        Text { text: modelData.source === "zett" ? "" : modelData.source; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) cmdLine.sel = index }
+                    TapHandler { onTapped: cmdLine.accept(modelData.name) }
+                }
+            }
+        }
+    }
+
+    // ── help: every key, or every command ──
+    function openHelp(what) {
+        if (what === "commands") {
+            helpPop.title = "Commands"
+            helpPop.rows = (JSON.parse(app.commandList()).commands || []).map(c => ({ a: c.name, b: c.desc, c: c.source === "zett" ? "" : c.source }))
+        } else {
+            helpPop.title = "Keys (normal mode)"
+            helpPop.rows = (JSON.parse(app.bindingList()).bindings || []).map(b => ({ a: b.keys, b: b.desc, c: "" }))
+        }
+        helpPop.open()
+    }
+    Popup {
+        id: helpPop
+        x: (win.width - width) / 2
+        y: 60
+        width: Math.min(640, win.width - 80)
+        height: Math.min(560, win.height - 120)
+        padding: 16
+        modal: true
+        focus: true
+        property string title: ""
+        property var rows: []
+        background: Rectangle { radius: 16; color: t.raised; border.width: 1; border.color: t.rule }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text { text: helpPop.title; color: t.text; font.family: t.sans; font.pixelSize: 18; font.weight: Font.DemiBold }
+            Text { text: "Change any of these in " + app.configPath(); color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                model: helpPop.rows
+                delegate: RowLayout {
+                    required property var modelData
+                    width: ListView.view.width
+                    height: 28
+                    spacing: 14
+                    Text { text: modelData.a; color: t.accent; font.family: t.mono; font.pixelSize: 13; Layout.preferredWidth: 170 }
+                    Text { Layout.fillWidth: true; text: modelData.b; color: t.text; font.family: t.sans; font.pixelSize: 13; elide: Text.ElideRight }
+                    Text { text: modelData.c; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                }
+            }
+        }
+    }
+
+    // ── notices from scripts (print, zett.notify, errors) ──
+    Column {
+        parent: rootRow
+        z: 95
+        anchors { right: parent.right; top: parent.top; margins: 16 }
+        spacing: 6
+        Repeater {
+            model: win.notes
+            delegate: Rectangle {
+                required property var modelData
+                width: Math.min(420, noteText.implicitWidth + 28)
+                height: noteText.implicitHeight + 18
+                radius: 12
+                color: t.raised
+                border.width: 1
+                border.color: t.rule
+                Text { id: noteText; anchors.centerIn: parent; width: Math.min(392, implicitWidth); text: modelData.text; color: t.text; font.family: t.sans; font.pixelSize: 13; wrapMode: Text.Wrap }
             }
         }
     }

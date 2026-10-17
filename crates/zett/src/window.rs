@@ -24,6 +24,7 @@ pub mod qobject {
         #[qproperty(QString, backlinks)]
         #[qproperty(QString, shot_keys, cxx_name = "shotKeys")]
         #[qproperty(QString, shot_type, cxx_name = "shotType")]
+        #[qproperty(QString, shot_engine, cxx_name = "shotEngine")]
         type Zett = super::ZettRust;
 
         /// opens page `index` of the list
@@ -56,6 +57,33 @@ pub mod qobject {
         #[cxx_name = "openTitle"]
         fn open_title(self: Pin<&mut Zett>, title: &QString);
         /// takes in pages changed on disk by other programs (Neovim, git…)
+        /// keys for the Lua engine (tokens joined by U+001F): {state: ran|pending|none, menu, ui, notes}
+        #[qinvokable]
+        #[cxx_name = "feedKeys"]
+        fn feed_keys(self: Pin<&mut Zett>, keys: &QString) -> QString;
+        /// the keys stopped (timeoutlen): run an exact mapping that waited for longer ones
+        #[qinvokable]
+        #[cxx_name = "keyTimeout"]
+        fn key_timeout(self: Pin<&mut Zett>, keys: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "runCommand"]
+        fn run_command(self: Pin<&mut Zett>, name: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "evalLua"]
+        fn eval_lua(self: Pin<&mut Zett>, code: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "commandList"]
+        fn command_list(self: Pin<&mut Zett>) -> QString;
+        #[qinvokable]
+        #[cxx_name = "bindingList"]
+        fn binding_list(self: Pin<&mut Zett>) -> QString;
+        #[qinvokable]
+        #[cxx_name = "reloadConfig"]
+        fn reload_config(self: Pin<&mut Zett>) -> QString;
+        #[qinvokable]
+        #[cxx_name = "configPath"]
+        fn config_path(self: &Zett) -> QString;
+
         #[qinvokable]
         #[cxx_name = "checkDisk"]
         fn check_disk(self: Pin<&mut Zett>);
@@ -92,8 +120,12 @@ pub struct ZettRust {
     shot_keys: QString,
     /// ZETT_SHOT_TYPE: text typed into a new block at the end before the capture (tests)
     shot_type: QString,
+    /// ZETT_SHOT_ENGINE: keys (space-separated tokens) fed to the Lua engine before the capture (tests)
+    shot_engine: QString,
     /// the block in Vim normal mode and its editor (undo and registers live here)
     vim: Option<(i32, zett_edit::Editor)>,
+    /// the Lua engine (init.lua, plugins); made on first use
+    engine: Option<zett_script::Engine>,
 }
 
 pub fn workspace_dir() -> std::path::PathBuf {
@@ -124,6 +156,8 @@ impl Default for ZettRust {
             vim: None,
             shot_keys: QString::from(&std::env::var("ZETT_SHOT_KEYS").unwrap_or_default()),
             shot_type: QString::from(&std::env::var("ZETT_SHOT_TYPE").unwrap_or_default()),
+            shot_engine: QString::from(&std::env::var("ZETT_SHOT_ENGINE").unwrap_or_default()),
+            engine: None,
         };
         z.refresh_pages();
         // open the page worked on last: the most recently changed file
@@ -438,5 +472,153 @@ impl qobject::Zett {
         };
         self.as_mut().set_current(idx);
         self.publish();
+    }
+}
+
+// ── the Lua engine: keys, commands, :lua ──
+
+use zett_script::{Effect, Engine, Feed};
+
+impl qobject::Zett {
+    /// Runs something on the engine with the workspace lent to it, then applies what it did:
+    /// pages opened or changed here, UI requests and notices go back to QML as JSON.
+    fn script(mut self: Pin<&mut Self>, call: impl FnOnce(&mut Engine) -> (serde_json::Value, Vec<Effect>)) -> QString {
+        let (mut out, effects, errors) = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let fresh = r.engine.is_none();
+            let mut eng = r.engine.take().unwrap_or_else(|| Engine::new(None));
+            eng.set_current(r.page());
+            let folder = r.folder.take();
+            let run = |e: &mut Engine| {
+                if fresh {
+                    e.load_config(&zett_script::config_dir());
+                }
+                call(e)
+            };
+            let (folder, res) = match folder {
+                Some(f) => {
+                    let (f, res) = eng.lend(f, run);
+                    (Some(f), res)
+                }
+                None => (None, run(&mut eng)),
+            };
+            r.folder = folder;
+            let errors = std::mem::take(&mut eng.errors);
+            r.engine = Some(eng);
+            (res.0, res.1, errors)
+        };
+        let mut ui = Vec::new();
+        let mut notes: Vec<String> = errors;
+        let mut changed = false;
+        for fx in effects {
+            match fx {
+                Effect::Open(p) => {
+                    let idx = {
+                        let r = self.as_mut().rust_mut();
+                        let r = r.get_mut();
+                        r.vim = None;
+                        r.refresh_pages();
+                        r.order.iter().position(|x| *x == p).map(|i| i as i32)
+                    };
+                    if let Some(i) = idx {
+                        self.as_mut().set_current(i);
+                    }
+                    changed = true;
+                }
+                Effect::Refresh => changed = true,
+                Effect::Notify(m) => notes.push(m),
+                Effect::Ui(name, arg) => ui.push(serde_json::json!({ "name": name, "arg": arg })),
+            }
+        }
+        if changed {
+            self.as_mut().publish();
+        }
+        out["ui"] = serde_json::Value::Array(ui);
+        out["notes"] = serde_json::Value::Array(notes.into_iter().map(serde_json::Value::String).collect());
+        QString::from(&out.to_string())
+    }
+
+    fn feed_result(feed: Feed) -> (serde_json::Value, Vec<Effect>) {
+        match feed {
+            Feed::Ran(fx) => (serde_json::json!({ "state": "ran" }), fx),
+            Feed::Pending(menu) => {
+                let m: Vec<_> = menu.iter().map(|i| serde_json::json!({ "key": i.key, "desc": i.desc, "group": i.group })).collect();
+                (serde_json::json!({ "state": "pending", "menu": m }), Vec::new())
+            }
+            Feed::None => (serde_json::json!({ "state": "none" }), Vec::new()),
+        }
+    }
+
+    fn feed_keys(self: Pin<&mut Self>, keys: &QString) -> QString {
+        // one spelling per key, as the maps use it (<CR> is <Enter>, a space is <Space>)
+        let typed: Vec<String> = keys.to_string().split('\u{1f}').filter(|s| !s.is_empty()).flat_map(zett_script::keys).collect();
+        self.script(|e| Self::feed_result(e.feed("n", &typed)))
+    }
+
+    fn key_timeout(self: Pin<&mut Self>, keys: &QString) -> QString {
+        // one spelling per key, as the maps use it (<CR> is <Enter>, a space is <Space>)
+        let typed: Vec<String> = keys.to_string().split('\u{1f}').filter(|s| !s.is_empty()).flat_map(zett_script::keys).collect();
+        self.script(|e| Self::feed_result(e.timeout("n", &typed)))
+    }
+
+    fn run_command(self: Pin<&mut Self>, name: &QString) -> QString {
+        let line = name.to_string();
+        self.script(|e| {
+            // `:name args` — a few built-in lines take the rest as text
+            let (cmd, rest) = line.trim().split_once(' ').map(|(a, b)| (a.to_string(), b.trim().to_string())).unwrap_or((line.trim().to_string(), String::new()));
+            let res = match cmd.as_str() {
+                "lua" => e.eval(&rest).map(|(out, fx)| {
+                    let mut fx = fx;
+                    if out != "nil" {
+                        fx.push(Effect::Notify(out));
+                    }
+                    fx
+                }),
+                "page" | "open" | "e" if !rest.is_empty() => e.eval(&format!("zett.page.open({rest:?})")).map(|(_, fx)| fx),
+                "capture" if !rest.is_empty() => e.eval(&format!("zett.page.open(\"Inbox\"); zett.page.add(\"todo\", {rest:?})")).map(|(_, fx)| fx),
+                _ => e.run(&cmd),
+            };
+            match res {
+                Ok(fx) => (serde_json::json!({ "state": "ran" }), fx),
+                Err(err) => (serde_json::json!({ "state": "error" }), vec![Effect::Notify(err)]),
+            }
+        })
+    }
+
+    fn eval_lua(self: Pin<&mut Self>, code: &QString) -> QString {
+        let code = code.to_string();
+        self.script(|e| match e.eval(&code) {
+            Ok((out, fx)) => (serde_json::json!({ "state": "ran", "result": out }), fx),
+            Err(err) => (serde_json::json!({ "state": "error" }), vec![Effect::Notify(err)]),
+        })
+    }
+
+    fn command_list(self: Pin<&mut Self>) -> QString {
+        self.script(|e| {
+            let v: Vec<_> = e.commands().into_iter().map(|(n, d, s)| serde_json::json!({ "name": n, "desc": d, "source": s })).collect();
+            (serde_json::json!({ "state": "ran", "commands": v }), Vec::new())
+        })
+    }
+
+    fn binding_list(self: Pin<&mut Self>) -> QString {
+        self.script(|e| {
+            let leader = e.leader();
+            let v: Vec<_> = e.bindings("n").into_iter().map(|(k, d)| {
+                let shown = k.replace("<leader>", if leader == "<Space>" { "SPC " } else { &leader });
+                serde_json::json!({ "keys": shown, "desc": d })
+            }).collect();
+            (serde_json::json!({ "state": "ran", "bindings": v }), Vec::new())
+        })
+    }
+
+    fn reload_config(mut self: Pin<&mut Self>) -> QString {
+        // a fresh engine: everything from defaults, plugins and init.lua again
+        self.as_mut().rust_mut().get_mut().engine = None;
+        self.script(|e| (serde_json::json!({ "state": "ran", "plugins": e.plugins.clone() }), vec![Effect::Notify(format!("config reloaded ({} plugins)", e.plugins.len()))]))
+    }
+
+    fn config_path(&self) -> QString {
+        QString::from(&zett_script::config_dir().join("init.lua").display().to_string())
     }
 }

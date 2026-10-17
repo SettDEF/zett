@@ -281,6 +281,20 @@ impl Engine {
         }
     }
 
+    /// Lends the workspace to the engine for one call and takes it back: the host keeps
+    /// owning its folder, scripts see it only while they run.
+    pub fn lend<R>(&mut self, folder: Folder, f: impl FnOnce(&mut Engine) -> R) -> (Folder, R) {
+        let rc = Rc::new(RefCell::new(folder));
+        self.st.borrow_mut().folder = Some(rc.clone());
+        let r = f(self);
+        self.st.borrow_mut().folder = None;
+        let folder = match Rc::try_unwrap(rc) {
+            Ok(c) => c.into_inner(),
+            Err(_) => unreachable!("scripts never keep the workspace"),
+        };
+        (folder, r)
+    }
+
     pub fn leader(&self) -> String {
         self.st.borrow().leader.clone()
     }
