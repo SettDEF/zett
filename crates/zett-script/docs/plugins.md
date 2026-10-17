@@ -1,10 +1,12 @@
 # Plugins: the explorer, the undo tree, your own
 
-zett comes with two plugins, written in Lua on the same API as yours:
+zett comes with three plugins, written in Lua on the same API as yours:
 
 - `explorer`  the project's files at the side: `SPC e` or `SPC o p`
   (`SPC o P` shows the file being edited)
-- `undotree`  the undo history as a tree, with each change's diff: `SPC s u`
+- `undotree`  the undo history as a tree, with each change's diff: `SPC u` or `SPC s u`
+- `fidget`    what language servers are doing, in the bottom-right corner
+  (`zett.opt.fidget = { notifications = true }` shows messages there too)
 
 ## Settings
 
@@ -59,6 +61,8 @@ A folder in `~/.config/zett/plugins/NAME/` with an `init.lua`. One named
     zett.confirm("Sure?", function(yes) end)
     zett.on("buf_enter" | "text_changed" | "write" | "option_set", f)
     zett.open(path, "right" | "below")   zett.diff(a, b)   zett.clipboard(s)
+    zett.float.open{ id=, anchor="SE", lines= }   zett.defer(ms, f)   zett.hl(name, spec)
+    zett.on("lsp_progress" | "notify", f)
 
 Groups for colours: Title Directory File Current Accent Muted Added Removed
 Changed GitModified GitAdded GitUntracked GitDeleted Error Warn Bold.

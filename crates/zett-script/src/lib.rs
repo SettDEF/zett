@@ -107,7 +107,7 @@ const DEFAULTS: &str = include_str!("defaults.lua");
 const EDITOR: &str = include_str!("editor.lua");
 /// Plugins that come with zett (editor only). A plugin of the same name in the config's
 /// plugins/ folder replaces one; `zett.opt.NAME = false` turns it off.
-const BUNDLED: &[(&str, &str)] = &[("explorer", include_str!("../plugins/explorer.lua")), ("undotree", include_str!("../plugins/undotree.lua"))];
+const BUNDLED: &[(&str, &str)] = &[("explorer", include_str!("../plugins/explorer.lua")), ("undotree", include_str!("../plugins/undotree.lua")), ("fidget", include_str!("../plugins/fidget.lua"))];
 
 /// Splits Vim key notation into keys: `<leader>pn` → `<leader>`, `p`, `n`; `<C-s>` stays one.
 pub fn keys(s: &str) -> Vec<String> {

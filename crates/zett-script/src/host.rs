@@ -52,6 +52,10 @@ pub(crate) struct Host {
     pub buffers: Vec<String>,
     /// a g waiting for its second g
     pub g: bool,
+    /// floating boxes in a corner (zett.float): id, corner, lines
+    pub floats: Vec<(String, String, Vec<Vec<(String, String)>>)>,
+    /// zett.defer: when, and what runs then
+    pub timers: Vec<(std::time::Instant, RegistryKey)>,
 }
 
 /// A Nerd Font icon for a file, by its extension.
@@ -197,6 +201,33 @@ impl Engine {
             .collect()
     }
 
+    /// The floating boxes: (id, corner "SE" | "NE" | "SW" | "NW", lines).
+    pub fn floats(&self) -> Vec<(String, String, Vec<Vec<(String, String)>>)> {
+        self.st.borrow().host.floats.clone()
+    }
+
+    /// When the next zett.defer is due.
+    pub fn next_timer(&self) -> Option<std::time::Instant> {
+        self.st.borrow().host.timers.iter().map(|t| t.0).min()
+    }
+
+    /// Runs the zett.defer functions that are due.
+    pub fn run_timers(&mut self) -> Vec<Effect> {
+        let now = std::time::Instant::now();
+        let due: Vec<RegistryKey> = {
+            let mut st = self.st.borrow_mut();
+            let (due, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut st.host.timers).into_iter().partition(|t| t.0 <= now);
+            st.host.timers = keep;
+            due.into_iter().map(|t| t.1).collect()
+        };
+        for k in due {
+            if let Err(e) = call(&self.lua, &Some(k), ()) {
+                self.errors.push(format!("timer: {e}"));
+            }
+        }
+        self.finish()
+    }
+
     pub fn focused_panel(&self) -> Option<String> {
         self.st.borrow().host.focus.clone()
     }
@@ -317,6 +348,17 @@ impl Engine {
     }
 
     /// Hooks with `{ path = … }` as their data (`buf_enter`, `write`, `text_changed`).
+    /// Hooks with a table of text fields as their data (`lsp_progress`, `notify`).
+    pub fn emit_fields(&mut self, event: &str, fields: &[(&str, String)]) -> Vec<Effect> {
+        let data = self.lua.create_table().ok().map(|t| {
+            for (k, v) in fields {
+                let _ = t.set(*k, v.as_str());
+            }
+            Value::Table(t)
+        });
+        self.emit(event, data.unwrap_or(Value::Nil))
+    }
+
     pub fn emit_path(&mut self, event: &str, path: &str) -> Vec<Effect> {
         let data = self.lua.create_table().ok().map(|t| {
             let _ = t.set("path", path);
@@ -475,6 +517,40 @@ impl Engine {
             Ok(())
         })?)?;
         z.set("panel", panel)?;
+
+        // ── zett.float: a box in a corner, over the windows (no keyboard) ──
+        let float = lua.create_table()?;
+        // zett.float.open{ id=, anchor="SE", lines={…} }: made, or its lines and corner replaced
+        let st = self.st.clone();
+        float.set("open", lua.create_function(move |_, o: Table| {
+            let id: String = o.get("id")?;
+            let anchor = o.get::<Option<String>>("anchor")?.unwrap_or_else(|| "SE".into()).to_uppercase();
+            let lines = lines_of(o.get::<Value>("lines")?);
+            let mut s = st.borrow_mut();
+            match s.host.floats.iter_mut().find(|f| f.0 == id) {
+                Some(f) => {
+                    f.1 = anchor;
+                    f.2 = lines;
+                }
+                None => s.host.floats.push((id, anchor, lines)),
+            }
+            Ok(())
+        })?)?;
+        let st = self.st.clone();
+        float.set("close", lua.create_function(move |_, id: String| {
+            st.borrow_mut().host.floats.retain(|f| f.0 != id);
+            Ok(())
+        })?)?;
+        let st = self.st.clone();
+        float.set("is_open", lua.create_function(move |_, id: String| Ok(st.borrow().host.floats.iter().any(|f| f.0 == id)))?)?;
+        z.set("float", float)?;
+        // zett.defer(ms, function): runs once, after ms milliseconds
+        let st = self.st.clone();
+        z.set("defer", lua.create_function(move |lua, (ms, f): (u64, Function)| {
+            let k = lua.create_registry_value(f)?;
+            st.borrow_mut().host.timers.push((std::time::Instant::now() + std::time::Duration::from_millis(ms), k));
+            Ok(())
+        })?)?;
 
         // ── zett.buf: the buffer being edited ──
         let buf = lua.create_table()?;

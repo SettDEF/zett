@@ -320,6 +320,8 @@ struct App {
     /// for buf_enter and text_changed: the buffer and text the hooks last heard about
     seen_doc: Option<(usize, String)>,
     seen_rev: u64,
+    /// a notify hook is running (its own messages are not sent back to it)
+    notifying: bool,
     lsp: zett_lsp::Servers,
     lsp_status: String,
     comp: Option<lsp::Comp>,
@@ -412,6 +414,7 @@ impl App {
             last_click: None,
             seen_doc: None,
             seen_rev: 0,
+            notifying: false,
             lsp: zett_lsp::Servers::new(),
             lsp_status: String::new(),
             comp: None,
@@ -447,6 +450,10 @@ impl App {
         while !self.quit {
             self.lsp_tick();
             self.watch_buffer();
+            if self.engine.next_timer().is_some_and(|t| t <= Instant::now()) {
+                let fx = self.with_lua(|e| e.run_timers());
+                self.after_lua(fx);
+            }
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.picker.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
@@ -458,6 +465,11 @@ impl App {
             let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { Duration::from_millis(900).saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
             // servers answer on their own time: look more often while any runs
             let wait = if self.lsp.clients.is_empty() { wait } else { wait.min(Duration::from_millis(100)) };
+            // a plugin's timer (zett.defer) wakes the loop when it is due
+            let wait = match self.engine.next_timer() {
+                Some(t) => wait.min(t.saturating_duration_since(Instant::now())),
+                None => wait,
+            };
             if !event::poll(wait)? {
                 if !self.keyseq.is_empty() && self.key_at.elapsed() >= Duration::from_millis(900) {
                     // keys that are exactly a mapping run now; a prefix alone keeps its menu open
@@ -627,7 +639,16 @@ impl App {
     fn effects(&mut self, fx: Vec<Effect>) {
         for e in fx {
             match e {
-                Effect::Notify(m) => self.say(m),
+                Effect::Notify(m) => {
+                    // plugins may show messages too (fidget); a message they send is not sent back
+                    if !self.notifying && self.engine.has_hooks("notify") {
+                        self.notifying = true;
+                        let fx = self.with_lua(|e| e.emit_fields("notify", &[("message", m.clone())]));
+                        self.after_lua(fx);
+                        self.notifying = false;
+                    }
+                    self.say(m)
+                }
                 Effect::Ui(name, arg) if self.doom_ui(&name, &arg) => {}
                 Effect::Ui(name, arg) => match name.as_str() {
                     "quickOpen" | "search" => self.open_picker(),
@@ -1037,6 +1058,7 @@ impl App {
             }
             self.draw_modeline(f, line, di, focused);
         }
+        self.draw_floats(f, body);
         self.draw_cmd(f, cmd);
         self.draw_suggestions(f, cmd);
         if !self.menu.is_empty() {

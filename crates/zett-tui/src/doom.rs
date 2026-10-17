@@ -246,6 +246,14 @@ impl App {
     }
 
     fn focus_dir(&mut self, dir: &str) {
+        // from a panel: back to the windows (towards them), else stay
+        if let Some(id) = self.engine.focused_panel() {
+            let side = self.engine.panels().into_iter().find(|p| p.id == id).map(|p| p.side).unwrap_or_default();
+            if !(side == dir) {
+                self.engine.focus_panel(None);
+            }
+            return;
+        }
         let ids = self.tree.ids();
         if dir == "next" {
             let i = ids.iter().position(|x| *x == self.focus).unwrap_or(0);

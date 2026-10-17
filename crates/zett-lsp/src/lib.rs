@@ -88,6 +88,8 @@ pub enum Event {
     Completion(usize, Vec<Item>),
     /// progress and log lines worth a glance
     Status(String),
+    /// a piece of work a server reports ($/progress): server, token, title, message, percent, done
+    Progress { server: String, token: String, title: String, message: String, percent: Option<u64>, done: bool },
     Exited(String),
 }
 
@@ -338,6 +340,18 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
                 }
                 "$/progress" => {
                     let v = &msg["params"]["value"];
+                    let token = match &msg["params"]["token"] {
+                        serde_json::Value::String(s) => s.clone(),
+                        t => t.to_string(),
+                    };
+                    let _ = events.send(Event::Progress {
+                        server: name.to_string(),
+                        token,
+                        title: v["title"].as_str().unwrap_or("").to_string(),
+                        message: v["message"].as_str().unwrap_or("").to_string(),
+                        percent: v["percentage"].as_u64(),
+                        done: v["kind"] == "end",
+                    });
                     let text = [v["title"].as_str(), v["message"].as_str()].into_iter().flatten().collect::<Vec<_>>().join(" ");
                     if v["kind"] == "end" {
                         let _ = events.send(Event::Status(String::new()));

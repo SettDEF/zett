@@ -224,3 +224,27 @@ impl App {
         true
     }
 }
+
+impl App {
+    /// Plugin floats in the corners of the editing area: lines right-aligned at the right
+    /// corners, only their own cells covered (the text around stays visible).
+    pub(crate) fn draw_floats(&mut self, f: &mut Frame, body: Rect) {
+        for (_, anchor, lines) in self.engine.floats() {
+            let h = (lines.len() as u16).min(body.height.saturating_sub(2));
+            let right = anchor.ends_with('E');
+            // above the bottom windows' modelines, below the top edge
+            let top = if anchor.starts_with('S') { body.bottom().saturating_sub(h + 1) } else { body.y };
+            for (i, l) in lines.iter().take(h as usize).enumerate() {
+                let w: u16 = l.iter().map(|(t, _)| t.chars().count() as u16).sum::<u16>().min(body.width.saturating_sub(2));
+                if w == 0 {
+                    continue;
+                }
+                let x = if right { body.right().saturating_sub(w + 1) } else { body.x + 1 };
+                let r = Rect { x, y: top + i as u16, width: w, height: 1 };
+                let spans: Vec<Span> = l.iter().map(|(t, g)| Span::styled(t.clone(), hl(g))).collect();
+                f.render_widget(Clear, r);
+                f.render_widget(Paragraph::new(Line::from(spans)), r);
+            }
+        }
+    }
+}

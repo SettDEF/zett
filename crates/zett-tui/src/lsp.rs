@@ -63,6 +63,13 @@ impl App {
                     }
                 }
                 Event::Status(s) => self.lsp_status = s,
+                Event::Progress { server, token, title, message, percent, done } => {
+                    if self.engine.has_hooks("lsp_progress") {
+                        let f = [("server", server), ("token", token), ("title", title), ("message", message), ("percent", percent.map(|p| p.to_string()).unwrap_or_default()), ("done", done.to_string())];
+                        let fx = self.with_lua(|e| e.emit_fields("lsp_progress", &f));
+                        self.after_lua(fx);
+                    }
+                }
                 Event::Exited(name) => {
                     self.lsp.clients.retain(|_, c| c.name != name);
                     self.say(format!("{name} stopped"));
