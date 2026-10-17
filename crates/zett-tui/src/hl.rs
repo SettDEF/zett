@@ -74,3 +74,8 @@ pub(crate) fn hl(name: &str) -> Style {
 pub(crate) fn fg(name: &str) -> Option<Color> {
     hl(name).fg
 }
+
+/// A new engine (the config reloaded): its groups are taken at the next frame.
+pub(crate) fn reset() {
+    CACHE.with(|c| c.borrow_mut().0 = u64::MAX);
+}

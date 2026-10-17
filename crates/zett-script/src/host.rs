@@ -17,6 +17,9 @@ pub(crate) struct Panel {
     /// each line: (text, highlight group) pieces
     lines: Vec<Vec<(String, String)>>,
     cursor: usize,
+    /// a floating panel moved from the middle (cells)
+    dx: i16,
+    dy: i16,
     on_key: Option<RegistryKey>,
     on_move: Option<RegistryKey>,
     on_close: Option<RegistryKey>,
@@ -35,6 +38,9 @@ pub struct PanelView {
     pub lines: Vec<Vec<(String, String)>>,
     pub cursor: usize,
     pub focused: bool,
+    /// side "float": moved from the middle by this many cells
+    pub dx: i16,
+    pub dy: i16,
 }
 
 #[derive(Default)]
@@ -197,7 +203,7 @@ impl Engine {
         st.host
             .panels
             .iter()
-            .map(|p| PanelView { id: p.id.clone(), side: p.side.clone(), width: p.width, height: p.height, title: p.title.clone(), lines: p.lines.clone(), cursor: p.cursor, focused: st.host.focus.as_deref() == Some(&p.id) })
+            .map(|p| PanelView { id: p.id.clone(), side: p.side.clone(), width: p.width, height: p.height, title: p.title.clone(), lines: p.lines.clone(), cursor: p.cursor, focused: st.host.focus.as_deref() == Some(&p.id), dx: p.dx, dy: p.dy })
             .collect()
     }
 
@@ -274,6 +280,24 @@ impl Engine {
                     fx.push(Effect::Notify(format!("{id}: {e}")));
                     return Some(fx);
                 }
+            }
+        }
+        // a floating panel moves with Alt+h j k l
+        let float = self.st.borrow().host.panels.iter().any(|p| p.id == id && p.side == "float");
+        if float {
+            let d = match key {
+                "<A-h>" => Some((-4, 0)),
+                "<A-l>" => Some((4, 0)),
+                "<A-k>" => Some((0, -2)),
+                "<A-j>" => Some((0, 2)),
+                _ => None,
+            };
+            if let Some((dx, dy)) = d {
+                if let Some(p) = self.st.borrow_mut().host.panels.iter_mut().find(|p| p.id == id) {
+                    p.dx = (p.dx + dx).clamp(-200, 200);
+                    p.dy = (p.dy + dy).clamp(-100, 100);
+                }
+                return Some(Vec::new());
             }
         }
         let last = len.saturating_sub(1);
@@ -453,15 +477,18 @@ impl Engine {
             let i = match h.panels.iter().position(|p| p.id == id) {
                 Some(i) => i,
                 None => {
-                    h.panels.push(Panel { id: id.clone(), side: "left".into(), width: 30, height: 0, title: String::new(), lines: Vec::new(), cursor: 0, on_key: None, on_move: None, on_close: None });
+                    h.panels.push(Panel { id: id.clone(), side: "left".into(), width: 30, height: 0, title: String::new(), lines: Vec::new(), cursor: 0, dx: 0, dy: 0, on_key: None, on_move: None, on_close: None });
                     h.panels.len() - 1
                 }
             };
             let p = &mut h.panels[i];
             if let Some(v) = o.get::<Option<String>>("side")? {
-                p.side = if v == "right" { v } else { "left".into() };
+                p.side = if v == "right" || v == "float" { v } else { "left".into() };
             }
             p.width = o.get::<Option<u16>>("width")?.unwrap_or(p.width).clamp(10, 200);
+            if p.side == "float" && o.get::<Option<u16>>("height")?.is_none() && p.height == 0 {
+                p.height = 70;
+            }
             p.height = o.get::<Option<u16>>("height")?.unwrap_or(p.height);
             p.title = o.get::<Option<String>>("title")?.unwrap_or(p.title.clone());
             p.on_key = on_key.or(p.on_key.take());
@@ -498,6 +525,15 @@ impl Engine {
         panel.set("focus", lua.create_function(move |_, id: Option<String>| {
             let mut s = st.borrow_mut();
             s.host.focus = id.filter(|i| s.host.panels.iter().any(|p| p.id == *i));
+            Ok(())
+        })?)?;
+        // zett.panel.move(id, dx, dy): a floating panel, moved by cells
+        let st = self.st.clone();
+        panel.set("move", lua.create_function(move |_, (id, dx, dy): (String, i16, i16)| {
+            if let Some(p) = st.borrow_mut().host.panels.iter_mut().find(|p| p.id == id) {
+                p.dx = p.dx.saturating_add(dx).clamp(-200, 200);
+                p.dy = p.dy.saturating_add(dy).clamp(-100, 100);
+            }
             Ok(())
         })?)?;
         // zett.panel.close(id): its on_close runs

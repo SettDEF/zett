@@ -248,3 +248,84 @@ impl App {
         }
     }
 }
+
+impl App {
+    /// Floating panels over the windows: centred (then moved), framed, the title on the frame.
+    /// The layer with the keyboard stands out; one without it stays in view, dimmed.
+    pub(crate) fn draw_float_panels(&mut self, f: &mut Frame, body: Rect) {
+        for p in self.engine.panels().into_iter().filter(|p| p.side == "float") {
+            let pct = |n: u16, of: u16| ((of as u32 * n.min(100) as u32) / 100) as u16;
+            let w = pct(p.width.max(20), body.width).max(20).min(body.width);
+            let h = pct(if p.height == 0 { 70 } else { p.height }, body.height).max(5).min(body.height);
+            let x = (((body.width - w) / 2) as i32 + p.dx as i32).clamp(0, (body.width - w) as i32) as u16;
+            let y = (((body.height - h) / 2) as i32 + p.dy as i32).clamp(0, (body.height - h) as i32) as u16;
+            let outer = Rect { x: body.x + x, y: body.y + y, width: w, height: h };
+            f.render_widget(Clear, outer);
+            let title = if p.focused { format!(" {} ", p.title) } else { format!(" {} · SPC w Tab: up ", p.title) };
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(hl(if p.focused { "FloatBorder" } else { "FloatBorderDim" }))
+                .title(Span::styled(title, hl(if p.focused { "Title" } else { "TitleNC" })));
+            let inner = block.inner(outer);
+            f.render_widget(block, outer);
+            // the lines as a side panel draws them, without its own title row
+            let untitled = PanelView { title: String::new(), ..p.clone() };
+            self.draw_panel(f, inner, &untitled);
+            self.panel_rects.insert(0, (p.id.clone(), inner));
+        }
+    }
+
+    /// `SPC w Tab`: the keyboard up to the floating panel, or down to the windows below it.
+    pub(crate) fn layer_toggle(&mut self) {
+        let floats: Vec<PanelView> = self.engine.panels().into_iter().filter(|p| p.side == "float").collect();
+        if floats.is_empty() {
+            return self.say("no floating panel (zett.panel.open{ side = \"float\" })");
+        }
+        match floats.iter().find(|p| p.focused) {
+            Some(_) => self.engine.focus_panel(None),
+            None => self.engine.focus_panel(Some(&floats[floats.len() - 1].id)),
+        }
+    }
+}
+
+/// The config's files: init.lua and every plugin's init.lua (and its lua/ folder's files).
+fn config_files() -> Vec<std::path::PathBuf> {
+    let dir = zett_script::config_dir();
+    let mut v = vec![dir.join("init.lua")];
+    let mut stack = vec![dir.join("lua"), dir.join("plugins")];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "lua") {
+                v.push(p);
+            }
+        }
+    }
+    v.sort();
+    v
+}
+
+impl App {
+    /// The config changed on disk (saved here or anywhere): it is loaded again, as a
+    /// running Neovim never does on its own.
+    pub(crate) fn watch_config(&mut self) {
+        if self.config_at.elapsed() < Duration::from_secs(2) {
+            return;
+        }
+        self.config_at = Instant::now();
+        let files = config_files();
+        let stamp: Vec<Option<std::time::SystemTime>> = files.iter().map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok()).collect();
+        if self.config_stamp.is_empty() {
+            self.config_stamp = stamp;
+            return;
+        }
+        if stamp != self.config_stamp {
+            self.config_stamp = stamp;
+            self.effects(vec![Effect::Ui("reload".into(), String::new())]);
+        }
+    }
+}

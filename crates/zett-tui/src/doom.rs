@@ -484,6 +484,7 @@ impl App {
             "dashboard" => self.dash = true,
             "split" => self.split(arg == "right"),
             "focusWin" => self.focus_dir(arg),
+            "layer" => self.layer_toggle(),
             "closeWin" => {
                 if !self.close_win() {
                     self.say("the last window: SPC q q quits");

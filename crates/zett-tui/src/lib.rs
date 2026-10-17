@@ -327,6 +327,9 @@ struct App {
     vis_range: Option<(usize, usize)>,
     last_sub: Option<(String, String, String)>,
     history: Vec<String>,
+    /// the config files' times, looked at every two seconds (a change reloads the config)
+    config_stamp: Vec<Option<std::time::SystemTime>>,
+    config_at: Instant,
     lsp: zett_lsp::Servers,
     lsp_status: String,
     comp: Option<lsp::Comp>,
@@ -423,6 +426,8 @@ impl App {
             vis_range: None,
             last_sub: None,
             history: Vec::new(),
+            config_stamp: Vec::new(),
+            config_at: Instant::now(),
             lsp: zett_lsp::Servers::new(),
             lsp_status: String::new(),
             comp: None,
@@ -465,6 +470,7 @@ impl App {
         while !self.quit {
             self.lsp_tick();
             self.watch_buffer();
+            self.watch_config();
             if self.engine.next_timer().is_some_and(|t| t <= Instant::now()) {
                 let fx = self.with_lua(|e| e.run_timers());
                 self.after_lua(fx);
@@ -687,6 +693,7 @@ impl App {
                         e.load_config(&zett_script::config_dir());
                         let n = e.plugins.len();
                         self.engine = e;
+                        hl::reset();
                         self.say(format!("config reloaded ({n} plugins)"));
                     }
                     "openConfig" => {
@@ -1090,6 +1097,7 @@ impl App {
             }
             self.draw_modeline(f, line, di, focused);
         }
+        self.draw_float_panels(f, body);
         self.draw_floats(f, body);
         self.draw_cmd(f, cmd);
         self.draw_suggestions(f, cmd);

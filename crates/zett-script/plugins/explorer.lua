@@ -182,7 +182,7 @@ function M.render()
       if M.clip and M.clip.path == e.path then pieces[#pieces + 1] = { M.clip.op == "cut" and " (cut)" or " (copied)", "Accent" } end
       if g and not e.dir then
         local mark = c.git_symbols[g] or "?"
-        if c.git_align == "right" then
+        if c.git_align == "right" and c.side ~= "float" then
           local used = 1
           for _, p in ipairs(pieces) do used = used + width(p[1]) end
           pieces[#pieces + 1] = { string.rep(" ", math.max(1, c.width - used - width(mark) - 1)) .. mark, gg }
