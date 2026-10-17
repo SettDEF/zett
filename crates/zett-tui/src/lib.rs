@@ -508,6 +508,9 @@ impl App {
             if tok.is_empty() {
                 return;
             }
+            if tok == "<CR>" && self.keyseq.is_empty() && self.follow_help() {
+                return;
+            }
             if tok == "<Esc>" && !self.keyseq.is_empty() {
                 self.keyseq.clear();
                 self.menu.clear();

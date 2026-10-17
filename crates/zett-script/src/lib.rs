@@ -357,6 +357,24 @@ impl Engine {
         self.st.borrow().commands.iter().map(|(n, c)| (n.clone(), c.desc.clone(), c.source.clone())).collect()
     }
 
+    /// The keys of each command in a mode, shown as typed (`SPC f f`, `gd`).
+    pub fn keys_of(&self, mode: &str) -> std::collections::HashMap<String, Vec<String>> {
+        let st = self.st.borrow();
+        let mut out: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        for m in st.maps.get(mode).map(|v| v.as_slice()).unwrap_or_default() {
+            if let Action::Command(c) = &m.action {
+                let shown: Vec<String> = m.keys.iter().map(|k| if k == "<leader>" || k == "<Space>" || k == " " { "SPC".to_string() } else { k.clone() }).collect();
+                // Doom's way: `SPC c c` spaced, Vim's sequences as typed (`gcc`, `]e`, `<C-w>v`)
+                let text = if shown.first().map(String::as_str) == Some("SPC") { shown.join(" ") } else { shown.concat() };
+                out.entry(c.clone()).or_default().push(text);
+            }
+        }
+        for v in out.values_mut() {
+            v.sort_by_key(|k| (k.len(), k.clone()));
+        }
+        out
+    }
+
     /// Every mapping of a mode as (keys as typed, description), for `SPC h b`.
     pub fn bindings(&self, mode: &str) -> Vec<(String, String)> {
         let st = self.st.borrow();

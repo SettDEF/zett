@@ -177,16 +177,57 @@ const DASH: &[(&str, &str, &str, &str)] = &[
 impl App {
     /// `:help TOPIC`: the topic in a buffer of its own (Markdown, read like any other).
     pub(crate) fn open_help(&mut self, topic: &str) {
-        let Some((name, text)) = zett_script::docs::get(topic) else {
-            return self.say(format!("no help for \"{topic}\": SPC h d lists the topics"));
+        let t = topic.trim();
+        let (name, text): (&str, String) = if t.len() >= 3 && "commands".starts_with(t) {
+            ("commands", zett_script::docs::commands_topic(&self.engine))
+        } else {
+            match zett_script::docs::get(t) {
+                Some((n, text)) => (n, text.to_string()),
+                None => return self.say(format!("no help for \"{topic}\": SPC h d lists the topics")),
+            }
         };
         let title = format!("help: {name}");
         if let Some(i) = self.docs.iter().position(|d| d.name == title) {
             return self.show_doc(i);
         }
-        self.docs.push(Doc::new(Editor::from_str(text), title, "Markdown".into()));
+        self.docs.push(Doc::new(Editor::from_str(&text), title, "Markdown".into()));
         let i = self.docs.len() - 1;
         self.show_doc(i);
+    }
+
+    /// Enter in a help buffer: a topic name opens it, a command name its entry in `commands`.
+    pub(crate) fn follow_help(&mut self) -> bool {
+        let d = &self.docs[self.cur];
+        if !d.name.starts_with("help: ") {
+            return false;
+        }
+        let c = d.ed.cursor();
+        let line: Vec<char> = d.ed.buf.line(c.line).chars().collect();
+        let word_char = |ch: char| ch.is_alphanumeric() || ch == '-' || ch == '_';
+        let (mut a, mut b) = (c.col.min(line.len()), c.col.min(line.len()));
+        while a > 0 && word_char(line[a - 1]) {
+            a -= 1;
+        }
+        while b < line.len() && word_char(line[b]) {
+            b += 1;
+        }
+        let w: String = line[a..b].iter().collect();
+        if w.is_empty() {
+            return false;
+        }
+        if w == "commands" || zett_script::docs::TOPICS.iter().any(|(n, _, _)| *n == w) {
+            self.open_help(&w);
+            return true;
+        }
+        if self.engine.commands().iter().any(|(n, _, _)| *n == w) {
+            self.open_help("commands");
+            let at = (0..self.docs[self.cur].ed.buf.len_lines()).find(|&l| self.docs[self.cur].ed.buf.line(l).starts_with(&format!("- `{w}`")));
+            if let Some(l) = at {
+                self.goto_line(l + 1);
+            }
+            return true;
+        }
+        false
     }
 
     // ── windows ──
@@ -484,7 +525,8 @@ impl App {
             }
             "comment" => self.comment(),
             "docs" => {
-                let rows = zett_script::docs::TOPICS.iter().map(|(n, about, _)| format!("{n:<10} {about}")).collect();
+                let mut rows: Vec<String> = zett_script::docs::TOPICS.iter().map(|(n, about, _)| format!("{n:<10} {about}")).collect();
+                rows.push(format!("{:<10} every command and its keys", "commands"));
                 self.pick_list(Pick::Docs, "Documentation", rows);
             }
             "definition" => self.lsp_definition(),

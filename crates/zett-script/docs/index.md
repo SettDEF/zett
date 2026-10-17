@@ -11,6 +11,7 @@ An editor you live in: Vim's editing, Emacs's programmability, Doom's keys.
 - `config`    init.lua: options, keys, commands, hooks, plugins
 - `terminal`  zett with zeit and zash: terminals, compiling, web pages
 - `cli`       zett on the command line and in scripts
+- `commands`  every command and its keys (made from your config)
 
-Open one: `:help TOPIC` in the editor, `SPC h d` for the list, or
+Open one: `:help TOPIC` in the editor (Enter on a name here opens it), `SPC h d` for the list, or
 `zett doc TOPIC` in a shell.

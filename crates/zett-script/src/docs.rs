@@ -31,3 +31,17 @@ mod tests {
         }
     }
 }
+
+/// The `commands` topic, made from the running config (plugins and init.lua included).
+pub fn commands_topic(e: &crate::Engine) -> String {
+    let keys = e.keys_of("n");
+    let mut cmds = e.commands();
+    cmds.sort();
+    let mut out = String::from("# Commands\n\nEvery command, with its keys. Run any by name: `SPC :` or `:NAME`.\n\n");
+    for (name, desc, source) in cmds {
+        let k = keys.get(&name).map(|v| v.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+        let from = if source == "zett" { String::new() } else { format!("  ({source})") };
+        out.push_str(&format!("- `{name}`  {desc}{}{from}\n", if k.is_empty() { String::new() } else { format!("  {k}") }));
+    }
+    out
+}

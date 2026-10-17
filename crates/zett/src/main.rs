@@ -165,6 +165,13 @@ fn main() {
         return;
     }
     if let Cmd::Doc { topic } = &cmd {
+        if topic.as_deref().is_some_and(|t| t.len() >= 3 && "commands".starts_with(t)) {
+            let mut e = zett_script::Engine::new(None);
+            e.set_frontend("editor");
+            e.load_config(&zett_script::config_dir());
+            print!("{}", zett_script::docs::commands_topic(&e));
+            return;
+        }
         return doc(topic.as_deref().unwrap_or(""));
     }
     let mut f = Folder::open(&dir).unwrap_or_else(|e| fail(&format!("{}: {e}", dir.display()), 1));
