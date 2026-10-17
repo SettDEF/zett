@@ -51,6 +51,18 @@ impl WTree {
         }
     }
 
+    /// As split, with the new window first (left of or above the old one).
+    fn split_before(&mut self, at: usize, new: usize, side: bool) {
+        match self {
+            WTree::Leaf(i) if *i == at => *self = WTree::Split(side, Box::new(WTree::Leaf(new)), Box::new(WTree::Leaf(at))),
+            WTree::Leaf(_) => {}
+            WTree::Split(_, a, b) => {
+                a.split_before(at, new, side);
+                b.split_before(at, new, side);
+            }
+        }
+    }
+
     fn remove(self, id: usize) -> Option<WTree> {
         match self {
             WTree::Leaf(i) if i == id => None,
@@ -245,6 +257,73 @@ impl App {
         self.tree = WTree::Leaf(self.focus);
     }
 
+    /// The window beside the focused one (left, right, up, down), nearest centre first.
+    fn neighbour(&self, dir: &str) -> Option<usize> {
+        let &(_, r) = self.win_rects.iter().find(|(i, _)| *i == self.focus)?;
+        let (cx, cy) = (r.x as i32 + r.width as i32 / 2, r.y as i32 + r.height as i32 / 2);
+        self.win_rects
+            .iter()
+            .filter(|(i, o)| {
+                *i != self.focus
+                    && match dir {
+                        "left" => o.right() <= r.x + 1,
+                        "right" => o.x + 1 >= r.right(),
+                        "up" => o.bottom() <= r.y + 1,
+                        _ => o.y + 1 >= r.bottom(),
+                    }
+            })
+            .min_by_key(|(_, o)| (o.x as i32 + o.width as i32 / 2 - cx).abs() + (o.y as i32 + o.height as i32 / 2 - cy).abs())
+            .map(|(i, _)| *i)
+    }
+
+    /// The buffer goes to the window on that side (a new one there when there is none); this
+    /// window shows the buffer before, or closes when it would only show the same again.
+    pub(crate) fn move_to_win(&mut self, dir: &str) {
+        let (src, doc) = (self.focus, self.cur);
+        if let Some(w) = self.wins[src].as_mut() {
+            w.doc = doc;
+        }
+        let other = self.last_doc.filter(|l| *l != doc && *l < self.docs.len()).or_else(|| (0..self.docs.len()).find(|i| *i != doc));
+        let target = match self.neighbour(dir) {
+            Some(t) => t,
+            None => {
+                if other.is_none() {
+                    return self.say("one buffer: nothing to move (SPC w v splits)");
+                }
+                let w = self.wins[src].clone().unwrap_or_default();
+                self.wins.push(Some(w));
+                let new = self.wins.len() - 1;
+                let side = dir == "left" || dir == "right";
+                if dir == "left" || dir == "up" { self.tree.split_before(src, new, side) } else { self.tree.split(src, new, side) }
+                new
+            }
+        };
+        if let Some(w) = self.wins[target].as_mut() {
+            if w.doc != doc {
+                w.doc = doc;
+                w.top = 0;
+                w.left = 0;
+            }
+        }
+        match other {
+            Some(o) => {
+                if let Some(w) = self.wins[src].as_mut() {
+                    w.doc = o;
+                    w.top = 0;
+                    w.left = 0;
+                }
+                self.focus_win(target);
+            }
+            None => {
+                self.focus_win(target);
+                let keep = self.focus;
+                self.focus = src;
+                self.close_win();
+                self.focus_win(keep);
+            }
+        }
+    }
+
     fn focus_dir(&mut self, dir: &str) {
         // from a panel: back to the windows (towards them), else stay
         if let Some(id) = self.engine.focused_panel() {
@@ -259,23 +338,7 @@ impl App {
             let i = ids.iter().position(|x| *x == self.focus).unwrap_or(0);
             return self.focus_win(ids[(i + 1) % ids.len()]);
         }
-        let Some(&(_, r)) = self.win_rects.iter().find(|(i, _)| *i == self.focus) else { return };
-        let (cx, cy) = (r.x as i32 + r.width as i32 / 2, r.y as i32 + r.height as i32 / 2);
-        let best = self
-            .win_rects
-            .iter()
-            .filter(|(i, o)| {
-                *i != self.focus
-                    && match dir {
-                        "left" => o.right() <= r.x + 1,
-                        "right" => o.x + 1 >= r.right(),
-                        "up" => o.bottom() <= r.y + 1,
-                        _ => o.y + 1 >= r.bottom(),
-                    }
-            })
-            .min_by_key(|(_, o)| (o.x as i32 + o.width as i32 / 2 - cx).abs() + (o.y as i32 + o.height as i32 / 2 - cy).abs())
-            .map(|(i, _)| *i);
-        match best {
+        match self.neighbour(dir) {
             Some(i) => self.focus_win(i),
             None => {
                 self.focus_panel_at(dir);
@@ -526,6 +589,7 @@ impl App {
             "dashboard" => self.dash = true,
             "split" => self.split(arg == "right"),
             "focusWin" => self.focus_dir(arg),
+            "moveToWin" => self.move_to_win(arg),
             "layer" => self.layer_toggle(),
             "closeWin" => {
                 if !self.close_win() {
