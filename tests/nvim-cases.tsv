@@ -1,0 +1,95 @@
+hello world	x
+hello world	wx
+hello world	dw
+hello world	cwbye<Esc>
+hello world	de
+hello world	$x
+hello world	0D
+one two three	2dw
+one two three	wC!<Esc>
+abc\ndef\nghi	jdd
+abc\ndef\nghi	Gdd
+abc\ndef\nghi	dj
+abc\ndef\nghi	yyp
+abc\ndef\nghi	yyjP
+abc\ndef\nghi	J
+abc\ndef\nghi	3J
+abc	ofoo<Esc>
+abc	Ofoo<Esc>
+abc	Ax<Esc>
+  abc	Ix<Esc>
+abc def	rX
+abc def	3rX
+abc\ndef	jkl
+a long line\nab	$jk
+abc	xu
+abc	xxu<C-r>
+hello world	wcw<Esc>
+one two	ywP
+one two	yeP
+hello world	wv$d
+hello world	vd
+hello world	vlld
+hello world	wvey$p
+hello world	vey
+hello world	wvbd
+hello world	vlo
+hello world	vllohd
+hello world	v~
+hello world	veU
+HELLO world	veu
+hello world	vlrx
+abc\ndef\nghi	Vd
+abc\ndef\nghi	Vjd
+abc\ndef\nghi	jVkd
+abc\ndef\nghi	Vjy
+abc\ndef\nghi	VjyGp
+abc\ndef\nghi	VJ
+abc\ndef\nghi	vjd
+abc\ndef\nghi	vjc!<Esc>
+abc\ndef\nghi	Vc!<Esc>
+hello world	ywwvep
+hello big world	wdiw
+hello big world	wdaw
+hello big world	wciwX<Esc>
+hello big world	$daw
+hello   world	ellldaw
+foo.bar baz	ldiw
+foo.bar baz	ldiW
+foo.bar baz	ldaW
+say "hi there" ok	fhdi"
+say "hi there" ok	di"
+say "hi there" ok	da"
+say 'a' and 'b'	di'
+say "hi there" ok	fhci"x<Esc>
+f(a, (b, c), d)	fbdi(
+f(a, (b, c), d)	fbda(
+f(a, (b, c), d)	fbdib
+f(a, (b, c), d)	fadi)
+x[1, 2]	ldi[
+if (x) { y }	fydi{
+if (x) { y }	fyda{
+a <b> c	fbdi<
+fn f() {\n    body\n}	jdi{
+fn f() {\n    body\n}	jda{
+p1\np1b\n\np2	dap
+p1\np1b\n\np2	dip
+p1\np1b\n\np2	Gdap
+hello big world	wviwd
+hello big world	wvawd
+say "hi there" ok	fhvi"d
+f(a, (b, c), d)	fbvi(d
+fn f() {\n    body\n}	jvi{d
+p1\np1b\n\np2	vipd
+a.b.c.d	f.x
+a.b.c.d	2f.x
+a.b.c.d	f.;x
+a.b.c.d	$F.x
+a.b.c.d	$F.,x
+a.b.c.d	t.x
+a.b.c.d	dt.
+a.b.c.d	df.
+a.b.c.d	$dF.
+a.b.c.d	$dT.
+a.b.c.d	ct.X<Esc>
+a.b.c.d	fzx

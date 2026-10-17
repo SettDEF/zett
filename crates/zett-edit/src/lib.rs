@@ -5,8 +5,10 @@
 //!
 //! M0 covers the core grammar: counts, `h j k l w b e 0 ^ $ gg G`, operators
 //! `d c y` with those motions (and doubled for lines), `x X D C r p P J`,
-//! insert entries `i a I A o O`, undo and redo. Visual mode, text objects,
-//! registers by name, dot-repeat, macros and search come in M1.
+//! insert entries `i a I A o O`, undo and redo; visual `v` `V` with operators, case,
+//! replace and put; text objects (words, quotes, brackets, paragraphs); `f t F T ; ,`.
+//! Every case in tests/nvim-cases.tsv behaves exactly as in Neovim. Still to come:
+//! registers by name, dot-repeat, macros and search.
 
 pub mod keys;
 pub use keys::{Code, Key};
@@ -17,6 +19,10 @@ use zett_core::{Buffer, Pos};
 pub enum Mode {
     Normal,
     Insert,
+    /// `v`: characters from the anchor to the cursor (both included)
+    Visual,
+    /// `V`: whole lines from the anchor's to the cursor's
+    VisualLine,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,6 +78,10 @@ pub struct Editor {
     redo: Vec<Change>,
     /// the change being recorded, closed by the next one or by `u`
     open: Option<Change>,
+    /// visual mode: where the selection started
+    anchor: usize,
+    /// the last f F t T and its character, for ; and ,
+    last_find: Option<(char, char)>,
 }
 
 fn class(c: char) -> u8 {
@@ -84,6 +94,8 @@ impl Editor {
             buf,
             cursor: 0,
             mode: Mode::Normal,
+            anchor: 0,
+            last_find: None,
             want_col: 0,
             count: None,
             op: None,
@@ -126,6 +138,7 @@ impl Editor {
         match self.mode {
             Mode::Insert => self.insert_key(k),
             Mode::Normal => self.normal_key(k),
+            Mode::Visual | Mode::VisualLine => self.visual_key(k),
         }
     }
 
@@ -145,7 +158,9 @@ impl Editor {
     fn clamp(&mut self) {
         let line = self.cur_line().min(self.buf.len_lines() - 1);
         let (s, len) = (self.line_start(line), self.buf.line_len(line));
-        let max = if self.mode == Mode::Normal && len > 0 { s + len - 1 } else { s + len };
+        // normal and visual stay on a character; visual after `$` may sit on the line break
+        let on_char = self.mode == Mode::Normal || (matches!(self.mode, Mode::Visual | Mode::VisualLine) && self.want_col != usize::MAX);
+        let max = if on_char && len > 0 { s + len - 1 } else { s + len };
         self.cursor = self.cursor.clamp(s, max);
     }
     fn char(&self, i: usize) -> Option<char> {
@@ -268,7 +283,13 @@ impl Editor {
                     let line = self.count.take().map(|n| n.saturating_sub(1)).unwrap_or(0);
                     return self.motion(Span::Lines(self.cur_line(), line.min(self.buf.len_lines() - 1)), Some(self.first_non_blank(line.min(self.buf.len_lines() - 1))));
                 }
+                ('r', ch) if matches!(self.mode, Mode::Visual | Mode::VisualLine) => return self.visual_replace(ch),
                 ('r', ch) => return self.replace_chars(ch),
+                ('i' | 'a', obj) => return self.text_object_key(p == 'i', obj),
+                ('f' | 'F' | 't' | 'T', ch) => {
+                    self.last_find = Some((p, ch));
+                    return self.find(p, ch);
+                }
                 _ => return,
             }
         }
@@ -358,7 +379,17 @@ impl Editor {
                 let to = self.count.take().map(|n| n.saturating_sub(1).min(last)).unwrap_or(last);
                 self.motion(Span::Lines(line, to), Some(self.first_non_blank(to)));
             }
-            'g' | 'r' => self.prefix = Some(c),
+            'g' | 'r' | 'f' | 'F' | 't' | 'T' => self.prefix = Some(c),
+            ';' | ',' => {
+                if let Some((k, ch)) = self.last_find {
+                    // , goes the other way
+                    let k = if c == ',' { match k { 'f' => 'F', 'F' => 'f', 't' => 'T', _ => 't' } } else { k };
+                    self.find(k, ch);
+                } else {
+                    self.count = None;
+                    self.op = None;
+                }
+            }
 
             // operators: `dd` `cc` `yy` act on lines
             'd' | 'c' | 'y' => {
@@ -381,6 +412,10 @@ impl Editor {
             'J' => { let n = self.take_count().max(2) - 1; self.join(n); }
 
             // into insert mode
+            // with an operator pending, i and a start a text object (`diw`, `ca"`)
+            'i' | 'a' if self.op.is_some() => self.prefix = Some(c),
+            'v' => { self.anchor = self.cursor; self.mode = Mode::Visual; self.count = None; }
+            'V' => { self.anchor = self.cursor; self.mode = Mode::VisualLine; self.count = None; }
             'i' => self.start_insert(self.cursor),
             'a' => { let at = (self.cursor + 1).min(self.line_end(line)); self.start_insert(at) }
             'I' => self.start_insert(self.first_non_blank(line)),
@@ -391,6 +426,440 @@ impl Editor {
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
             _ => { self.count = None; self.op = None; }
         }
+    }
+
+    // ── visual mode ──
+
+    /// The selection as a span: characters from the anchor to the cursor (both
+    /// included), or whole lines in `V`.
+    fn selection(&self) -> Span {
+        if self.mode == Mode::VisualLine {
+            return Span::Lines(self.buf.to_pos(self.anchor).line, self.cur_line());
+        }
+        let (a, b) = (self.anchor.min(self.cursor), self.anchor.max(self.cursor));
+        Span::Chars(a, (b + 1).min(self.buf.len_chars()))
+    }
+
+    /// The selected characters (start, end exclusive), for drawing; None outside visual mode.
+    pub fn selection_range(&self) -> Option<(usize, usize)> {
+        match self.mode {
+            Mode::Visual | Mode::VisualLine => Some(match self.selection() {
+                Span::Chars(a, b) => (a, b),
+                Span::Lines(l1, l2) => {
+                    let (l1, l2) = (l1.min(l2), l1.max(l2));
+                    (self.line_start(l1), self.line_end(l2))
+                }
+            }),
+            _ => None,
+        }
+    }
+
+    fn leave_visual(&mut self) {
+        self.mode = Mode::Normal;
+        self.want_col = self.want_col.min(usize::MAX - 1);
+        self.clamp();
+    }
+
+    /// An operator on the selection (`d`, `c`, `y`); `lines` forces whole lines (`D`, `Y`, `X`, `S`).
+    fn visual_op(&mut self, op: Op, lines: bool) {
+        let span = match self.selection() {
+            Span::Chars(a, b) if lines => Span::Lines(self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line),
+            s => s,
+        };
+        let start = match span {
+            Span::Chars(a, _) => a,
+            Span::Lines(l1, l2) => self.line_start(l1.min(l2)),
+        };
+        self.mode = Mode::Normal;
+        self.want_col = 0;
+        if op == Op::Yank {
+            // the cursor goes to the start of what was yanked
+            self.apply(op, span);
+            self.cursor = match span {
+                Span::Chars(a, _) => a,
+                Span::Lines(l1, l2) => self.line_start(l1.min(l2)) + self.buf.to_pos(self.anchor.min(self.cursor)).col.min(0),
+            };
+            if let Span::Lines(..) = span {
+                self.cursor = start.max(self.cursor.min(start));
+            }
+            self.clamp();
+            self.want_col = self.cursor().col;
+            return;
+        }
+        self.apply(op, span);
+    }
+
+    fn visual_key(&mut self, k: Key) {
+        if k.code == Code::Esc {
+            self.count = None;
+            self.prefix = None;
+            return self.leave_visual();
+        }
+        if k.ctrl || self.prefix.is_some() {
+            return self.normal_key(k);
+        }
+        let Some(c) = k.char() else { return self.normal_key(k) };
+        if c.is_ascii_digit() && (c != '0' || self.count.is_some()) {
+            return self.normal_key(k);
+        }
+        let line = self.cur_line();
+        match c {
+            'v' | 'V' => {
+                let want = if c == 'v' { Mode::Visual } else { Mode::VisualLine };
+                if self.mode == want { self.leave_visual() } else { self.mode = want }
+            }
+            'o' | 'O' => std::mem::swap(&mut self.anchor, &mut self.cursor),
+            'i' | 'a' => self.prefix = Some(c),
+            'd' | 'x' => self.visual_op(Op::Delete, false),
+            'X' | 'D' => self.visual_op(Op::Delete, true),
+            'c' | 's' => self.visual_op(Op::Change, false),
+            'C' | 'S' | 'R' => self.visual_op(Op::Change, true),
+            'y' => self.visual_op(Op::Yank, false),
+            'Y' => self.visual_op(Op::Yank, true),
+            'J' => {
+                let (l1, l2) = match self.selection() {
+                    Span::Lines(a, b) => (a.min(b), a.max(b)),
+                    Span::Chars(a, b) => (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line),
+                };
+                self.mode = Mode::Normal;
+                self.cursor = self.line_start(l1);
+                self.join((l2 - l1).max(1));
+            }
+            '~' | 'u' | 'U' => self.visual_case(c),
+            'p' | 'P' => self.visual_put(),
+            'I' | 'A' => {
+                let (a, b) = self.selection_range().unwrap_or((self.cursor, self.cursor));
+                self.mode = Mode::Normal;
+                self.start_insert(if c == 'I' { a } else { b });
+            }
+            '$' => {
+                // past the last character: the line break is selected too
+                let n = self.take_count();
+                let target = (line + n - 1).min(self.buf.len_lines() - 1);
+                self.cursor = self.line_end(target);
+                self.want_col = usize::MAX;
+            }
+            _ => self.normal_key(k),
+        }
+    }
+
+    fn visual_case(&mut self, how: char) {
+        let (a, b) = self.selection_range().unwrap_or((self.cursor, self.cursor));
+        let text = self.buf.slice(a, b);
+        let changed: String = match how {
+            'u' => text.to_lowercase(),
+            'U' => text.to_uppercase(),
+            _ => text.chars().map(|ch| if ch.is_uppercase() { ch.to_lowercase().next().unwrap_or(ch) } else { ch.to_uppercase().next().unwrap_or(ch) }).collect(),
+        };
+        self.mode = Mode::Normal;
+        if changed != text {
+            self.begin();
+            self.rem(a, b);
+            self.ins(a, &changed);
+        }
+        self.cursor = a;
+        self.clamp();
+        self.want_col = self.cursor().col;
+    }
+
+    fn visual_replace(&mut self, ch: char) {
+        let (a, b) = self.selection_range().unwrap_or((self.cursor, self.cursor));
+        let text = self.buf.slice(a, b);
+        let changed: String = text.chars().map(|c| if c == '\n' { c } else { ch }).collect();
+        self.mode = Mode::Normal;
+        self.begin();
+        self.rem(a, b);
+        self.ins(a, &changed);
+        self.cursor = a;
+        self.clamp();
+    }
+
+    /// `p` on a selection: the register replaces it, and what was selected goes to the register.
+    fn visual_put(&mut self) {
+        let saved = self.reg.clone();
+        if self.mode == Mode::VisualLine {
+            let Span::Lines(l1, l2) = self.selection() else { return };
+            let (l1, l2) = (l1.min(l2), l1.max(l2));
+            let at_end = l2 + 1 >= self.buf.len_lines();
+            self.visual_op(Op::Delete, true);
+            let removed = std::mem::replace(&mut self.reg, Register { text: saved.text.clone(), linewise: true });
+            if !self.reg.text.ends_with('\n') {
+                self.reg.text.push('\n');
+            }
+            // the lines go where the selection was: after the line above when it was the end
+            self.close();
+            if at_end && l1 > 0 {
+                self.cursor = self.line_start(self.buf.len_lines() - 1);
+                self.put(true, 1);
+            } else {
+                self.put(false, 1);
+            }
+            self.reg = removed;
+            return;
+        }
+        let Span::Chars(a, b) = self.selection() else { return };
+        self.mode = Mode::Normal;
+        self.begin();
+        let removed = self.rem(a, b);
+        if saved.linewise {
+            // whole lines into the middle of a line: they go on lines of their own
+            let text = format!("\n{}\n", saved.text.trim_end_matches('\n'));
+            self.ins(a, &text);
+            self.cursor = a + 1;
+        } else {
+            self.ins(a, &saved.text);
+            self.cursor = a + saved.text.chars().count().saturating_sub(1);
+        }
+        self.reg = Register { text: removed, linewise: false };
+        self.clamp();
+        self.want_col = self.cursor().col;
+    }
+
+    /// f F t T: to (or up to) the next or previous `ch` on the line, count times.
+    fn find(&mut self, kind: char, ch: char) {
+        let n = self.take_count();
+        let line = self.cur_line();
+        let (ls, le) = (self.line_start(line), self.line_end(line));
+        let forward = kind == 'f' || kind == 't';
+        let till = kind == 't' || kind == 'T';
+        let mut i = self.cursor;
+        let mut found = None;
+        let mut left = n;
+        loop {
+            // t/T start one further, so repeating them moves on
+            let next = if forward { i + 1 } else { i.wrapping_sub(1) };
+            if (forward && next >= le) || (!forward && (i == 0 || next < ls)) {
+                break;
+            }
+            i = next;
+            if self.char(i) == Some(ch) {
+                left -= 1;
+                if left == 0 {
+                    found = Some(i);
+                    break;
+                }
+            }
+        }
+        let Some(p) = found else {
+            self.op = None;
+            self.op_count = None;
+            return;
+        };
+        let to = match (forward, till) {
+            (true, true) => p - 1,
+            (false, true) => p + 1,
+            _ => p,
+        };
+        if forward {
+            // f and t include the character they land on
+            self.motion(Span::Chars(self.cursor, to + 1), Some(to));
+        } else {
+            self.motion(Span::Chars(to, self.cursor), Some(to));
+        }
+    }
+
+    // ── text objects ──
+
+    fn text_object_key(&mut self, inner: bool, obj: char) {
+        let Some((s, e, lines)) = self.text_object(inner, obj) else {
+            self.op = None;
+            self.count = None;
+            return;
+        };
+        match self.mode {
+            Mode::Visual | Mode::VisualLine => {
+                if lines && self.mode == Mode::Visual {
+                    self.mode = Mode::VisualLine;
+                }
+                self.anchor = s;
+                self.cursor = e.saturating_sub(1).max(s);
+            }
+            _ if self.op.is_some() => {
+                let span = if lines { Span::Lines(self.buf.to_pos(s).line, self.buf.to_pos(e.saturating_sub(1).max(s)).line) } else { Span::Chars(s, e) };
+                self.motion(span, None);
+            }
+            _ => {}
+        }
+    }
+
+    /// The text object at the cursor: (start, end exclusive, whole lines?).
+    fn text_object(&self, inner: bool, obj: char) -> Option<(usize, usize, bool)> {
+        match obj {
+            'w' | 'W' => self.word_object(inner, obj == 'W'),
+            '"' | '\'' | '`' => self.quote_object(inner, obj),
+            '(' | ')' | 'b' => self.bracket_object(inner, '(', ')'),
+            '[' | ']' => self.bracket_object(inner, '[', ']'),
+            '{' | '}' | 'B' => self.bracket_object(inner, '{', '}'),
+            '<' | '>' => self.bracket_object(inner, '<', '>'),
+            'p' => self.paragraph_object(inner),
+            _ => None,
+        }
+    }
+
+    fn word_object(&self, inner: bool, big: bool) -> Option<(usize, usize, bool)> {
+        let line = self.cur_line();
+        let (ls, le) = (self.line_start(line), self.line_end(line));
+        if ls == le {
+            return None;
+        }
+        let i = self.cursor.min(le - 1);
+        let kind = |c: char| if c.is_whitespace() { 0 } else if big { 1 } else { class(c) };
+        let k = kind(self.char(i)?);
+        let (mut s, mut e) = (i, i + 1);
+        while s > ls && self.char(s - 1).is_some_and(|c| kind(c) == k) {
+            s -= 1;
+        }
+        while e < le && self.char(e).is_some_and(|c| kind(c) == k) {
+            e += 1;
+        }
+        if inner {
+            return Some((s, e, false));
+        }
+        if k == 0 {
+            // on spaces: the spaces and the word after them
+            let k2 = self.char(e).map(kind);
+            while e < le && self.char(e).is_some_and(|c| Some(kind(c)) == k2) {
+                e += 1;
+            }
+            return Some((s, e, false));
+        }
+        // a word: with the spaces after it, or (at the line end) the ones before it
+        let mut e2 = e;
+        while e2 < le && self.char(e2).is_some_and(|c| c == ' ' || c == '\t') {
+            e2 += 1;
+        }
+        if e2 > e {
+            return Some((s, e2, false));
+        }
+        let mut s2 = s;
+        while s2 > ls && self.char(s2 - 1).is_some_and(|c| c == ' ' || c == '\t') {
+            s2 -= 1;
+        }
+        Some((s2, e, false))
+    }
+
+    fn quote_object(&self, inner: bool, q: char) -> Option<(usize, usize, bool)> {
+        let line = self.cur_line();
+        let (ls, le) = (self.line_start(line), self.line_end(line));
+        let quotes: Vec<usize> = (ls..le).filter(|i| self.char(*i) == Some(q) && (*i == ls || self.char(i - 1) != Some('\\'))).collect();
+        let cur = self.cursor;
+        // the pair around the cursor, else the first pair after it (as Vim does)
+        let mut pair = None;
+        for w in quotes.chunks(2) {
+            if let [a, b] = w {
+                if cur >= *a && cur <= *b {
+                    pair = Some((*a, *b));
+                    break;
+                }
+                if pair.is_none() && *a > cur {
+                    pair = Some((*a, *b));
+                    break;
+                }
+            }
+        }
+        let (a, b) = pair?;
+        if inner {
+            return Some((a + 1, b, false));
+        }
+        // around: with the spaces after, or else the ones before
+        let mut e = b + 1;
+        while e < le && self.char(e).is_some_and(|c| c == ' ' || c == '\t') {
+            e += 1;
+        }
+        let mut s = a;
+        if e == b + 1 {
+            while s > ls && self.char(s - 1).is_some_and(|c| c == ' ' || c == '\t') {
+                s -= 1;
+            }
+        }
+        Some((s, e, false))
+    }
+
+    fn bracket_object(&self, inner: bool, open: char, close: char) -> Option<(usize, usize, bool)> {
+        let len = self.buf.len_chars();
+        // the open bracket: the one under the cursor, or the nearest unmatched one before it
+        let mut depth = 0i32;
+        let mut i = self.cursor.min(len.saturating_sub(1));
+        let start = loop {
+            let c = self.char(i)?;
+            if c == close && i != self.cursor {
+                depth += 1;
+            } else if c == open {
+                if depth == 0 {
+                    break i;
+                }
+                depth -= 1;
+            }
+            if i == 0 {
+                return None;
+            }
+            i -= 1;
+        };
+        let mut depth = 0i32;
+        let mut j = start + 1;
+        let end = loop {
+            let c = self.char(j)?;
+            if c == open {
+                depth += 1;
+            } else if c == close {
+                if depth == 0 {
+                    break j;
+                }
+                depth -= 1;
+            }
+            j += 1;
+            if j >= len {
+                return None;
+            }
+        };
+        if !inner {
+            return Some((start, end + 1, false));
+        }
+        let (mut s, mut e) = (start + 1, end);
+        // a block over several lines: the line break after the open bracket and the
+        // indent before the close one are not inside
+        if self.char(s) == Some('\n') {
+            s += 1;
+            let close_line = self.buf.to_pos(end).line;
+            let cs = self.line_start(close_line);
+            if (cs..end).all(|k| self.char(k).is_some_and(|c| c == ' ' || c == '\t')) && cs > s {
+                e = cs;
+                return Some((s, e, true));
+            }
+        }
+        Some((s, e.max(s), false))
+    }
+
+    fn paragraph_object(&self, inner: bool) -> Option<(usize, usize, bool)> {
+        let last = self.buf.len_lines() - 1;
+        let blank = |l: usize| self.buf.line(l).trim().is_empty();
+        let l = self.cur_line();
+        let kind = blank(l);
+        let (mut a, mut b) = (l, l);
+        while a > 0 && blank(a - 1) == kind {
+            a -= 1;
+        }
+        while b < last && blank(b + 1) == kind {
+            b += 1;
+        }
+        if !inner {
+            // with the blank lines after it (or before, at the end)
+            let b0 = b;
+            while b < last && blank(b + 1) != kind {
+                b += 1;
+                if !blank(b) {
+                    b -= 1;
+                    break;
+                }
+            }
+            if b == b0 {
+                while a > 0 && blank(a - 1) != kind && blank(a - 1) {
+                    a -= 1;
+                }
+            }
+        }
+        let e = if b + 1 <= last { self.line_start(b + 1) } else { self.buf.len_chars() };
+        Some((self.line_start(a), e, true))
     }
 
     fn is_word_end(&self, i: usize) -> bool {
