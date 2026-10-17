@@ -443,6 +443,7 @@ impl App {
                 app.dash = true;
             }
         }
+        app.take_opts();
         app.started_ms = started.elapsed().as_millis();
         for i in 0..app.docs.len() {
             app.lsp_open(i);
@@ -694,6 +695,7 @@ impl App {
                         let n = e.plugins.len();
                         self.engine = e;
                         hl::reset();
+                        self.take_opts();
                         self.say(format!("config reloaded ({n} plugins)"));
                     }
                     "openConfig" => {
@@ -911,6 +913,16 @@ impl App {
             "bn" | "bnext" => self.show_doc((self.cur + 1) % self.docs.len()),
             "bp" | "bprevious" => self.show_doc((self.cur + self.docs.len() - 1) % self.docs.len()),
             "bd" | "bdelete" => self.close(false),
+            "bm" | "bmove" => match arg.trim() {
+                "" => self.say("usage: :bmove +1 | -1 | N (its place in the tab line)"),
+                a => match (a.strip_prefix('+'), a.strip_prefix('-'), a.parse::<i32>()) {
+                    (Some(n), _, _) => self.move_doc(n.parse().unwrap_or(1)),
+                    (_, Some(n), _) => self.move_doc(-n.parse().unwrap_or(1)),
+                    (_, _, Ok(n)) => self.move_doc(n - 1 - self.cur as i32),
+                    _ => self.say(format!("not a place: {a}")),
+                },
+            },
+            "bo" | "bonly" | "bufonly" => self.close_others(),
             "ls" | "buffers" => {
                 let list: Vec<String> = self.docs.iter().enumerate().map(|(i, d)| format!("{}{}{}", if i == self.cur { "%" } else { " " }, d.name, if d.dirty() { " [+]" } else { "" })).collect();
                 self.say(list.join("   "));
@@ -1115,11 +1127,26 @@ impl App {
         }
     }
 
+    /// The editor settings a config can set (zett.opt.tabs = true, number, relativenumber), as :set does.
+    fn take_opts(&mut self) {
+        let on = |v: Option<String>| v.map(|v| v == "true");
+        if let Some(b) = on(self.engine.opt("tabs")) {
+            self.tabs = b;
+        }
+        if let Some(b) = on(self.engine.opt("number")) {
+            self.numbers = b;
+        }
+        if let Some(b) = on(self.engine.opt("relativenumber")) {
+            self.relative = b;
+        }
+    }
+
     fn draw_tabs(&self, f: &mut Frame, a: Rect) {
         let mut spans = Vec::new();
         for (i, d) in self.docs.iter().enumerate() {
             let name = Path::new(&d.name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(d.name.clone());
-            let label = format!(" {name}{} ", if d.dirty() { " ●" } else { "" });
+            // numbered, as Alt+1…9 and :b N count them
+            let label = format!(" {} {name}{} ", i + 1, if d.dirty() { " ●" } else { "" });
             let st = if i == self.cur { hl("TabLineSel") } else { hl("TabLine") };
             spans.push(Span::styled(label, st));
             spans.push(Span::raw(" "));

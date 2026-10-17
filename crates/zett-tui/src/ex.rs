@@ -502,6 +502,11 @@ impl App {
                 let n = self.docs.len() - 1;
                 self.show_doc(n);
             }
+            "b" | "buffer" if arg.trim() == "#" => {
+                if let Some(l) = self.last_doc.filter(|l| *l < self.docs.len()) {
+                    self.show_doc(l);
+                }
+            }
             "b" | "buffer" => {
                 let i = arg.parse::<usize>().ok().map(|n| n.saturating_sub(1)).or_else(|| self.docs.iter().position(|d| d.name.contains(arg)));
                 match i.filter(|i| *i < self.docs.len()) {

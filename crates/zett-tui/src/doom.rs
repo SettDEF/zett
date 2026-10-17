@@ -421,6 +421,40 @@ impl App {
     }
 
     /// Shows buffer `i` in the focused window, remembering the one before.
+    /// The current buffer one place left (-1) or right (+1) in the tab line; the windows keep theirs.
+    pub(crate) fn move_doc(&mut self, by: i32) {
+        let from = self.cur;
+        let to = (from as i32 + by).clamp(0, self.docs.len() as i32 - 1) as usize;
+        if to == from {
+            return;
+        }
+        let d = self.docs.remove(from);
+        self.docs.insert(to, d);
+        let remap = |k: usize| if k == from { to } else if from < to && k > from && k <= to { k - 1 } else if to < from && k >= to && k < from { k + 1 } else { k };
+        for w in self.wins.iter_mut().flatten() {
+            w.doc = remap(w.doc);
+        }
+        self.last_doc = self.last_doc.map(remap);
+        self.cur = to;
+    }
+
+    /// Every other buffer closed, but the ones with unsaved changes (they stay, and it says so).
+    pub(crate) fn close_others(&mut self) {
+        let keep = self.cur;
+        let mut kept = 0;
+        for i in (0..self.docs.len()).rev() {
+            if i == keep { continue; }
+            if self.docs[i].dirty() { kept += 1; continue; }
+            self.docs.remove(i);
+            if self.cur > i { self.cur -= 1; }
+            self.doc_removed(i);
+        }
+        self.last_doc = None;
+        if kept > 0 {
+            self.say(format!("{kept} with unsaved changes stay open"));
+        }
+    }
+
     pub(crate) fn show_doc(&mut self, i: usize) {
         if i != self.cur {
             self.last_doc = Some(self.cur);
@@ -476,6 +510,14 @@ impl App {
                     self.show_doc(l);
                 }
             }
+            "moveBufferLeft" => self.move_doc(-1),
+            "moveBufferRight" => self.move_doc(1),
+            "gotoBuffer" => {
+                if let Some(i) = arg.trim().parse::<usize>().ok().filter(|n| (1..=self.docs.len()).contains(n)) {
+                    self.show_doc(i - 1);
+                }
+            }
+            "closeOtherBuffers" => self.close_others(),
             "newBuffer" | "scratch" => {
                 self.docs.push(Doc::scratch());
                 let i = self.docs.len() - 1;
