@@ -1,0 +1,9 @@
+[package]
+name = "zett-lsp"
+description = "zett's language-server client: diagnostics, definitions, hover"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = "1"

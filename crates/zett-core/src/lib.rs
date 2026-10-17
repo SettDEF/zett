@@ -31,6 +31,8 @@ pub struct Buffer {
     text: Rope,
     path: Option<PathBuf>,
     dirty: bool,
+    /// counts every change (language servers and caches compare it)
+    rev: u64,
 }
 
 impl Buffer {
@@ -51,7 +53,7 @@ impl Buffer {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Rope::new(),
             Err(e) => return Err(e),
         };
-        Ok(Self { text, path: Some(path.to_path_buf()), dirty: false })
+        Ok(Self { text, path: Some(path.to_path_buf()), dirty: false, rev: 0 })
     }
 
     #[cfg(feature = "fs")]
@@ -91,6 +93,11 @@ impl Buffer {
     }
 
     /// Lines as the editor counts them: a trailing "\n" does not start one more.
+    /// How many changes the text has had (any edit counts one).
+    pub fn rev(&self) -> u64 {
+        self.rev
+    }
+
     pub fn len_lines(&self) -> usize {
         let n = self.text.len_lines();
         if n > 1 && self.text.line(n - 1).len_chars() == 0 { n - 1 } else { n.max(1) }
@@ -139,6 +146,7 @@ impl Buffer {
         }
         self.text.insert(idx.min(self.text.len_chars()), s);
         self.dirty = true;
+        self.rev += 1;
     }
 
     /// Removes chars `from..to` and returns them.
@@ -150,6 +158,7 @@ impl Buffer {
         let gone = self.text.slice(a..b).to_string();
         self.text.remove(a..b);
         self.dirty = true;
+        self.rev += 1;
         gone
     }
 

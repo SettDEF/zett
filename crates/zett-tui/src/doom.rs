@@ -81,6 +81,7 @@ pub(crate) enum Pick {
     Grep(PathBuf),
     Lines,
     Commands,
+    Diagnostics,
 }
 
 fn state_dir() -> PathBuf {
@@ -279,6 +280,18 @@ impl App {
                 ("Search buffer".into(), (0..d.ed.buf.len_lines()).map(|i| format!("{:>5}│ {}", i + 1, d.ed.buf.line(i).trim_end())).collect())
             }
             Pick::Commands => ("M-x".into(), self.engine.commands().into_iter().map(|(n, d, _)| format!("{n:<24} {d}")).collect()),
+            Pick::Diagnostics => {
+                let mut rows = Vec::new();
+                for d in &self.docs {
+                    let name = d.name.strip_prefix(&format!("{}/", self.root.display())).unwrap_or(&d.name).to_string();
+                    let mut ds = d.diags.clone();
+                    ds.sort_by_key(|x| (x.severity, x.line));
+                    for x in ds.iter().filter(|x| x.severity <= 2) {
+                        rows.push(format!("{name}:{}: {} {}", x.line + 1, if x.severity == 1 { "error" } else { "warning" }, x.message));
+                    }
+                }
+                ("Errors and warnings".into(), rows)
+            }
         };
         self.dash = false;
         self.picker = Some(Picker { query: String::new(), files: items, sel: 0, kind, title });
@@ -326,6 +339,14 @@ impl App {
             }
             Pick::Lines => {
                 if let Some(l) = item.split('│').next().and_then(|n| n.trim().parse::<usize>().ok()) {
+                    self.goto_line(l);
+                }
+            }
+            Pick::Diagnostics => {
+                let mut parts = item.splitn(3, ':');
+                if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.trim().parse::<usize>().ok())) {
+                    let p = if Path::new(f).is_absolute() { PathBuf::from(f) } else { self.root.join(f) };
+                    self.open(&p);
                     self.goto_line(l);
                 }
             }
@@ -436,6 +457,10 @@ impl App {
                 }
             }
             "comment" => self.comment(),
+            "definition" => self.lsp_definition(),
+            "hover" => self.lsp_hover(),
+            "diag" => self.next_diag(arg != "prev"),
+            "diagnostics" => self.pick(Pick::Diagnostics),
             "tree" => self.tree_toggle(arg == "reveal"),
             "quit" => {
                 if arg != "force" && self.docs.iter().any(|d| d.dirty()) {
@@ -567,6 +592,16 @@ impl App {
         }
         left.push(Span::styled(format!("  {}:{}", c.line + 1, c.col + 1), dim));
         let mut right: Vec<Span> = Vec::new();
+        let (errs, warns) = (d.diags.iter().filter(|x| x.severity == 1).count(), d.diags.iter().filter(|x| x.severity == 2).count());
+        if errs > 0 {
+            right.push(Span::styled(format!("\u{f00d} {errs}  "), Style::default().fg(Color::Indexed(1))));
+        }
+        if warns > 0 {
+            right.push(Span::styled(format!("\u{f071} {warns}  "), Style::default().fg(Color::Indexed(3))));
+        }
+        if d.lsp && errs + warns == 0 && focused {
+            right.push(Span::styled("\u{f00c}  ", Style::default().fg(Color::Indexed(2))));
+        }
         if let Some(b) = &self.branch {
             right.push(Span::styled(format!("\u{e725} {b}  "), if focused { Style::default().fg(Color::Indexed(5)) } else { dim }));
         }

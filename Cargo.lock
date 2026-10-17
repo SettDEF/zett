@@ -2567,6 +2567,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "zett-lsp"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "zett-script"
 version = "0.1.0"
 dependencies = [
@@ -2582,6 +2589,7 @@ dependencies = [
  "syntect",
  "zett-core",
  "zett-edit",
+ "zett-lsp",
  "zett-script",
 ]
 

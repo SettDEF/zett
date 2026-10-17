@@ -1,6 +1,7 @@
 //! zett in the terminal: the code editor, Doom-style, in the terminal's own colours.
 
 mod doom;
+mod lsp;
 use doom::{Pick, Tree, WTree, Win};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
@@ -81,6 +82,10 @@ struct Doc {
     states: Vec<(ParseState, HighlightState)>,
     /// to see what an edit touched: (lines, chars, cursor line)
     shape: (usize, usize, usize),
+    /// what its language server reported, and whether it has one
+    diags: Vec<zett_lsp::Diag>,
+    lsp: bool,
+    lsp_rev: u64,
 }
 
 impl Doc {
@@ -100,7 +105,7 @@ impl Doc {
 
     fn new(ed: Editor, name: String, syntax: String) -> Doc {
         let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
-        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape }
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0 }
     }
 
     fn dirty(&self) -> bool {
@@ -279,6 +284,10 @@ struct App {
     vis_g: bool,
     /// the project tree sidebar
     side: Tree,
+    lsp: zett_lsp::Servers,
+    lsp_status: String,
+    /// the latest edit (servers hear about it once typing pauses)
+    edit_at: Instant,
 }
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
@@ -357,6 +366,9 @@ impl App {
             started_ms: 0,
             vis_g: false,
             side: Tree::default(),
+            lsp: zett_lsp::Servers::new(),
+            lsp_status: String::new(),
+            edit_at: Instant::now(),
         };
         // a folder: the file finder; nothing: the dashboard
         if !opened_files {
@@ -367,6 +379,9 @@ impl App {
             }
         }
         app.started_ms = started.elapsed().as_millis();
+        for i in 0..app.docs.len() {
+            app.lsp_open(i);
+        }
         app
     }
 
@@ -381,6 +396,7 @@ impl App {
     fn main_loop(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
         let mut shape = None;
         while !self.quit {
+            self.lsp_tick();
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.picker.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
@@ -390,6 +406,8 @@ impl App {
             }
             // a pending key sequence ends after a moment (Neovim's timeoutlen)
             let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { Duration::from_millis(900).saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
+            // servers answer on their own time: look more often while any runs
+            let wait = if self.lsp.clients.is_empty() { wait } else { wait.min(Duration::from_millis(100)) };
             if !event::poll(wait)? {
                 if !self.keyseq.is_empty() && self.key_at.elapsed() >= Duration::from_millis(900) {
                     // keys that are exactly a mapping run now; a prefix alone keeps its menu open
@@ -521,8 +539,12 @@ impl App {
 
     fn edit_key(&mut self, k: Key) {
         let before = self.docs[self.cur].ed.cursor().line;
+        let rev = self.docs[self.cur].ed.buf.rev();
         self.doc().ed.key(k);
         self.doc().touched(before);
+        if self.docs[self.cur].ed.buf.rev() != rev {
+            self.edit_at = Instant::now();
+        }
     }
 
     fn effects(&mut self, fx: Vec<Effect>) {
@@ -587,6 +609,7 @@ impl App {
                 self.docs.push(d);
                 let i = self.docs.len() - 1;
                 self.show_doc(i);
+                self.lsp_open(i);
             }
             Err(e) => self.say(format!("{}: {e}", p.display())),
         }
@@ -757,6 +780,8 @@ impl App {
             Ok(()) => {
                 let m = format!("\"{}\" {lines} lines written", d.name);
                 self.say(m);
+                let i = self.cur;
+                self.lsp_saved(i);
             }
             Err(e) => self.say(format!("could not save: {e}")),
         }
@@ -951,9 +976,31 @@ impl App {
             }
             let num_style = if ln == c.line { Style::default().fg(Color::Indexed(3)).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::Indexed(8)) };
             let shown = if relative && ln != c.line { ln.abs_diff(c.line) } else { ln + 1 };
-            let mut spans = vec![if numbers { Span::styled(format!("{:>w$} ", shown, w = gutter as usize - 1), num_style) } else { Span::raw(" ") }];
-            // the selection on this line, in screen columns
             let line_text = d.ed.buf.line(ln);
+            // diagnostics: a sign in the gutter, the ranges underlined (in screen columns)
+            let sign = d.diags.iter().filter(|x| x.line == ln).map(|x| x.severity).min();
+            let marks: Vec<(usize, usize, u8)> = d
+                .diags
+                .iter()
+                .filter(|x| x.line <= ln && x.end_line >= ln)
+                .map(|x| {
+                    let s = if x.line == ln { screen_col(&line_text, x.col) } else { 0 };
+                    let e = if x.end_line == ln { screen_col(&line_text, x.end_col) } else { usize::MAX };
+                    (s, e.max(s + 1), x.severity)
+                })
+                .collect();
+            let mut spans = vec![if numbers {
+                let num = format!("{:>w$} ", shown, w = gutter as usize - 1);
+                match sign {
+                    Some(s) => Span::styled(format!("●{}", &num[num.char_indices().nth(1).map(|(i, _)| i).unwrap_or(num.len())..]), num_style.fg(lsp::severity_color(s))),
+                    None => Span::styled(num, num_style),
+                }
+            } else if let Some(s) = sign {
+                Span::styled("●", Style::default().fg(lsp::severity_color(s)))
+            } else {
+                Span::raw(" ")
+            }];
+            // the selection on this line, in screen columns
             let sel_cols = sel.and_then(|(s, e)| {
                 let ls = d.ed.buf.to_char(Pos { line: ln, col: 0 });
                 let le = ls + line_text.chars().count();
@@ -967,6 +1014,9 @@ impl App {
                         let mut s = st;
                         if sel_cols.is_some_and(|(a, b)| x >= a && x < b) {
                             s = s.add_modifier(Modifier::REVERSED);
+                        }
+                        if let Some(&(_, _, sev)) = marks.iter().filter(|m| x >= m.0 && x < m.1).min_by_key(|m| m.2) {
+                            s = s.add_modifier(Modifier::UNDERLINED).underline_color(lsp::severity_color(sev));
                         }
                         spans.push(Span::styled(ch.to_string(), s));
                     }
@@ -1003,6 +1053,13 @@ impl App {
         if !self.keyseq.is_empty() {
             let shown: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
             f.render_widget(Paragraph::new(shown.join(" ")).style(Style::default().fg(Color::Indexed(4))), a);
+            return;
+        }
+        // the error on this line (as Doom shows it), else what a language server is doing
+        if let Some((sev, m)) = self.line_diag() {
+            f.render_widget(Paragraph::new(m).style(Style::default().fg(lsp::severity_color(sev))), a);
+        } else if !self.lsp_status.is_empty() {
+            f.render_widget(Paragraph::new(self.lsp_status.as_str()).style(Style::default().fg(Color::Indexed(8))), a);
         }
     }
 
