@@ -2586,6 +2586,7 @@ dependencies = [
 name = "zett-tui"
 version = "0.1.0"
 dependencies = [
+ "fancy-regex",
  "ratatui",
  "syntect",
  "zett-core",

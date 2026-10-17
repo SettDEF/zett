@@ -6,6 +6,7 @@ mod panels;
 mod hl;
 use hl::hl;
 mod cmdline;
+mod ex;
 use doom::{project_of, Pick, WTree, Win};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
@@ -322,6 +323,10 @@ struct App {
     seen_rev: u64,
     /// a notify hook is running (its own messages are not sent back to it)
     notifying: bool,
+    /// the lines of the last visual selection (:'<,'>), the last :s, the messages so far
+    vis_range: Option<(usize, usize)>,
+    last_sub: Option<(String, String, String)>,
+    history: Vec<String>,
     lsp: zett_lsp::Servers,
     lsp_status: String,
     comp: Option<lsp::Comp>,
@@ -415,6 +420,9 @@ impl App {
             seen_doc: None,
             seen_rev: 0,
             notifying: false,
+            vis_range: None,
+            last_sub: None,
+            history: Vec::new(),
             lsp: zett_lsp::Servers::new(),
             lsp_status: String::new(),
             comp: None,
@@ -442,7 +450,14 @@ impl App {
     }
 
     fn say(&mut self, m: impl Into<String>) {
-        self.msg = Some((m.into(), Instant::now()));
+        let m = m.into();
+        if !m.is_empty() {
+            self.history.push(m.clone());
+            if self.history.len() > 200 {
+                self.history.remove(0);
+            }
+        }
+        self.msg = Some((m, Instant::now()));
     }
 
     fn main_loop(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -539,6 +554,18 @@ impl App {
                 self.vis_g = true;
                 return;
             }
+        }
+        // : in visual mode: the selected lines as the range ('<,'>), as Vim does
+        if matches!(mode, Mode::Visual | Mode::VisualLine) && k.code == KeyCode::Char(':') {
+            let d = &self.docs[self.cur];
+            if let Some((a, b)) = d.ed.selection_range() {
+                let (la, lb) = (d.ed.buf.to_pos(a).line, d.ed.buf.to_pos(b.saturating_sub(1).max(a)).line);
+                self.vis_range = Some((la.min(lb), la.max(lb)));
+            }
+            self.edit_key(Key::code(Code::Esc));
+            self.cmdline = Some("'<,'>".into());
+            self.cmd_sel = 0;
+            return;
         }
         // the dashboard's own keys (the SPC tree works there too)
         if self.dash && mode == Mode::Normal && self.keyseq.is_empty() && !ctrl {
@@ -679,6 +706,7 @@ impl App {
                         }
                         self.open(Path::new(path));
                     }
+                    "ex" => self.command(&arg),
                     "clipboard" => {
                         let ok = std::process::Command::new("wl-copy").arg(&arg).status().is_ok_and(|s| s.success());
                         if !ok {
@@ -805,6 +833,10 @@ impl App {
 
     /// A `:` line: Vim's file commands, then zett's commands and `lua …`.
     fn command(&mut self, l: &str) {
+        // Neovim's commands with ranges and the rest of its everyday ones
+        if self.ex(l) {
+            return;
+        }
         let (cmd, arg) = l.split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((l, ""));
         match cmd {
             "" => {}

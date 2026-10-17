@@ -24,6 +24,53 @@ pub(crate) const EX: &[(&str, &str, &str, &str)] = &[
     ("compile", "<command>", "run a build as a zeit job", "compile cargo build"),
     ("rename", "<name>", "rename the symbol (language server)", "rename parse_line"),
     ("lua", "<code>", "run Lua with the zett API", "lua zett.notify(\"hi\")"),
+    ("s", "/pattern/replacement/[g][i]", "substitute (% in front: every line)", "%s/foo/bar/g"),
+    ("g", "/pattern/[d | p | s/…/…/ | normal …]", "on every line that matches", "g/TODO/d"),
+    ("v", "/pattern/command", "on every line that does not match", "v/fn /d"),
+    ("sort", "[n] [u] [i] [!]", "sort the lines (numbers, unique, reverse)", "sort u"),
+    ("d", "", "delete the lines (range in front)", "3,5d"),
+    ("y", "", "copy the lines to the clipboard", "%y"),
+    ("m", "<line>", "move the lines after a line", "m0"),
+    ("t", "<line>", "copy the lines after a line", "t$"),
+    ("j", "[!]", "join lines", "j"),
+    (">", "", "indent the lines", "'<,'>>"),
+    ("<", "", "unindent the lines", "%<"),
+    ("normal", "<keys>", "Vim keys on each line", "%normal A;"),
+    ("!", "<command>", "run a shell command (range: filter lines)", "%!jq ."),
+    ("r", "<file> | !<command>", "insert a file or a command's output", "r !date"),
+    ("retab", "[width]", "tabs into spaces", "retab 4"),
+    ("earlier", "<n> | <n>s m h d", "back in time (undo tree)", "earlier 5m"),
+    ("later", "<n> | <n>s m h d", "forward in time", "later 1m"),
+    ("undo", "[n]", "undo, or go to undo state n", "undo 3"),
+    ("undolist", "", "the undo states", "undolist"),
+    ("messages", "", "every message so far", "messages"),
+    ("e!", "", "reload the file, dropping changes", "e!"),
+    ("enew", "", "a new empty buffer", "enew"),
+    ("new", "", "a new buffer below", "new"),
+    ("vnew", "", "a new buffer at the right", "vnew"),
+    ("saveas", "<file>", "save under a new name", "saveas copy.rs"),
+    ("update", "", "save if changed", "update"),
+    ("b", "<n | name>", "go to a buffer", "b main"),
+    ("bfirst", "", "the first buffer", "bfirst"),
+    ("blast", "", "the last buffer", "blast"),
+    ("bufdo", "<command>", "a command in every buffer", "bufdo %s/a/b/g | update"),
+    ("pwd", "", "the project folder", "pwd"),
+    ("file", "", "name, lines, changed", "file"),
+    ("echo", "<lua>", "print a Lua value", "echo 6 * 7"),
+    ("source", "[file | %]", "run a Lua file (% this one)", "so %"),
+    ("nmap", "<keys> <command | :ex<CR>>", "map keys (for this session)", "nmap <leader>w :w<CR>"),
+    ("unmap", "<keys>", "remove a mapping", "unmap <leader>w"),
+    ("command", "<Name> <ex line>", "a new : command", "command Fmt %!rustfmt"),
+    ("wincmd", "<h j k l w v s c o>", "window commands", "wincmd v"),
+    ("terminal", "", "a terminal (zeit pane)", "terminal"),
+    ("make", "", "compile", "make"),
+    ("grep", "<pattern>", "search the project", "grep TODO"),
+    ("Explore", "", "the explorer", "Explore"),
+    ("UndotreeToggle", "", "the undo tree", "UndotreeToggle"),
+    ("checkhealth", "", "what zett runs with, what is missing", "checkhealth"),
+    ("LspInfo", "", "running language servers", "LspInfo"),
+    ("version", "", "zett's version", "version"),
+    ("=", "", "the number of lines", "="),
     ("<number>", "", "go to that line", "42"),
 ];
 
@@ -40,6 +87,20 @@ pub(crate) struct Suggestion {
 impl App {
     /// Suggestions for the line as typed so far.
     pub(crate) fn suggestions(&self, line: &str) -> Vec<Suggestion> {
+        // a range in front (%, 3,5, '<,'>) stays on the line; suggestions are for what follows
+        let cur = self.docs[self.cur].ed.cursor().line;
+        let (range, after) = ex::parse_range(line, cur, usize::MAX / 2, None);
+        let prefix = &line[..line.len() - after.len()];
+        if range.is_some() {
+            return self
+                .suggestions(after)
+                .into_iter()
+                .map(|mut s| {
+                    s.fill = format!("{prefix}{}", s.fill);
+                    s
+                })
+                .collect();
+        }
         let (head, rest) = match line.split_once(' ') {
             Some((h, r)) => (h, Some(r)),
             None => (line, None),
