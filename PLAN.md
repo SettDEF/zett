@@ -266,7 +266,7 @@ Each one is usable on its own; order chosen so the data model is right first.
    performance budgets measured and met.
 2. 🟡 **M1 — editing.** Vim grammar in blocks (normal ✅ / insert ✅ /
    visual ⬜ / `:` ⬜), block-level motions (move, indent, fold, zoom into a
-   block), slash menu (written, not yet verified on screen), drag to reorder;
+   block), slash menu ✅, drag to reorder;
    undo through the CRDT. The `SPC` leader tree with the which-key popup and
    `SPC h` help.
 3. 🟡 **M2 — linking.** `[[pages]]` ✅ (click opens or creates), backlinks ✅,
@@ -302,14 +302,13 @@ The Firefox extension's editing part can start early (after M1): it needs only
 
 ## Next up (in order)
 
-1. Verify the slash menu on screen; fix what the capture shows.
-2. Visual mode (`v`, `V`) and text objects (`iw`, `ap`, `i"`…) in zett-edit,
+1. Visual mode (`v`, `V`) and text objects (`iw`, `ap`, `i"`…) in zett-edit,
    checked against Neovim with the comparison harness.
-3. Block motions: move a block (`Alt+j/k`), indent / outdent (`>>` `<<`),
+2. Block motions: move a block (`Alt+j/k`), indent / outdent (`>>` `<<`),
    fold, zoom into a block.
-4. Undo that survives a restart (history from the CRDT in `.zett/`).
-5. `zett -t`: the terminal front end, first read-only, then editing.
-6. The `SPC` tree with which-key, then `init.lua` (the start of M5).
+3. Undo that survives a restart (history from the CRDT in `.zett/`).
+4. `zett -t`: the terminal front end, first read-only, then editing.
+5. Plugin manifests (permissions), a lockfile, `zett sync`, `zett doctor`.
 
 ## Quality: how we know it is good
 

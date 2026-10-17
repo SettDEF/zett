@@ -200,13 +200,19 @@ fn kind_from(s: &str) -> Kind {
 }
 
 impl ZettRust {
-    fn refresh_pages(&mut self) {
-        let Some(f) = &self.folder else { return };
+    /// The page order (kept here) and the page list for QML (returned, not stored: the
+    /// setter stores it, so QML hears about the change)
+    fn compute_pages(&mut self) -> QString {
+        let Some(f) = &self.folder else { return self.pages.clone() };
         let mut pages: Vec<BlockId> = f.ws.pages();
         pages.sort_by_key(|p| f.ws.text(*p).to_lowercase());
         let list: Vec<_> = pages.iter().map(|p| serde_json::json!({ "title": f.ws.text(*p), "blocks": f.ws.children(*p).len() })).collect();
         self.order = pages;
-        self.pages = QString::from(&serde_json::Value::Array(list).to_string());
+        QString::from(&serde_json::Value::Array(list).to_string())
+    }
+
+    fn refresh_pages(&mut self) {
+        self.pages = self.compute_pages();
     }
 
     fn page(&self) -> Option<BlockId> {
@@ -214,14 +220,21 @@ impl ZettRust {
     }
 
     fn refresh_page(&mut self) {
-        let (Some(f), Some(p)) = (&self.folder, self.page()) else { return };
+        if let Some((b, t, bk)) = self.compute_page() {
+            (self.blocks, self.title, self.backlinks) = (b, t, bk);
+        }
+    }
+
+    /// The open page for QML: blocks, title, backlinks (returned, not stored; see compute_pages)
+    fn compute_page(&self) -> Option<(QString, QString, QString)> {
+        let (Some(f), Some(p)) = (&self.folder, self.page()) else { return None };
         let list: Vec<_> = f.ws.children(p).into_iter().map(|b| {
             let mut v = kind_json(&f.ws.kind(b));
             v["text"] = serde_json::Value::String(f.ws.text(b));
             v
         }).collect();
-        self.title = QString::from(&f.ws.text(p));
-        self.blocks = QString::from(&serde_json::Value::Array(list).to_string());
+        let title = QString::from(&f.ws.text(p));
+        let blocks = QString::from(&serde_json::Value::Array(list).to_string());
         // backlinks: blocks of other pages that mention [[this page]]
         let needle = format!("[[{}]]", f.ws.text(p).to_lowercase());
         let mut back = Vec::new();
@@ -234,7 +247,7 @@ impl ZettRust {
                 }
             }
         }
-        self.backlinks = QString::from(&serde_json::Value::Array(back).to_string());
+        Some((blocks, title, QString::from(&serde_json::Value::Array(back).to_string())))
     }
 
     fn block(&self, i: i32) -> Option<BlockId> {
@@ -253,12 +266,14 @@ impl ZettRust {
 
 impl qobject::Zett {
     fn publish(mut self: Pin<&mut Self>) {
+        // computed, not stored: the setters store and tell QML (one given the value already
+        // stored stays silent, which once kept the screen from updating at all)
         let (blocks, title, pages, back) = {
             let r = self.as_mut().rust_mut();
             let r = r.get_mut();
-            r.refresh_pages();
-            r.refresh_page();
-            (r.blocks.clone(), r.title.clone(), r.pages.clone(), r.backlinks.clone())
+            let pages = r.compute_pages();
+            let (b, t, bk) = r.compute_page().unwrap_or_else(|| (r.blocks.clone(), r.title.clone(), r.backlinks.clone()));
+            (b, t, pages, bk)
         };
         self.as_mut().set_backlinks(back);
         self.as_mut().set_pages(pages);
@@ -286,8 +301,7 @@ impl qobject::Zett {
         let pages = {
             let r = self.as_mut().rust_mut();
             let r = r.get_mut();
-            r.refresh_pages();
-            r.pages.clone()
+            r.compute_pages()
         };
         self.as_mut().set_pages(pages);
     }
@@ -360,7 +374,7 @@ impl qobject::Zett {
             let Ok(p) = f.new_page(&title.to_string()) else { return };
             let _ = f.ws.append(p, Kind::Paragraph, "");
             let _ = f.save_page(p);
-            r.refresh_pages();
+            let _ = r.compute_pages(); // the order only; publish() stores and announces
             r.order.iter().position(|x| *x == p).map(|i| i as i32).unwrap_or(0)
         };
         self.as_mut().set_current(idx);
@@ -467,7 +481,7 @@ impl qobject::Zett {
                 }
             };
             r.vim = None;
-            r.refresh_pages();
+            let _ = r.compute_pages(); // the order only; publish() stores and announces
             r.order.iter().position(|x| *x == page).map(|i| i as i32).unwrap_or(0)
         };
         self.as_mut().set_current(idx);
@@ -518,7 +532,7 @@ impl qobject::Zett {
                         let r = self.as_mut().rust_mut();
                         let r = r.get_mut();
                         r.vim = None;
-                        r.refresh_pages();
+                        let _ = r.compute_pages(); // the order only; publish() stores and announces
                         r.order.iter().position(|x| *x == p).map(|i| i as i32)
                     };
                     if let Some(i) = idx {

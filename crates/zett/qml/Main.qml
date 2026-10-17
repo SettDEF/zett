@@ -69,18 +69,36 @@ ApplicationWindow {
         if (d) d.vimHere()
     }
 
-    onBlocksChanged: if (focusAfter >= 0) {
-        const i = focusAfter
+    // a block to focus: set before or after the change that makes it (`focusAfter = app.addBlock(…)`
+    // assigns once the list was already rebuilt), so focus a frame later, when every change is in
+    onFocusAfterChanged: if (focusAfter >= 0) {
+        focusRetry.target = focusAfter
+        focusRetry.tries = 0
         focusAfter = -1
-        Qt.callLater(() => {
-            const d = list.itemAtIndex(i)
-            if (!d) return
+        focusRetry.restart()
+    }
+    onBlocksChanged: if (focusRetry.running) focusRetry.tries = 0
+    // the list builds a new block's view a frame or two after the model changes: try until it is there
+    Timer {
+        id: focusRetry
+        interval: 16
+        repeat: true
+        property int target: -1
+        property int tries: 0
+        onTriggered: {
+            const d = list.itemAtIndex(target)
+            if (!d) {
+                if (++tries > 30) stop()
+                return
+            }
+            stop()
             d.focusEditor(0)
-            if (typeAfter.length > 0) { d.typeForTest(typeAfter); typeAfter = "" }
-        })
+            if (win.typeAfter.length > 0) { d.typeForTest(win.typeAfter); win.typeAfter = "" }
+        }
     }
 
     // ── the Lua engine: keys (SPC tree, :, user maps), which-key, commands ──
+    property string typeAfter: ""    // test hook: typed into the block focused next
     property var keySeq: []          // keys typed so far in a pending sequence
     property var whichKey: []        // what can follow them
     property var notes: []           // notices shown in the corner
@@ -166,9 +184,11 @@ ApplicationWindow {
                 const d = list.itemAtIndex(1)
                 for (const k of app.shotKeys.split(" ")) d.vimKeyForTest(k)
             }
+            if (app.shotType.length > 0) probeLater.start()
             grabLater.start()
         }
     }
+    Timer { id: probeLater; interval: 500; onTriggered: console.log(`zett-probe: slashFor=${win.slashFor} query=${win.slashQuery} matches=${win.slashMatches.map(m => m.label)} focus=${win.activeFocusItem}`) }
 
     Rectangle {
     id: rootRow
@@ -178,7 +198,6 @@ ApplicationWindow {
     focus: true
     Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }
-    property string typeAfter: ""   // test hook: typed into the block focused next
 
     RowLayout {
         anchors.fill: parent

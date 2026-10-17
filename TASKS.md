@@ -30,7 +30,7 @@ See PLAN.md for the vision and milestones.
 - [x] watch the folder: reload pages changed by other editors (Neovim, git pull)
 - [ ] undo history per page that survives a restart (through the CRDT)
 - [x] [[links]] (click opens or creates the page), backlinks under each page, Ctrl+P quick open
-- [~] slash menu (written, not verified on screen yet)
+- [x] slash menu (verified: /to → To-do)
 - [ ] drag to reorder blocks, block references ((id)) (M2)
 - [ ] visual mode, text objects, search in the window (M1)
 - [ ] M2½: `zett -t` terminal front end (ratatui), read-only first
