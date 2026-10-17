@@ -2068,6 +2068,7 @@ dependencies = [
  "serde_json",
  "zett-core",
  "zett-edit",
+ "zett-script",
 ]
 
 [[package]]

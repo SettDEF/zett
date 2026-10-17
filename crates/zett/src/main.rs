@@ -60,6 +60,27 @@ enum Cmd {
     /// Apply Vim keys to a page's Markdown and save it
     #[command(after_help = "Examples:\n  zett edit ideas 'Go- new idea<Esc>'\n  zett edit ideas 'gg/build<CR>dd'   (search lands in M1)")]
     Edit { page: String, keys: String },
+    /// Run a command (the same ones keys and `:` run; `zett commands` lists them)
+    Run {
+        command: String,
+        /// the page it works on (default: none)
+        #[arg(long)]
+        page: Option<String>,
+    },
+    /// Run Lua with the `zett` API (as `:lua` in the window)
+    #[command(after_help = "Examples:\n  zett lua '#zett.pages()'\n  zett lua --page ideas 'zett.page.add(\"todo\", \"from a script\")'")]
+    Lua {
+        code: String,
+        #[arg(long)]
+        page: Option<String>,
+    },
+    /// List every command (built-in, plugins, init.lua)
+    Commands,
+    /// List the key mappings of a mode (n = normal)
+    Keys {
+        #[arg(default_value = "n")]
+        mode: String,
+    },
     /// Shell completions
     Completions {
         #[arg(value_enum)]
@@ -88,6 +109,9 @@ fn main() {
         return;
     }
     let mut f = Folder::open(&dir).unwrap_or_else(|e| fail(&format!("{}: {e}", dir.display()), 1));
+    if matches!(cmd, Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. }) {
+        return script(cmd, f, cli.json);
+    }
     let page_of = |f: &Folder, name: &str| f.find(name).unwrap_or_else(|| fail(&format!("no page \"{name}\" in {} (zett ls lists them)", dir.display()), 3));
     match cmd {
         Cmd::Ls => {
@@ -135,6 +159,74 @@ fn main() {
             f.save_page(p).unwrap_or_else(|e| fail(&e.to_string(), 1));
             print!("{}", markdown::to_markdown(&f.ws, p));
         }
-        Cmd::Completions { .. } => unreachable!(),
+        Cmd::Completions { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
+    }
+}
+
+/// The commands that go through the Lua engine (with the user's init.lua and plugins).
+fn script(cmd: Cmd, f: Folder, json: bool) {
+    use zett_script::{Effect, Engine};
+    let folder = std::rc::Rc::new(std::cell::RefCell::new(f));
+    let mut e = Engine::new(Some(folder.clone()));
+    e.load_config(&zett_script::config_dir());
+    for err in &e.errors {
+        eprintln!("zett: {err}");
+    }
+    let set_page = |e: &Engine, page: &Option<String>| {
+        if let Some(name) = page {
+            let p = folder.borrow().find(name).unwrap_or_else(|| fail(&format!("no page \"{name}\""), 3));
+            e.set_current(Some(p));
+        }
+    };
+    let report = |fx: Vec<Effect>| {
+        for x in fx {
+            match x {
+                Effect::Notify(m) => println!("{m}"),
+                Effect::Open(p) => println!("opened: {}", folder.borrow().ws.text(p)),
+                Effect::Ui(name, _) => eprintln!("zett: that opens {name} in the window (run `zett` for it)"),
+                Effect::Refresh => {}
+            }
+        }
+    };
+    match cmd {
+        Cmd::Run { command, page } => {
+            set_page(&e, &page);
+            match e.run(&command) {
+                Ok(fx) => report(fx),
+                Err(err) => fail(&err, 2),
+            }
+        }
+        Cmd::Lua { code, page } => {
+            set_page(&e, &page);
+            match e.eval(&code) {
+                Ok((out, fx)) => {
+                    report(fx);
+                    if out != "nil" {
+                        println!("{out}");
+                    }
+                }
+                Err(err) => fail(&err, 2),
+            }
+        }
+        Cmd::Commands => {
+            let list = e.commands();
+            if json {
+                let v: Vec<_> = list.iter().map(|(n, d, s)| serde_json::json!({ "name": n, "desc": d, "source": s })).collect();
+                println!("{}", serde_json::Value::Array(v));
+            } else {
+                for (n, d, s) in list {
+                    println!("{n:<20} {d:<44} {s}");
+                }
+            }
+        }
+        Cmd::Keys { mode } => {
+            let leader = e.leader();
+            for (k, d) in e.bindings(&mode) {
+                // shown as typed: <leader> spelled out as the key it is
+                let shown = k.replace("<leader>", if leader == "<Space>" { "SPC " } else { &leader });
+                println!("{shown:<16} {d}");
+            }
+        }
+        _ => unreachable!(),
     }
 }
