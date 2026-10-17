@@ -12,6 +12,8 @@ pub enum HlColor {
     Rgb(u8, u8, u8),
     /// the terminal's own foreground or background
     Default,
+    /// the theme's background lifted N% toward its foreground (`+12`): a tint that follows the theme
+    Lift(u8),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -53,6 +55,10 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     // the editor
     ("LineNr", "fg=8"),
     ("CursorLineNr", "fg=3 bold"),
+    // the line the cursor is on, and a soft fade on the lines around it
+    ("CursorLine", "bg=+13"),
+    ("CursorLineGlow", "bg=+7"),
+    ("CursorLineGlow2", "bg=+3"),
     ("NonText", "fg=8"),
     ("WinSeparator", "fg=8"),
     ("MsgArea", "fg=7"),
@@ -119,6 +125,9 @@ pub const DEFAULTS: &[(&str, &str)] = &[
 
 fn color(s: &str) -> Option<HlColor> {
     let s = s.trim().to_lowercase();
+    if let Some(p) = s.strip_prefix('+') {
+        return p.trim_end_matches('%').parse::<u8>().ok().map(|p| HlColor::Lift(p.min(100)));
+    }
     if let Some(h) = s.strip_prefix('#') {
         let v = u32::from_str_radix(h, 16).ok()?;
         return (h.len() == 6).then(|| HlColor::Rgb((v >> 16) as u8, (v >> 8) as u8, v as u8));
@@ -146,6 +155,7 @@ fn show_color(c: &HlColor) -> String {
         HlColor::Index(n) => n.to_string(),
         HlColor::Rgb(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
         HlColor::Default => "none".into(),
+        HlColor::Lift(p) => format!("+{p}"),
     }
 }
 

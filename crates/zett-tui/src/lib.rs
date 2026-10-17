@@ -1219,7 +1219,22 @@ impl App {
             if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && x >= d.left && x < d.left + width {
                 spans.push(Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
             }
-            out.push(Line::from(spans));
+            // the current line stands out, and fades over the lines around it (CursorLine, CursorLineGlow…)
+            let band = match ln.abs_diff(c.line) {
+                _ if !focused => None,
+                0 => Some("CursorLine"),
+                1 => Some("CursorLineGlow"),
+                2 => Some("CursorLineGlow2"),
+                _ => None,
+            };
+            match band.map(hl::hl).filter(|s| s.bg.is_some()) {
+                Some(s) => {
+                    let used: usize = spans.iter().map(|s| s.width()).sum();
+                    spans.push(Span::raw(" ".repeat((a.width as usize).saturating_sub(used))));
+                    out.push(Line::from(spans).style(s));
+                }
+                None => out.push(Line::from(spans)),
+            }
         }
         f.render_widget(Paragraph::new(out), a);
         if focused && self.cmdline.is_none() && self.picker.is_none() && self.popup.is_none() {
