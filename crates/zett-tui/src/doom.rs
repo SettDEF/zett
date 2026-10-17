@@ -82,6 +82,7 @@ pub(crate) enum Pick {
     Lines,
     Commands,
     Diagnostics,
+    Docs,
 }
 
 fn state_dir() -> PathBuf {
@@ -174,6 +175,20 @@ const DASH: &[(&str, &str, &str, &str)] = &[
 ];
 
 impl App {
+    /// `:help TOPIC`: the topic in a buffer of its own (Markdown, read like any other).
+    pub(crate) fn open_help(&mut self, topic: &str) {
+        let Some((name, text)) = zett_script::docs::get(topic) else {
+            return self.say(format!("no help for \"{topic}\": SPC h d lists the topics"));
+        };
+        let title = format!("help: {name}");
+        if let Some(i) = self.docs.iter().position(|d| d.name == title) {
+            return self.show_doc(i);
+        }
+        self.docs.push(Doc::new(Editor::from_str(text), title, "Markdown".into()));
+        let i = self.docs.len() - 1;
+        self.show_doc(i);
+    }
+
     // ── windows ──
 
     pub(crate) fn focus_win(&mut self, id: usize) {
@@ -286,6 +301,7 @@ impl App {
                 ("Search buffer".into(), (0..d.ed.buf.len_lines()).map(|i| format!("{:>5}│ {}", i + 1, d.ed.buf.line(i).trim_end())).collect())
             }
             Pick::Commands => ("M-x".into(), self.engine.commands().into_iter().map(|(n, d, _)| format!("{n:<24} {d}")).collect()),
+            Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| format!("{n:<10} {about}")).collect()),
             Pick::Diagnostics => {
                 let mut rows = Vec::new();
                 for d in &self.docs {
@@ -355,6 +371,10 @@ impl App {
                     self.open(&p);
                     self.goto_line(l);
                 }
+            }
+            Pick::Docs => {
+                let name = item.split_whitespace().next().unwrap_or("").to_string();
+                self.open_help(&name);
             }
             Pick::Commands => {
                 let name = item.split_whitespace().next().unwrap_or("").to_string();
@@ -463,6 +483,10 @@ impl App {
                 }
             }
             "comment" => self.comment(),
+            "docs" => {
+                let rows = zett_script::docs::TOPICS.iter().map(|(n, about, _)| format!("{n:<10} {about}")).collect();
+                self.pick_list(Pick::Docs, "Documentation", rows);
+            }
             "definition" => self.lsp_definition(),
             "hover" => self.lsp_hover(),
             "diag" => self.next_diag(arg != "prev"),

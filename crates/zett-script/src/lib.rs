@@ -8,6 +8,8 @@
 //! commands are Lua too (`defaults.lua`), written against the public API, so
 //! a plugin can do anything the app itself does.
 
+pub mod docs;
+
 use mlua::{Function, Lua, RegistryKey, Table, Value};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};

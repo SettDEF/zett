@@ -718,6 +718,7 @@ impl App {
                 }
             }
             "compile" => self.compile(arg),
+            "h" | "help" => self.open_help(arg),
             "rename" => self.lsp_rename(arg),
             "wa" | "wall" => {
                 let keep = self.cur;

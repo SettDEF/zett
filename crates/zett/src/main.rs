@@ -6,14 +6,23 @@
 mod window;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use clap::builder::styling::{AnsiColor, Effects, Styles};
+
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::White.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::White.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default())
+    .placeholder(AnsiColor::BrightBlack.on_default())
+    .error(AnsiColor::Red.on_default().effects(Effects::BOLD));
 use std::path::PathBuf;
 use zett_core::folder::Folder;
 use zett_core::{markdown, Kind};
 
-const EXAMPLES: &str = "Examples:
-  zett                              the editor in this terminal (the folder you are in)
+const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
+  zett                              the editor in this terminal (its dashboard)
   zett src/main.rs                  open files; a folder opens its file finder
-  zett --gui                        the window (pages, blocks)
+  zett --gui                        the notes window (pages, blocks)
+  zett doc                          the documentation (also :help in the editor)
   zett new \"Ideas\"
   zett add ideas \"build zash\" --todo
   zett ls
@@ -24,7 +33,7 @@ const EXAMPLES: &str = "Examples:
 A workspace is a folder of Markdown files: --dir, $ZETT_DIR, or ~/zett.";
 
 #[derive(Parser)]
-#[command(name = "zett", version, about = "An editor you live in — code, pages, Vim everywhere", after_help = EXAMPLES, args_conflicts_with_subcommands = true)]
+#[command(name = "zett", version, about = "An editor you live in: code with Vim's keys and Doom's, pages, Lua everywhere", after_help = EXAMPLES, args_conflicts_with_subcommands = true, styles = STYLES)]
 struct Cli {
     /// files or a folder to open (in the terminal; with --gui in the window)
     paths: Vec<PathBuf>,
@@ -84,6 +93,9 @@ enum Cmd {
     },
     /// List every command (built-in, plugins, init.lua)
     Commands,
+    /// Read the documentation (a topic, or the list of them)
+    #[command(after_help = "Examples:\n  zett doc            the topics\n  zett doc lsp        language servers\n  zett doc keys")]
+    Doc { topic: Option<String> },
     /// List the key mappings of a mode (n = normal)
     Keys {
         #[arg(default_value = "n")]
@@ -94,6 +106,35 @@ enum Cmd {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+}
+
+/// `zett doc TOPIC`: a topic, headings bold and `code` in colour on a terminal.
+fn doc(topic: &str) {
+    use std::io::IsTerminal;
+    let Some((_, text)) = zett_script::docs::get(topic) else {
+        eprintln!("zett: no topic \"{topic}\"; the topics:");
+        for (n, about, _) in zett_script::docs::TOPICS {
+            eprintln!("  {n:<10} {about}");
+        }
+        std::process::exit(2);
+    };
+    let tty = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    for line in text.lines() {
+        if !tty {
+            println!("{line}");
+        } else if let Some(h) = line.strip_prefix("# ").or_else(|| line.strip_prefix("## ")) {
+            println!("\x1b[1m{h}\x1b[0m");
+        } else if line.starts_with("    ") {
+            println!("\x1b[36m{line}\x1b[0m");
+        } else {
+            // `code` in cyan
+            let mut out = String::new();
+            for (i, part) in line.split('`').enumerate() {
+                if i % 2 == 1 { out.push_str(&format!("\x1b[36m{part}\x1b[0m")) } else { out.push_str(part) }
+            }
+            println!("{out}");
+        }
+    }
 }
 
 fn fail(msg: &str, code: i32) -> ! {
@@ -122,6 +163,9 @@ fn main() {
     if let Cmd::Completions { shell } = cmd {
         clap_complete::generate(shell, &mut Cli::command(), "zett", &mut std::io::stdout());
         return;
+    }
+    if let Cmd::Doc { topic } = &cmd {
+        return doc(topic.as_deref().unwrap_or(""));
     }
     let mut f = Folder::open(&dir).unwrap_or_else(|e| fail(&format!("{}: {e}", dir.display()), 1));
     if matches!(cmd, Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. }) {
@@ -174,7 +218,7 @@ fn main() {
             f.save_page(p).unwrap_or_else(|e| fail(&e.to_string(), 1));
             print!("{}", markdown::to_markdown(&f.ws, p));
         }
-        Cmd::Completions { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
+        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
     }
 }
 
