@@ -15,7 +15,7 @@ See PLAN.md for the vision and milestones.
 - [ ] tests: core + mirror round-trips + headless window capture
 - [x] file I/O behind the `fs` feature; core builds for wasm32 without it
 - [ ] check `cargo build -p zett-core -p zett-edit --target wasm32-unknown-unknown` in the test script
-- [x] performance budgets (docs/PERFORMANCE.md) + checker: `cargo run --release -p zett --example perf` — all met
+- [x] performance budgets (docs/PERFORMANCE.md) + checker: `cargo run --release -p zett-edit --example perf` — all met
 - [x] operation-based undo (cost of the change, not of the file): x/dd/p/u 2–4 µs in 100k lines
 - [x] Neovim comparison harness (scripts-nvim-compare.sh)
 - [ ] M1: undo/redo cursor placement matches Neovim (diff: `abc` + `ofoo<Esc>Obar<Esc>uu<C-r>` → nvim 1:1, zett 1:3)

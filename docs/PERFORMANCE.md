@@ -1,7 +1,7 @@
 # Performance — budgets, not hopes
 
 Performance is a feature of zett, measured on every change. Each budget below
-has a check in `cargo run --release -p zett --example perf` (and later a CI
+has a check in `cargo run --release -p zett-edit --example perf` (and later a CI
 job); a change that breaks a budget is a bug, like a failing test.
 
 Reference machine: ROG Flow Z13 (Ryzen AI Max+ 395, Radeon 8060S), on battery
