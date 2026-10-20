@@ -1221,13 +1221,20 @@ impl Editor {
 
     // ── the undo tree, for undotree-like views ──
 
+    /// Ends the change being typed, so the history includes it: always in the Emacs profile
+    /// (modeless, always "inserting"), in Vim's only outside an insert session (one session is
+    /// one undo step there).
+    fn settle(&mut self) {
+        if self.emacs || self.mode != Mode::Insert {
+            self.close();
+        }
+    }
+
     /// Every state: (its parent, when it was made in seconds since the epoch). State 0 is
     /// the text as opened; a state's number is its place in time.
     pub fn undo_states(&mut self) -> Vec<(usize, u64)> {
         // a finished change counts at once; one still being typed does not
-        if self.mode != Mode::Insert {
-            self.close();
-        }
+        self.settle();
         self.undo.nodes.iter().map(|n| (n.parent, n.time)).collect()
     }
     /// `u` and `C-r` once, for scripts.
@@ -1239,18 +1246,54 @@ impl Editor {
     }
     /// The state the text is in.
     pub fn undo_current(&mut self) -> usize {
-        if self.mode != Mode::Insert {
-            self.close();
-        }
+        self.settle();
         self.undo.cur
     }
     /// The text as it is at state `n`, without going there.
     pub fn text_at(&mut self, n: usize) -> String {
-        if self.mode != Mode::Insert {
-            self.close();
-        }
+        self.settle();
         if n >= self.undo.nodes.len() { self.text() } else { self.undo.text_at(&self.text(), n) }
     }
+    /// The whole undo history as bytes, to keep it across restarts.
+    pub fn history_save(&mut self) -> Vec<u8> {
+        self.settle();
+        self.undo.save(&self.text())
+    }
+
+    /// Takes back a saved history; false (and nothing changes) if it was saved for other text.
+    pub fn history_load(&mut self, bytes: &[u8]) -> bool {
+        match undo::Tree::load(bytes, &self.text()) {
+            Some(t) => {
+                self.undo = t;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Time travel's "restore this section": the section `title` as it was at state `n` replaces
+    /// the one of that title now, as one change (later work elsewhere stays). False: it is not
+    /// in both.
+    pub fn restore_section(&mut self, n: usize, title: &str) -> bool {
+        let then = self.text_at(n);
+        let old: Vec<String> = then.lines().map(String::from).collect();
+        let Some(s_old) = outline::sections(&old, self.view_kind()).into_iter().find(|s| s.title == title) else { return false };
+        let Some(s_new) = self.sections().into_iter().find(|s| s.title == title) else { return false };
+        let mut body: String = old[s_old.start..s_old.end].iter().map(|l| format!("{l}\n")).collect();
+        let a = self.line_start(s_new.start);
+        let b = if s_new.end >= self.buf.len_lines() { self.buf.len_chars() } else { self.line_start(s_new.end) };
+        // the end of the file without a line break keeps it that way
+        if b == self.buf.len_chars() && !self.buf.slice(a, b).ends_with('\n') {
+            body.pop();
+        }
+        self.begin();
+        self.rem(a, b);
+        self.ins(a, &body);
+        self.close();
+        self.cursor = a;
+        true
+    }
+
     /// Goes to state `n`, along the tree (undoing up to the common state, then redoing down).
     pub fn undo_goto(&mut self, n: usize) {
         self.close();
@@ -1406,6 +1449,60 @@ mod apply_tests {
 #[cfg(test)]
 mod undo_tree_tests {
     use super::*;
+
+    #[test]
+    fn history_survives_a_restart() {
+        let mut e = Editor::from_str("a\n");
+        e.feed("Ab<Esc>");
+        e.feed("Ac<Esc>");
+        e.feed("u");
+        e.feed("Aé ü<Esc>"); // a branch, and text that is more than one byte a character
+        let saved = e.history_save();
+        // the file reopened: the same text gets its whole tree back, branches included
+        let mut again = Editor::from_str(&e.text());
+        assert!(again.history_load(&saved));
+        assert_eq!(again.undo_states().len(), 4);
+        assert_eq!(again.text_at(2), "abc\n");
+        again.feed("u");
+        assert_eq!(again.text(), "ab\n");
+        // changed elsewhere meanwhile: the old history is not forced onto it
+        let mut other = Editor::from_str("something else\n");
+        assert!(!other.history_load(&saved));
+        assert_eq!(other.undo_states().len(), 1);
+    }
+
+    #[test]
+    fn the_emacs_history_includes_what_was_just_typed() {
+        // modeless, the editor is always "inserting": the typing still open must count
+        let mut e = Editor::from_str("x\nold\n");
+        e.set_emacs(true);
+        e.set_cursor(Pos { line: 1, col: 0 });
+        e.exec("kill-line", 1);
+        "new".chars().for_each(|c| e.self_insert(c));
+        let states = e.undo_states().len();
+        assert_eq!(states, 3, "the kill and the typing are two steps");
+        assert_eq!(e.text_at(0), "x\nold\n", "the first state has none of the later typing");
+        assert_eq!(e.text_at(1), "x\n\n");
+    }
+
+    #[test]
+    fn one_section_comes_back_from_the_past() {
+        let mut e = Editor::from_str("# A\nold a\n# B\nold b\n");
+        e.set_emacs(true);
+        e.set_outline_kind(outline::OutlineKind::Markdown);
+        e.set_cursor(Pos { line: 1, col: 0 });
+        e.exec("kill-line", 1);
+        "new a".chars().for_each(|c| e.self_insert(c));
+        e.set_cursor(Pos { line: 3, col: 0 });
+        e.exec("kill-line", 1);
+        "new b".chars().for_each(|c| e.self_insert(c));
+        assert_eq!(e.text(), "# A\nnew a\n# B\nnew b\n");
+        // A as it was at the start; B keeps what was done since
+        assert!(e.restore_section(0, "# A"));
+        assert_eq!(e.text(), "# A\nold a\n# B\nnew b\n");
+        e.exec("undo", 1);
+        assert_eq!(e.text(), "# A\nnew a\n# B\nnew b\n", "one undo step");
+    }
 
     #[test]
     fn branches_are_kept() {

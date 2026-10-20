@@ -612,6 +612,7 @@ impl App {
             }
             "searchLines" => self.pick(Pick::Lines),
             "commands" => self.pick(Pick::Commands),
+            "timeTravel" => self.travel_start(),
             "save" => self.save(None),
             "yankPath" => {
                 let p = self.docs[self.cur].name.clone();

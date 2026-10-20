@@ -89,6 +89,58 @@ impl Tree {
         (up, down)
     }
 
+    /// The tree as bytes, for the text `text` it is at now (its fingerprint is kept, so a file
+    /// changed elsewhere is not given a history that does not fit it).
+    pub fn save(&self, text: &str) -> Vec<u8> {
+        let mut out = format!("zett-undo 1\n{} {} {}\n", self.cur, fingerprint(text), self.nodes.len()).into_bytes();
+        for n in &self.nodes {
+            let redo = n.redo.map_or(-1, |r| r as i64);
+            out.extend(format!("{} {} {} {} {}\n", n.parent, n.time, redo, n.change.cursor, n.change.edits.len()).bytes());
+            for e in &n.change.edits {
+                out.extend(format!("{} {} {}\n", e.at, e.removed.len(), e.inserted.len()).bytes());
+                out.extend(e.removed.bytes());
+                out.extend(e.inserted.bytes());
+            }
+        }
+        out
+    }
+
+    /// A saved tree, if it was saved for exactly this text.
+    pub fn load(bytes: &[u8], text: &str) -> Option<Tree> {
+        let mut r = Reader { b: bytes, at: 0 };
+        if r.line()? != "zett-undo 1" {
+            return None;
+        }
+        let head = r.line()?;
+        let mut h = head.split(' ');
+        let cur: usize = h.next()?.parse().ok()?;
+        let fp: u64 = h.next()?.parse().ok()?;
+        let count: usize = h.next()?.parse().ok()?;
+        if fp != fingerprint(text) || cur >= count {
+            return None;
+        }
+        let mut nodes = Vec::with_capacity(count);
+        for _ in 0..count {
+            let l = r.line()?;
+            let v: Vec<i64> = l.split(' ').map(|x| x.parse().ok()).collect::<Option<_>>()?;
+            let [parent, time, redo, cursor, edits] = v[..] else { return None };
+            let mut change = Change { edits: Vec::with_capacity(edits as usize), cursor: cursor as usize };
+            for _ in 0..edits {
+                let l = r.line()?;
+                let v: Vec<usize> = l.split(' ').map(|x| x.parse().ok()).collect::<Option<_>>()?;
+                let [at, rl, il] = v[..] else { return None };
+                let removed = r.take(rl)?;
+                let inserted = r.take(il)?;
+                change.edits.push(Edit { at, removed, inserted });
+            }
+            if parent as usize >= count {
+                return None;
+            }
+            nodes.push(Node { parent: parent as usize, change, time: time as u64, redo: (redo >= 0).then_some(redo as usize) });
+        }
+        Some(Tree { nodes, cur })
+    }
+
     /// The text at node `to`, worked out from `text` at the current node.
     pub fn text_at(&self, text: &str, to: usize) -> String {
         let mut buf = Buffer::from_str(text);
@@ -100,5 +152,29 @@ impl Tree {
             self.nodes[n].change.apply(&mut buf);
         }
         buf.text()
+    }
+}
+
+/// FNV-1a over the text: which text a saved history belongs to.
+pub(crate) fn fingerprint(text: &str) -> u64 {
+    text.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
+}
+
+struct Reader<'a> {
+    b: &'a [u8],
+    at: usize,
+}
+
+impl Reader<'_> {
+    fn line(&mut self) -> Option<String> {
+        let end = self.b[self.at..].iter().position(|&c| c == b'\n')? + self.at;
+        let s = std::str::from_utf8(&self.b[self.at..end]).ok()?.to_string();
+        self.at = end + 1;
+        Some(s)
+    }
+    fn take(&mut self, n: usize) -> Option<String> {
+        let s = std::str::from_utf8(self.b.get(self.at..self.at + n)?).ok()?.to_string();
+        self.at += n;
+        Some(s)
     }
 }

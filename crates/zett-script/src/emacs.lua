@@ -49,6 +49,7 @@ map("<M-Space>", "just-one-space")
 map("<C-/>", "undo")
 map("<C-_>", "undo")
 map("<C-x>u", "undo")
+map("<C-c>t", "time-travel")
 map("<C-g>", "keyboard-quit")
 
 -- ── numeric argument: C-u 4 C-f, M-5 C-n, M-- M-f ──

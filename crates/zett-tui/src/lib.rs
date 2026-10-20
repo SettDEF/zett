@@ -9,6 +9,7 @@ mod clipboard;
 mod cmdline;
 mod ex;
 mod minibuf;
+mod travel;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -127,7 +128,10 @@ impl Doc {
             let first = buf.line(0);
             ss.find_syntax_by_first_line(&first).map(|s| s.name.clone()).unwrap_or_else(|| "Plain Text".into())
         });
-        Ok(Doc::new(Editor::new(buf), name, syntax))
+        let mut d = Doc::new(Editor::new(buf), name, syntax);
+        // the history it was saved with, so time travel and undo reach past this session
+        d.load_history();
+        Ok(d)
     }
 
     fn scratch() -> Doc {
@@ -245,6 +249,8 @@ struct App {
     cmdline: Option<String>,
     msg: Option<(String, Instant)>,
     minibuf: Option<Minibuf>,
+    /// time travel through a buffer's history, while it is open
+    travel: Option<travel::Travel>,
     /// where the minibuffer is drawn (zett.opt.minibuffer)
     placement: Placement,
     popup: Option<Popup>,
@@ -366,6 +372,7 @@ impl App {
             cmdline: None,
             msg,
             minibuf: None,
+            travel: None,
             placement: Placement::Bottom,
             popup: None,
             quit: false,
@@ -514,6 +521,9 @@ impl App {
         }
         if self.minibuf.is_some() {
             return self.minibuf_key(k);
+        }
+        if self.travel.is_some() {
+            return self.travel_key(k);
         }
         if self.cmdline.is_some() {
             return self.cmdline_key(k);
@@ -1108,6 +1118,7 @@ impl App {
                 let m = format!("\"{}\" {lines} lines written", d.name);
                 self.say(m);
                 let i = self.cur;
+                self.docs[i].keep_history();
                 self.lsp_saved(i);
                 self.emit("write");
             }
@@ -1239,7 +1250,15 @@ impl App {
                 // a window keeps its own scroll position, even on a buffer shown twice
                 self.docs[di].top = w.top;
                 self.docs[di].left = w.left;
+                // time travel: the buffer as it was, drawn in its place
+                let travelling = focused && self.travel.as_ref().is_some_and(|t| t.doc == di);
+                if travelling {
+                    std::mem::swap(&mut self.docs[di], &mut self.travel.as_mut().unwrap().preview);
+                }
                 self.draw_text(f, text, di, focused);
+                if travelling {
+                    std::mem::swap(&mut self.docs[di], &mut self.travel.as_mut().unwrap().preview);
+                }
                 if let Some(Some(w)) = self.wins.get_mut(id) {
                     w.top = self.docs[di].top;
                     w.left = self.docs[di].left;
@@ -1462,6 +1481,9 @@ impl App {
     }
 
     fn draw_cmd(&mut self, f: &mut Frame, a: Rect) {
+        if self.travel.is_some() {
+            return self.draw_travel(f, a);
+        }
         if let Some(l) = &self.cmdline {
             let p = self.prompt.clone().unwrap_or_else(|| ":".into());
             f.render_widget(Paragraph::new(Line::from(vec![Span::styled(p.clone(), hl("Prompt")), Span::raw(l.as_str())])), a);

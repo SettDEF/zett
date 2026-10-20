@@ -108,7 +108,13 @@ See PLAN.md for the vision and milestones.
 
 ## Next
 - [x] watch the folder: reload pages changed by other editors (Neovim, git pull)
-- [ ] undo history per page that survives a restart (through the CRDT)
+- [~] undo history per page that survives a restart (through the CRDT)
+  - [x] files in the code editor: the undo tree saved with each save (state/zett/history/undo,
+    only the changes, with the text's fingerprint: a file changed elsewhere starts fresh)
+  - [x] time travel (C-c t, M-x time-travel, SPC U): ←→ through every state with a slider and
+    when, the whole buffer as it was; Enter goes back (later states kept), b brings one section
+    back as it was (the rest stays), v…y copies from the past
+  - [ ] pages in the window: the same through Loro's history
 - [x] [[links]] (click opens or creates the page), backlinks under each page, Ctrl+P quick open
 - [x] slash menu (verified: /to → To-do)
 - [ ] drag to reorder blocks, block references ((id)) (M2)
