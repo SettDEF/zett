@@ -677,6 +677,8 @@ impl App {
                 d.ed.set_emacs(emacs);
             }
             d.ed.use_kill_ring(&self.kill_ring);
+            // the outline (folds, sections) read the file type's way
+            d.ed.set_outline_kind(zett_edit::outline::OutlineKind::for_syntax(&d.syntax));
         }
     }
 
@@ -1307,15 +1309,24 @@ impl App {
         }
         let width = a.width.saturating_sub(gutter) as usize;
         let height = a.height as usize;
-        // keep the cursor in view (a few lines of margin, like scrolloff)
+        // keep the cursor in view (a few lines of margin, like scrolloff), counting shown lines:
+        // folded and narrowed-away ones take no rows
+        d.ed.refresh_view();
         let c = d.ed.cursor();
         let margin = 3.min(height / 4);
-        if c.line < d.top + margin {
-            d.top = c.line.saturating_sub(margin);
-        } else if c.line + margin >= d.top + height {
-            d.top = (c.line + margin + 1).saturating_sub(height);
-        }
         d.top = d.top.min(lines.saturating_sub(1));
+        while d.top + 1 < lines && d.ed.is_hidden(d.top) {
+            d.top += 1;
+        }
+        let above = d.ed.step_shown(c.line, margin, true);
+        if above < d.top {
+            d.top = above;
+        } else {
+            let rows = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height).count();
+            if rows + margin >= height {
+                d.top = d.ed.step_shown(c.line, height.saturating_sub(margin + 1), true);
+            }
+        }
         let cur_line_text = d.ed.buf.line(c.line);
         let ccol = screen_col(&cur_line_text, c.col);
         if ccol < d.left {
@@ -1331,14 +1342,23 @@ impl App {
             Some(s) if !s.query().is_empty() => {
                 let current = s.current();
                 let from = d.ed.buf.to_char(Pos { line: d.top.min(lines), col: 0 });
-                let end = (d.top + height).min(lines);
+                let end = if d.ed.view_is_empty() { (d.top + height).min(lines) } else { lines };
                 let to = if end >= lines { d.ed.buf.len_chars() } else { d.ed.buf.to_char(Pos { line: end, col: 0 }) };
                 (d.ed.isearch_matches(from, to), current)
             }
             _ => (Vec::new(), None),
         };
+        let mut next = d.top;
+        let mut cursor_row = 0;
         for row in 0..height {
-            let ln = d.top + row;
+            while next < lines && d.ed.is_hidden(next) {
+                next += 1;
+            }
+            let ln = next;
+            next += 1;
+            if ln == c.line {
+                cursor_row = row;
+            }
             if ln >= lines {
                 out.push(Line::from(Span::styled(format!("{:>w$} ", "~", w = gutter as usize - 1), hl::hl("NonText"))));
                 continue;
@@ -1411,6 +1431,10 @@ impl App {
             if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && x >= d.left && x < d.left + width {
                 spans.push(Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
             }
+            // a folded section: what it hides, after its heading
+            if d.ed.is_fold_start(ln) {
+                spans.push(Span::styled(" …", hl::hl("Folded")));
+            }
             // the current line stands out, and fades over the lines around it (CursorLine, CursorLineGlow…)
             let band = match ln.abs_diff(c.line) {
                 _ if !focused => None,
@@ -1431,7 +1455,7 @@ impl App {
         f.render_widget(Paragraph::new(out), a);
         if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
             let x = a.x + gutter + (ccol - d.left) as u16;
-            let y = a.y + (c.line - d.top) as u16;
+            let y = a.y + cursor_row as u16;
             self.cursor_xy = (x, y);
             f.set_cursor_position(Position { x: x.min(a.right().saturating_sub(1)), y });
         }
@@ -1597,6 +1621,7 @@ fn token(k: &KeyEvent) -> String {
         KeyCode::Enter => named("CR"),
         KeyCode::Backspace => named("BS"),
         KeyCode::Tab => named("Tab"),
+        KeyCode::BackTab => named("S-Tab"),
         KeyCode::Up => named("Up"),
         KeyCode::Down => named("Down"),
         KeyCode::Left => named("Left"),

@@ -95,6 +95,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("PickerNote", "fg=8"),
     ("HelpKey", "fg=3"),
     ("Pmenu", "bg=0"),
+    ("Folded", "fg=8 bold"),
     ("PmenuSel", "fg=0 bg=4"),
     ("PmenuKind", "fg=5"),
     ("PmenuExtra", "fg=8"),

@@ -13,6 +13,7 @@
 pub mod emacs;
 pub mod keys;
 pub mod killring;
+pub mod outline;
 pub mod prefix;
 pub mod search;
 mod undo;
@@ -89,6 +90,8 @@ pub struct Editor {
     yanked: Option<(usize, usize, usize)>,
     /// the command that ran last (kills append to kills, typing groups into one undo step)
     last_cmd: String,
+    /// folds and narrowing (outline.rs)
+    view: outline::View,
 }
 
 fn class(c: char) -> u8 {
@@ -119,6 +122,7 @@ impl Editor {
             last_search: String::new(),
             yanked: None,
             last_cmd: String::new(),
+            view: outline::View::default(),
         }
     }
 

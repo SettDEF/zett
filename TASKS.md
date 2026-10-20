@@ -68,8 +68,15 @@ See PLAN.md for the vision and milestones.
 
 ### P2 — what people come to Emacs for
 - [ ] Everything a buffer: messages, help, explorer, terminal, undo tree (today panels).
-- [ ] Org-like outlines on the block tree: fold, promote/demote, TODO states, an agenda across
+- [~] Org-like outlines on the block tree: fold, promote/demote, TODO states, an agenda across
   pages (and Dotos).
+  - [x] one set of structure keys for notes and code (zett-edit `outline.rs`): Markdown headings,
+    code blocks by indentation and closing brackets; next/previous/same level/up (C-c C-n …),
+    move a subtree (M-↑/↓), promote/demote it (M-←/→: # count, or one indent step), fold (Tab on
+    a heading, C-c Tab, S-Tab for all; Vim: za zM zR zj zk), narrow (C-x n s / n / w), mark
+    (C-c @); folds remember their heading and follow it through any edit
+  - [ ] tree-sitter as a third source (exact blocks per language), LSP symbols as a fourth
+  - [ ] TODO states and the agenda
 - [ ] Kill ring + registers + keyboard macros (`C-x (`, `C-x )`, `C-x e`).
 - [ ] Windows the Emacs way: `C-x 2/3/o/0/1` (the window work exists; map it).
 - [ ] isearch, `query-replace`, project-wide search.

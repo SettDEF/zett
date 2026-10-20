@@ -52,7 +52,7 @@ const KILLS: &[&str] = &["kill-line", "kill-whole-line", "kill-word", "backward-
 /// Every named editor command: the editing ones here, the search ones (search.rs) and the
 /// numeric argument (prefix.rs, which the front end runs).
 pub fn all() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
-    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter())
+    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter()).chain(crate::outline::COMMANDS.iter())
 }
 
 pub fn is_command(name: &str) -> bool {
@@ -89,7 +89,7 @@ impl Editor {
     }
 
     /// Point to mark, shown or not (C-w kills it either way, as Emacs does).
-    fn mark_span(&self) -> Option<(usize, usize)> {
+    pub(crate) fn mark_span(&self) -> Option<(usize, usize)> {
         self.mark.map(|m| (m.min(self.cursor), m.max(self.cursor)))
     }
 
@@ -101,7 +101,7 @@ impl Editor {
     }
 
     /// Sets the mark where the cursor is; `active` shows it as the region.
-    fn set_mark(&mut self, active: bool) {
+    pub(crate) fn set_mark(&mut self, active: bool) {
         self.mark = Some(self.cursor);
         self.mark_active = active;
     }
@@ -149,6 +149,15 @@ impl Editor {
             return false;
         }
         let n = n.max(1);
+        if crate::outline::is_command(name) {
+            self.last_cmd = name.to_string();
+            return self.outline_exec(name, n);
+        }
+        // Tab on a Markdown heading folds it, as Org's TAB
+        if name == "indent-for-tab-command" && self.view_kind() == crate::outline::OutlineKind::Markdown && self.sections().iter().any(|s| s.start == self.cur_line()) {
+            self.last_cmd = name.to_string();
+            return self.outline_exec("outline-cycle", 1);
+        }
         let last = std::mem::replace(&mut self.last_cmd, name.to_string());
         // searching moves the cursor, never the text: no undo step, no kill run
         if self.search_command(name) {
@@ -179,7 +188,9 @@ impl Editor {
                 "backward-char" => self.cursor = self.cursor.saturating_sub(1),
                 "next-line" | "previous-line" => {
                     let line = self.cur_line();
-                    let target = if name == "next-line" { (line + 1).min(self.buf.len_lines() - 1) } else { line.saturating_sub(1) };
+                    // folded and narrowed-away lines are stepped over
+                    self.refresh_view();
+                    let target = self.step_shown(line, 1, name == "previous-line");
                     let col = self.want_col.min(self.buf.line_len(target));
                     self.cursor = self.line_start(target) + col;
                 }
@@ -362,6 +373,10 @@ impl Editor {
         }
         if !vertical {
             self.want_col = self.cursor().col;
+        }
+        // a motion or edit that lands in a fold opens it
+        if !self.view_is_empty() {
+            self.reveal();
         }
         true
     }
