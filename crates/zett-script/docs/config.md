@@ -19,7 +19,9 @@ emacs.lua): anything there can be changed or removed from init.lua.
 ## Keys: Emacs or Vim
 
 Emacs' keys by default: modeless, `C-x` chords, `M-x` for every command,
-`C-h` for help. Keys point at commands; rebind any of them in mode `"e"`:
+`C-h` for help. Esc works as in Emacs and zsh: Meta for the next key (`Esc f`
+is `M-f`), and `Esc Esc` (or Esc inside a chord) cancels. Keys point at
+commands; rebind any of them in mode `"e"`:
 
     zett.map("e", "<C-x><C-b>", "switch-buffer")
     zett.opt.keys = "vim"                         -- Vim's modes and Doom's SPC tree instead

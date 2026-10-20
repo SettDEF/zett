@@ -307,6 +307,8 @@ struct App {
     tabs: bool,
     /// the key profile: Emacs (default) or Vim (`zett.opt.keys = "vim"`), read with the options
     emacs: bool,
+    /// Emacs profile: Esc was pressed, the next key gets Meta (Esc f = M-f, as in Emacs and zsh)
+    meta: bool,
     branch: Option<String>,
     branch_at: Instant,
     started_ms: u128,
@@ -414,6 +416,7 @@ impl App {
             relative: false,
             tabs: false,
             emacs: true,
+            meta: false,
             branch: None,
             branch_at: Instant::now() - Duration::from_secs(60),
             started_ms: 0,
@@ -714,7 +717,24 @@ impl App {
     /// Emacs profile: every key goes through the keymap (chords like C-x C-f wait for more);
     /// an unbound printable key types itself, anything else unbound says so.
     fn emacs_key(&mut self, k: &KeyEvent) {
-        let tok = token(k);
+        // Esc, as in Emacs and zsh: Meta on the next key (Esc f = M-f). Esc Esc, or Esc in the
+        // middle of a chord, cancels everything (Emacs' keyboard-escape-quit)
+        let pending_meta = std::mem::take(&mut self.meta);
+        if k.code == KeyCode::Esc && k.modifiers.is_empty() {
+            if pending_meta || !self.keyseq.is_empty() {
+                self.keyseq.clear();
+                self.menu.clear();
+                return self.after_lua(vec![Effect::Edit("keyboard-quit".into(), 1)]);
+            }
+            self.meta = true;
+            return self.say("ESC-");
+        }
+        // the pending Meta joins the key itself, so token() is the one place keys are spelled
+        let mut k = *k;
+        if pending_meta {
+            k.modifiers |= KeyModifiers::ALT;
+        }
+        let tok = token(&k);
         if tok.is_empty() {
             return;
         }
@@ -1509,8 +1529,6 @@ fn to_key(k: &KeyEvent) -> Option<Key> {
     Some(Key { code, ctrl, alt })
 }
 
-/// A terminal key in the engine's notation (`a`, `<Space>`, `<C-w>`, `<CR>`).
-
 /// What zett shows when it starts without a file: `zett.opt.startup`.
 #[derive(Clone, Debug, PartialEq)]
 enum Startup {
@@ -1531,6 +1549,8 @@ impl Startup {
         }
     }
 }
+
+/// A terminal key in the engine's notation (`a`, `<Space>`, `<C-w>`, `<CR>`).
 fn token(k: &KeyEvent) -> String {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let alt = k.modifiers.contains(KeyModifiers::ALT);
