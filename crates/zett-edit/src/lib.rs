@@ -16,6 +16,7 @@ pub mod killring;
 pub mod outline;
 pub mod prefix;
 pub mod search;
+pub mod suggest;
 mod undo;
 pub use keys::{Code, Key};
 pub use killring::{KillRing, SharedKillRing};
@@ -92,6 +93,8 @@ pub struct Editor {
     last_cmd: String,
     /// folds and narrowing (outline.rs)
     view: outline::View,
+    /// an agent's suggestions, not yet taken (suggest.rs)
+    pending: suggest::Pending,
 }
 
 fn class(c: char) -> u8 {
@@ -123,6 +126,7 @@ impl Editor {
             yanked: None,
             last_cmd: String::new(),
             view: outline::View::default(),
+            pending: suggest::Pending::default(),
         }
     }
 

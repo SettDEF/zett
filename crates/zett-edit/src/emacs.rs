@@ -52,7 +52,7 @@ const KILLS: &[&str] = &["kill-line", "kill-whole-line", "kill-word", "backward-
 /// Every named editor command: the editing ones here, the search ones (search.rs) and the
 /// numeric argument (prefix.rs, which the front end runs).
 pub fn all() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
-    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter()).chain(crate::outline::COMMANDS.iter())
+    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter()).chain(crate::outline::COMMANDS.iter()).chain(crate::suggest::COMMANDS.iter())
 }
 
 pub fn is_command(name: &str) -> bool {
@@ -149,6 +149,10 @@ impl Editor {
             return false;
         }
         let n = n.max(1);
+        if crate::suggest::is_command(name) {
+            self.last_cmd = name.to_string();
+            return self.suggest_exec(name);
+        }
         if crate::outline::is_command(name) {
             self.last_cmd = name.to_string();
             return self.outline_exec(name, n);

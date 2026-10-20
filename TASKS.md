@@ -66,6 +66,19 @@ See PLAN.md for the vision and milestones.
 - [ ] `config.toml` for plain options; the settings page writes it.
 - [ ] Plugin manifest + package manager (below): `plugin.toml`, lockfile, `zett sync`.
 
+### Beyond Notion and Emacs (2026-10-21: the ten ideas, in this order: 5 1 3 2 4 6 7 8 9 10)
+- [x] 5 structure keys for notes and code (outline.rs)
+- [x] 1 time travel (travel.rs; the window's pages through Loro still open)
+- [x] 3 the agent as a collaborator (zett-edit suggest.rs, zett-tui agent.rs): C-c a / SPC a a asks
+  (Haiku by default, `claude -p`, no tools: zett.opt.agent_model, agent_command) about the region or
+  the section; the answer comes back as suggestions per changed block, the old lines struck through
+  and the new ones drawn under them with the agent's tag; C-c y / n take or drop one, C-c ] [ move,
+  C-c Y / N all; each taken one is its own undo step; they follow their lines through edits
+  - [ ] streaming (the API), several questions at once, the window (pages)
+- [ ] 2 live query blocks · [ ] 4 block references everywhere · [ ] 6 notebook blocks
+- [ ] 7 search everything incl. history · [ ] 8 git buffer + blame · [ ] 9 sync without a server
+- [ ] 10 canvas
+
 ### P2 — what people come to Emacs for
 - [ ] Everything a buffer: messages, help, explorer, terminal, undo tree (today panels).
 - [~] Org-like outlines on the block tree: fold, promote/demote, TODO states, an agenda across

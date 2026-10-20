@@ -10,6 +10,7 @@ mod cmdline;
 mod ex;
 mod minibuf;
 mod travel;
+mod agent;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -251,6 +252,9 @@ struct App {
     minibuf: Option<Minibuf>,
     /// time travel through a buffer's history, while it is open
     travel: Option<travel::Travel>,
+    /// a question to the agent on its way, and the echo area asking one
+    agent: Option<agent::Job>,
+    asking: bool,
     /// where the minibuffer is drawn (zett.opt.minibuffer)
     placement: Placement,
     popup: Option<Popup>,
@@ -373,6 +377,8 @@ impl App {
             msg,
             minibuf: None,
             travel: None,
+            agent: None,
+            asking: false,
             placement: Placement::Bottom,
             popup: None,
             quit: false,
@@ -464,6 +470,7 @@ impl App {
                 self.after_lua(fx);
             }
             self.sync_profile();
+            self.agent_poll();
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.minibuf.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
@@ -474,7 +481,7 @@ impl App {
             // a pending key sequence ends after a moment (Neovim's timeoutlen)
             let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { Duration::from_millis(900).saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
             // servers answer on their own time: look more often while any runs
-            let wait = if self.lsp.clients.is_empty() { wait } else { wait.min(Duration::from_millis(100)) };
+            let wait = if self.lsp.clients.is_empty() && self.agent.is_none() { wait } else { wait.min(Duration::from_millis(100)) };
             // a plugin's timer (zett.defer) wakes the loop when it is due
             let wait = match self.engine.next_timer() {
                 Some(t) => wait.min(t.saturating_duration_since(Instant::now())),
@@ -726,6 +733,10 @@ impl App {
         if tok.is_empty() {
             return;
         }
+        // C-g drops a question the agent is still answering
+        if tok == "<C-g>" && self.agent.take().is_some() {
+            return self.say("dropped the question");
+        }
         // C-g abandons a half-typed chord or argument (and, bound, deactivates the mark)
         if tok == "<C-g>" && (!self.keyseq.is_empty() || self.arg.active()) {
             self.keyseq.clear();
@@ -949,6 +960,17 @@ impl App {
 
     fn cmdline_key(&mut self, k: KeyEvent) {
         let Some(line) = self.cmdline.as_mut() else { return };
+        // the question for the agent: its own prompt, not a Lua one
+        if self.asking && matches!(k.code, KeyCode::Esc | KeyCode::Enter) {
+            let l = std::mem::take(line);
+            self.cmdline = None;
+            self.prompt = None;
+            self.asking = false;
+            if k.code == KeyCode::Enter {
+                self.agent_start(&l);
+            }
+            return;
+        }
         match k.code {
             KeyCode::Esc => {
                 self.cmdline = None;
@@ -1341,7 +1363,9 @@ impl App {
         if above < d.top {
             d.top = above;
         } else {
-            let rows = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height).count();
+            // a suggestion's lines take rows too
+            let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum();
+            let rows = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height).count() + extra;
             if rows + margin >= height {
                 d.top = d.ed.step_shown(c.line, height.saturating_sub(margin + 1), true);
             }
@@ -1369,9 +1393,34 @@ impl App {
         };
         let mut next = d.top;
         let mut cursor_row = 0;
+        // the agent's suggestions: what they replace is struck through, their lines drawn after it
+        let hunks: Vec<zett_edit::suggest::Hunk> = d.ed.suggestions().to_vec();
+        let mut virt: std::collections::VecDeque<Line> = std::collections::VecDeque::new();
+        let mut queued_for = usize::MAX;
         for row in 0..height {
+            if let Some(l) = virt.pop_front() {
+                out.push(l);
+                continue;
+            }
             while next < lines && d.ed.is_hidden(next) {
                 next += 1;
+            }
+            if queued_for != next {
+                queued_for = next;
+                for h in hunks.iter().filter(|h| h.end() == next) {
+                    for (i, t) in h.new.iter().enumerate() {
+                        let shown: String = t.replace('\t', &" ".repeat(TAB)).chars().skip(d.left).take(width).collect();
+                        let mut spans = vec![Span::styled(format!("{:>w$} ", "+", w = gutter as usize - 1), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
+                        if i == 0 {
+                            spans.push(Span::styled(format!(" {} ", h.author), hl::hl("AgentTag")));
+                        }
+                        virt.push_back(Line::from(spans));
+                    }
+                }
+                if let Some(l) = virt.pop_front() {
+                    out.push(l);
+                    continue;
+                }
             }
             let ln = next;
             next += 1;
@@ -1428,10 +1477,15 @@ impl App {
                     .collect()
             };
             let mut x = 0usize;
+            // a line a suggestion would replace
+            let replaced = hunks.iter().find(|h| h.at <= ln && ln < h.end());
             for (st, text) in d.spans(ln, ss, &hl) {
                 for ch in text.chars() {
                     if x >= d.left && x < d.left + width {
                         let mut s = st;
+                        if replaced.is_some() {
+                            s = s.patch(hl::hl("AgentDelete"));
+                        }
                         if sel_cols.is_some_and(|(a, b)| x >= a && x < b) {
                             s = s.add_modifier(Modifier::REVERSED);
                         }
@@ -1449,6 +1503,10 @@ impl App {
             // a selection over the line end shows one cell for the line break
             if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && x >= d.left && x < d.left + width {
                 spans.push(Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
+            }
+            // a suggestion that only deletes: its tag on the first line it would delete
+            if let Some(h) = replaced.filter(|h| h.new.is_empty() && h.at == ln) {
+                spans.push(Span::styled(format!(" {}: delete ", h.author), hl::hl("AgentTag")));
             }
             // a folded section: what it hides, after its heading
             if d.ed.is_fold_start(ln) {
@@ -1496,6 +1554,10 @@ impl App {
             let (label, query) = p.split_once(": ").unwrap_or((p.as_str(), ""));
             let style = if label.starts_with("Failing") { hl("Invalid") } else { hl("Prompt") };
             f.render_widget(Paragraph::new(Line::from(vec![Span::styled(format!("{label}: "), style), Span::raw(query.to_string())])), a);
+            return;
+        }
+        if let Some(s) = self.agent_status() {
+            f.render_widget(Paragraph::new(s).style(hl("MsgArea")), a);
             return;
         }
         if let Some((m, at)) = &self.msg {

@@ -24,6 +24,7 @@ pub struct Hl {
     pub italic: bool,
     pub underline: bool,
     pub reverse: bool,
+    pub strikethrough: bool,
     /// take another group's look instead
     pub link: Option<String>,
 }
@@ -96,6 +97,9 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("HelpKey", "fg=3"),
     ("Pmenu", "bg=0"),
     ("Folded", "fg=8 bold"),
+    ("AgentAdd", "fg=2"),
+    ("AgentDelete", "fg=8 strikethrough"),
+    ("AgentTag", "fg=0 bg=6 bold"),
     ("PmenuSel", "fg=0 bg=4"),
     ("PmenuKind", "fg=5"),
     ("PmenuExtra", "fg=8"),
@@ -180,12 +184,14 @@ impl Hl {
                     "italic" => self.italic = true,
                     "underline" => self.underline = true,
                     "reverse" => self.reverse = true,
+                    "strikethrough" => self.strikethrough = true,
                     "nobold" => self.bold = false,
                     "noitalic" => self.italic = false,
                     "nounderline" => self.underline = false,
                     "noreverse" => self.reverse = false,
+                    "nostrikethrough" => self.strikethrough = false,
                     "clear" | "NONE" => *self = Hl::default(),
-                    o => return Err(format!("unknown: {o} (bold italic underline reverse clear)")),
+                    o => return Err(format!("unknown: {o} (bold italic underline reverse strikethrough clear)")),
                 },
             }
         }
@@ -204,7 +210,7 @@ impl Hl {
         if let Some(c) = &self.bg {
             v.push(format!("bg={}", show_color(c)));
         }
-        for (on, n) in [(self.bold, "bold"), (self.italic, "italic"), (self.underline, "underline"), (self.reverse, "reverse")] {
+        for (on, n) in [(self.bold, "bold"), (self.italic, "italic"), (self.underline, "underline"), (self.reverse, "reverse"), (self.strikethrough, "strikethrough")] {
             if on {
                 v.push(n.into());
             }
@@ -222,7 +228,7 @@ impl Hl {
             })
         };
         let flag = |k: &str| t.get::<Option<bool>>(k).map(|b| b.unwrap_or(false));
-        Ok(Hl { fg: col("fg")?, bg: col("bg")?, bold: flag("bold")?, italic: flag("italic")?, underline: flag("underline")?, reverse: flag("reverse")?, link: t.get("link")? })
+        Ok(Hl { fg: col("fg")?, bg: col("bg")?, bold: flag("bold")?, italic: flag("italic")?, underline: flag("underline")?, reverse: flag("reverse")?, strikethrough: flag("strikethrough")?, link: t.get("link")? })
     }
 }
 
@@ -312,6 +318,7 @@ impl Engine {
                     t.set("italic", h.italic)?;
                     t.set("underline", h.underline)?;
                     t.set("reverse", h.reverse)?;
+                    t.set("strikethrough", h.strikethrough)?;
                     t.set("link", h.link.clone())?;
                     Ok(Value::Table(t))
                 }

@@ -50,6 +50,15 @@ map("<C-/>", "undo")
 map("<C-_>", "undo")
 map("<C-x>u", "undo")
 map("<C-c>t", "time-travel")
+
+-- ── the agent beside you: its changes come as suggestions, taken or dropped one by one ──
+map("<C-c>a", "agent-ask")
+map("<C-c>y", "agent-accept")
+map("<C-c>n", "agent-reject")
+map("<C-c>Y", "agent-accept-all")
+map("<C-c>N", "agent-reject-all")
+map("<C-c>]", "agent-next-suggestion")
+map("<C-c>[", "agent-previous-suggestion")
 map("<C-g>", "keyboard-quit")
 
 -- ── numeric argument: C-u 4 C-f, M-5 C-n, M-- M-f ──

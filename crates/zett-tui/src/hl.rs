@@ -46,7 +46,7 @@ pub(crate) fn style(h: &Hl) -> Style {
     if let Some(c) = h.bg {
         s = s.bg(color(c));
     }
-    for (on, m) in [(h.bold, Modifier::BOLD), (h.italic, Modifier::ITALIC), (h.underline, Modifier::UNDERLINED), (h.reverse, Modifier::REVERSED)] {
+    for (on, m) in [(h.bold, Modifier::BOLD), (h.italic, Modifier::ITALIC), (h.underline, Modifier::UNDERLINED), (h.reverse, Modifier::REVERSED), (h.strikethrough, Modifier::CROSSED_OUT)] {
         if on {
             s = s.add_modifier(m);
         }
