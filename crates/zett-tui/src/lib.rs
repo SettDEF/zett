@@ -556,7 +556,12 @@ impl App {
             return;
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-        // Ctrl+S saves in any mode, Ctrl+P finds a file
+        // the Emacs profile: every key through its keymap. C-s is isearch and C-p the previous
+        // line there, so the Vim profile's shortcuts below must not catch them first
+        if self.emacs_keys() {
+            return self.emacs_key(&k);
+        }
+        // Vim profile: Ctrl+S saves in any mode, Ctrl+P finds a file
         if ctrl && k.code == KeyCode::Char('s') {
             return self.save(None);
         }
@@ -564,9 +569,6 @@ impl App {
             return self.open_picker();
         }
         let Some(ek) = to_key(&k) else { return };
-        if self.emacs_keys() {
-            return self.emacs_key(&k);
-        }
         let mode = self.docs[self.cur].ed.mode();
         // gc in visual mode comments the selection (the engine only sees normal-mode keys)
         if matches!(mode, Mode::Visual | Mode::VisualLine) && !ctrl {
@@ -755,7 +757,21 @@ impl App {
         }
         let mut seq = std::mem::take(&mut self.keyseq);
         seq.push(tok);
-        match self.with_lua(|e| e.feed("e", &seq)) {
+        // a search in progress has its own keymap (the isearch plugin's), as Emacs's isearch-mode-map
+        let searching = self.docs[self.cur].ed.isearch().is_some();
+        match self.with_lua(|e| e.feed(if searching { "isearch" } else { "e" }, &seq)) {
+            Feed::None if searching => {
+                self.menu.clear();
+                let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+                match k.code {
+                    KeyCode::Char(c) if plain => self.doc().ed.isearch_char(c),
+                    // any other key ends the search where it is, then does what it always does
+                    _ => {
+                        self.doc().ed.exec("isearch-exit", 1);
+                        self.emacs_key(&k);
+                    }
+                }
+            }
             Feed::None => {
                 self.menu.clear();
                 let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
@@ -1321,6 +1337,18 @@ impl App {
         }
         let sel = d.ed.selection_range();
         let mut out: Vec<Line> = Vec::with_capacity(height);
+        // a search in progress: its visible matches, found once per frame (Search; IncSearch for the
+        // one the cursor is on)
+        let (found, current) = match d.ed.isearch() {
+            Some(s) if !s.query().is_empty() => {
+                let current = s.current();
+                let from = d.ed.buf.to_char(Pos { line: d.top.min(lines), col: 0 });
+                let end = (d.top + height).min(lines);
+                let to = if end >= lines { d.ed.buf.len_chars() } else { d.ed.buf.to_char(Pos { line: end, col: 0 }) };
+                (d.ed.isearch_matches(from, to), current)
+            }
+            _ => (Vec::new(), None),
+        };
         for row in 0..height {
             let ln = d.top + row;
             if ln >= lines {
@@ -1360,6 +1388,18 @@ impl App {
                 let (a, b) = (s.max(ls), e.min(le + 1));
                 (a < b).then(|| (screen_col(&line_text, a - ls), screen_col(&line_text, b.min(le) - ls) + usize::from(b > le)))
             });
+            // search matches on this line, in screen columns (true: the current one)
+            let hits: Vec<(usize, usize, bool)> = if found.is_empty() {
+                Vec::new()
+            } else {
+                let ls = d.ed.buf.to_char(Pos { line: ln, col: 0 });
+                let le = ls + line_text.chars().count();
+                found
+                    .iter()
+                    .filter(|(a, b)| *a < le && *b > ls)
+                    .map(|&(a, b)| (screen_col(&line_text, a.max(ls) - ls), screen_col(&line_text, b.min(le) - ls), current == Some((a, b))))
+                    .collect()
+            };
             let mut x = 0usize;
             for (st, text) in d.spans(ln, ss, &hl) {
                 for ch in text.chars() {
@@ -1367,6 +1407,9 @@ impl App {
                         let mut s = st;
                         if sel_cols.is_some_and(|(a, b)| x >= a && x < b) {
                             s = s.add_modifier(Modifier::REVERSED);
+                        }
+                        if let Some(h) = hits.iter().find(|h| x >= h.0 && x < h.1) {
+                            s = s.patch(hl::hl(if h.2 { "IncSearch" } else { "Search" }));
                         }
                         if let Some(&(_, _, sev)) = marks.iter().filter(|m| x >= m.0 && x < m.1).min_by_key(|m| m.2) {
                             s = s.add_modifier(Modifier::UNDERLINED).underline_color(lsp::severity_color(sev));
@@ -1411,6 +1454,14 @@ impl App {
             let p = self.prompt.clone().unwrap_or_else(|| ":".into());
             f.render_widget(Paragraph::new(Line::from(vec![Span::styled(p.clone(), hl("Prompt")), Span::raw(l.as_str())])), a);
             f.set_cursor_position(Position { x: a.x + (p.chars().count() + l.chars().count()) as u16, y: a.y });
+            return;
+        }
+        // a search in progress: "I-search: query", Emacs's echo area
+        if let Some(s) = self.docs.get(self.cur).and_then(|d| d.ed.isearch()) {
+            let p = s.prompt();
+            let (label, query) = p.split_once(": ").unwrap_or((p.as_str(), ""));
+            let style = if label.starts_with("Failing") { hl("Invalid") } else { hl("Prompt") };
+            f.render_widget(Paragraph::new(Line::from(vec![Span::styled(format!("{label}: "), style), Span::raw(query.to_string())])), a);
             return;
         }
         if let Some((m, at)) = &self.msg {

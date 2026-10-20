@@ -134,3 +134,16 @@ fn emacs_keys_run_editing_commands_and_chords_wait() {
     let names: Vec<String> = e.commands().into_iter().map(|c| c.0).collect();
     assert!(names.contains(&"kill-line".to_string()) && names.contains(&"find-file".to_string()));
 }
+
+#[test]
+fn isearch_plugin_binds_c_s_and_its_own_keymap() {
+    let (d, f) = ws("isearch");
+    let mut e = Engine::new(Some(f));
+    e.set_frontend("editor");
+    e.load_config(&d.join("no-config"));
+    assert!(e.errors.is_empty(), "{:?}", e.errors);
+    assert_eq!(e.feed("e", &k("<C-s>")), Feed::Ran(vec![Effect::Edit("isearch-forward".into(), 1)]));
+    assert_eq!(e.feed("e", &k("<C-r>")), Feed::Ran(vec![Effect::Edit("isearch-backward".into(), 1)]));
+    assert_eq!(e.feed("isearch", &k("<C-s>")), Feed::Ran(vec![Effect::Edit("isearch-repeat-forward".into(), 1)]));
+    assert_eq!(e.feed("isearch", &["<CR>".to_string()]), Feed::Ran(vec![Effect::Edit("isearch-exit".into(), 1)]));
+}

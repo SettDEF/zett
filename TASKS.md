@@ -30,7 +30,9 @@ See PLAN.md for the vision and milestones.
   Vim's modes become one keymap layer.
 - [~] **Modeless editing:** `C-a C-e C-f C-b M-f M-b`, `C-k`/`C-y` with a kill ring, `M-y`,
   mark and region (`C-SPC`, `C-w`, `M-w`), `C-/` undo, `C-s`/`C-r` incremental search.
-  (done: all but incremental search, which still opens the search picker. The region is drawn and
+  (done, incremental search too: C-s / C-r as Emacs's isearch, the keys in the bundled isearch
+  plugin, the search in zett-edit `search.rs`, the matcher Buffer::find over the rope; M-s o is the
+  line search C-s used to open. The region is drawn and
   transient: C-SPC activates it, an edit, M-w or C-g ends it; M-< / M-> leave a mark without one.
   Kills go to the system clipboard and a yank takes in what was copied elsewhere: wl-copy/wl-paste,
   OSC 52 without Wayland.)

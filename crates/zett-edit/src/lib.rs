@@ -13,9 +13,11 @@
 pub mod emacs;
 pub mod keys;
 pub mod killring;
+pub mod search;
 mod undo;
 pub use keys::{Code, Key};
 pub use killring::{KillRing, SharedKillRing};
+pub use search::Isearch;
 
 use zett_core::{Buffer, Pos};
 
@@ -78,6 +80,10 @@ pub struct Editor {
     mark_active: bool,
     /// the kill ring: this editor's own until a front end shares one (`use_kill_ring`)
     kill_ring: SharedKillRing,
+    /// an incremental search in progress (C-s / C-r)
+    isearch: Option<Isearch>,
+    /// the last finished search, for C-s C-s
+    last_search: String,
     /// the last yank (start, end, kill-ring index), for yank-pop
     yanked: Option<(usize, usize, usize)>,
     /// the command that ran last (kills append to kills, typing groups into one undo step)
@@ -108,6 +114,8 @@ impl Editor {
             mark: None,
             mark_active: false,
             kill_ring: KillRing::shared(),
+            isearch: None,
+            last_search: String::new(),
             yanked: None,
             last_cmd: String::new(),
         }

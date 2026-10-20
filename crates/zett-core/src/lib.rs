@@ -172,11 +172,72 @@ impl Buffer {
         self.text = Rope::from_str(s);
         self.dirty = true;
     }
+
+    /// Where `needle` next starts: at or after `from` (forward), or before `from` (backward).
+    /// `fold`: case does not matter. Walks the rope itself, so a search costs the distance to
+    /// the match, not a copy of the text.
+    pub fn find(&self, needle: &str, from: usize, forward: bool, fold: bool) -> Option<usize> {
+        let low = |c: char| if fold { c.to_lowercase().next().unwrap_or(c) } else { c };
+        let want: Vec<char> = needle.chars().map(low).collect();
+        let (m, len) = (want.len(), self.text.len_chars());
+        if m == 0 || m > len {
+            return None;
+        }
+        let mut window = std::collections::VecDeque::with_capacity(m + 1);
+        if forward {
+            let mut at = from.min(len);
+            for c in self.text.chars_at(at) {
+                window.push_back(low(c));
+                if window.len() > m {
+                    window.pop_front();
+                }
+                at += 1;
+                if window.len() == m && window.iter().eq(want.iter()) {
+                    return Some(at - m);
+                }
+            }
+        } else {
+            // a match starting before `from` may end after it
+            let mut at = (from + m - 1).min(len);
+            let mut it = self.text.chars_at(at);
+            while let Some(c) = it.prev() {
+                at -= 1;
+                window.push_front(low(c));
+                if window.len() > m {
+                    window.pop_back();
+                }
+                if window.len() == m && at < from && window.iter().eq(want.iter()) {
+                    return Some(at);
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn find_both_ways_and_folded() {
+        let b = Buffer::from_str("one Two one two");
+        assert_eq!(b.find("one", 0, true, false), Some(0));
+        assert_eq!(b.find("one", 1, true, false), Some(8));
+        assert_eq!(b.find("two", 0, true, false), Some(12));
+        assert_eq!(b.find("two", 0, true, true), Some(4));
+        // backward: a match that starts before `from`, even one reaching past it
+        assert_eq!(b.find("one", 15, false, false), Some(8));
+        assert_eq!(b.find("one", 9, false, false), Some(8));
+        assert_eq!(b.find("one", 8, false, false), Some(0));
+        assert_eq!(b.find("one", 0, false, false), None);
+        assert_eq!(b.find("three", 0, true, true), None);
+        assert_eq!(b.find("", 0, true, true), None);
+        // not ASCII: char positions
+        let b = Buffer::from_str("grüße, Grüße");
+        assert_eq!(b.find("GRÜSSE", 0, true, true), None);
+        assert_eq!(b.find("grüße", 1, true, true), Some(7));
+    }
 
     #[test]
     fn lines_and_positions() {

@@ -59,6 +59,9 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("CursorLine", "bg=+13"),
     ("CursorLineGlow", "bg=+7"),
     ("CursorLineGlow2", "bg=+3"),
+    // incremental search: every match, and the one the cursor is on
+    ("Search", "fg=0 bg=3"),
+    ("IncSearch", "fg=0 bg=5 bold"),
     ("NonText", "fg=8"),
     ("WinSeparator", "fg=8"),
     ("MsgArea", "fg=7"),

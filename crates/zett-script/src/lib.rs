@@ -126,7 +126,7 @@ const EDITOR: &str = include_str!("editor.lua");
 const EMACS: &str = include_str!("emacs.lua");
 /// Plugins that come with zett (editor only). A plugin of the same name in the config's
 /// plugins/ folder replaces one; `zett.opt.NAME = false` turns it off.
-const BUNDLED: &[(&str, &str)] = &[("explorer", include_str!("../plugins/explorer.lua")), ("undotree", include_str!("../plugins/undotree.lua")), ("fidget", include_str!("../plugins/fidget.lua"))];
+const BUNDLED: &[(&str, &str)] = &[("explorer", include_str!("../plugins/explorer.lua")), ("undotree", include_str!("../plugins/undotree.lua")), ("fidget", include_str!("../plugins/fidget.lua")), ("isearch", include_str!("../plugins/isearch.lua"))];
 
 /// Splits Vim key notation into keys: `<leader>pn` → `<leader>`, `p`, `n`; `<C-s>` stays one.
 pub fn keys(s: &str) -> Vec<String> {
@@ -399,7 +399,7 @@ impl Engine {
     pub fn commands(&self) -> Vec<(String, String, String)> {
         let st = self.st.borrow();
         let mut v: Vec<(String, String, String)> = st.commands.iter().map(|(n, c)| (n.clone(), c.desc.clone(), c.source.clone())).collect();
-        for (n, d) in zett_edit::emacs::COMMANDS {
+        for (n, d) in zett_edit::emacs::all() {
             if !st.commands.contains_key(*n) {
                 v.push((n.to_string(), d.to_string(), "editor".into()));
             }

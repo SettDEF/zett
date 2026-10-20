@@ -49,12 +49,17 @@ pub const COMMANDS: &[(&str, &str)] = &[
 /// Kills that follow each other add to the same kill-ring entry (Emacs's kill-append).
 const KILLS: &[&str] = &["kill-line", "kill-whole-line", "kill-word", "backward-kill-word", "kill-region"];
 
+/// Every named editor command: the editing ones here and the search ones (search.rs).
+pub fn all() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
+    COMMANDS.iter().chain(crate::search::COMMANDS.iter())
+}
+
 pub fn is_command(name: &str) -> bool {
-    COMMANDS.iter().any(|(n, _)| *n == name)
+    all().any(|(n, _)| *n == name)
 }
 
 pub fn describe(name: &str) -> Option<&'static str> {
-    COMMANDS.iter().find(|(n, _)| *n == name).map(|(_, d)| *d)
+    all().find(|(n, _)| *n == name).map(|(_, d)| *d)
 }
 
 fn wordish(c: char) -> bool {
@@ -119,6 +124,15 @@ impl Editor {
         }
         let n = n.max(1);
         let last = std::mem::replace(&mut self.last_cmd, name.to_string());
+        // searching moves the cursor, never the text: no undo step, no kill run
+        if self.search_command(name) {
+            self.want_col = self.cursor().col;
+            return true;
+        }
+        // C-g (or Esc Esc) during a search cancels it, as in Emacs
+        if name == "keyboard-quit" && self.isearch.is_some() {
+            return self.search_command("isearch-abort");
+        }
         let appending = KILLS.contains(&name) && KILLS.contains(&last.as_str());
         let vertical = matches!(name, "next-line" | "previous-line");
         // an edit is its own undo step (typing runs are grouped in self_insert)
