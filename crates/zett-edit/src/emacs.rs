@@ -200,18 +200,25 @@ impl Editor {
                     self.mark_active = false;
                 }
                 "yank" => {
-                    if let Some(t) = self.kill_ring.last().cloned() {
+                    let newest = {
+                        let r = self.ring();
+                        r.last().map(|t| (t.to_string(), r.len() - 1))
+                    };
+                    if let Some((t, i)) = newest {
                         let at = self.cursor;
                         self.ins(at, &t);
                         self.cursor = at + t.chars().count();
-                        self.yanked = Some((at, self.cursor, self.kill_ring.len() - 1));
+                        self.yanked = Some((at, self.cursor, i));
                     }
                 }
                 "yank-pop" => {
                     if let (Some((a, b, i)), true) = (self.yanked, last == "yank" || last == "yank-pop") {
-                        if self.kill_ring.len() > 1 {
-                            let i = (i + self.kill_ring.len() - 1) % self.kill_ring.len();
-                            let t = self.kill_ring[i].clone();
+                        let older = {
+                            let r = self.ring();
+                            let n = r.len();
+                            (n > 1).then(|| (i + n - 1) % n).and_then(|i| r.get(i).map(|t| (i, t.to_string())))
+                        };
+                        if let Some((i, t)) = older {
                             self.rem(a, b);
                             self.ins(a, &t);
                             self.cursor = a + t.chars().count();
@@ -330,40 +337,36 @@ impl Editor {
     }
 
     fn push_kill(&mut self, t: String, append: bool, before: bool) {
-        match self.kill_ring.last_mut() {
-            Some(last) if append => {
-                if before {
-                    last.insert_str(0, &t);
-                } else {
-                    last.push_str(&t);
-                }
-            }
-            _ => {
-                self.kill_ring.push(t);
-                if self.kill_ring.len() > 120 {
-                    self.kill_ring.remove(0);
-                }
-            }
-        }
+        self.ring().push(t, append, before);
         self.yanked = None;
-        self.kills += 1;
+    }
+
+    fn ring(&self) -> std::sync::MutexGuard<'_, crate::KillRing> {
+        self.kill_ring.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Shares a front end's ring, so a kill in one buffer yanks in every other one.
+    pub fn use_kill_ring(&mut self, ring: &crate::SharedKillRing) {
+        if !std::sync::Arc::ptr_eq(&self.kill_ring, ring) {
+            self.kill_ring = ring.clone();
+            self.yanked = None;
+        }
     }
 
     /// The last killed text (for the system clipboard).
-    pub fn last_kill(&self) -> Option<&str> {
-        self.kill_ring.last().map(String::as_str)
+    pub fn last_kill(&self) -> Option<String> {
+        self.ring().last().map(String::from)
     }
 
     /// Goes up with every kill or copy: when it changed, `last_kill` is new.
     pub fn kill_count(&self) -> u64 {
-        self.kills
+        self.ring().kill_count()
     }
 
     /// Text copied outside zett (the system clipboard), offered before a yank: it joins the
     /// kill ring when it is not already the newest kill (Emacs' interprogram paste).
     pub fn offer_paste(&mut self, text: String) {
-        if !text.is_empty() && self.last_kill() != Some(text.as_str()) {
-            self.kill_ring.push(text);
+        if self.ring().offer(text) {
             self.yanked = None;
         }
     }
@@ -444,6 +447,26 @@ mod tests {
     }
 
     #[test]
+    fn a_shared_ring_yanks_in_another_buffer() {
+        let ring = crate::KillRing::shared();
+        let mut a = ed("alpha beta", 0);
+        let mut b = ed("", 0);
+        a.use_kill_ring(&ring);
+        b.use_kill_ring(&ring);
+        a.exec("kill-word", 1);
+        b.exec("yank", 1);
+        assert_eq!(b.text(), "alpha");
+        // and yank-pop in b walks kills made in a (a motion between them keeps them apart: a run
+        // of kills is one entry)
+        a.exec("beginning-of-line", 1);
+        a.exec("kill-line", 1);
+        b.exec("yank", 1);
+        assert_eq!(b.text(), "alpha beta");
+        b.exec("yank-pop", 1);
+        assert_eq!(b.text(), "alphaalpha");
+    }
+
+    #[test]
     fn kill_line_twice_takes_the_line_break_and_appends() {
         let mut e = ed("one\ntwo\nthree", 0);
         e.exec("kill-line", 1);
@@ -451,7 +474,7 @@ mod tests {
         e.exec("kill-line", 1);
         assert_eq!(e.text(), "two\nthree");
         // both kills are one entry
-        assert_eq!(e.last_kill(), Some("one\n"));
+        assert_eq!(e.last_kill().as_deref(), Some("one\n"));
         e.exec("next-line", 1);
         e.exec("yank", 1);
         assert_eq!(e.text(), "two\none\nthree");

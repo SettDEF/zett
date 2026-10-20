@@ -12,8 +12,10 @@
 
 pub mod emacs;
 pub mod keys;
+pub mod killring;
 mod undo;
 pub use keys::{Code, Key};
+pub use killring::{KillRing, SharedKillRing};
 
 use zett_core::{Buffer, Pos};
 
@@ -74,9 +76,8 @@ pub struct Editor {
     mark: Option<usize>,
     /// the region is active (shown, acted on by default): transient-mark-mode
     mark_active: bool,
-    kill_ring: Vec<String>,
-    /// counts kills, so a front end can tell when to copy to the system clipboard
-    kills: u64,
+    /// the kill ring: this editor's own until a front end shares one (`use_kill_ring`)
+    kill_ring: SharedKillRing,
     /// the last yank (start, end, kill-ring index), for yank-pop
     yanked: Option<(usize, usize, usize)>,
     /// the command that ran last (kills append to kills, typing groups into one undo step)
@@ -106,8 +107,7 @@ impl Editor {
             emacs: false,
             mark: None,
             mark_active: false,
-            kill_ring: Vec::new(),
-            kills: 0,
+            kill_ring: KillRing::shared(),
             yanked: None,
             last_cmd: String::new(),
         }

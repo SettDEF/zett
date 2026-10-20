@@ -310,6 +310,8 @@ struct App {
     emacs: bool,
     /// Emacs profile: Esc was pressed, the next key gets Meta (Esc f = M-f, as in Emacs and zsh)
     meta: bool,
+    /// one kill ring for every buffer (Emacs): handed to each in sync_profile
+    kill_ring: zett_edit::SharedKillRing,
     branch: Option<String>,
     branch_at: Instant,
     started_ms: u128,
@@ -418,6 +420,7 @@ impl App {
             tabs: false,
             emacs: true,
             meta: false,
+            kill_ring: zett_edit::KillRing::shared(),
             branch: None,
             branch_at: Instant::now() - Duration::from_secs(60),
             started_ms: 0,
@@ -699,10 +702,14 @@ impl App {
 
     /// Every open editor in the active key profile: new buffers, help, a config reload that
     /// switched `zett.opt.keys`. Runs before each draw, so no place that opens a buffer has to.
+    /// Every buffer in step with the app: the key profile, and the one kill ring they share.
     fn sync_profile(&mut self) {
         let emacs = self.emacs;
-        for d in self.docs.iter_mut().filter(|d| d.ed.is_emacs() != emacs) {
-            d.ed.set_emacs(emacs);
+        for d in self.docs.iter_mut() {
+            if d.ed.is_emacs() != emacs {
+                d.ed.set_emacs(emacs);
+            }
+            d.ed.use_kill_ring(&self.kill_ring);
         }
     }
 
@@ -842,7 +849,7 @@ impl App {
                     self.doc().ed.exec(&name, n);
                     if self.docs[self.cur].ed.kill_count() != kills {
                         if let Some(t) = self.docs[self.cur].ed.last_kill() {
-                            clipboard::copy(t);
+                            clipboard::copy(&t);
                         }
                     }
                     self.doc().touched(before);

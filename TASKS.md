@@ -34,8 +34,8 @@ See PLAN.md for the vision and milestones.
   transient: C-SPC activates it, an edit, M-w or C-g ends it; M-< / M-> leave a mark without one.
   Kills go to the system clipboard and a yank takes in what was copied elsewhere: wl-copy/wl-paste,
   OSC 52 without Wayland.)
-  - [ ] the kill ring is per buffer today (it lives in each Editor); move it up to the App so it is
-    one ring for every buffer even without a system clipboard
+  - [x] one kill ring for every buffer (zett-edit `killring.rs`, shared by the App through
+    sync_profile): a kill in one buffer yanks in another, also without a system clipboard
 - [ ] **Minibuffer:** one completion UI for `M-x`, find-file, switch-buffer and help (fuzzy,
   history, annotations: vertico + orderless + marginalia in one).
 - [ ] **Major and minor modes:** one per file type (markdown, rust, lua…), toggles (line
