@@ -83,7 +83,8 @@ impl App {
         // anything else: the global keymaps (SPC, :), never Vim's editing
         let mut seq = std::mem::take(&mut self.keyseq);
         seq.push(tok);
-        let feed = self.with_lua(|e| e.feed("n", &seq));
+        let mode = self.keymode();
+        let feed = self.with_lua(|e| e.feed(mode, &seq));
         match feed {
             Feed::None => self.menu.clear(),
             f => self.after_feed(f, seq),

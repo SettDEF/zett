@@ -250,6 +250,7 @@ fn script(cmd: Cmd, f: Folder, json: bool) {
                 Effect::Notify(m) => println!("{m}"),
                 Effect::Open(p) => println!("opened: {}", folder.borrow().ws.text(p)),
                 Effect::Ui(name, _) => eprintln!("zett: that opens {name} in the window (run `zett` for it)"),
+                Effect::Edit(name, _) => eprintln!("zett: {name} edits text in the editor (run `zett -t`)"),
                 Effect::Refresh => {}
             }
         }

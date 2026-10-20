@@ -497,7 +497,8 @@ impl App {
                     // keys that are exactly a mapping run now; a prefix alone keeps its menu open
                     // until the next key (as which-key does)
                     let seq = self.keyseq.clone();
-                    match self.with_lua(|e| e.timeout("n", &seq)) {
+                    let mode = self.keymode();
+                    match self.with_lua(|e| e.timeout(mode, &seq)) {
                         Feed::Ran(fx) => {
                             self.keyseq.clear();
                             self.menu.clear();
@@ -548,6 +549,13 @@ impl App {
             return self.open_picker();
         }
         let Some(ek) = to_key(&k) else { return };
+        if self.emacs_keys() {
+            return self.emacs_key(&k);
+        }
+        if self.docs[self.cur].ed.is_emacs() {
+            // zett.opt.keys changed to "vim" while this buffer was open
+            self.doc().ed.set_emacs(false);
+        }
         let mode = self.docs[self.cur].ed.mode();
         // gc in visual mode comments the selection (the engine only sees normal-mode keys)
         if matches!(mode, Mode::Visual | Mode::VisualLine) && !ctrl {
@@ -660,6 +668,51 @@ impl App {
         }
     }
 
+    /// The key profile: Emacs unless `zett.opt.keys = "vim"`.
+    fn emacs_keys(&self) -> bool {
+        self.engine.opt("keys").is_none_or(|k| k != "vim")
+    }
+    /// The keymap mode keys go through: "e" (Emacs) or Vim's normal-mode "n".
+    fn keymode(&self) -> &'static str {
+        if self.emacs_keys() { "e" } else { "n" }
+    }
+
+    /// Emacs profile: every key goes through the keymap (chords like C-x C-f wait for more);
+    /// an unbound printable key types itself, anything else unbound says so.
+    fn emacs_key(&mut self, k: &KeyEvent) {
+        if !self.docs[self.cur].ed.is_emacs() {
+            self.doc().ed.set_emacs(true);
+        }
+        let tok = token(k);
+        if tok.is_empty() {
+            return;
+        }
+        // C-g abandons a half-typed chord (and, bound, deactivates the mark)
+        if tok == "<C-g>" && !self.keyseq.is_empty() {
+            self.keyseq.clear();
+            self.menu.clear();
+            return self.say("Quit");
+        }
+        let mut seq = std::mem::take(&mut self.keyseq);
+        seq.push(tok);
+        match self.with_lua(|e| e.feed("e", &seq)) {
+            Feed::None => {
+                self.menu.clear();
+                let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+                match k.code {
+                    KeyCode::Char(c) if plain && seq.len() == 1 => {
+                        let before = self.docs[self.cur].ed.cursor().line;
+                        self.doc().ed.self_insert(c);
+                        self.doc().touched(before);
+                        self.edit_at = Instant::now();
+                    }
+                    _ => self.say(format!("{} is undefined", seq.join(" "))),
+                }
+            }
+            f => self.after_feed(f, seq),
+        }
+    }
+
     fn edit_key(&mut self, k: Key) {
         let before = self.docs[self.cur].ed.cursor().line;
         let rev = self.docs[self.cur].ed.buf.rev();
@@ -724,6 +777,15 @@ impl App {
                     }
                     other => self.say(format!("{other}: only in the window (zett --gui)")),
                 },
+                Effect::Edit(name, n) => {
+                    let before = self.docs[self.cur].ed.cursor().line;
+                    let rev = self.docs[self.cur].ed.buf.rev();
+                    self.doc().ed.exec(&name, n);
+                    self.doc().touched(before);
+                    if self.docs[self.cur].ed.buf.rev() != rev {
+                        self.edit_at = Instant::now();
+                    }
+                }
                 Effect::Open(_) | Effect::Refresh => {}
             }
         }
@@ -737,7 +799,7 @@ impl App {
             self.engine.commands().into_iter().map(|(n, d, _)| (n, d)).collect()
         } else {
             let leader = self.engine.leader();
-            self.engine.bindings("n").into_iter().map(|(k, d)| (k.replace("<leader>", if leader == "<Space>" { "SPC " } else { &leader }), d)).collect()
+            self.engine.bindings(self.keymode()).into_iter().map(|(k, d)| (k.replace("<leader>", if leader == "<Space>" { "SPC " } else { &leader }), d)).collect()
         };
         self.popup = Some(Popup::Help(if what == "commands" { "Commands".into() } else { "Keys".into() }, rows));
     }
@@ -1432,6 +1494,9 @@ fn token(k: &KeyEvent) -> String {
     match k.code {
         KeyCode::Char(' ') => named("Space"),
         KeyCode::Char('<') if !ctrl && !alt => "<lt>".into(),
+        // inside <…> a bare < or > would end the notation: M-< is <A-lt>, M-> <A-gt>
+        KeyCode::Char('<') => named("lt"),
+        KeyCode::Char('>') if ctrl || alt => named("gt"),
         KeyCode::Char(c) if ctrl || alt => named(&c.to_lowercase().to_string()),
         KeyCode::Char(c) => c.to_string(),
         KeyCode::Esc => named("Esc"),

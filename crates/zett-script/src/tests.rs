@@ -111,3 +111,26 @@ fn lua_eval_and_page_api() {
     assert_eq!(out, "h1:first");
     assert!(e.eval("zett.page.add('nonsense', 'x')").is_err());
 }
+
+#[test]
+fn emacs_keys_run_editing_commands_and_chords_wait() {
+    let (d, f) = ws("emacs");
+    let mut e = Engine::new(Some(f));
+    e.set_frontend("editor");
+    e.load_config(&d.join("no-config"));
+    assert!(e.errors.is_empty(), "{:?}", e.errors);
+    // a key on an editing command: the host runs it in the editor
+    assert_eq!(e.feed("e", &k("<C-k>")), Feed::Ran(vec![Effect::Edit("kill-line".into(), 1)]));
+    // M- is Alt; the host types <A-f>
+    assert_eq!(e.feed("e", &["<A-f>".to_string()]), Feed::Ran(vec![Effect::Edit("forward-word".into(), 1)]));
+    // the host types <CR> for Enter; the map says <CR> too: one spelling after normalizing
+    assert_eq!(e.feed("e", &["<CR>".to_string()]), Feed::Ran(vec![Effect::Edit("newline".into(), 1)]));
+    // C-x waits for the rest and lists it
+    let Feed::Pending(menu) = e.feed("e", &k("<C-x>")) else { panic!("C-x should wait") };
+    assert!(menu.iter().any(|m| m.desc.contains("save")), "{menu:?}");
+    // unbound printable keys are the host's (it types them)
+    assert_eq!(e.feed("e", &k("a")), Feed::None);
+    // M-x lists editing commands next to the Lua ones
+    let names: Vec<String> = e.commands().into_iter().map(|c| c.0).collect();
+    assert!(names.contains(&"kill-line".to_string()) && names.contains(&"find-file".to_string()));
+}

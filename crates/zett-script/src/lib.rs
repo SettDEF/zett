@@ -33,6 +33,8 @@ pub enum Effect {
     Notify(String),
     /// a piece of UI the host owns: "quickOpen", "commandLine", "whichKey", "help"…
     Ui(String, String),
+    /// run an editing command (zett-edit's emacs.rs: forward-char, kill-line…) this many times
+    Edit(String, usize),
 }
 
 /// One entry of the which-key popup.
@@ -105,6 +107,8 @@ pub struct Engine {
 const DEFAULTS: &str = include_str!("defaults.lua");
 /// The code editor's layer (Doom's SPC tree), on top of the defaults when `frontend` is "editor".
 const EDITOR: &str = include_str!("editor.lua");
+/// The default keys, Emacs' (mode "e"); the editor uses them unless `zett.opt.keys` is "vim".
+const EMACS: &str = include_str!("emacs.lua");
 /// Plugins that come with zett (editor only). A plugin of the same name in the config's
 /// plugins/ folder replaces one; `zett.opt.NAME = false` turns it off.
 const BUNDLED: &[(&str, &str)] = &[("explorer", include_str!("../plugins/explorer.lua")), ("undotree", include_str!("../plugins/undotree.lua")), ("fidget", include_str!("../plugins/fidget.lua"))];
@@ -252,6 +256,7 @@ impl Engine {
         let plugins = dir.join("plugins");
         if self.frontend() == "editor" {
             self.exec_named(EDITOR, "zett", "editor.lua");
+            self.exec_named(EMACS, "zett", "emacs.lua");
             for (name, code) in BUNDLED {
                 if !plugins.join(name).join("init.lua").is_file() {
                     self.exec_named(code, name, &format!("{name}.lua (built in)"));
@@ -358,6 +363,10 @@ impl Engine {
 
     /// Runs a command by name.
     pub fn run(&mut self, name: &str) -> Result<Vec<Effect>, String> {
+        // an editing command the editor itself runs (unless a script defines one of that name)
+        if !self.st.borrow().commands.contains_key(name) && zett_edit::emacs::is_command(name) {
+            return Ok(vec![Effect::Edit(name.to_string(), 1)]);
+        }
         let f: Function = {
             let st = self.st.borrow();
             let c = st.commands.get(name).ok_or_else(|| format!("no command {name:?}"))?;
@@ -371,7 +380,15 @@ impl Engine {
 
     /// Commands for the palette and `:`: (name, description, source).
     pub fn commands(&self) -> Vec<(String, String, String)> {
-        self.st.borrow().commands.iter().map(|(n, c)| (n.clone(), c.desc.clone(), c.source.clone())).collect()
+        let st = self.st.borrow();
+        let mut v: Vec<(String, String, String)> = st.commands.iter().map(|(n, c)| (n.clone(), c.desc.clone(), c.source.clone())).collect();
+        for (n, d) in zett_edit::emacs::COMMANDS {
+            if !st.commands.contains_key(*n) {
+                v.push((n.to_string(), d.to_string(), "editor".into()));
+            }
+        }
+        v.sort();
+        v
     }
 
     /// The keys of each command in a mode, shown as typed (`SPC f f`, `gd`).
@@ -403,6 +420,9 @@ impl Engine {
     /// Keys typed in a mode (`n`, `i`, …). A mapping that matches exactly runs; a prefix of
     /// longer mappings waits and lists what can follow (which-key).
     pub fn feed(&mut self, mode: &str, typed: &[String]) -> Feed {
+        // the host types `<CR>`, maps say `<Enter>`: one spelling for both
+        let typed: Vec<String> = typed.iter().map(|t| if t.starts_with('<') && t.len() > 2 { normalize(t) } else { t.clone() }).collect();
+        let typed = typed.as_slice();
         let (exact, pending) = {
             let st = self.st.borrow();
             let leader = st.leader.clone();

@@ -10,6 +10,7 @@
 //! Every case in tests/nvim-cases.tsv behaves exactly as in Neovim. Still to come:
 //! registers by name, dot-repeat, macros and search.
 
+pub mod emacs;
 pub mod keys;
 mod undo;
 pub use keys::{Code, Key};
@@ -67,6 +68,15 @@ pub struct Editor {
     anchor: usize,
     /// the last f F t T and its character, for ; and ,
     last_find: Option<(char, char)>,
+    /// Emacs profile (emacs.rs): modeless, keys are commands
+    emacs: bool,
+    /// Emacs's mark: with the cursor it makes the region
+    mark: Option<usize>,
+    kill_ring: Vec<String>,
+    /// the last yank (start, end, kill-ring index), for yank-pop
+    yanked: Option<(usize, usize, usize)>,
+    /// the command that ran last (kills append to kills, typing groups into one undo step)
+    last_cmd: String,
 }
 
 fn class(c: char) -> u8 {
@@ -89,6 +99,11 @@ impl Editor {
             reg: Register::default(),
             undo: undo::Tree::default(),
             open: None,
+            emacs: false,
+            mark: None,
+            kill_ring: Vec::new(),
+            yanked: None,
+            last_cmd: String::new(),
         }
     }
 

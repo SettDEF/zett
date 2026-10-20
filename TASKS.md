@@ -14,14 +14,21 @@ See PLAN.md for the vision and milestones.
   keymaps hang off them. That is the first thing to change.
 
 ### P0 — the core everything else stands on
-- [ ] **Command system:** every action is a named command (name, docs, arguments, interactive
+- [~] **Command system:** every action is a named command (name, docs, arguments, interactive
   prompts); keys only point at commands. `M-x` lists them all. Vim keys move from `keys.rs`
   into commands + a keymap.
-- [ ] **Keymap engine, Emacs style:** prefix chords (`C-x C-f`), keymaps with precedence
+  - [x] 38 editing commands by name (zett-edit `emacs.rs`), run from keys or M-x as `Effect::Edit`;
+    listed with the Lua commands (source "editor")
+  - [ ] numeric argument (`C-u 4`, `M-4`), interactive prompts for arguments
+  - [ ] Vim's keys as commands + a keymap (today still the hard-wired grammar in `keys`)
+- [~] **Keymap engine, Emacs style:** (done: chords `C-x C-f`, which-key per prefix, C-g, `M-`
+  as Alt, typed keys normalized; open: keymap precedence by mode) prefix chords (`C-x C-f`), keymaps with precedence
   (minor mode > major mode > global), which-key for every prefix, `C-g` cancels anything.
   Vim's modes become one keymap layer.
-- [ ] **Modeless editing:** `C-a C-e C-f C-b M-f M-b`, `C-k`/`C-y` with a kill ring, `M-y`,
+- [~] **Modeless editing:** `C-a C-e C-f C-b M-f M-b`, `C-k`/`C-y` with a kill ring, `M-y`,
   mark and region (`C-SPC`, `C-w`, `M-w`), `C-/` undo, `C-s`/`C-r` incremental search.
+  (done: all but incremental search, which still opens the search picker; open: the region drawn
+  on screen, the kill ring shared with the system clipboard)
 - [ ] **Minibuffer:** one completion UI for `M-x`, find-file, switch-buffer and help (fuzzy,
   history, annotations: vertico + orderless + marginalia in one).
 - [ ] **Major and minor modes:** one per file type (markdown, rust, lua…), toggles (line
