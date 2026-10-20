@@ -19,7 +19,10 @@ See PLAN.md for the vision and milestones.
   into commands + a keymap.
   - [x] 38 editing commands by name (zett-edit `emacs.rs`), run from keys or M-x as `Effect::Edit`;
     listed with the Lua commands (source "editor")
-  - [ ] numeric argument (`C-u 4`, `M-4`), interactive prompts for arguments
+  - [x] numeric argument (zett-edit `prefix.rs`): `C-u` (4, ×4), `C-u 12`, `M-0…9`, `M--` /
+    `C-u -` as the commands universal-, digit-, negative-argument; negative runs the opposite
+    (M-- M-f = M-b), `C-u N C-k` kills N lines, `C-u 5 a` types five; Lua reads `zett.arg`
+  - [ ] interactive prompts for arguments (through the minibuffer)
   - [ ] Vim's keys as commands + a keymap (today still the hard-wired grammar in `keys`)
 - [x] **Startup is the config's:** the scratch buffer by default (as Emacs); `zett.opt.startup` =
   "dashboard" or any command; `zett.on("start")` effects reach the editor; the dashboard's

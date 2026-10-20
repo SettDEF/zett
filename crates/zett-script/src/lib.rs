@@ -261,6 +261,14 @@ impl Engine {
         }
     }
 
+    /// The numeric argument the next command runs with (`zett.arg` in Lua: a number, or nil
+    /// without one), as Emacs's prefix-arg. Set by the front end before keys are fed.
+    pub fn set_arg(&mut self, arg: Option<i64>) {
+        if let Ok(z) = self.lua.globals().get::<Table>("zett") {
+            let _ = z.set("arg", arg);
+        }
+    }
+
     pub fn frontend(&self) -> String {
         self.lua.globals().get::<Table>("zett").and_then(|z| z.get::<String>("frontend")).unwrap_or_default()
     }

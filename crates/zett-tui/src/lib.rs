@@ -269,6 +269,10 @@ struct App {
     emacs: bool,
     /// Emacs profile: Esc was pressed, the next key gets Meta (Esc f = M-f, as in Emacs and zsh)
     meta: bool,
+    /// Emacs profile: a numeric argument being typed (C-u 4, M-5), for the next command
+    arg: zett_edit::prefix::PrefixArg,
+    /// the key that ran the last command (digit-argument reads its digit)
+    last_key: String,
     /// one kill ring for every buffer (Emacs): handed to each in sync_profile
     kill_ring: zett_edit::SharedKillRing,
     branch: Option<String>,
@@ -380,6 +384,8 @@ impl App {
             tabs: false,
             emacs: true,
             meta: false,
+            arg: Default::default(),
+            last_key: String::new(),
             kill_ring: zett_edit::KillRing::shared(),
             branch: None,
             branch_at: Instant::now() - Duration::from_secs(60),
@@ -708,12 +714,30 @@ impl App {
         if tok.is_empty() {
             return;
         }
-        // C-g abandons a half-typed chord (and, bound, deactivates the mark)
-        if tok == "<C-g>" && !self.keyseq.is_empty() {
+        // C-g abandons a half-typed chord or argument (and, bound, deactivates the mark)
+        if tok == "<C-g>" && (!self.keyseq.is_empty() || self.arg.active()) {
             self.keyseq.clear();
             self.menu.clear();
+            self.arg.take();
             return self.say("Quit");
         }
+        // typing a numeric argument: digits (and a leading -) are part of it, not text
+        if self.arg.active() && self.keyseq.is_empty() {
+            let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+            match k.code {
+                KeyCode::Char(c) if plain && c.is_ascii_digit() => {
+                    self.arg.digit(c.to_digit(10).unwrap_or(0));
+                    return self.say(self.arg.prompt());
+                }
+                KeyCode::Char('-') if plain && self.arg.accepts_minus() => {
+                    self.arg.minus();
+                    return self.say(self.arg.prompt());
+                }
+                _ => {}
+            }
+        }
+        self.last_key = tok.clone();
+        self.engine.set_arg(self.arg.value());
         let mut seq = std::mem::take(&mut self.keyseq);
         seq.push(tok);
         // a search in progress has its own keymap (the isearch plugin's), as Emacs's isearch-mode-map
@@ -736,15 +760,30 @@ impl App {
                 let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
                 match k.code {
                     KeyCode::Char(c) if plain && seq.len() == 1 => {
+                        // C-u 5 a types aaaaa
+                        let times = self.arg.take().map_or(1, |n| n.unsigned_abs().max(1));
                         let before = self.docs[self.cur].ed.cursor().line;
-                        self.doc().ed.self_insert(c);
+                        for _ in 0..times {
+                            self.doc().ed.self_insert(c);
+                        }
                         self.doc().touched(before);
                         self.edit_at = Instant::now();
                     }
-                    _ => self.say(format!("{} is undefined", seq.join(" "))),
+                    _ => {
+                        self.arg.take();
+                        self.say(format!("{} is undefined", seq.join(" ")))
+                    }
                 }
             }
-            f => self.after_feed(f, seq),
+            f => {
+                // a Lua command used the argument (zett.arg); an editing one takes it in effects()
+                if let Feed::Ran(fx) = &f {
+                    if !fx.iter().any(|e| matches!(e, Effect::Edit(..))) {
+                        self.arg.take();
+                    }
+                }
+                self.after_feed(f, seq)
+            }
         }
     }
 
@@ -811,6 +850,18 @@ impl App {
                     }
                     other => self.say(format!("{other}: only in the window (zett --gui)")),
                 },
+                // C-u, M-0…M-9, M--: build the argument for the next command
+                Effect::Edit(name, _) if zett_edit::prefix::is_command(&name) => {
+                    match name.as_str() {
+                        "universal-argument" => self.arg.universal(),
+                        "negative-argument" => self.arg.minus(),
+                        _ => {
+                            let d = self.last_key.chars().rev().find_map(|c| c.to_digit(10)).unwrap_or(0);
+                            self.arg.digit(d);
+                        }
+                    }
+                    self.say(self.arg.prompt());
+                }
                 Effect::Edit(name, n) => {
                     let before = self.docs[self.cur].ed.cursor().line;
                     let rev = self.docs[self.cur].ed.buf.rev();
@@ -821,7 +872,12 @@ impl App {
                             self.doc().ed.offer_paste(t);
                         }
                     }
-                    self.doc().ed.exec(&name, n);
+                    // the typed argument, else the count the effect carries
+                    let arg = self.arg.take().or((n > 1).then_some(n as i64));
+                    if arg.is_some() {
+                        self.msg = None; // the "C-u 4-" prompt is answered
+                    }
+                    self.doc().ed.exec_arg(&name, arg);
                     if self.docs[self.cur].ed.kill_count() != kills {
                         if let Some(t) = self.docs[self.cur].ed.last_kill() {
                             clipboard::copy(&t);

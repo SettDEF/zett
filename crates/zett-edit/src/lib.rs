@@ -13,6 +13,7 @@
 pub mod emacs;
 pub mod keys;
 pub mod killring;
+pub mod prefix;
 pub mod search;
 mod undo;
 pub use keys::{Code, Key};

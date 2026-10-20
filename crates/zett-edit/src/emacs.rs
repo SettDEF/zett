@@ -49,9 +49,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
 /// Kills that follow each other add to the same kill-ring entry (Emacs's kill-append).
 const KILLS: &[&str] = &["kill-line", "kill-whole-line", "kill-word", "backward-kill-word", "kill-region"];
 
-/// Every named editor command: the editing ones here and the search ones (search.rs).
+/// Every named editor command: the editing ones here, the search ones (search.rs) and the
+/// numeric argument (prefix.rs, which the front end runs).
 pub fn all() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
-    COMMANDS.iter().chain(crate::search::COMMANDS.iter())
+    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter())
 }
 
 pub fn is_command(name: &str) -> bool {
@@ -115,6 +116,31 @@ impl Editor {
         self.cursor += 1;
         self.want_col = self.cursor().col;
         self.last_cmd = "self-insert-command".into();
+    }
+
+    /// Runs a command with a numeric argument (prefix.rs), as Emacs does: None runs it once;
+    /// negative runs its opposite (M-- M-f = M-b); `C-u N C-k` kills N whole lines.
+    pub fn exec_arg(&mut self, name: &str, arg: Option<i64>) -> bool {
+        let n = arg.unwrap_or(1);
+        if name == "kill-line" && arg.is_some() && n > 0 {
+            if !is_command(name) {
+                return false;
+            }
+            let last = std::mem::replace(&mut self.last_cmd, name.to_string());
+            let appending = KILLS.contains(&last.as_str());
+            let l = self.cur_line() + n as usize;
+            let to = if l < self.buf.len_lines() { self.line_start(l) } else { self.buf.len_chars() };
+            self.begin();
+            self.kill(self.cursor, to, appending, false);
+            self.mark_active = false;
+            self.close();
+            self.want_col = self.cursor().col;
+            return true;
+        }
+        match crate::prefix::opposite(name) {
+            Some(o) if n < 0 => self.exec(o, n.unsigned_abs() as usize),
+            _ => self.exec(name, n.unsigned_abs().max(1) as usize),
+        }
     }
 
     /// Runs a named command `n` times (a numeric argument). False: no such command.
@@ -574,5 +600,27 @@ mod tests {
         e.exec("forward-char", 3);
         assert_eq!(e.cursor, 3);
         assert!(!e.exec("no-such-command", 1));
+    }
+
+    #[test]
+    fn a_negative_argument_runs_the_opposite() {
+        let mut e = ed("one two three", 13);
+        e.exec_arg("forward-word", Some(-2));
+        assert_eq!(e.cursor, 4, "M-- 2 M-f is two words back");
+        let mut e = ed("abcdef", 4);
+        e.exec_arg("delete-char", Some(-2));
+        assert_eq!(e.text(), "abef");
+    }
+
+    #[test]
+    fn kill_line_with_an_argument_kills_whole_lines() {
+        let mut e = ed("aa\nbb\ncc\ndd", 1);
+        e.exec_arg("kill-line", Some(2));
+        assert_eq!(e.text(), "acc\ndd", "from the cursor through two line breaks");
+        assert_eq!(e.last_kill().as_deref(), Some("a\nbb\n"));
+        // no argument: to the end of the line only
+        let mut e = ed("aa\nbb", 1);
+        e.exec_arg("kill-line", None);
+        assert_eq!(e.text(), "a\nbb");
     }
 }

@@ -147,3 +147,22 @@ fn isearch_plugin_binds_c_s_and_its_own_keymap() {
     assert_eq!(e.feed("isearch", &k("<C-s>")), Feed::Ran(vec![Effect::Edit("isearch-repeat-forward".into(), 1)]));
     assert_eq!(e.feed("isearch", &["<CR>".to_string()]), Feed::Ran(vec![Effect::Edit("isearch-exit".into(), 1)]));
 }
+
+#[test]
+fn numeric_argument_keys_and_zett_arg() {
+    let (d, f) = ws("prefix-arg");
+    let mut e = Engine::new(Some(f));
+    e.set_frontend("editor");
+    e.load_config(&d.join("no-config"));
+    assert!(e.errors.is_empty(), "{:?}", e.errors);
+    assert_eq!(e.feed("e", &k("<C-u>")), Feed::Ran(vec![Effect::Edit("universal-argument".into(), 1)]));
+    assert_eq!(e.feed("e", &["<A-5>".to_string()]), Feed::Ran(vec![Effect::Edit("digit-argument".into(), 1)]));
+    assert_eq!(e.feed("e", &["<A-->".to_string()]), Feed::Ran(vec![Effect::Edit("negative-argument".into(), 1)]));
+    // a Lua command reads the argument the front end set
+    e.set_arg(Some(7));
+    let (out, _) = e.eval("return tostring(zett.arg)").unwrap();
+    assert_eq!(out, "7");
+    e.set_arg(None);
+    let (out, _) = e.eval("return tostring(zett.arg)").unwrap();
+    assert_eq!(out, "nil");
+}

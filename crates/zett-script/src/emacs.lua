@@ -50,6 +50,11 @@ map("<C-/>", "undo")
 map("<C-_>", "undo")
 map("<C-x>u", "undo")
 map("<C-g>", "keyboard-quit")
+
+-- ── numeric argument: C-u 4 C-f, M-5 C-n, M-- M-f ──
+map("<C-u>", "universal-argument")
+map("<M-->", "negative-argument")
+for d = 0, 9 do map("<M-" .. d .. ">", "digit-argument") end
 map("<M-;>", "comment")
 
 -- ── files, buffers, windows (C-x) ──
