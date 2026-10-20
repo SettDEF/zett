@@ -696,21 +696,36 @@ impl App {
 
     // ── drawing ──
 
+    /// The dashboard's banner, buttons and footer switch: the config's (zett.dashboard{…}), each
+    /// part falling back to zett's own when the config leaves it out.
+    fn dash_parts(&self) -> (Vec<String>, Vec<(String, String, String, String)>, bool) {
+        let own = || DASH.iter().map(|(i, l, k, c)| (i.to_string(), l.to_string(), k.to_string(), c.to_string())).collect();
+        match self.engine.dashboard() {
+            Some(d) => (
+                if d.banner.is_empty() { BANNER.iter().map(|s| s.to_string()).collect() } else { d.banner },
+                if d.buttons.is_empty() { own() } else { d.buttons },
+                d.footer,
+            ),
+            None => (BANNER.iter().map(|s| s.to_string()).collect(), own(), true),
+        }
+    }
+
     /// The dashboard, Doom's way: the banner, the buttons, a line about the config.
     pub(crate) fn draw_dashboard(&self, f: &mut Frame, a: Rect) {
+        let (banner, buttons, footer) = self.dash_parts();
         let mut lines: Vec<Line> = Vec::new();
-        let banner_h = BANNER.len() as u16;
-        let rows = banner_h + 2 + DASH.len() as u16 * 2 + 3;
+        let banner_h = banner.len() as u16;
+        let rows = banner_h + 2 + buttons.len() as u16 * 2 + 3;
         let pad = a.height.saturating_sub(rows) / 2;
         for _ in 0..pad {
             lines.push(Line::raw(""));
         }
-        for b in BANNER {
-            lines.push(Line::from(Span::styled(*b, hl("DashboardHeader"))).centered());
+        for b in &banner {
+            lines.push(Line::from(Span::styled(b.clone(), hl("DashboardHeader"))).centered());
         }
         lines.push(Line::raw(""));
         lines.push(Line::raw(""));
-        for (i, (icon, label, keys, _)) in DASH.iter().enumerate() {
+        for (i, (icon, label, keys, _)) in buttons.iter().enumerate() {
             let sel = i == self.dash_sel;
             let st = if sel { hl("DashboardHeader") } else { Style::default() };
             let text = format!("{icon}  {label:<30}");
@@ -718,34 +733,32 @@ impl App {
             lines.push(Line::raw(""));
         }
         lines.push(Line::raw(""));
-        let n = self.engine.plugins.len();
-        let foot = format!("zett loaded {n} plugin{} in {} ms · {}", if n == 1 { "" } else { "s" }, self.started_ms, home_short(&self.root.display().to_string()));
-        lines.push(Line::from(Span::styled(foot, hl("DashboardFooter"))).centered());
+        if footer {
+            let n = self.engine.plugins.len();
+            let foot = format!("zett loaded {n} plugin{} in {} ms · {}", if n == 1 { "" } else { "s" }, self.started_ms, home_short(&self.root.display().to_string()));
+            lines.push(Line::from(Span::styled(foot, hl("DashboardFooter"))).centered());
+        }
         f.render_widget(Paragraph::new(lines), a);
     }
 
     /// Enter on the dashboard runs the chosen button.
     pub(crate) fn dash_run(&mut self) {
-        let name = DASH[self.dash_sel.min(DASH.len() - 1)].3;
-        match self.with_lua(|e| e.run(name)) {
+        let buttons = self.dash_parts().1;
+        let Some(name) = buttons.get(self.dash_sel.min(buttons.len().saturating_sub(1))).map(|b| b.3.clone()) else { return };
+        match self.with_lua(|e| e.run(&name)) {
             Ok(fx) => self.after_lua(fx),
             Err(e) => self.say(e),
         }
     }
 
-    pub(crate) fn dash_len() -> usize {
-        DASH.len()
+    pub(crate) fn dash_len(&self) -> usize {
+        self.dash_parts().1.len().max(1)
     }
 
     /// A window's modeline (doom-modeline): state, icon, name, position | branch, mode, place.
     pub(crate) fn draw_modeline(&self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
         let d = &self.docs[di];
-        let (label, color) = match d.ed.mode() {
-            Mode::Normal => ("N", "ModeNormal"),
-            Mode::Insert => ("I", "ModeInsert"),
-            Mode::Visual => ("V", "ModeVisual"),
-            Mode::VisualLine => ("L", "ModeVisual"),
-        };
+        let (label, color) = mode_badge(d);
         let c = d.ed.cursor();
         let lines = d.ed.buf.len_lines().max(1);
         let place = if d.top == 0 && lines <= a.height as usize { "All".to_string() } else if c.line == 0 { "Top".into() } else if c.line + 1 >= lines { "Bot".into() } else { format!("{}%", c.line * 100 / (lines - 1).max(1)) };
@@ -816,3 +829,17 @@ impl App {
     }
 }
 
+
+/// The modeline's first field and its highlight group: Vim's mode, or in the Emacs profile
+/// "E" ("MARK" while a region is active).
+fn mode_badge(d: &Doc) -> (&'static str, &'static str) {
+    if d.ed.is_emacs() {
+        return if d.ed.region().is_some() { ("MARK", "ModeVisual") } else { ("E", "ModeNormal") };
+    }
+    match d.ed.mode() {
+        Mode::Normal => ("N", "ModeNormal"),
+        Mode::Insert => ("I", "ModeInsert"),
+        Mode::Visual => ("V", "ModeVisual"),
+        Mode::VisualLine => ("L", "ModeVisual"),
+    }
+}

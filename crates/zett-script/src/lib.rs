@@ -37,6 +37,17 @@ pub enum Effect {
     Edit(String, usize),
 }
 
+/// A start screen made in the config: `zett.dashboard{ banner = {…}, buttons = {…}, footer = true }`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Dashboard {
+    /// lines drawn on top (empty: the zett banner)
+    pub banner: Vec<String>,
+    /// icon, label, keys shown, command run by Enter
+    pub buttons: Vec<(String, String, String, String)>,
+    /// the line about plugins and load time
+    pub footer: bool,
+}
+
 /// One entry of the which-key popup.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MenuItem {
@@ -95,6 +106,10 @@ struct State {
     /// highlight groups (zett.hl, :hi) and a counter that moves when one changes
     hl: HashMap<String, hl::Hl>,
     hl_rev: u64,
+    /// what `start` hooks asked for, for the host to apply once it is up
+    start: Vec<Effect>,
+    /// zett.dashboard{…}: the start screen, when the config makes one
+    dashboard: Option<Dashboard>,
 }
 
 pub struct Engine {
@@ -292,7 +307,9 @@ impl Engine {
         }
         self.leader_from_opts();
         let _ = self.take_effects();
-        self.emit("start", Value::Nil);
+        // kept for the host: a start hook may open files or run commands (zett.opt.startup too)
+        let fx = self.emit("start", Value::Nil);
+        self.st.borrow_mut().start = fx;
     }
 
     fn exec_named(&mut self, code: &str, source: &str, chunk: &str) {
@@ -608,6 +625,22 @@ impl Engine {
             Ok(())
         })?)?;
 
+        // zett.dashboard{ banner = {"line", …}, buttons = {{icon=, label=, keys=, command=}, …}, footer = true }
+        let st = self.st.clone();
+        z.set("dashboard", lua.create_function(move |_, t: Table| {
+            let banner: Vec<String> = t.get::<Option<Vec<String>>>("banner")?.unwrap_or_default();
+            let mut buttons = Vec::new();
+            if let Some(bs) = t.get::<Option<Vec<Table>>>("buttons")? {
+                for b in bs {
+                    let g = |k: &str| b.get::<Option<String>>(k).map(|v| v.unwrap_or_default());
+                    buttons.push((g("icon")?, g("label")?, g("keys")?, g("command")?));
+                }
+            }
+            let footer = t.get::<Option<bool>>("footer")?.unwrap_or(true);
+            st.borrow_mut().dashboard = Some(Dashboard { banner, buttons, footer });
+            Ok(())
+        })?)?;
+
         // zett.group("<leader>p", "pages"): the name which-key shows for a prefix
         let st = self.st.clone();
         z.set("group", lua.create_function(move |_, (lhs, name): (String, String)| {
@@ -831,3 +864,14 @@ fn show(v: &Value) -> String {
 
 #[cfg(test)]
 mod tests;
+
+impl Engine {
+    /// What the config's `start` hooks asked for (once: taking empties it).
+    pub fn take_start(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.st.borrow_mut().start)
+    }
+    /// The start screen the config made with zett.dashboard{…}, if it made one.
+    pub fn dashboard(&self) -> Option<Dashboard> {
+        self.st.borrow().dashboard.clone()
+    }
+}

@@ -21,6 +21,9 @@ See PLAN.md for the vision and milestones.
     listed with the Lua commands (source "editor")
   - [ ] numeric argument (`C-u 4`, `M-4`), interactive prompts for arguments
   - [ ] Vim's keys as commands + a keymap (today still the hard-wired grammar in `keys`)
+- [x] **Startup is the config's:** the scratch buffer by default (as Emacs); `zett.opt.startup` =
+  "dashboard" or any command; `zett.on("start")` effects reach the editor; the dashboard's
+  banner, buttons and footer from `zett.dashboard{…}`
 - [~] **Keymap engine, Emacs style:** (done: chords `C-x C-f`, which-key per prefix, C-g, `M-`
   as Alt, typed keys normalized; open: keymap precedence by mode) prefix chords (`C-x C-f`), keymaps with precedence
   (minor mode > major mode > global), which-key for every prefix, `C-g` cancels anything.

@@ -13,8 +13,39 @@ plugins in `~/.config/zett/plugins/NAME/init.lua`. `SPC h r` reloads.
     zett.on("start", function() end)              -- hooks (start, page events)
     zett.frontend                                 -- "editor" or "window"
 
-The built-in layer is written with the same API (defaults.lua, editor.lua):
-anything there can be changed or removed from init.lua.
+The built-in layer is written with the same API (defaults.lua, editor.lua,
+emacs.lua): anything there can be changed or removed from init.lua.
+
+## Keys: Emacs or Vim
+
+Emacs' keys by default: modeless, `C-x` chords, `M-x` for every command,
+`C-h` for help. Keys point at commands; rebind any of them in mode `"e"`:
+
+    zett.map("e", "<C-x><C-b>", "switch-buffer")
+    zett.opt.keys = "vim"                         -- Vim's modes and Doom's SPC tree instead
+
+## Starting up
+
+Without a file zett opens the scratch buffer, as Emacs does. What it does
+instead is yours to choose and to program:
+
+    zett.opt.startup = "dashboard"                -- or "scratch", or any command:
+    zett.opt.startup = "recent-files"             --   "find-file", one of your own
+    zett.opt.scratch_message = "notes:\n"         -- the scratch buffer's text
+    zett.on("start", function()                   -- anything else, in Lua
+      zett.notify("good morning")
+    end)
+
+The dashboard is yours too; leave a part out to keep zett's own:
+
+    zett.dashboard{
+      banner = { "MY ZETT" },
+      buttons = {
+        { icon = "", label = "Find file", keys = "C-x C-f", command = "find-file" },
+        { icon = "", label = "Recent files", keys = "C-x C-r", command = "recent-files" },
+      },
+      footer = false,                             -- the plugins / load-time line
+    }
 
 ## Colours: highlight groups
 

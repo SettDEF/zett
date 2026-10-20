@@ -305,6 +305,8 @@ struct App {
     numbers: bool,
     relative: bool,
     tabs: bool,
+    /// the key profile: Emacs (default) or Vim (`zett.opt.keys = "vim"`), read with the options
+    emacs: bool,
     branch: Option<String>,
     branch_at: Instant,
     started_ms: u128,
@@ -411,6 +413,7 @@ impl App {
             numbers: true,
             relative: false,
             tabs: false,
+            emacs: true,
             branch: None,
             branch_at: Instant::now() - Duration::from_secs(60),
             started_ms: 0,
@@ -435,15 +438,19 @@ impl App {
             cursor_xy: (0, 0),
             edit_at: Instant::now(),
         };
-        // a folder: the file finder; nothing: the dashboard
+        // the options first: the startup depends on them (the key profile)
+        app.take_opts();
+        // a folder: the file finder; nothing: what zett.opt.startup says (scratch by default)
         if !opened_files {
             if paths.iter().any(|p| p.is_dir()) {
                 app.open_picker();
             } else {
-                app.dash = true;
+                app.startup();
             }
         }
-        app.take_opts();
+        // and what the config's start hooks asked for (zett.on("start", …))
+        let fx = app.engine.take_start();
+        app.after_lua(fx);
         app.started_ms = started.elapsed().as_millis();
         for i in 0..app.docs.len() {
             app.lsp_open(i);
@@ -476,6 +483,7 @@ impl App {
                 let fx = self.with_lua(|e| e.run_timers());
                 self.after_lua(fx);
             }
+            self.sync_profile();
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.picker.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
@@ -552,10 +560,6 @@ impl App {
         if self.emacs_keys() {
             return self.emacs_key(&k);
         }
-        if self.docs[self.cur].ed.is_emacs() {
-            // zett.opt.keys changed to "vim" while this buffer was open
-            self.doc().ed.set_emacs(false);
-        }
         let mode = self.docs[self.cur].ed.mode();
         // gc in visual mode comments the selection (the engine only sees normal-mode keys)
         if matches!(mode, Mode::Visual | Mode::VisualLine) && !ctrl {
@@ -586,11 +590,11 @@ impl App {
         if self.dash && mode == Mode::Normal && self.keyseq.is_empty() && !ctrl {
             match k.code {
                 KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => {
-                    self.dash_sel = (self.dash_sel + 1) % App::dash_len();
+                    self.dash_sel = (self.dash_sel + 1) % self.dash_len();
                     return;
                 }
                 KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => {
-                    self.dash_sel = (self.dash_sel + App::dash_len() - 1) % App::dash_len();
+                    self.dash_sel = (self.dash_sel + self.dash_len() - 1) % self.dash_len();
                     return;
                 }
                 KeyCode::Enter => return self.dash_run(),
@@ -668,9 +672,39 @@ impl App {
         }
     }
 
+    /// Started without a file: what `zett.opt.startup` asks for (see [`Startup`]).
+    fn startup(&mut self) {
+        match Startup::from_opt(self.engine.opt("startup")) {
+            Startup::Scratch => {
+                // the scratch buffer's own text, when the config gives one; the buffer stays clean
+                if let Some(text) = self.engine.opt("scratch_message").filter(|t| !t.is_empty()) {
+                    if let Some(d) = self.docs.iter_mut().find(|d| d.name == "[scratch]") {
+                        d.ed = Editor::from_str(&text);
+                    }
+                } else if self.emacs_keys() {
+                    self.say("C-x C-f opens a file · M-x runs a command · C-h d reads the documentation");
+                }
+            }
+            Startup::Dashboard => self.dash = true,
+            Startup::Command(cmd) => match self.with_lua(|e| e.run(&cmd)) {
+                Ok(fx) => self.after_lua(fx),
+                Err(e) => self.say(format!("zett.opt.startup: {e}")),
+            },
+        }
+    }
+
+    /// Every open editor in the active key profile: new buffers, help, a config reload that
+    /// switched `zett.opt.keys`. Runs before each draw, so no place that opens a buffer has to.
+    fn sync_profile(&mut self) {
+        let emacs = self.emacs;
+        for d in self.docs.iter_mut().filter(|d| d.ed.is_emacs() != emacs) {
+            d.ed.set_emacs(emacs);
+        }
+    }
+
     /// The key profile: Emacs unless `zett.opt.keys = "vim"`.
     fn emacs_keys(&self) -> bool {
-        self.engine.opt("keys").is_none_or(|k| k != "vim")
+        self.emacs
     }
     /// The keymap mode keys go through: "e" (Emacs) or Vim's normal-mode "n".
     fn keymode(&self) -> &'static str {
@@ -680,9 +714,6 @@ impl App {
     /// Emacs profile: every key goes through the keymap (chords like C-x C-f wait for more);
     /// an unbound printable key types itself, anything else unbound says so.
     fn emacs_key(&mut self, k: &KeyEvent) {
-        if !self.docs[self.cur].ed.is_emacs() {
-            self.doc().ed.set_emacs(true);
-        }
         let tok = token(k);
         if tok.is_empty() {
             return;
@@ -1201,6 +1232,7 @@ impl App {
         if let Some(b) = on(self.engine.opt("relativenumber")) {
             self.relative = b;
         }
+        self.emacs = self.engine.opt("keys").is_none_or(|k| k != "vim");
     }
 
     fn draw_tabs(&self, f: &mut Frame, a: Rect) {
@@ -1478,6 +1510,27 @@ fn to_key(k: &KeyEvent) -> Option<Key> {
 }
 
 /// A terminal key in the engine's notation (`a`, `<Space>`, `<C-w>`, `<CR>`).
+
+/// What zett shows when it starts without a file: `zett.opt.startup`.
+#[derive(Clone, Debug, PartialEq)]
+enum Startup {
+    /// the scratch buffer (the default, as in Emacs); its text is `zett.opt.scratch_message`
+    Scratch,
+    /// the start screen (made in the config with zett.dashboard{…}, or zett's own)
+    Dashboard,
+    /// any command: "recent-files", "find-file", one of the config's own
+    Command(String),
+}
+
+impl Startup {
+    fn from_opt(v: Option<String>) -> Self {
+        match v.as_deref().map(str::trim) {
+            None | Some("") | Some("scratch") => Startup::Scratch,
+            Some("dashboard") => Startup::Dashboard,
+            Some(cmd) => Startup::Command(cmd.to_string()),
+        }
+    }
+}
 fn token(k: &KeyEvent) -> String {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let alt = k.modifiers.contains(KeyModifiers::ALT);
@@ -1514,6 +1567,14 @@ fn token(k: &KeyEvent) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_option() {
+        assert_eq!(Startup::from_opt(None), Startup::Scratch);
+        assert_eq!(Startup::from_opt(Some(" scratch ".into())), Startup::Scratch);
+        assert_eq!(Startup::from_opt(Some("dashboard".into())), Startup::Dashboard);
+        assert_eq!(Startup::from_opt(Some("recent-files".into())), Startup::Command("recent-files".into()));
+    }
 
     #[test]
     fn fuzzy_prefers_name_starts_and_runs() {
