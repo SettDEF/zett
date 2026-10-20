@@ -2,6 +2,56 @@
 
 See PLAN.md for the vision and milestones.
 
+## Direction (2026-10-20): Emacs by default, configurable like Neovim
+- **Default feel = Emacs:** modeless editing, `C-x`/`C-c` chords, `M-x` for every command,
+  self-documenting (`C-h k/f/v/m`), everything is a buffer, change it live while it runs.
+- **Vim stays:** a built-in "evil" profile, one option away (`zett.opt.keys = "vim"`). Today's
+  Vim work (95/95 = Neovim) becomes that profile, not the engine.
+- **Configuration languages:** Lua (exists), Fennel (a Lisp that compiles to Lua: the Emacs
+  flavour without a second VM), Rust (plugins as WASM components, same API as Lua), TOML for
+  plain options (also what a settings page writes).
+- Today the Vim modes live inside the editing core (`zett-edit`: `Mode`, `keys.rs`) and Lua
+  keymaps hang off them. That is the first thing to change.
+
+### P0 — the core everything else stands on
+- [ ] **Command system:** every action is a named command (name, docs, arguments, interactive
+  prompts); keys only point at commands. `M-x` lists them all. Vim keys move from `keys.rs`
+  into commands + a keymap.
+- [ ] **Keymap engine, Emacs style:** prefix chords (`C-x C-f`), keymaps with precedence
+  (minor mode > major mode > global), which-key for every prefix, `C-g` cancels anything.
+  Vim's modes become one keymap layer.
+- [ ] **Modeless editing:** `C-a C-e C-f C-b M-f M-b`, `C-k`/`C-y` with a kill ring, `M-y`,
+  mark and region (`C-SPC`, `C-w`, `M-w`), `C-/` undo, `C-s`/`C-r` incremental search.
+- [ ] **Minibuffer:** one completion UI for `M-x`, find-file, switch-buffer and help (fuzzy,
+  history, annotations: vertico + orderless + marginalia in one).
+- [ ] **Major and minor modes:** one per file type (markdown, rust, lua…), toggles (line
+  numbers, autosave, whitespace), hooks on enable/disable.
+- [ ] **Config loading + safety:** `init.lua` / `init.fnl` / `config.toml` in a fixed order,
+  live reload (exists), errors shown in a buffer, never a crash; `zett --safe` starts without
+  any config.
+- [ ] **Self-documentation:** `C-h k` (what does this key do), `C-h f` (command), `C-h v`
+  (option), `C-h m` (active modes and their keys), jump to the definition. Builds on `:help`
+  and docs.rs.
+
+### P1 — configuration languages
+- [ ] Lua API made stable and versioned: `zett.cmd`, `zett.map`, `zett.opt`, `zett.hook`,
+  `zett.mode`; documented from the source.
+- [ ] Fennel: bundle fennel.lua, load `init.fnl` and `plugins/*.fnl`, macros for `defcmd`,
+  `defmode`, `map!`.
+- [ ] Rust plugins: WASM components (wasmtime, WIT interface mirroring the Lua API),
+  hot reload, permissions per plugin.
+- [ ] `config.toml` for plain options; the settings page writes it.
+- [ ] Plugin manifest + package manager (below): `plugin.toml`, lockfile, `zett sync`.
+
+### P2 — what people come to Emacs for
+- [ ] Everything a buffer: messages, help, explorer, terminal, undo tree (today panels).
+- [ ] Org-like outlines on the block tree: fold, promote/demote, TODO states, an agenda across
+  pages (and Dotos).
+- [ ] Kill ring + registers + keyboard macros (`C-x (`, `C-x )`, `C-x e`).
+- [ ] Windows the Emacs way: `C-x 2/3/o/0/1` (the window work exists; map it).
+- [ ] isearch, `query-replace`, project-wide search.
+- [ ] A Magit-style git buffer.
+
 ## M0 — foundation
 - [x] PLAN.md, README, workspace layout
 - [x] zett-core: rope buffer for plain files (open, save atomically, edit, positions) + tests
