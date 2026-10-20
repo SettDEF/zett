@@ -68,6 +68,7 @@ impl Editor {
         self.close();
         self.mode = if on { Mode::Insert } else { Mode::Normal };
         self.mark = None;
+        self.mark_active = false;
         if !on {
             self.clamp();
         }
@@ -76,9 +77,27 @@ impl Editor {
         self.emacs
     }
 
-    /// The active region (start, end) when the mark is set.
+    /// The active region (start, end): set with C-SPC, gone after an edit, M-w or C-g.
     pub fn region(&self) -> Option<(usize, usize)> {
+        self.mark_active.then(|| self.mark_span()).flatten()
+    }
+
+    /// Point to mark, shown or not (C-w kills it either way, as Emacs does).
+    fn mark_span(&self) -> Option<(usize, usize)> {
         self.mark.map(|m| (m.min(self.cursor), m.max(self.cursor)))
+    }
+
+    /// Leaves a mark behind before a long jump (M-<, M->), unless a region is being made.
+    fn push_mark(&mut self) {
+        if !self.mark_active {
+            self.set_mark(false);
+        }
+    }
+
+    /// Sets the mark where the cursor is; `active` shows it as the region.
+    fn set_mark(&mut self, active: bool) {
+        self.mark = Some(self.cursor);
+        self.mark_active = active;
     }
 
     /// Types a character (unbound printable keys). Consecutive ones are one undo step.
@@ -86,6 +105,7 @@ impl Editor {
         if self.last_cmd != "self-insert-command" || self.open.is_none() {
             self.begin();
         }
+        self.mark_active = false;
         self.ins(self.cursor, &c.to_string());
         self.cursor += 1;
         self.want_col = self.cursor().col;
@@ -108,6 +128,7 @@ impl Editor {
                 | "forward-word" | "backward-word" | "beginning-of-buffer" | "end-of-buffer" | "forward-paragraph" | "backward-paragraph"
                 | "set-mark-command" | "exchange-point-and-mark" | "mark-whole-buffer" | "keyboard-quit" | "copy-region-as-kill" | "undo" | "redo"
         );
+        let rev = self.buf.rev();
         if edits {
             self.begin();
         }
@@ -128,11 +149,11 @@ impl Editor {
                 "forward-word" => self.cursor = self.emacs_word_end(self.cursor),
                 "backward-word" => self.cursor = self.emacs_word_start(self.cursor),
                 "beginning-of-buffer" => {
-                    self.mark = Some(self.cursor);
+                    self.push_mark();
                     self.cursor = 0;
                 }
                 "end-of-buffer" => {
-                    self.mark = Some(self.cursor);
+                    self.push_mark();
                     self.cursor = len;
                 }
                 "forward-paragraph" => self.cursor = self.paragraph_edge(true),
@@ -167,17 +188,16 @@ impl Editor {
                     self.kill(from, self.cursor, appending, true);
                 }
                 "kill-region" => {
-                    if let Some((a, b)) = self.region() {
+                    if let Some((a, b)) = self.mark_span() {
                         self.kill(a, b, appending, false);
                     }
-                    self.mark = None;
                 }
                 "copy-region-as-kill" => {
-                    if let Some((a, b)) = self.region() {
+                    if let Some((a, b)) = self.mark_span() {
                         let t = self.buf.slice(a, b);
                         self.push_kill(t, false, false);
                     }
-                    self.mark = None;
+                    self.mark_active = false;
                 }
                 "yank" => {
                     if let Some(t) = self.kill_ring.last().cloned() {
@@ -199,18 +219,19 @@ impl Editor {
                         }
                     }
                 }
-                "set-mark-command" => self.mark = Some(self.cursor),
+                "set-mark-command" => self.set_mark(true),
                 "exchange-point-and-mark" => {
                     if let Some(m) = self.mark {
-                        self.mark = Some(self.cursor);
+                        self.set_mark(true);
                         self.cursor = m;
                     }
                 }
                 "mark-whole-buffer" => {
-                    self.mark = Some(len);
+                    self.cursor = len;
+                    self.set_mark(true);
                     self.cursor = 0;
                 }
-                "keyboard-quit" => self.mark = None,
+                "keyboard-quit" => self.mark_active = false,
                 "newline" => {
                     let l = self.cur_line();
                     let ind: String = self.indent_of(l).chars().take(self.cursor - self.line_start(l)).collect();
@@ -285,6 +306,10 @@ impl Editor {
                 _ => {}
             }
         }
+        // a change to the text ends the region (transient-mark-mode)
+        if self.buf.rev() != rev {
+            self.mark_active = false;
+        }
         if edits {
             self.close();
         }
@@ -321,11 +346,26 @@ impl Editor {
             }
         }
         self.yanked = None;
+        self.kills += 1;
     }
 
     /// The last killed text (for the system clipboard).
     pub fn last_kill(&self) -> Option<&str> {
         self.kill_ring.last().map(String::as_str)
+    }
+
+    /// Goes up with every kill or copy: when it changed, `last_kill` is new.
+    pub fn kill_count(&self) -> u64 {
+        self.kills
+    }
+
+    /// Text copied outside zett (the system clipboard), offered before a yank: it joins the
+    /// kill ring when it is not already the newest kill (Emacs' interprogram paste).
+    pub fn offer_paste(&mut self, text: String) {
+        if !text.is_empty() && self.last_kill() != Some(text.as_str()) {
+            self.kill_ring.push(text);
+            self.yanked = None;
+        }
     }
 
     /// Emacs's forward-word: skip to a word, then past it.
@@ -431,6 +471,37 @@ mod tests {
         assert_eq!(e.text(), "alpha beta gamma");
         e.exec("yank-pop", 1);
         assert_eq!(e.text(), "alpha alpha gamma");
+    }
+
+    #[test]
+    fn the_region_is_active_only_while_being_made() {
+        let mut e = ed("alpha beta gamma", 6);
+        e.exec("end-of-buffer", 1); // leaves a mark at 6, but no region
+        assert_eq!(e.region(), None);
+        e.exec("kill-region", 1); // C-w still kills point..mark
+        assert_eq!(e.text(), "alpha ");
+        e.exec("set-mark-command", 1);
+        e.exec("backward-word", 1);
+        assert_eq!(e.region(), Some((0, 6)));
+        e.self_insert('x'); // typing ends it
+        assert_eq!(e.region(), None);
+        e.exec("mark-whole-buffer", 1);
+        assert_eq!(e.region(), Some((0, 7)));
+        e.exec("keyboard-quit", 1);
+        assert_eq!(e.region(), None);
+    }
+
+    #[test]
+    fn outside_copies_join_the_kill_ring() {
+        let mut e = ed("ab", 2);
+        e.exec("backward-kill-word", 1);
+        let n = e.kill_count();
+        e.offer_paste("ab".into()); // the clipboard holds our own kill: nothing new
+        e.offer_paste("zz".into());
+        assert_eq!(e.kill_count(), n);
+        e.exec("yank", 1);
+        e.exec("yank-pop", 1);
+        assert_eq!(e.text(), "ab");
     }
 
     #[test]

@@ -5,6 +5,7 @@ mod lsp;
 mod panels;
 mod hl;
 use hl::hl;
+mod clipboard;
 mod cmdline;
 mod ex;
 use doom::{project_of, Pick, WTree, Win};
@@ -733,6 +734,7 @@ impl App {
         let mut k = *k;
         if pending_meta {
             k.modifiers |= KeyModifiers::ALT;
+            self.msg = None; // the "ESC-" prompt is answered
         }
         let tok = token(&k);
         if tok.is_empty() {
@@ -821,9 +823,8 @@ impl App {
                     }
                     "ex" => self.command(&arg),
                     "clipboard" => {
-                        let ok = std::process::Command::new("wl-copy").arg(&arg).status().is_ok_and(|s| s.success());
-                        if !ok {
-                            self.say("could not copy (wl-copy)");
+                        if !clipboard::copy(&arg) {
+                            self.say("could not copy to the clipboard");
                         }
                     }
                     other => self.say(format!("{other}: only in the window (zett --gui)")),
@@ -831,7 +832,19 @@ impl App {
                 Effect::Edit(name, n) => {
                     let before = self.docs[self.cur].ed.cursor().line;
                     let rev = self.docs[self.cur].ed.buf.rev();
+                    let kills = self.docs[self.cur].ed.kill_count();
+                    // the kill ring and the system clipboard are one, as in Emacs
+                    if name == "yank" {
+                        if let Some(t) = clipboard::paste() {
+                            self.doc().ed.offer_paste(t);
+                        }
+                    }
                     self.doc().ed.exec(&name, n);
+                    if self.docs[self.cur].ed.kill_count() != kills {
+                        if let Some(t) = self.docs[self.cur].ed.last_kill() {
+                            clipboard::copy(t);
+                        }
+                    }
                     self.doc().touched(before);
                     if self.docs[self.cur].ed.buf.rev() != rev {
                         self.edit_at = Instant::now();

@@ -246,14 +246,14 @@ impl App {
                 let (a, b) = range.unwrap_or(here);
                 let b = arg.parse::<usize>().map(|n| (a + n - 1).min(last)).unwrap_or(b);
                 let gone = self.lines_of(a, b).join("\n");
-                let _ = std::process::Command::new("wl-copy").arg(&gone).status();
+                clipboard::copy(&gone);
                 self.set_lines(a, b, vec![]);
                 self.say(format!("{} fewer lines", b - a + 1));
             }
             "y" | "ya" | "yank" => {
                 let (a, b) = range.unwrap_or(here);
                 let text = self.lines_of(a, b).join("\n");
-                let _ = std::process::Command::new("wl-copy").arg(&text).status();
+                clipboard::copy(&text);
                 self.say(format!("{} lines copied", b - a + 1));
             }
             "m" | "mo" | "move" | "t" | "co" | "copy" => {

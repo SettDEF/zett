@@ -72,7 +72,11 @@ pub struct Editor {
     emacs: bool,
     /// Emacs's mark: with the cursor it makes the region
     mark: Option<usize>,
+    /// the region is active (shown, acted on by default): transient-mark-mode
+    mark_active: bool,
     kill_ring: Vec<String>,
+    /// counts kills, so a front end can tell when to copy to the system clipboard
+    kills: u64,
     /// the last yank (start, end, kill-ring index), for yank-pop
     yanked: Option<(usize, usize, usize)>,
     /// the command that ran last (kills append to kills, typing groups into one undo step)
@@ -101,7 +105,9 @@ impl Editor {
             open: None,
             emacs: false,
             mark: None,
+            mark_active: false,
             kill_ring: Vec::new(),
+            kills: 0,
             yanked: None,
             last_cmd: String::new(),
         }
@@ -455,8 +461,12 @@ impl Editor {
         Span::Chars(a, (b + 1).min(self.buf.len_chars()))
     }
 
-    /// The selected characters (start, end exclusive), for drawing; None outside visual mode.
+    /// The selected characters (start, end exclusive), for drawing and for commands on a
+    /// selection: Vim's visual selection, or the Emacs profile's active region.
     pub fn selection_range(&self) -> Option<(usize, usize)> {
+        if self.emacs {
+            return self.region().filter(|(a, b)| a < b);
+        }
         match self.mode {
             Mode::Visual | Mode::VisualLine => Some(match self.selection() {
                 Span::Chars(a, b) => (a, b),

@@ -30,8 +30,12 @@ See PLAN.md for the vision and milestones.
   Vim's modes become one keymap layer.
 - [~] **Modeless editing:** `C-a C-e C-f C-b M-f M-b`, `C-k`/`C-y` with a kill ring, `M-y`,
   mark and region (`C-SPC`, `C-w`, `M-w`), `C-/` undo, `C-s`/`C-r` incremental search.
-  (done: all but incremental search, which still opens the search picker; open: the region drawn
-  on screen, the kill ring shared with the system clipboard)
+  (done: all but incremental search, which still opens the search picker. The region is drawn and
+  transient: C-SPC activates it, an edit, M-w or C-g ends it; M-< / M-> leave a mark without one.
+  Kills go to the system clipboard and a yank takes in what was copied elsewhere: wl-copy/wl-paste,
+  OSC 52 without Wayland.)
+  - [ ] the kill ring is per buffer today (it lives in each Editor); move it up to the App so it is
+    one ring for every buffer even without a system clipboard
 - [ ] **Minibuffer:** one completion UI for `M-x`, find-file, switch-buffer and help (fuzzy,
   history, annotations: vertico + orderless + marginalia in one).
 - [ ] **Major and minor modes:** one per file type (markdown, rust, lua…), toggles (line

@@ -555,7 +555,7 @@ impl App {
             "save" => self.save(None),
             "yankPath" => {
                 let p = self.docs[self.cur].name.clone();
-                let ok = std::process::Command::new("wl-copy").arg(&p).status().is_ok_and(|s| s.success());
+                let ok = clipboard::copy(&p);
                 self.say(if ok { format!("copied {p}") } else { p });
             }
             "killBuffer" => {
