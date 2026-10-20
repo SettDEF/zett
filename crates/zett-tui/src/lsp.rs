@@ -426,12 +426,12 @@ impl App {
             return self.say("nothing found");
         }
         let root = format!("{}/", self.root.display());
-        let rows: Vec<String> = locs
+        let rows: Vec<Cand> = locs
             .iter()
             .map(|l| {
                 let text = std::fs::read_to_string(&l.path).ok().and_then(|t| t.lines().nth(l.line).map(|s| s.trim().to_string())).unwrap_or_default();
                 let p = l.path.display().to_string();
-                format!("{}:{}: {text}", p.strip_prefix(&root).unwrap_or(&p), l.line + 1)
+                Cand::plain(format!("{}:{}: {text}", p.strip_prefix(&root).unwrap_or(&p), l.line + 1))
             })
             .collect();
         self.pick_list(Pick::Diagnostics, title, rows);
@@ -457,7 +457,7 @@ impl App {
             2 => "module",
             _ => "",
         };
-        let rows = syms.iter().map(|(n, k, line, _, depth)| format!("{:>5}│ {}{n}  {}", line + 1, "  ".repeat(*depth), kind(*k))).collect();
+        let rows = syms.iter().map(|(n, k, line, _, depth)| Cand::noted(format!("{:>5}│ {}{n}", line + 1, "  ".repeat(*depth)), kind(*k))).collect();
         self.pick_list(Pick::Lines, "Symbols", rows);
     }
 

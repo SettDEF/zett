@@ -97,7 +97,39 @@ pub(crate) enum Pick {
     Docs,
 }
 
-fn state_dir() -> PathBuf {
+impl Pick {
+    /// Its history file's name.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Pick::Files(_) => "files",
+            Pick::Recent => "recent",
+            Pick::Buffers => "buffers",
+            Pick::Projects => "projects",
+            Pick::Grep(_) => "grep",
+            Pick::Lines => "lines",
+            Pick::Commands => "commands",
+            Pick::Diagnostics => "diagnostics",
+            Pick::Docs => "docs",
+        }
+    }
+
+    /// The source searches by itself as you type (ripgrep): no filtering here.
+    pub fn live(&self) -> bool {
+        matches!(self, Pick::Grep(_))
+    }
+
+    /// Choices worth remembering, and listed first next time (not lines of one buffer, nor buffers: they come in the order they were used).
+    pub fn remembers(&self) -> bool {
+        matches!(self, Pick::Files(_) | Pick::Recent | Pick::Projects | Pick::Commands | Pick::Docs)
+    }
+
+    /// Enter with nothing matching uses what was typed: a new file, a folder.
+    pub fn takes_typed(&self) -> bool {
+        matches!(self, Pick::Files(_) | Pick::Projects)
+    }
+}
+
+pub(crate) fn state_dir() -> PathBuf {
     std::env::var_os("XDG_STATE_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/state")).join("zett")
 }
 
@@ -360,19 +392,29 @@ impl App {
         }
     }
 
-    // ── pickers ──
+    // ── pickers (the minibuffer) ──
 
-    /// A picker over a ready list (references, symbols).
-    pub(crate) fn pick_list(&mut self, kind: Pick, title: &str, items: Vec<String>) {
+    /// The minibuffer over a ready list (references, symbols).
+    pub(crate) fn pick_list(&mut self, kind: Pick, title: &str, items: Vec<Cand>) {
         self.dash = false;
-        self.picker = Some(Picker { query: String::new(), files: items, sel: 0, kind, title: title.into() });
+        self.minibuf = Some(Minibuf::new(kind, title, items));
     }
 
     pub(crate) fn pick(&mut self, kind: Pick) {
-        let (title, items): (String, Vec<String>) = match &kind {
-            Pick::Files(root) => (format!("Find file · {}", home_short(&root.display().to_string())), list_files(root)),
-            Pick::Recent => ("Recent files".into(), recent().into_iter().map(|p| home_short(&p)).collect()),
-            Pick::Buffers => ("Buffers".into(), self.docs.iter().map(|d| home_short(&d.name)).collect()),
+        let (title, items): (String, Vec<Cand>) = match &kind {
+            Pick::Files(root) => (format!("Find file in {}", root.file_name().map_or("/".into(), |n| n.to_string_lossy())), list_files(root).into_iter().map(Cand::plain).collect()),
+            Pick::Recent => ("Recent file".into(), recent().into_iter().map(|p| Cand::plain(home_short(&p))).collect()),
+            Pick::Buffers => {
+                // as Emacs: the buffer before this one first, this one last
+                let mut order: Vec<usize> = (0..self.docs.len()).filter(|&i| i != self.cur).collect();
+                if let Some(p) = self.last_doc.and_then(|l| order.iter().position(|&i| i == l)) {
+                    let l = order.remove(p);
+                    order.insert(0, l);
+                }
+                order.push(self.cur);
+                let note = |d: &Doc| format!("{}{}", d.syntax, if d.dirty() { " · modified" } else { "" });
+                ("Switch to buffer".into(), order.into_iter().map(|i| Cand::noted(self.buffer_label(&self.docs[i]), note(&self.docs[i]))).collect())
+            }
             Pick::Projects => {
                 let mut list: Vec<String> = Vec::new();
                 let here = project_of(&self.root).unwrap_or(self.root.clone()).display().to_string();
@@ -385,15 +427,28 @@ impl App {
                         }
                     }
                 }
-                ("Projects".into(), list.iter().map(|p| home_short(p)).collect())
+                ("Switch to project".into(), list.iter().map(|p| Cand::plain(home_short(p))).collect())
             }
-            Pick::Grep(root) => (format!("Search · {}", home_short(&root.display().to_string())), Vec::new()),
+            Pick::Grep(root) => (format!("Search {}", home_short(&root.display().to_string())), Vec::new()),
             Pick::Lines => {
                 let d = &self.docs[self.cur];
-                ("Search buffer".into(), (0..d.ed.buf.len_lines()).map(|i| format!("{:>5}│ {}", i + 1, d.ed.buf.line(i).trim_end())).collect())
+                ("Go to line".into(), (0..d.ed.buf.len_lines()).map(|i| Cand::plain(format!("{:>5}│ {}", i + 1, d.ed.buf.line(i).trim_end()))).collect())
             }
-            Pick::Commands => ("M-x".into(), self.engine.commands().into_iter().map(|(n, d, _)| format!("{n:<24} {d}")).collect()),
-            Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| format!("{n:<10} {about}")).collect()),
+            Pick::Commands => {
+                let keys = self.engine.keys_of(self.keymode());
+                let emacs = self.emacs_keys();
+                let items = self
+                    .engine
+                    .commands()
+                    .into_iter()
+                    .map(|(n, d, _)| {
+                        let k = keys.get(&n).and_then(|v| v.first()).map(|k| if emacs { minibuf::emacs_keys(k) } else { k.clone() }).unwrap_or_default();
+                        Cand { keys: k, ..Cand::noted(n, d) }
+                    })
+                    .collect();
+                ("M-x ".into(), items)
+            }
+            Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
                 let mut rows = Vec::new();
                 for d in &self.docs {
@@ -401,31 +456,30 @@ impl App {
                     let mut ds = d.diags.clone();
                     ds.sort_by_key(|x| (x.severity, x.line));
                     for x in ds.iter().filter(|x| x.severity <= 2) {
-                        rows.push(format!("{name}:{}: {} {}", x.line + 1, if x.severity == 1 { "error" } else { "warning" }, x.message));
+                        rows.push(Cand::plain(format!("{name}:{}: {} {}", x.line + 1, if x.severity == 1 { "error" } else { "warning" }, x.message)));
                     }
                 }
                 ("Errors and warnings".into(), rows)
             }
         };
-        self.dash = false;
-        self.picker = Some(Picker { query: String::new(), files: items, sel: 0, kind, title });
+        self.pick_list(kind, &title, items);
     }
 
     /// The project search, again for the query typed so far (ripgrep, at most 400 lines).
     pub(crate) fn grep_update(&mut self) {
-        let Some(p) = self.picker.as_mut() else { return };
-        let Pick::Grep(root) = &p.kind else { return };
-        if p.query.chars().count() < 2 {
-            p.files.clear();
+        let Some(m) = self.minibuf.as_mut() else { return };
+        let Pick::Grep(root) = &m.kind else { return };
+        if m.query().chars().count() < 2 {
+            m.set_items(Vec::new());
             return;
         }
         let out = std::process::Command::new("rg")
-            .args(["--line-number", "--no-heading", "--smart-case", "--max-columns", "200", "--max-count", "50", "--fixed-strings", "--", &p.query])
+            .args(["--line-number", "--no-heading", "--smart-case", "--max-columns", "200", "--max-count", "50", "--fixed-strings", "--", m.query()])
             .current_dir(root)
             .stderr(std::process::Stdio::null())
             .output();
-        p.files = out.map(|o| String::from_utf8_lossy(&o.stdout).lines().take(400).map(String::from).collect()).unwrap_or_default();
-        p.sel = 0;
+        let rows = out.map(|o| String::from_utf8_lossy(&o.stdout).lines().take(400).map(Cand::plain).collect()).unwrap_or_default();
+        m.set_items(rows);
     }
 
     /// Enter in a picker.
@@ -435,7 +489,7 @@ impl App {
             Pick::Files(root) => self.open(&root.join(&item)),
             Pick::Recent => self.open(Path::new(&expand_home(&item))),
             Pick::Buffers => {
-                if let Some(i) = self.docs.iter().position(|d| home_short(&d.name) == item) {
+                if let Some(i) = self.docs.iter().position(|d| self.buffer_label(d) == item) {
                     self.show_doc(i);
                 }
             }
@@ -476,6 +530,12 @@ impl App {
                 }
             }
         }
+    }
+
+    /// A buffer as the minibuffer lists it: inside the project relative to it, else from ~.
+    fn buffer_label(&self, d: &Doc) -> String {
+        let root = format!("{}/", self.root.display());
+        d.name.strip_prefix(&root).map(String::from).unwrap_or_else(|| home_short(&d.name))
     }
 
     pub(crate) fn goto_line(&mut self, l: usize) {
@@ -620,8 +680,8 @@ impl App {
             }
             "comment" => self.comment(),
             "docs" => {
-                let mut rows: Vec<String> = zett_script::docs::TOPICS.iter().map(|(n, about, _)| format!("{n:<10} {about}")).collect();
-                rows.push(format!("{:<10} every command and its keys", "commands"));
+                let mut rows: Vec<Cand> = zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect();
+                rows.push(Cand::noted("commands", "every command and its keys"));
                 self.pick_list(Pick::Docs, "Documentation", rows);
             }
             "definition" => self.lsp_definition(),

@@ -582,7 +582,7 @@ impl App {
             }
             "com" | "command" => {
                 let Some((cname, body)) = arg.split_once(' ') else {
-                    self.picker = None;
+                    self.minibuf = None;
                     self.help("commands");
                     return true;
                 };
@@ -630,8 +630,8 @@ impl App {
                 }
             "gr" | "grep" | "vim" | "vimgrep" | "Rg" => {
                 self.doom_ui("grep", "");
-                if let Some(p) = self.picker.as_mut() {
-                    p.query = arg.trim_matches('/').to_string();
+                if let Some(m) = self.minibuf.as_mut() {
+                    m.set_query(arg.trim_matches('/'));
                 }
                 self.grep_update();
             }

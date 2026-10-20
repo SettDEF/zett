@@ -38,8 +38,12 @@ See PLAN.md for the vision and milestones.
   OSC 52 without Wayland.)
   - [x] one kill ring for every buffer (zett-edit `killring.rs`, shared by the App through
     sync_profile): a kill in one buffer yanks in another, also without a system clipboard
-- [ ] **Minibuffer:** one completion UI for `M-x`, find-file, switch-buffer and help (fuzzy,
-  history, annotations: vertico + orderless + marginalia in one).
+- [x] **Minibuffer:** one completion UI for `M-x`, find-file, switch-buffer and help (fuzzy,
+  history, annotations: vertico + orderless + marginalia in one). zett-tui `minibuf.rs`: words in
+  any order, `!word` excludes, notes and keys in columns, choices remembered per kind (M-p / M-n),
+  Emacs editing keys, Tab takes the candidate; at the bottom (`zett.opt.minibuffer = "bottom"`,
+  the Emacs default) or a float (Vim's).
+  - [ ] Lua prompts (`zett.input`) and find-file's path walking through it
 - [ ] **Major and minor modes:** one per file type (markdown, rust, lua…), toggles (line
   numbers, autosave, whitespace), hooks on enable/disable.
 - [ ] **Config loading + safety:** `init.lua` / `init.fnl` / `config.toml` in a fixed order,

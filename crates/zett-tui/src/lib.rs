@@ -8,6 +8,8 @@ use hl::hl;
 mod clipboard;
 mod cmdline;
 mod ex;
+mod minibuf;
+use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
@@ -199,51 +201,6 @@ fn screen_col(line: &str, col: usize) -> usize {
 
 // ── the file finder ──
 
-struct Picker {
-    query: String,
-    files: Vec<String>,
-    sel: usize,
-    kind: Pick,
-    title: String,
-}
-
-impl Picker {
-    fn matches(&self) -> Vec<&String> {
-        // ripgrep already matched them
-        if self.query.is_empty() || self.kind == Pick::Grep(PathBuf::new()) || matches!(self.kind, Pick::Grep(_)) {
-            return self.files.iter().take(200).collect();
-        }
-        let q: Vec<char> = self.query.to_lowercase().chars().collect();
-        let mut scored: Vec<(i32, &String)> = self.files.iter().filter_map(|f| fuzzy(&q, f).map(|s| (s, f))).collect();
-        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.len().cmp(&b.1.len())));
-        scored.into_iter().take(200).map(|(_, f)| f).collect()
-    }
-}
-
-/// Subsequence match: letters in order; runs and starts of names score higher.
-fn fuzzy(q: &[char], s: &str) -> Option<i32> {
-    let chars: Vec<char> = s.to_lowercase().chars().collect();
-    let name_start = s.rfind('/').map(|i| s[..i + 1].chars().count()).unwrap_or(0);
-    let (mut qi, mut score, mut last) = (0, 0i32, None::<usize>);
-    for (i, c) in chars.iter().enumerate() {
-        if qi < q.len() && *c == q[qi] {
-            score += 1;
-            if last == Some(i.wrapping_sub(1)) {
-                score += 4;
-            }
-            if i == name_start || i == 0 || matches!(chars.get(i.wrapping_sub(1)), Some('/' | '_' | '-' | '.')) {
-                score += 6;
-            }
-            if i >= name_start {
-                score += 2;
-            }
-            last = Some(i);
-            qi += 1;
-        }
-    }
-    (qi == q.len()).then_some(score)
-}
-
 fn list_files(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -287,7 +244,9 @@ struct App {
     key_at: Instant,
     cmdline: Option<String>,
     msg: Option<(String, Instant)>,
-    picker: Option<Picker>,
+    minibuf: Option<Minibuf>,
+    /// where the minibuffer is drawn (zett.opt.minibuffer)
+    placement: Placement,
     popup: Option<Popup>,
     quit: bool,
     /// editor area from the last draw (for the mouse and scrolling)
@@ -402,7 +361,8 @@ impl App {
             key_at: Instant::now(),
             cmdline: None,
             msg,
-            picker: None,
+            minibuf: None,
+            placement: Placement::Bottom,
             popup: None,
             quit: false,
             area: Rect::default(),
@@ -493,7 +453,7 @@ impl App {
             self.sync_profile();
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
-            let bar = self.cmdline.is_some() || self.picker.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
+            let bar = self.cmdline.is_some() || self.minibuf.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
             if shape != Some(bar) {
                 let _ = execute!(std::io::stdout(), if bar { SetCursorStyle::SteadyBar } else { SetCursorStyle::SteadyBlock });
                 shape = Some(bar);
@@ -546,8 +506,8 @@ impl App {
             let _ = p;
             return;
         }
-        if self.picker.is_some() {
-            return self.picker_key(k);
+        if self.minibuf.is_some() {
+            return self.minibuf_key(k);
         }
         if self.cmdline.is_some() {
             return self.cmdline_key(k);
@@ -702,9 +662,8 @@ impl App {
         }
     }
 
-    /// Every open editor in the active key profile: new buffers, help, a config reload that
-    /// switched `zett.opt.keys`. Runs before each draw, so no place that opens a buffer has to.
     /// Every buffer in step with the app: the key profile, and the one kill ring they share.
+    /// Runs before each draw, so no place that opens a buffer has to.
     fn sync_profile(&mut self) {
         let emacs = self.emacs;
         for d in self.docs.iter_mut() {
@@ -918,37 +877,6 @@ impl App {
 
     fn open_picker(&mut self) {
         self.pick(Pick::Files(self.root.clone()));
-    }
-
-    fn picker_key(&mut self, k: KeyEvent) {
-        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-        let Some(p) = self.picker.as_mut() else { return };
-        match k.code {
-            KeyCode::Esc => self.picker = None,
-            KeyCode::Enter => {
-                let chosen = p.matches().get(p.sel).map(|s| s.to_string());
-                let kind = p.kind.clone();
-                self.picker = None;
-                if let Some(f) = chosen {
-                    self.picked(kind, f);
-                }
-            }
-            KeyCode::Down | KeyCode::Tab => p.sel = (p.sel + 1).min(p.matches().len().saturating_sub(1)),
-            KeyCode::Char('n') | KeyCode::Char('j') if ctrl => p.sel = (p.sel + 1).min(p.matches().len().saturating_sub(1)),
-            KeyCode::Up | KeyCode::BackTab => p.sel = p.sel.saturating_sub(1),
-            KeyCode::Char('p') | KeyCode::Char('k') if ctrl => p.sel = p.sel.saturating_sub(1),
-            KeyCode::Backspace => {
-                p.query.pop();
-                p.sel = 0;
-                self.grep_update();
-            }
-            KeyCode::Char(c) if !ctrl => {
-                p.query.push(c);
-                p.sel = 0;
-                self.grep_update();
-            }
-            _ => {}
-        }
     }
 
     fn cmdline_key(&mut self, k: KeyEvent) {
@@ -1211,7 +1139,10 @@ impl App {
             }
         }
         let tabs = self.tabs && self.docs.len() > 1;
-        let [tabline, body, cmd] = Layout::vertical([Constraint::Length(if tabs { 1 } else { 0 }), Constraint::Min(2), Constraint::Length(1)]).areas(f.area());
+        // the minibuffer's candidates take rows from the windows, as in Emacs
+        let mini = self.minibuf.as_ref().filter(|_| self.placement == Placement::Bottom).map_or(0, |m| m.rows() as u16);
+        let [tabline, body, list, cmd] =
+            Layout::vertical([Constraint::Length(if tabs { 1 } else { 0 }), Constraint::Min(2), Constraint::Length(mini), Constraint::Length(1)]).areas(f.area());
         if tabs {
             self.draw_tabs(f, tabline);
         }
@@ -1268,8 +1199,8 @@ impl App {
         if self.comp.is_some() {
             self.draw_comp(f);
         }
-        if self.picker.is_some() {
-            self.draw_picker(f);
+        if self.minibuf.is_some() {
+            self.draw_minibuf(f, list, cmd);
         }
         if let Some(Popup::Help(title, rows)) = &self.popup {
             draw_help(f, title, rows);
@@ -1289,6 +1220,7 @@ impl App {
             self.relative = b;
         }
         self.emacs = self.engine.opt("keys").is_none_or(|k| k != "vim");
+        self.placement = Placement::from_opt(self.engine.opt("minibuffer"), self.emacs);
     }
 
     fn draw_tabs(&self, f: &mut Frame, a: Rect) {
@@ -1441,7 +1373,7 @@ impl App {
             }
         }
         f.render_widget(Paragraph::new(out), a);
-        if focused && self.cmdline.is_none() && self.picker.is_none() && self.popup.is_none() {
+        if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
             let x = a.x + gutter + (ccol - d.left) as u16;
             let y = a.y + (c.line - d.top) as u16;
             self.cursor_xy = (x, y);
@@ -1517,44 +1449,6 @@ impl App {
         f.render_widget(Paragraph::new(lines), inner);
     }
 
-    fn draw_picker(&self, f: &mut Frame) {
-        let Some(p) = &self.picker else { return };
-        let area = f.area();
-        let w = (area.width * 7 / 10).max(40).min(area.width);
-        let h = (area.height * 7 / 10).max(10).min(area.height);
-        let a = Rect { x: area.x + (area.width - w) / 2, y: area.y + (area.height - h) / 3, width: w, height: h };
-        f.render_widget(Clear, a);
-        let matches = p.matches();
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(hl("FloatBorder"))
-            .title(format!(" {} ", p.title))
-            .title_bottom(format!(" {} of {} ", matches.len(), p.files.len()));
-        let inner = block.inner(a);
-        f.render_widget(block, a);
-        let [input, list] = Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
-        f.render_widget(Paragraph::new(Line::from(vec![Span::styled(" ❯ ", hl("PickerPrompt")), Span::raw(p.query.as_str())])), input);
-        f.set_cursor_position(Position { x: input.x + 3 + p.query.chars().count() as u16, y: input.y });
-        let rows = list.height as usize;
-        let first = p.sel.saturating_sub(rows.saturating_sub(1));
-        let lines: Vec<Line> = matches
-            .iter()
-            .enumerate()
-            .skip(first)
-            .take(rows)
-            .map(|(i, m)| {
-                let (dir, name) = m.rsplit_once('/').map(|(d, n)| (format!("{d}/"), n.to_string())).unwrap_or((String::new(), m.to_string()));
-                let base = if i == p.sel { hl("PickerSel") } else { Style::default() };
-                Line::from(vec![
-                    Span::styled(if i == p.sel { " ▌ " } else { "   " }, base.patch(hl("PickerPrompt"))),
-                    Span::styled(dir, base.patch(hl("PickerDir"))),
-                    Span::styled(name, base),
-                ])
-            })
-            .collect();
-        f.render_widget(Paragraph::new(lines), list);
-    }
 }
 
 fn draw_help(f: &mut Frame, title: &str, rows: &[(String, String)]) {
