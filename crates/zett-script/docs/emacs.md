@@ -97,6 +97,19 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
   status, `C-x v h` the commits of the section at the cursor
 - `C-x C-c` quit (with unsaved buffers it says so: `C-x s` saves them), `C-z` back to the shell
 
+## Version control (git)
+
+- `C-x v =` the file's changes, `C-x v D` all of them (coloured: added, removed); `C-x v E =` and
+  `C-x v T =` what is not pushed yet; `C-x v M D` since where the branch left another
+- `C-x v l` the file's commits, `C-x v L` all, `C-x v O` not pushed, `C-x v I` not pulled; Enter
+  shows one; `C-x v g` who changed each line; `C-x v ~` the file as it was in a commit
+- `C-x v v` the next step: an untracked file is added, a changed one asks for the message and is
+  committed (on its own); `C-x v i` add, `C-x v @` discard the changes, `C-x v x` delete, `C-x v R`
+  rename, `C-x v G` ignore
+- `C-x v b c` `C-x v b s` a new branch, another one; `C-x v m` merge; `C-x v s` `C-x v r` tags;
+  `C-x v +` pull and `C-x v P` push in a terminal pane; `C-x v w c w x R` working trees
+- `C-x v d` (and `C-x g`) the git buffer, as Magit; `C-x v h` the commits of the section at the cursor
+
 ## Help
 
 - `C-h k` what a key runs (`C-h c` in one line), `C-h f` a command, `C-h v` a setting, `C-h w` a

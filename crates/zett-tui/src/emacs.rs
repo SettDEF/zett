@@ -145,6 +145,11 @@ impl App {
         if let Some(t) = title.strip_suffix(" @settings") {
             return (t.to_string(), crate::settings::all().into_iter().map(|s| Cand::noted(s.name, s.about)).collect());
         }
+        for src in ["branches", "tags", "worktrees"] {
+            if let Some(t) = title.strip_suffix(&format!(" @{src}")) {
+                return (t.to_string(), self.vc_items(src));
+            }
+        }
         if let Some(t) = title.strip_suffix(" @buffers") {
             return (t.to_string(), self.docs.iter().map(|d| Cand::plain(self.buffer_label(d))).collect());
         }
@@ -188,6 +193,10 @@ impl App {
             }
             "insbuf" => {
                 self.emacs_ui("insertBuffer", body);
+            }
+            "vc" => {
+                let (w, a) = body.split_once(' ').unwrap_or((body, ""));
+                self.vc(w, a);
             }
             "whereis" => {
                 self.emacs_ui("whereIs", body);
@@ -361,6 +370,10 @@ impl App {
             // an editor command from Lua (a step of a command that does several)
             "edit" => self.after_lua(vec![Effect::Edit(arg.to_string(), 1)]),
             "repeat" => self.repeat_last(),
+            "vc" => {
+                let (w, a) = arg.split_once(' ').unwrap_or((arg, ""));
+                self.vc(w, a);
+            }
             "evalLua" => self.eval_lua(arg),
             "webSearch" => {
                 let ed = &self.docs[self.cur].ed;

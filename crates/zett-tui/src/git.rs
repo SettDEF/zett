@@ -35,7 +35,7 @@ pub(crate) struct GitView {
     pub armed: Option<String>,
 }
 
-fn git(root: &Path, args: &[&str]) -> Result<String, String> {
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     let o = std::process::Command::new("git").args(args).current_dir(root).stdin(std::process::Stdio::null()).output().map_err(|e| format!("git: {e}"))?;
     if o.status.success() {
         Ok(String::from_utf8_lossy(&o.stdout).to_string())
@@ -66,7 +66,7 @@ pub(crate) fn parse_status(s: &str) -> (Vec<(String, String)>, Vec<(String, Stri
 }
 
 impl App {
-    fn git_root(&self) -> Option<PathBuf> {
+    pub(crate) fn git_root(&self) -> Option<PathBuf> {
         let here = std::fs::canonicalize(&self.docs[self.cur].name).ok().unwrap_or(self.root.clone());
         doom::project_of(&here).or_else(|| doom::project_of(&self.root))
     }
@@ -262,7 +262,7 @@ impl App {
     }
 
     /// One commit in a buffer of its own.
-    fn git_show(&mut self, root: &Path, hash: &str) {
+    pub(crate) fn git_show(&mut self, root: &Path, hash: &str) {
         let text = git(root, &["show", "--stat", "--patch", hash]).unwrap_or_else(|e| e);
         let name = format!("*git {hash}*");
         if let Some(i) = self.docs.iter().position(|d| d.name == name) {

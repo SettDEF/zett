@@ -35,6 +35,7 @@ mod diff;
 mod runtime;
 mod signs;
 mod emacs;
+mod vc;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -129,6 +130,10 @@ fn palette_theme() -> Theme {
             item("markup.underline.link, string.other.link", "Link"),
             item("markup.list.unnumbered, markup.list.numbered, punctuation.definition.list", "ListMarker"),
             item("markup.quote", "Quote"),
+            // diffs (git, :diffpatch, C-x v =): Neovim's Added / Removed / Changed
+            item("markup.inserted", "Added"),
+            item("markup.deleted", "Removed"),
+            item("markup.changed, meta.diff.range, meta.diff.header", "Changed"),
             item("invalid", "Invalid"),
         ],
     }
@@ -185,7 +190,7 @@ impl Doc {
         Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), mtime: None, seen: false, tcd: None, signs: Vec::new() }
     }
 
-    fn dirty(&self) -> bool {
+    pub(crate) fn dirty(&self) -> bool {
         self.ed.buf.is_dirty()
     }
 
