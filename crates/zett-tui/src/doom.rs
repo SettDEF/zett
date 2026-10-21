@@ -912,7 +912,13 @@ impl App {
     }
 
     /// A window's modeline (doom-modeline): state, icon, name, position | branch, mode, place.
-    pub(crate) fn draw_modeline(&self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
+    pub(crate) fn draw_modeline(&mut self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
+        // statusline: its own format instead of zett's mode line
+        let fmt = self.setting(di, "statusline");
+        if !fmt.is_empty() {
+            let p = self.fmt_line(&fmt, di, self.area.height as usize, a.width as usize);
+            return crate::statusline::draw_pieces(f, a, p, hl(if focused { "StatusLine" } else { "StatusLineNC" }));
+        }
         let d = &self.docs[di];
         let (label, color) = mode_badge(d);
         let c = d.ed.cursor();

@@ -14,14 +14,50 @@ impl App {
                 d.states.clear();
             }
         }
-        let tabs = self.tabs && self.docs.len() > 1;
+        let cur = self.cur.min(self.docs.len() - 1);
+        // showtabline: 0 never, 2 always, 1 (Neovim's default) as zett's tabs setting says
+        let tabs = match self.setting(cur, "showtabline").as_str() {
+            "0" => false,
+            "2" => true,
+            _ => self.tabs && self.docs.len() > 1,
+        };
+        // cmdheight: the rows under the windows (0: only while there is something to show)
+        let busy = self.cmdline.is_some() || self.msg.is_some() || self.minibuf.is_some() || self.docs[cur].ed.isearch().is_some() || !self.keyseq.is_empty();
+        let cmd_rows = match self.num(cur, "cmdheight") {
+            0 if busy => 1,
+            n => n.min(10) as u16,
+        };
+        // laststatus 3: one status line for the focused window, under all of them
+        let laststatus = self.num(cur, "laststatus");
+        let global = u16::from(laststatus == 3);
         // the minibuffer's candidates take rows from the windows, as in Emacs
         let mini = self.minibuf.as_ref().filter(|_| self.placement == Placement::Bottom).map_or(0, |m| m.rows() as u16);
-        let [tabline, body, list, cmd] =
-            Layout::vertical([Constraint::Length(if tabs { 1 } else { 0 }), Constraint::Min(2), Constraint::Length(mini), Constraint::Length(1)]).areas(f.area());
+        let [tabline, body, gline, list, cmd] = Layout::vertical([
+            Constraint::Length(if tabs { 1 } else { 0 }),
+            Constraint::Min(2),
+            Constraint::Length(global),
+            Constraint::Length(mini),
+            Constraint::Length(cmd_rows),
+        ])
+        .areas(f.area());
         if tabs {
-            self.draw_tabs(f, tabline);
+            // tabline: its own format, else zett's buffer tabs
+            let fmt = self.setting(cur, "tabline");
+            if fmt.is_empty() {
+                self.draw_tabs(f, tabline);
+            } else {
+                let p = self.fmt_line(&fmt, cur, body.height as usize, tabline.width as usize);
+                crate::statusline::draw_pieces(f, tabline, p, hl("TabLineFill"));
+            }
         }
+        // title: the terminal's title from titlestring (zett's own when empty)
+        self.title_want = self.flag(cur, "title").then(|| {
+            let fmt = self.setting(cur, "titlestring");
+            let fmt = if fmt.is_empty() { "%t%( %M%) - zett".to_string() } else { fmt };
+            let len = self.num(cur, "titlelen");
+            let width = if len == 0 { 200 } else { (f.area().width as usize * len / 100).max(10) };
+            crate::statusline::plain(&self.fmt_line(&fmt, cur, body.height as usize, width)).trim_end().to_string()
+        });
         if self.branch_at.elapsed() > Duration::from_secs(3) {
             self.branch = doom::git_branch(&self.root);
             self.branch_at = Instant::now();
@@ -37,15 +73,27 @@ impl App {
         let mut seps = Vec::new();
         self.tree.place(body, &mut placed, &mut seps);
         self.win_rects = placed.clone();
+        // fillchars vert: the character between windows
+        let vert = crate::display::fillchars(&self.setting(self.cur.min(self.docs.len() - 1), "fillchars")).vert.to_string();
         for s in seps {
-            let bar: Vec<Line> = (0..s.height).map(|_| Line::from(Span::styled("│", hl("WinSeparator")))).collect();
+            let bar: Vec<Line> = (0..s.height).map(|_| Line::from(Span::styled(vert.clone(), hl("WinSeparator")))).collect();
             f.render_widget(Paragraph::new(bar), s);
         }
+        // laststatus: 0 no status lines, 1 only with two windows or more, 2 each window (3: the one above)
+        let n_wins = placed.len();
+        let status = match laststatus {
+            0 | 3 => false,
+            1 => n_wins > 1,
+            _ => true,
+        };
         for (id, r) in placed {
             let Some(w) = self.wins.get(id).and_then(|w| w.clone()) else { continue };
             let focused = id == self.focus;
             let di = w.doc.min(self.docs.len() - 1);
-            let text = Rect { height: r.height.saturating_sub(1), ..r };
+            // winbar: a format line at the window's top
+            let bar_fmt = self.setting(di, "winbar");
+            let wb = u16::from(!bar_fmt.is_empty() && r.height > 2);
+            let text = Rect { y: r.y + wb, height: r.height.saturating_sub(u16::from(status) + wb), ..r };
             let line = Rect { y: r.bottom().saturating_sub(1), height: 1, ..r };
             if focused && self.dash && di == self.cur && self.docs[di].name == "[scratch]" && !self.docs[di].dirty() {
                 self.area = text;
@@ -71,12 +119,30 @@ impl App {
                     w.left = self.docs[di].left;
                 }
             }
-            self.draw_modeline(f, line, di, focused);
+            if wb > 0 {
+                let p = self.fmt_line(&bar_fmt, di, text.height as usize, r.width as usize);
+                crate::statusline::draw_pieces(f, Rect { height: 1, ..r }, p, hl(if focused { "WinBar" } else { "WinBarNC" }));
+            }
+            if status {
+                self.draw_modeline(f, line, di, focused);
+            }
+        }
+        if global > 0 {
+            self.draw_modeline(f, gline, cur, true);
         }
         self.draw_float_panels(f, body);
         self.draw_floats(f, body);
         let (line_at, boxed, below) = self.cmd_place(body, cmd);
         self.draw_cmd(f, cmd, line_at, boxed);
+        // ruler: where the cursor is, at the right of the last line, when no status line says it
+        if !status && global == 0 && self.cmdline.is_none() && self.minibuf.is_none() && cmd.height > 0 && self.flag(cur, "ruler") {
+            let fmt = self.setting(cur, "rulerformat");
+            let fmt = if fmt.is_empty() { "%l,%c%V%=%P".to_string() } else { fmt };
+            let w = 18.min(cmd.width);
+            let at = Rect { x: cmd.right() - w, y: cmd.y, width: w, height: 1 };
+            let p = self.fmt_line(&fmt, cur, body.height as usize, w as usize);
+            crate::statusline::draw_pieces(f, at, p, hl("MsgArea"));
+        }
         self.draw_suggestions(f, line_at, boxed, below);
         if !self.menu.is_empty() {
             self.draw_menu(f, body);

@@ -22,6 +22,7 @@ mod git;
 mod nvim_options;
 mod settings;
 mod display;
+mod statusline;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -327,6 +328,9 @@ struct App {
     /// editor area from the last draw (for the mouse and scrolling)
     area: Rect,
     gutter: u16,
+    /// the terminal title (title, titlestring) as drawn, and as last set
+    title_want: Option<String>,
+    title_set: Option<String>,
     /// windows (by id; closed ones are None), their split tree, the focused one
     wins: Vec<Option<Win>>,
     tree: WTree,
@@ -470,6 +474,8 @@ impl App {
             quit: false,
             area: Rect::default(),
             gutter: 4,
+            title_want: None,
+            title_set: None,
             wins: vec![Some(Win::default())],
             tree: WTree::Leaf(0),
             focus: 0,
@@ -576,6 +582,13 @@ impl App {
                 term.clear()?;
             }
             term.draw(|f| self.draw(f))?;
+            // title: the terminal's title, when it changed
+            if self.title_want != self.title_set {
+                if let Some(t) = &self.title_want {
+                    let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle(t));
+                }
+                self.title_set = self.title_want.clone();
+            }
             // ZETT_EXIT_AFTER_DRAW=1: quit after the first frame (start-up timing)
             if std::env::var_os("ZETT_EXIT_AFTER_DRAW").is_some() {
                 self.quit = true;

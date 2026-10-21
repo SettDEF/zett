@@ -31,6 +31,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("list", &[], Kind::Bool, "false", "show tabs, spaces at line ends and more as listchars says"),
     s("listchars", &["lcs"], Kind::Text, "tab:→ ,trail:·,nbsp:+", "what list shows: tab:XY[Z] trail: lead: space: nbsp: eol: extends: precedes:"),
     s("signcolumn", &["scl"], Kind::Text, "number", "where error signs go: number (in the line numbers), yes, auto, no"),
+    s("statusline", &["stl"], Kind::Text, "", "the status line's format (%f %m %l %c %P %= %#Group# …; empty: zett's mode line)"),
     s("showmode", &["smd"], Kind::Bool, "false", "-- INSERT -- and the like on the last line (the status line shows the mode already)"),
     s("scrolloff", &["so"], Kind::Int, "3", "lines kept above and below the cursor"),
     s("tabstop", &["ts"], Kind::Int, "4", "columns a tab character takes"),
@@ -59,6 +60,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     // the window's display options (display.rs, draw.rs)
     "cursorcolumn", "cursorlineopt", "showbreak", "breakindent", "numberwidth", "foldcolumn", "hlsearch", "synmaxcol",
     "sidescroll", "sidescrolloff", "fillchars", "showmatch",
+    "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 
 /// The setting does something in zett (zett's table, or acted on elsewhere); false: accepted and kept,
