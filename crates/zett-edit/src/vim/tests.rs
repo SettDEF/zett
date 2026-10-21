@@ -68,6 +68,7 @@ mod tests {
         e.feed("g??");
         assert_eq!(e.text(), "URYYB JBEYQ");
         let mut e = ed("a\nb\n");
+        e.set_opt("shiftwidth", "4");
         e.feed(">>j>>");
         assert_eq!(e.text(), "    a\n    b\n");
         e.feed("<<");
@@ -419,5 +420,44 @@ mod foldmethod {
         e.feed("G");
         e.refresh_view();
         assert!(e.is_hidden(2), "foldclose=all: the fold the cursor left closes");
+    }
+}
+
+mod shifting {
+    use crate::Editor;
+
+    fn ed(text: &str, opts: &[(&str, &str)]) -> Editor {
+        let mut e = Editor::from_str(text);
+        for (k, v) in opts {
+            e.set_opt(k, v);
+        }
+        e
+    }
+
+    #[test]
+    fn shiftwidth_shiftround_preserveindent_and_programs() {
+        let mut e = ed("a\n\nb\n", &[("shiftwidth", "2")]);
+        e.feed(">2j");
+        assert_eq!(e.text(), "  a\n\n  b\n", "shiftwidth 2, the empty line left alone");
+        let mut e = ed("   a\n", &[("shiftwidth", "4"), ("shiftround", "true")]);
+        e.feed(">>");
+        assert_eq!(e.text(), "    a\n", "shiftround: 3 goes to 4, not 7");
+        e.feed(">><<");
+        assert_eq!(e.text(), "    a\n");
+        let mut e = ed("   a\n", &[("shiftwidth", "4")]);
+        e.feed("<<");
+        assert_eq!(e.text(), "a\n");
+        let mut e = ed("\t a\n", &[("shiftwidth", "4"), ("tabstop", "8"), ("expandtab", "false"), ("preserveindent", "true")]);
+        e.feed(">>");
+        assert_eq!(e.text(), "\t     a\n", "preserveindent keeps the tab and adds at the end");
+        let mut e = ed("a\n", &[("shiftwidth", "8"), ("tabstop", "8"), ("expandtab", "false")]);
+        e.feed(">>");
+        assert_eq!(e.text(), "\ta\n", "noexpandtab: a tab");
+        let mut e = ed("b\na\n", &[("equalprg", "sort")]);
+        e.feed("=j");
+        assert!(e.take_requests().contains(&crate::vim::Request::Ex("1,2!sort".into())), "equalprg filters the lines");
+        let mut e = ed("x y\n", &[("formatprg", "fmt -w 20")]);
+        e.feed("gqq");
+        assert!(e.take_requests().contains(&crate::vim::Request::Ex("1,1!fmt -w 20".into())));
     }
 }

@@ -202,6 +202,7 @@ impl App {
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
         SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
         let show = self.display(di);
+        let incsearch = self.flag(di, "incsearch");
         // spell: only when on and a dictionary is there (the first use loads it)
         let spell_on = self.flag(di, "spell") && zett_edit::spell::with(|s| s.available());
         let camel = self.setting(di, "spelloptions").split(',').any(|o| o == "camel");
@@ -331,7 +332,7 @@ impl App {
         // a search in progress: its visible matches, found once per frame (Search; IncSearch for the
         // one the cursor is on)
         let (found, current) = match d.ed.isearch() {
-            Some(s) if !s.query().is_empty() => {
+            Some(s) if !s.query().is_empty() && (d.ed.is_emacs() || incsearch) => {
                 let current = s.current();
                 let from = d.ed.buf.to_char(Pos { line: d.top.min(lines), col: 0 });
                 let end = if d.ed.view_is_empty() { (d.top + height).min(lines) } else { lines };

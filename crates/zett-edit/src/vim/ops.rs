@@ -25,28 +25,64 @@ impl Editor {
                 self.cursor = a;
             }
             Op::ShiftRight | Op::ShiftLeft | Op::Reindent => {
-                let sw = self.soft_tab.unwrap_or(4);
+                // equalprg: = filters the lines through that program instead
+                if op == Op::Reindent {
+                    if let Some(prg) = self.opt("equalprg").filter(|p| !p.trim().is_empty()) {
+                        let l = format!("{},{}!{prg}", l1 + 1, l2 + 1);
+                        self.vim.requests.push(Request::Ex(l));
+                        return true;
+                    }
+                }
+                // shiftwidth steps; shiftround to a multiple of it; preserveindent keeps the
+                // indent's own characters and only adds or takes at its end
+                let sw = self.shiftwidth().max(1);
+                let (round, keep) = (self.opt_on("shiftround", false), self.opt_on("preserveindent", false));
                 self.begin();
                 for l in l1..=l2 {
-                    let s = self.line_start(l);
                     let ind = self.indent_of(l);
-                    let width = ind.chars().map(|c| if c == '\t' { sw } else { 1 }).sum::<usize>();
+                    let width = self.indent_width(&ind);
                     let blank = self.buf.line_len(l) == ind.chars().count();
                     let new = match op {
-                        Op::ShiftRight if !blank => width + sw,
-                        Op::ShiftRight => width,
-                        Op::ShiftLeft => width.saturating_sub(sw) / sw * sw + if width % sw != 0 && width > sw { 0 } else { 0 },
+                        // > leaves empty lines as they are
+                        Op::ShiftRight if blank => continue,
+                        Op::ShiftRight if round => (width / sw + 1) * sw,
+                        Op::ShiftRight => width + sw,
+                        Op::ShiftLeft if round && width % sw != 0 => width / sw * sw,
+                        Op::ShiftLeft => width.saturating_sub(sw),
                         // = : the indent of the nearest non-blank line above (Vim's default with no indentexpr)
-                        _ => (0..l).rev().find(|&k| self.buf.line_len(k) > self.indent_of(k).chars().count()).map(|k| self.indent_of(k).chars().map(|c| if c == '\t' { sw } else { 1 }).sum()).unwrap_or(0),
+                        _ => (0..l).rev().find(|&k| self.buf.line_len(k) > self.indent_of(k).chars().count()).map(|k| self.indent_width(&self.indent_of(k))).unwrap_or(0),
                     };
-                    let n = ind.chars().count();
-                    self.rem(s, s + n);
-                    self.ins(s, &" ".repeat(new));
+                    let new_ind = if keep && new >= width {
+                        format!("{ind}{}", " ".repeat(new - width))
+                    } else if keep {
+                        let mut kept: String = String::new();
+                        for c in ind.chars() {
+                            if self.indent_width(&format!("{kept}{c}")) > new {
+                                break;
+                            }
+                            kept.push(c);
+                        }
+                        let w = self.indent_width(&kept);
+                        format!("{kept}{}", " ".repeat(new - w))
+                    } else {
+                        self.make_indent(new)
+                    };
+                    if new_ind != ind {
+                        let s = self.line_start(l);
+                        self.rem(s, s + ind.chars().count());
+                        self.ins(s, &new_ind);
+                    }
                 }
                 self.close();
                 self.cursor = self.first_non_blank(l1);
             }
             Op::Format => {
+                // formatprg: gq filters the lines through that program instead
+                if let Some(prg) = self.opt("formatprg").filter(|p| !p.trim().is_empty()) {
+                    let l = format!("{},{}!{prg}", l1 + 1, l2 + 1);
+                    self.vim.requests.push(Request::Ex(l));
+                    return true;
+                }
                 let width = self.fill_column.max(10);
                 let text = self.buf.slice(self.line_start(l1), self.line_end(l2));
                 let mut out: Vec<String> = Vec::new();

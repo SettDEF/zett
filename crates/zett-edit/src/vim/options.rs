@@ -12,7 +12,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "selection", "report", "modifiable", "textwidth", "wrapmargin", "formatoptions", "quoteescape", "paragraphs",
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
-    "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions",
+    "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions", "equalprg", "formatprg", "incsearch",
 ];
 
 impl Editor {
@@ -60,10 +60,10 @@ impl Editor {
         if word { 2 } else { 1 }
     }
 
-    fn tabstop(&self) -> usize {
+    pub(crate) fn tabstop(&self) -> usize {
         self.opt_num("tabstop", 8).max(1) as usize
     }
-    fn shiftwidth(&self) -> usize {
+    pub(crate) fn shiftwidth(&self) -> usize {
         match self.opt_num("shiftwidth", 0) {
             n if n > 0 => n as usize,
             _ => self.soft_tab.unwrap_or_else(|| self.tabstop()),

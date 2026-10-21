@@ -31,6 +31,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("list", &[], Kind::Bool, "false", "show tabs, spaces at line ends and more as listchars says"),
     s("listchars", &["lcs"], Kind::Text, "tab:→ ,trail:·,nbsp:+", "what list shows: tab:XY[Z] trail: lead: space: nbsp: eol: extends: precedes:"),
     s("signcolumn", &["scl"], Kind::Text, "number", "where error signs go: number (in the line numbers), yes, auto, no"),
+    s("undofile", &["udf"], Kind::Bool, "true", "every saved file keeps its undo history (time travel, undo after a restart; zett's default)"),
     s("splitbelow", &["sb"], Kind::Bool, "true", ":split puts the new window below (zett's default, Doom's; off: above, Vim's)"),
     s("splitright", &["spr"], Kind::Bool, "true", ":vsplit puts the new window on the right (zett's default; off: left, Vim's)"),
     s("statusline", &["stl"], Kind::Text, "", "the status line's format (%f %m %l %c %P %= %#Group# …; empty: zett's mode line)"),
@@ -58,7 +59,7 @@ pub(crate) fn find(name: &str) -> Option<&'static Setting> {
 
 /// Neovim options zett acts on outside this table (the window draws numbers, history is always kept).
 const WORKS_ELSEWHERE: &[&str] = &[
-    "number", "relativenumber", "incsearch", "undofile",
+    "number", "relativenumber",
     // the window's display options (display.rs, draw.rs)
     "cursorcolumn", "cursorlineopt", "showbreak", "breakindent", "numberwidth", "foldcolumn", "hlsearch", "synmaxcol",
     "sidescroll", "sidescrolloff", "fillchars", "showmatch",

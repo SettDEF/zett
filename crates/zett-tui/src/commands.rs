@@ -270,7 +270,9 @@ impl App {
                 self.docs[i].mtime = self.disk_time(i);
                 self.say(m);
                 let i = self.cur;
-                self.docs[i].keep_history();
+                if self.flag(i, "undofile") {
+                    self.docs[i].keep_history();
+                }
                 self.lsp_saved(i);
                 self.emit("write");
             }

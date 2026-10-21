@@ -185,6 +185,12 @@ impl Editor {
         let forward = s.now.forward;
         let wrapped = s.now.wrapped;
         self.isearch_go(q, forward, from, wrapped);
+        // noincsearch (Vim): the cursor waits where the search began until Enter
+        if !self.emacs && !self.opt_on("incsearch", true) {
+            if let Some(o) = self.isearch.as_ref().map(|s| s.origin) {
+                self.cursor = o;
+            }
+        }
         self.want_col = self.cursor().col;
     }
 
