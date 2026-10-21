@@ -492,6 +492,10 @@ impl App {
             self.agent_poll();
             self.notebook_poll();
             term.draw(|f| self.draw(f))?;
+            // ZETT_EXIT_AFTER_DRAW=1: quit after the first frame (start-up timing)
+            if std::env::var_os("ZETT_EXIT_AFTER_DRAW").is_some() {
+                self.quit = true;
+            }
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.minibuf.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
             if shape != Some(bar) {
@@ -713,7 +717,10 @@ impl App {
     /// Runs before each draw, so no place that opens a buffer has to.
     fn sync_profile(&mut self) {
         let emacs = self.emacs;
+        // where M-q wraps (zett.opt.fill_column, 80)
+        let fill = self.engine.opt("fill_column").and_then(|s| s.parse::<usize>().ok()).unwrap_or(80);
         for d in self.docs.iter_mut() {
+            d.ed.set_fill_column(fill);
             if d.ed.is_emacs() != emacs {
                 d.ed.set_emacs(emacs);
             }

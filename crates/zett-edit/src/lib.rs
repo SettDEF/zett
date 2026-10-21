@@ -17,6 +17,7 @@ pub mod outline;
 pub mod prefix;
 pub mod search;
 pub mod suggest;
+pub mod textops;
 mod undo;
 pub use keys::{Code, Key};
 pub use killring::{KillRing, SharedKillRing};
@@ -95,6 +96,11 @@ pub struct Editor {
     view: outline::View,
     /// an agent's suggestions, not yet taken (suggest.rs)
     pending: suggest::Pending,
+    /// textops.rs: where M-q wraps, M-@ in a row, M-/ in a row
+    fill_column: usize,
+    last_cmd_was_mark_word: bool,
+    mark_word_end: usize,
+    dabbrev: Option<textops::Dabbrev>,
 }
 
 fn class(c: char) -> u8 {
@@ -120,6 +126,10 @@ impl Editor {
             emacs: false,
             mark: None,
             mark_active: false,
+            fill_column: 80,
+            last_cmd_was_mark_word: false,
+            mark_word_end: 0,
+            dabbrev: None,
             kill_ring: KillRing::shared(),
             isearch: None,
             last_search: String::new(),

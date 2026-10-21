@@ -99,6 +99,43 @@ See PLAN.md for the vision and milestones.
 - [ ] 9 sync without a server
 - [ ] 10 canvas
 
+### Emacs parity (2026-10-21): what Emacs has and zett does not yet, in the order they are felt
+A. editing (zett-edit textops.rs, pure, tested)
+- [x] fill-paragraph M-q (zett.opt.fill_column; list and comment prefixes kept), sort-lines, delete-duplicate-lines,
+  join-line M-^, transpose-words M-t / transpose-lines C-x C-t, delete-blank-lines C-x C-o,
+  upcase/downcase-region C-x C-u / C-x C-l, mark-word M-@, dabbrev-expand M-/ (cycling), count-words M-=
+B. interactive (zett-tui)
+- [ ] keyboard macros: C-x ( · C-x ) · C-x e (e again repeats), F3 / F4
+- [ ] query-replace M-% (y n ! q .), replace-string, isearch-forward-regexp C-M-s
+- [ ] goto-line M-g g, zap-to-char M-z, shell-command M-!, shell-command-on-region M-| (C-u: replace)
+- [ ] registers: point C-x r SPC / jump C-x r j, text C-x r s / insert C-x r i; bookmarks C-x r m / b
+- [ ] rectangles: C-x r k / y / t (string-rectangle), C-x SPC
+- [ ] occur M-s o (a buffer of matching lines, editable: changes go back, as wgrep)
+C. files and sessions
+- [ ] save-place (each file reopens where it was), auto-save + crash recovery, desktop (buffers and
+  windows back after a restart), auto-revert (a file changed elsewhere reloads when untouched)
+- [ ] dired: a folder as an editable buffer (rename by editing the names, mark, delete, copy)
+- [ ] ibuffer (buffers as a buffer), TRAMP-like remote files over ssh
+D. help and discovery
+- [ ] C-h k / f / v / m as buffers (key → command → its source), apropos, a preview while picking
+  (consult), actions on any candidate (embark)
+E. programming
+- [ ] eldoc (signature in the echo area), tree-sitter, a debugger (DAP), send region to a REPL, ediff
+F. org
+- [ ] TODO states cycling, priorities, tags, SCHEDULED / DEADLINE, the agenda (with Dotos), tables
+  (aligned, formulas), clocking, export (HTML / PDF)
+G. the rest
+- [ ] a terminal buffer (zash inside zett), spell checking, calc, calendar; zett server/client (one zett
+  for every edit: zett-edit)
+- skip: mail, RSS, IRC (other apps do it better)
+
+### zett everywhere (2026-10-21, design)
+- [x] zett-edit (~/.scripts/apps/zett): the clipboard (Super+Shift+E, the clipboard toast's zett chip),
+  a file or stdin, each save written back; every edit kept in ~/.local/share/zett/edits (a git folder:
+  C-c s finds them and their history); quit without saving changes nothing; secrets kept nowhere
+- [ ] the shell's text fields (Ctrl+E), tela-zen's text boxes (the float over the box, live write-back),
+  per-site modes and snippets, the agent with the page as context, drafts across devices (after sync)
+
 ### P2 — what people come to Emacs for
 - [ ] Everything a buffer: messages, help, explorer, terminal, undo tree (today panels).
 - [~] Org-like outlines on the block tree: fold, promote/demote, TODO states, an agenda across

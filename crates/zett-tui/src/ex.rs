@@ -206,6 +206,10 @@ impl App {
         let last = self.last_line();
         let (range, rest) = parse_range(line, cur, last, self.vis_range);
         let rest = rest.trim_start();
+        // a named command (sort-lines, fill-paragraph): not Vim's :sort with "-lines"; it runs by name
+        if range.is_none() && rest.split_whitespace().next().is_some_and(|w| w.contains('-') && w.chars().next().is_some_and(|c| c.is_ascii_alphabetic())) {
+            return false;
+        }
         // a range alone: go to its last line (:42, :$, :.+3)
         if range.is_some() && rest.is_empty() {
             let (_, b) = range.unwrap();
