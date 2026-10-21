@@ -1377,8 +1377,9 @@ impl App {
         }
         self.draw_float_panels(f, body);
         self.draw_floats(f, body);
-        self.draw_cmd(f, cmd);
-        self.draw_suggestions(f, cmd);
+        let (line_at, boxed, below) = self.cmd_place(body, cmd);
+        self.draw_cmd(f, cmd, line_at, boxed);
+        self.draw_suggestions(f, line_at, boxed, below);
         if !self.menu.is_empty() {
             self.draw_menu(f, body);
         }
@@ -1727,15 +1728,32 @@ impl App {
         }
     }
 
-    fn draw_cmd(&mut self, f: &mut Frame, a: Rect) {
+    /// The bottom row (`a`): messages, keys, errors; and the `:` line at `line_at` (in a box when `boxed`).
+    fn draw_cmd(&mut self, f: &mut Frame, a: Rect, line_at: Rect, boxed: bool) {
         if self.travel.is_some() {
             return self.draw_travel(f, a);
         }
         if let Some(l) = &self.cmdline {
             let p = self.prompt.clone().unwrap_or_else(|| ":".into());
-            f.render_widget(Paragraph::new(Line::from(vec![Span::styled(p.clone(), hl("Prompt")), Span::raw(l.as_str())])), a);
-            f.set_cursor_position(Position { x: a.x + (p.chars().count() + l.chars().count()) as u16, y: a.y });
-            return;
+            if boxed {
+                // a floating line: a rounded box, its prompt as the title
+                let outer = Rect { x: line_at.x - 1, y: line_at.y - 1, width: line_at.width + 2, height: 3 };
+                f.render_widget(Clear, outer);
+                let title = if p == ":" { " Command ".to_string() } else { format!(" {} ", p.trim_end_matches([':', ' '])) };
+                f.render_widget(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(hl("FloatBorder")).title(Span::styled(title, hl("Prompt"))), outer);
+            } else if line_at != a {
+                f.render_widget(Clear, line_at);
+            }
+            let shown_p = if boxed && p == ":" { "› ".to_string() } else { p.clone() };
+            // the end of a long line stays in view
+            let room = (line_at.width as usize).saturating_sub(shown_p.chars().count() + 1);
+            let skip = l.chars().count().saturating_sub(room);
+            let tail: String = l.chars().skip(skip).collect();
+            f.render_widget(Paragraph::new(Line::from(vec![Span::styled(shown_p.clone(), hl("Prompt")), Span::raw(tail.clone())])), line_at);
+            f.set_cursor_position(Position { x: line_at.x + (shown_p.chars().count() + tail.chars().count()) as u16, y: line_at.y });
+            if line_at == a {
+                return;
+            }
         }
         // a search in progress: "I-search: query", Emacs's echo area
         if let Some(s) = self.docs.get(self.cur).and_then(|d| d.ed.isearch()) {

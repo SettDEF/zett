@@ -136,6 +136,9 @@ settings page.
 - [x] the table (zett-tui settings.rs): :set, :setlocal, :set name? / noname, :set alone lists them,
   zett.opt, zett.ft.<type> (Markdown and plain text wrap); wrap, linebreak, cursorline, colorcolumn,
   list, scrolloff, tabstop, shiftwidth, expandtab, trim_trailing_whitespace, final_newline, fill_column
+- [x] where `:` asks (2026-10-21): `cmdline` = bottom (Vim) / top / center (a box, like noice.nvim) /
+  cursor (a box under the cursor), `cmdwidth`; suggestions open below a floating line. Next: a plugin
+  replacing the command line altogether (a hook that draws it), and the same for `/` search
 - [ ] display: listchars, signcolumn,
   signcolumn, number / relativenumber (have), conceal for Markdown
 - [ ] indenting: tabstop, shiftwidth, expandtab, autoindent, smartindent; editorconfig

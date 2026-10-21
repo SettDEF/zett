@@ -184,7 +184,26 @@ impl App {
     }
 
     /// The list over the command line: name, what follows, what it does; an example under it.
-    pub(crate) fn draw_suggestions(&mut self, f: &mut Frame, cmd: Rect) {
+    /// Where `:` asks (the `cmdline` setting): the line's own row, whether it sits in a box, and
+    /// whether suggestions open below it (a floating line) or above (the bottom row).
+    pub(crate) fn cmd_place(&self, body: Rect, cmd: Rect) -> (Rect, bool, bool) {
+        let w = (self.num(self.cur, "cmdwidth").max(20) as u16).min(body.width.saturating_sub(4)).max(10);
+        let boxed = |x: u16, y: u16| (Rect { x: x + 1, y: y + 1, width: w.saturating_sub(2), height: 1 }, true, true);
+        match self.setting(self.cur, "cmdline").as_str() {
+            "top" => (Rect { x: body.x, y: body.y, width: body.width, height: 1 }, false, true),
+            "center" => boxed(body.x + (body.width.saturating_sub(w)) / 2, body.y + body.height / 3),
+            "cursor" => {
+                let (cx, cy) = self.cursor_xy;
+                let x = cx.saturating_sub(2).clamp(body.x, body.right().saturating_sub(w));
+                // under the cursor's line, or over it near the bottom
+                let y = if cy + 4 < body.bottom() { cy + 1 } else { cy.saturating_sub(3).max(body.y) };
+                boxed(x, y)
+            }
+            _ => (cmd, false, false),
+        }
+    }
+
+    pub(crate) fn draw_suggestions(&mut self, f: &mut Frame, cmd: Rect, boxed: bool, below: bool) {
         let Some(line) = self.cmdline.clone() else { return };
         if self.prompt.is_some() {
             return;
@@ -200,7 +219,14 @@ impl App {
         let foot = if !sel.example.is_empty() { 1 } else { 0 };
         let h = (shown + foot + 2) as u16;
         let w = f.area().width.min(90);
-        let a = Rect { x: cmd.x, y: cmd.y.saturating_sub(h), width: w, height: h.min(cmd.y) };
+        let a = if below {
+            // under the line (and its box), as far as the screen goes
+            let y = cmd.y + 1 + boxed as u16;
+            let x = cmd.x.saturating_sub(boxed as u16);
+            Rect { x, y, width: w.min(f.area().width.saturating_sub(x)), height: h.min(f.area().height.saturating_sub(y)) }
+        } else {
+            Rect { x: cmd.x, y: cmd.y.saturating_sub(h), width: w, height: h.min(cmd.y) }
+        };
         let name_w = all.iter().skip(first).take(shown).map(|s| s.name.chars().count() + 1 + s.args.chars().count()).max().unwrap_or(8).min(40);
         let mut lines = Vec::new();
         for (i, s) in all.iter().enumerate().skip(first).take(shown) {
