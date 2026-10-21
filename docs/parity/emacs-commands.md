@@ -905,7 +905,7 @@ plugin, not the core.
 - · `delete-trailing-whitespace-mode` Delete trailing whitespace before saving the current buffer.
 - ✓ `delete-whitespace-rectangle` Delete all whitespace following a specified column in each line.
 - ✓ `delete-window` Delete specified WINDOW.
-- · `delete-windows-on` Delete all windows showing BUFFER-OR-NAME.
+- ✓ `delete-windows-on` Delete all windows showing BUFFER-OR-NAME.
 
 ## delimit
 
@@ -926,7 +926,7 @@ plugin, not the core.
 - ✓ `describe-bindings` Display a buffer showing a list of all defined keys, and their definitions.
 - · `describe-buffer-case-table` Describe the case table of the current buffer.
 - · `describe-categories` Describe the category specifications in the current category table.
-- · `describe-char` Describe position POS (interactively, point) and the char after POS.
+- ✓ `describe-char` Describe position POS (interactively, point) and the char after POS.
 - · `describe-character-set` Display information about built-in character set CHARSET.
 - · `describe-char-fold-equivalences` Display characters equivalent to CHAR under character-folding.
 - · `describe-coding-system` Display information about CODING-SYSTEM.
@@ -1370,12 +1370,12 @@ plugin, not the core.
 
 ## emoji
 
-- · `emoji-describe` Display the name of the grapheme cluster composed from GLYPH.
-- · `emoji-insert` 
-- · `emoji-list` List Emoji and allow selecting and inserting one of them.
+- ✓ `emoji-describe` Display the name of the grapheme cluster composed from GLYPH.
+- ✓ `emoji-insert` 
+- ✓ `emoji-list` List Emoji and allow selecting and inserting one of them.
 - · `emoji-list-select` 
-- · `emoji-recent` 
-- · `emoji-search` 
+- ✓ `emoji-recent` 
+- ✓ `emoji-search` 
 - · `emoji-zoom-decrease` Decrease the size of the character under point.
 - · `emoji-zoom-increase` Increase the size of the character under point.
 - · `emoji-zoom-reset` Reset the size of the character under point.
@@ -1706,7 +1706,7 @@ plugin, not the core.
 ## fit
 
 - · `fit-frame-to-buffer` Adjust size of FRAME to display the contents of its buffer exactly.
-- · `fit-window-to-buffer` Adjust size of WINDOW to display its buffer's contents exactly.
+- ✓ `fit-window-to-buffer` Adjust size of WINDOW to display its buffer's contents exactly.
 
 ## fixup
 
@@ -2326,7 +2326,7 @@ plugin, not the core.
 
 - · `insert-abbrevs` Insert the description of all defined abbrevs after point.
 - ✓ `insert-buffer` Insert after point the contents of BUFFER.
-- · `insert-char` Insert COUNT copies of CHARACTER.
+- ✓ `insert-char` Insert COUNT copies of CHARACTER.
 - ✓ `insert-file` Insert contents of file FILENAME into buffer after point.
 - · `insert-file-literally` Insert contents of file FILENAME into buffer after point with no conversion.
 - · `insert-kbd-macro` Insert in buffer the definition of kbd macro MACRONAME, as Lisp code.
@@ -4184,7 +4184,7 @@ plugin, not the core.
 
 - ✓ `shrink-window` Make the selected window DELTA lines smaller.
 - ✓ `shrink-window-horizontally` Make selected window DELTA columns narrower.
-- · `shrink-window-if-larger-than-buffer` Shrink height of WINDOW if its buffer doesn't need so many lines.
+- ✓ `shrink-window-if-larger-than-buffer` Shrink height of WINDOW if its buffer doesn't need so many lines.
 
 ## sieve
 
@@ -4474,7 +4474,7 @@ plugin, not the core.
 - · `tab-switcher-unmark` Cancel operations on window configuration on this line and move down.
 - ✓ `tab-to-tab-stop` Insert spaces or tabs to next defined tab-stop column.
 - ✓ `tab-undo` Restore the most recently closed tab.
-- · `tab-window-detach` Move the selected window to a new tab.
+- ✓ `tab-window-detach` Move the selected window to a new tab.
 
 ## tabify
 
@@ -5159,11 +5159,11 @@ plugin, not the core.
 
 - · `window-configuration-to-register` Store the window configuration of the selected frame in REGISTER.
 - · `window-divider-mode` Display dividers between windows (Window Divider mode).
-- · `window-layout-flip-leftright` Flip WINDOW's child windows horizontally.
-- · `window-layout-flip-topdown` Flip WINDOW's child windows vertically.
-- · `window-layout-rotate-anticlockwise` Rotate layout of WINDOW's child windows counterclockwise by 90 degrees.
-- · `window-layout-rotate-clockwise` Rotate layout of WINDOW's child windows clockwise by 90 degrees.
-- · `window-layout-transpose` Transpose child windows of WINDOW.
+- ✓ `window-layout-flip-leftright` Flip WINDOW's child windows horizontally.
+- ✓ `window-layout-flip-topdown` Flip WINDOW's child windows vertically.
+- ✓ `window-layout-rotate-anticlockwise` Rotate layout of WINDOW's child windows counterclockwise by 90 degrees.
+- ✓ `window-layout-rotate-clockwise` Rotate layout of WINDOW's child windows clockwise by 90 degrees.
+- ✓ `window-layout-transpose` Transpose child windows of WINDOW.
 - · `window-swap-states` Swap the states of live windows WINDOW-1 and WINDOW-2.
 - · `window-toggle-side-windows` Toggle display of side windows on specified FRAME.
 - · `window-tool-bar-mode` Toggle display of the tool bar in the tab line of the current buffer.

@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-345 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
+360 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
 
 | | key | command |
 |---|---|---|
@@ -166,7 +166,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-x )` | `kmacro-end-macro` |
 | · | `C-x *` | `calc-dispatch` |
 | ✓ | `C-x +` | `balance-windows` |
-| · | `C-x -` | `shrink-window-if-larger-than-buffer` |
+| ✓ | `C-x -` | `shrink-window-if-larger-than-buffer` |
 | ✓ | `C-x .` | `set-fill-prefix` |
 | ✓ | `C-x 0` | `delete-window` |
 | ✓ | `C-x 1` | `delete-other-windows` |
@@ -202,15 +202,15 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x 5 r` | `find-file-read-only-other-frame` |
 | · | `C-x 5 u` | `undelete-frame` |
 | · | `C-x 6` | `2C-command` |
-| · | `C-x 8 RET` | `insert-char` |
+| ✓ | `C-x 8 RET` | `insert-char` |
 | · | `C-x 8 e +` | `emoji-zoom-increase` |
 | · | `C-x 8 e -` | `emoji-zoom-decrease` |
 | · | `C-x 8 e 0` | `emoji-zoom-reset` |
-| · | `C-x 8 e d` | `emoji-describe` |
-| · | `C-x 8 e i` | `emoji-insert` |
-| · | `C-x 8 e l` | `emoji-list` |
-| · | `C-x 8 e r` | `emoji-recent` |
-| · | `C-x 8 e s` | `emoji-search` |
+| ✓ | `C-x 8 e d` | `emoji-describe` |
+| ✓ | `C-x 8 e i` | `emoji-insert` |
+| ✓ | `C-x 8 e l` | `emoji-list` |
+| ✓ | `C-x 8 e r` | `emoji-recent` |
+| ✓ | `C-x 8 e s` | `emoji-search` |
 | · | `C-x ;` | `comment-set-column` |
 | ✓ | `C-x <` | `scroll-left` |
 | ✓ | `C-x <left>` | `previous-buffer` |
@@ -395,22 +395,22 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-x v w x` | `vc-delete-working-tree` |
 | ✓ | `C-x v x` | `vc-delete-file` |
 | ✓ | `C-x v ~` | `vc-revision-other-window` |
-| · | `C-x w -` | `fit-window-to-buffer` |
-| · | `C-x w 0` | `delete-windows-on` |
+| ✓ | `C-x w -` | `fit-window-to-buffer` |
+| ✓ | `C-x w 0` | `delete-windows-on` |
 | ✓ | `C-x w 2` | `split-root-window-below` |
 | ✓ | `C-x w 3` | `split-root-window-right` |
 | · | `C-x w ^ f` | `tear-off-window` |
-| · | `C-x w ^ t` | `tab-window-detach` |
+| ✓ | `C-x w ^ t` | `tab-window-detach` |
 | · | `C-x w d` | `toggle-window-dedicated` |
-| · | `C-x w f <down>` | `window-layout-flip-topdown` |
-| · | `C-x w f <right>` | `window-layout-flip-leftright` |
+| ✓ | `C-x w f <down>` | `window-layout-flip-topdown` |
+| ✓ | `C-x w f <right>` | `window-layout-flip-leftright` |
 | ✓ | `C-x w o <left>` | `rotate-windows-back` |
 | ✓ | `C-x w o <right>` | `rotate-windows` |
 | ✓ | `C-x w q` | `quit-window` |
-| · | `C-x w r <left>` | `window-layout-rotate-anticlockwise` |
-| · | `C-x w r <right>` | `window-layout-rotate-clockwise` |
+| ✓ | `C-x w r <left>` | `window-layout-rotate-anticlockwise` |
+| ✓ | `C-x w r <right>` | `window-layout-rotate-clockwise` |
 | · | `C-x w s` | `window-toggle-side-windows` |
-| · | `C-x w t` | `window-layout-transpose` |
+| ✓ | `C-x w t` | `window-layout-transpose` |
 | · | `C-x x @` | `tramp-revert-buffer-with-sudo` |
 | ✓ | `C-x x f` | `font-lock-update` |
 | ✓ | `C-x x g` | `revert-buffer-quick` |
