@@ -247,7 +247,7 @@ impl App {
         let more = if all.len() > shown { format!(" {}/{} ", self.cmd_sel + 1, all.len()) } else { String::new() };
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+            .border_set(crate::display::float_set())
             .border_style(hl("FloatBorderDim"))
             .title_bottom(Line::from(Span::styled(format!(" Tab completes · ↑↓ choose{more}"), hl("FloatBorderDim"))).right_aligned());
         f.render_widget(Paragraph::new(lines).block(block), a);

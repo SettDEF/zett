@@ -265,7 +265,7 @@ impl App {
             let title = if p.focused { format!(" {} ", p.title) } else { format!(" {} · SPC w Tab: up ", p.title) };
             let block = Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
+                .border_set(crate::display::float_set())
                 .border_style(hl(if p.focused { "FloatBorder" } else { "FloatBorderDim" }))
                 .title(Span::styled(title, hl(if p.focused { "Title" } else { "TitleNC" })));
             let inner = block.inner(outer);

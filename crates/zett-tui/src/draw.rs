@@ -285,6 +285,14 @@ impl App {
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
         SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
         let show = self.display(di);
+        // breakindentopt: shift:N more, min:N columns of text kept at least
+        let briopt = self.setting(di, "breakindentopt");
+        let bri_num = |k: &str, d: usize| briopt.split(',').find_map(|p| p.strip_prefix(k)?.parse::<isize>().ok()).unwrap_or(d as isize);
+        let (bri_shift, bri_min) = (bri_num("shift:", 0), bri_num("min:", 20).max(1) as usize);
+        let sbr_first = briopt.split(',').any(|p| p == "sbr");
+        // linebreak: the characters a line may break after (breakat; ^I is a tab)
+        let brk: Vec<char> = self.setting(di, "breakat").replace("^I", "\t").chars().chain([TAB_FIRST, TAB_FILL, TAB_LAST]).collect();
+        let words = words.then_some(brk.as_slice());
         let incsearch = self.flag(di, "incsearch");
         // spell: only when on and a dictionary is there (the first use loads it)
         let spell_on = self.flag(di, "spell") && zett_edit::spell::with(|s| s.available());
@@ -347,7 +355,7 @@ impl App {
         // a wrapped line's later rows start with showbreak, and with breakindent at the line's indent
         let sbr: String = show.showbreak.clone();
         let sbr_w = sbr.chars().count();
-        let cont_of = |t: &str| (sbr_w + if show.breakindent { screen_col(t, t.chars().take_while(|c| *c == ' ' || *c == '\t').count()) } else { 0 }).min(width / 2);
+        let cont_of = |t: &str| (sbr_w + if show.breakindent { (screen_col(t, t.chars().take_while(|c| *c == ' ' || *c == '\t').count()) as isize + bri_shift).max(0) as usize } else { 0 }).min(width.saturating_sub(bri_min).max(sbr_w)).min(width / 2 + width / 4);
         let rows_of = |d: &Doc, l: usize| {
             if wrap {
                 let t = d.ed.buf.line(l);
@@ -719,11 +727,15 @@ impl App {
                         out.push(finish(std::mem::take(&mut spans)));
                     } else {
                         let mut row = vec![Span::raw(" ".repeat(gutter as usize))];
-                        // showbreak, then the breakindent
+                        // the breakindent, then showbreak (breakindentopt sbr: showbreak first)
                         let mark: String = sbr.chars().take(cont).collect();
                         let n = mark.chars().count();
-                        row.push(Span::styled(mark, hl::hl("NonText")));
-                        row.push(Span::raw(" ".repeat(cont - n)));
+                        let (mark, pad) = (Span::styled(mark, hl::hl("NonText")), Span::raw(" ".repeat(cont - n)));
+                        if sbr_first {
+                            row.extend([mark, pad]);
+                        } else {
+                            row.extend([pad, mark]);
+                        }
                         row.extend(part);
                         virt.push_back(finish(row));
                     }
@@ -753,7 +765,7 @@ impl App {
                 let outer = Rect { x: line_at.x - 1, y: line_at.y - 1, width: line_at.width + 2, height: 3 };
                 f.render_widget(Clear, outer);
                 let title = if p == ":" { " Command ".to_string() } else { format!(" {} ", p.trim_end_matches([':', ' '])) };
-                f.render_widget(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(hl("FloatBorder")).title(Span::styled(title, hl("Prompt"))), outer);
+                f.render_widget(Block::default().borders(Borders::ALL).border_set(crate::display::float_set()).border_style(hl("FloatBorder")).title(Span::styled(title, hl("Prompt"))), outer);
             } else if line_at != a {
                 f.render_widget(Clear, line_at);
             }
@@ -825,7 +837,7 @@ impl App {
         let a = Rect { x: body.x, y: body.bottom().saturating_sub(h), width: body.width, height: h };
         f.render_widget(Clear, a);
         let title: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
-        let block = Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(hl("FloatBorderDim")).title(format!(" {} … ", title.join(" ")));
+        let block = Block::default().borders(Borders::ALL).border_set(crate::display::float_set()).border_style(hl("FloatBorderDim")).title(format!(" {} … ", title.join(" ")));
         let inner = block.inner(a);
         f.render_widget(block, a);
         let colw = inner.width as usize / cols;

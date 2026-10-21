@@ -492,7 +492,7 @@ fn draw_float(f: &mut Frame, m: &Minibuf) {
     f.render_widget(Clear, a);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_set(crate::display::float_set())
         .border_style(hl("FloatBorder"))
         .title(format!(" {} ", m.title.trim_end()))
         .title_bottom(format!(" {} of {} ", m.count(), m.items.len()));

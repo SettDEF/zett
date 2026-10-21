@@ -32,6 +32,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("listchars", &["lcs"], Kind::Text, "tab:→ ,trail:·,nbsp:+", "what list shows: tab:XY[Z] trail: lead: space: nbsp: eol: extends: precedes:"),
     s("signcolumn", &["scl"], Kind::Text, "number", "where error signs go: number (in the line numbers), yes, auto, no"),
     s("undofile", &["udf"], Kind::Bool, "true", "every saved file keeps its undo history (time travel, undo after a restart; zett's default)"),
+    s("winborder", &[], Kind::Text, "rounded", "the lines around floating boxes: rounded (zett's), single, double, bold, solid, shadow, none"),
     s("splitbelow", &["sb"], Kind::Bool, "true", ":split puts the new window below (zett's default, Doom's; off: above, Vim's)"),
     s("splitright", &["spr"], Kind::Bool, "true", ":vsplit puts the new window on the right (zett's default; off: left, Vim's)"),
     s("statusline", &["stl"], Kind::Text, "", "the status line's format (%f %m %l %c %P %= %#Group# …; empty: zett's mode line)"),
@@ -76,6 +77,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "cedit", "termguicolors", "messagesopt", "winfixbuf",
     "scrollbind", "cursorbind", "scrollopt",
     "winheight", "winwidth", "winminheight", "winminwidth",
+    "breakat", "breakindentopt",
     "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
     "bomb", "endofline", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
@@ -234,6 +236,7 @@ impl App {
             self.docs[i].ed.set_case(ic, scs);
             let ws = self.flag(i, "wrapscan");
             self.docs[i].ed.set_wrapscan(ws);
+            crate::display::WINBORDER.store(crate::display::winborder_code(&self.setting(i, "winborder")), std::sync::atomic::Ordering::Relaxed);
             if hl::TRUECOLOR.swap(self.flag(i, "termguicolors"), std::sync::atomic::Ordering::Relaxed) != self.flag(i, "termguicolors") {
                 hl::invalidate();
             }

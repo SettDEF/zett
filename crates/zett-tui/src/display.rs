@@ -289,3 +289,30 @@ pub(crate) fn cursor_style((shape, blink): (&str, bool)) -> ratatui::crossterm::
     }
 }
 
+
+/// winborder as a number for the drawing code that has no settings at hand (float_set).
+pub(crate) static WINBORDER: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(2);
+
+/// winborder's name as its number: single 1, rounded 2, double 3, bold 4, none / solid 5 (spaces).
+pub(crate) fn winborder_code(v: &str) -> u8 {
+    match v.split(',').next().unwrap_or("") {
+        "single" | "shadow" => 1,
+        "double" => 3,
+        "bold" => 4,
+        "none" | "solid" => 5,
+        _ => 2,
+    }
+}
+
+/// The lines floating boxes are drawn with (winborder); none and solid keep the box's size with
+/// a border of spaces.
+pub(crate) fn float_set() -> ratatui::symbols::border::Set {
+    use ratatui::symbols::border;
+    match WINBORDER.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => border::PLAIN,
+        3 => border::DOUBLE,
+        4 => border::THICK,
+        5 => border::Set { top_left: " ", top_right: " ", bottom_left: " ", bottom_right: " ", vertical_left: " ", vertical_right: " ", horizontal_top: " ", horizontal_bottom: " " },
+        _ => border::ROUNDED,
+    }
+}

@@ -32,7 +32,7 @@ use ratatui::crossterm::{cursor::SetCursorStyle, execute};
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::{DefaultTerminal, Frame};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -239,7 +239,7 @@ fn expand(s: &str) -> String {
 
 /// Where a wrapped line's rows start, in screen columns (wrap): every `width` columns, or with
 /// `words` (linebreak) after the last space that fits, so a word moves to the next row whole.
-fn wrap_starts(line: &str, width: usize, words: bool, cont: usize) -> Vec<usize> {
+fn wrap_starts(line: &str, width: usize, words: Option<&[char]>, cont: usize) -> Vec<usize> {
     let cells: Vec<char> = expand(line.trim_end_matches('\n')).chars().collect();
     let width = width.max(1);
     let mut starts = vec![0];
@@ -248,8 +248,9 @@ fn wrap_starts(line: &str, width: usize, words: bool, cont: usize) -> Vec<usize>
     let row_w = |s: usize| if s == 0 { width } else { (width - cont.min(width - 1)).max(1) };
     while cells.len() - s > row_w(s) {
         let mut e = s + row_w(s);
-        if words {
-            if let Some(sp) = (s + 1..e).rev().find(|&i| cells[i - 1] == ' ' && cells[i] != ' ') {
+        // linebreak: after the last character of breakat that fits
+        if let Some(brk) = words {
+            if let Some(sp) = (s + 1..e).rev().find(|&i| brk.contains(&cells[i - 1]) && cells[i] != ' ') {
                 e = sp;
             }
         }
@@ -715,7 +716,7 @@ fn draw_help(f: &mut Frame, title: &str, rows: &[(String, String)]) {
     f.render_widget(Clear, a);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_set(crate::display::float_set())
         .border_style(hl("FloatBorder"))
         .title(format!(" {title} "))
         .title_bottom(" any key closes · change them in ~/.config/zett/init.lua ");
