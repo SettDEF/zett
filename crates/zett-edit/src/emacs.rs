@@ -73,6 +73,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("newline-and-indent", "A line break, keeping the indentation (newline)"),
     ("fixup-whitespace", "One space around the cursor (just-one-space)"),
     ("keyboard-escape-quit", "Cancel: deactivate the mark (keyboard-quit)"),
+    ("rectangle-mark-mode", "The region as a rectangle (C-w, M-w, C-d act on it), or as text again"),
     ("overwrite-mode", "Typing replaces the character under the cursor, or inserts again"),
     ("set-goal-column", "C-n and C-p keep this column (with an argument: no longer)"),
     ("set-fill-prefix", "M-q and M-j start lines with the text before the cursor (at the line start: none)"),
@@ -194,6 +195,7 @@ impl Editor {
         }
         self.mark = Some(self.cursor);
         self.mark_active = active;
+        self.rect_mark = false;
     }
 
     /// Types a character (unbound printable keys). Consecutive ones are one undo step.
@@ -275,6 +277,27 @@ impl Editor {
         }
         let name = resolve(name);
         let n = n.max(1);
+        // C-x SPC: the region is a rectangle, and the region commands act on it
+        if name == "rectangle-mark-mode" {
+            self.last_cmd = name.to_string();
+            if self.rect_mark && self.mark_active {
+                self.rect_mark = false;
+            } else {
+                if !self.mark_active {
+                    self.set_mark(true);
+                }
+                self.rect_mark = true;
+            }
+            return true;
+        }
+        let name = match name {
+            "kill-region" | "copy-region-as-kill" | "delete-region" | "delete-char" | "delete-backward-char" if self.rect_mark && self.mark_active => {
+                let r = match name { "kill-region" => "kill-rectangle", "copy-region-as-kill" => "copy-rectangle-as-kill", _ => "delete-rectangle" };
+                self.rect_mark = false;
+                return self.rect_exec(r);
+            }
+            n => n,
+        };
         if crate::balanced::is_command(name) {
             return self.balanced_exec(name, n as i64);
         }

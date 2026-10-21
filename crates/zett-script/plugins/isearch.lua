@@ -10,6 +10,11 @@ local defaults = {
   start = {
     ["<C-s>"] = "isearch-forward",
     ["<C-r>"] = "isearch-backward",
+    ["<C-M-s>"] = "isearch-forward-regexp",
+    ["<C-M-r>"] = "isearch-backward-regexp",
+    ["<M-s>w"] = "isearch-forward-word",
+    ["<M-s>_"] = "isearch-forward-symbol",
+    ["<M-s><M-.>"] = "isearch-forward-thing-at-point",
   },
   -- the keys while it runs (Emacs's isearch-mode-map)
   keys = {
@@ -18,6 +23,9 @@ local defaults = {
     ["<BS>"] = "isearch-delete-char",
     ["<CR>"] = "isearch-exit",
     ["<C-g>"] = "isearch-abort",
+    ["<M-r>"] = "isearch-toggle-regexp",
+    ["<M-s>w"] = "isearch-toggle-word",
+    ["<M-s>_"] = "isearch-toggle-symbol",
   },
 }
 

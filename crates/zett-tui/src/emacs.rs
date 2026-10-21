@@ -3,6 +3,7 @@
 //! keys: y n ! . q, the case kept as Emacs keeps it.
 
 use super::*;
+use zett_edit::search::emacs_regex;
 
 /// A query-replace in progress: the next match is shown as the region.
 pub(crate) struct QueryReplace {
@@ -21,53 +22,6 @@ pub(crate) struct QueryReplace {
     pub done: usize,
 }
 
-/// Emacs's regexp syntax in the regex crate's: \( \) \| \{ \} group and count, bare ones are
-/// themselves; \< \> word edges, \` \' the buffer's ends, \s- a blank.
-pub(crate) fn emacs_regex(p: &str) -> String {
-    let mut out = String::new();
-    let mut it = p.chars().peekable();
-    while let Some(c) = it.next() {
-        match c {
-            '\\' => match it.next() {
-                Some(d @ ('(' | ')' | '|' | '{' | '}')) => {
-                    // \(?: a shy group
-                    if d == '(' && it.peek() == Some(&'?') {
-                        it.next();
-                        if it.peek() == Some(&':') {
-                            it.next();
-                        }
-                        out.push_str("(?:");
-                    } else {
-                        out.push(d);
-                    }
-                }
-                Some('<' | '>') => out.push_str(r"\b"),
-                Some('`') => out.push_str(r"\A"),
-                Some('\'') => out.push_str(r"\z"),
-                Some('s') => {
-                    it.next();
-                    out.push_str(r"\s");
-                }
-                Some('S') => {
-                    it.next();
-                    out.push_str(r"\S");
-                }
-                Some(d @ ('w' | 'W' | 'b' | 'B' | '1'..='9')) => {
-                    out.push('\\');
-                    out.push(d);
-                }
-                Some(d) => out.push_str(&fancy_regex::escape(&d.to_string())),
-                None => out.push_str(r"\\"),
-            },
-            '(' | ')' | '|' | '{' | '}' => {
-                out.push('\\');
-                out.push(c);
-            }
-            c => out.push(c),
-        }
-    }
-    out
-}
 
 /// An Emacs replacement (\& the match, \N a group, \\ a backslash) in the regex crate's form.
 pub(crate) fn emacs_replacement(r: &str) -> String {
@@ -196,6 +150,8 @@ impl App {
             }
             "hl" => self.highlight(body),
             "tab" => self.emacs_tab(body),
+            "abbrev-add" => self.abbrev_answer(false, body),
+            "abbrev-inverse" => self.abbrev_answer(true, body),
             "char" => self.insert_char(body),
             "emoji" => self.insert_emoji(body),
             "delwins" => {
@@ -388,6 +344,17 @@ impl App {
             "repeat" => self.repeat_last(),
             "mouse" => self.mouse_command(arg),
             "tab" => self.emacs_tab(arg),
+            "abbrevAdd" => self.abbrev_add(arg),
+            "abbrevExpand" => {
+                if !self.expand_abbrev_here() {
+                    self.say("No abbrev here");
+                }
+            }
+            "abbrevPrefix" => self.abbrev_prefix_mark(),
+            "abbrevMode" => {
+                self.abbrev_mode = !self.abbrev_mode;
+                self.say(if self.abbrev_mode { "Abbrev mode enabled" } else { "Abbrev mode disabled" });
+            }
             "emojiList" => self.emoji_list(),
             "describeChar" => self.describe_char(),
             "layout" => {
@@ -797,6 +764,100 @@ impl App {
     }
 }
 
+impl App {
+    /// An abbrev's expansion: this file type's (C-x a +), else everyone's (C-x a g, :iabbrev).
+    pub(crate) fn abbrev_for(&self, word: &str) -> Option<String> {
+        let syntax = &self.docs[self.cur].syntax;
+        let find = |list: &Vec<(String, String)>| list.iter().find(|(l, _)| l == word).map(|(_, r)| r.clone());
+        self.mode_abbrevs.get(syntax).and_then(find).or_else(|| find(&self.abbrevs))
+    }
+
+    /// The word before the cursor (from M-'s mark when one was set): (start char, the word).
+    fn word_before(&self) -> Option<(usize, String)> {
+        let ed = &self.docs[self.cur].ed;
+        let at = ed.buf.to_char(ed.cursor());
+        let line_start = ed.buf.to_char(zett_core::Pos::new(ed.cursor().line, 0));
+        let start = match self.abbrev_prefix.filter(|&p| p >= line_start && p < at) {
+            Some(p) => p,
+            None => (line_start..at).rev().take_while(|&i| ed.buf.char_at(i).is_some_and(|c| c.is_alphanumeric() || c == '_')).last()?,
+        };
+        Some((start, ed.buf.slice(start, at)))
+    }
+
+    /// C-x ' (and abbrev-mode as you type): the word before the cursor as its expansion.
+    pub(crate) fn expand_abbrev_here(&mut self) -> bool {
+        let Some((start, word)) = self.word_before() else { return false };
+        let word = word.trim_start_matches('-').to_string();
+        let Some(rhs) = self.abbrev_for(&word) else { return false };
+        let ed = &self.docs[self.cur].ed;
+        let at = ed.buf.to_char(ed.cursor());
+        // M-': the "-" it left goes, the prefix before it joins the expansion
+        let from = match self.abbrev_prefix.take() {
+            Some(p) if ed.buf.char_at(p) == Some('-') => p,
+            _ => start,
+        };
+        let before = ed.cursor().line;
+        self.doc().ed.replace_text(from, at, &rhs);
+        self.doc().touched(before);
+        true
+    }
+
+    /// C-x a g / C-x a + (with `mode`): the words before the cursor (the argument's count; 0: the
+    /// region) become an expansion, its name asked for. C-x a i g / i l: the word before the cursor
+    /// is the name, the expansion asked for (and put in at once).
+    pub(crate) fn abbrev_add(&mut self, how: &str) {
+        let n = self.arg.take().unwrap_or(1);
+        let (mode, inverse) = (how.contains("mode"), how.starts_with("inverse"));
+        if inverse {
+            let Some((_, word)) = self.word_before() else { return self.say("No word before the cursor") };
+            self.pending_abbrev = Some((word.clone(), mode));
+            return self.prompt(&format!("{} expansion for \"{word}\": \tabbrev-inverse:{{1}}", if mode { "Mode" } else { "Global" }));
+        }
+        let ed = &self.docs[self.cur].ed;
+        let at = ed.buf.to_char(ed.cursor());
+        let text = if n == 0 {
+            ed.region().map(|(a, b)| ed.buf.slice(a, b)).unwrap_or_default()
+        } else {
+            // the n words before the cursor
+            let before = ed.buf.slice(0, at);
+            let mut words = before.split_whitespace().rev().take(n.max(1) as usize).collect::<Vec<_>>();
+            words.reverse();
+            words.join(" ")
+        };
+        if text.is_empty() {
+            return self.say("No text for an abbrev");
+        }
+        self.pending_abbrev = Some((text.clone(), mode));
+        self.prompt(&format!("{} abbrev for \"{text}\": \tabbrev-add:{{1}}", if mode { "Mode" } else { "Global" }));
+    }
+
+    /// The prompt's answer: the abbrev defined (and, inverse, the word expanded).
+    pub(crate) fn abbrev_answer(&mut self, inverse: bool, answer: &str) {
+        let Some((pending, mode)) = self.pending_abbrev.take() else { return };
+        let answer = answer.trim();
+        if answer.is_empty() {
+            return;
+        }
+        let (name, rhs) = if inverse { (pending, answer.to_string()) } else { (answer.to_string(), pending) };
+        let list = if mode { self.mode_abbrevs.entry(self.docs[self.cur].syntax.clone()).or_default() } else { &mut self.abbrevs };
+        list.retain(|(l, _)| *l != name);
+        list.push((name.clone(), rhs));
+        if inverse {
+            self.expand_abbrev_here();
+        }
+        self.say(format!("{} abbrev \"{name}\" defined", if mode { "Mode" } else { "Global" }));
+    }
+
+    /// M-': a "-" here, where the next expansion starts (a prefix before it stays).
+    pub(crate) fn abbrev_prefix_mark(&mut self) {
+        self.expand_abbrev_here();
+        let ed = &self.docs[self.cur].ed;
+        let at = ed.buf.to_char(ed.cursor());
+        self.doc().ed.replace_text(at, at, "-");
+        self.abbrev_prefix = Some(at);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -923,5 +984,26 @@ mod tests {
         assert!(matches!(&t, WTree::Split(true, a, _, _) if matches!(**a, WTree::Leaf(0))), "A | B");
         t.relayout("flip-leftright");
         assert!(matches!(&t, WTree::Split(true, a, _, _) if matches!(**a, WTree::Leaf(1))), "B | A");
+    }
+
+    #[test]
+    fn abbrevs_both_ways() {
+        let mut a = app("by the way");
+        a.docs[a.cur].ed.exec("end-of-buffer", 1);
+        a.abbrev_add("global");
+        // "way" is the word before the cursor (one word)
+        let m = a.minibuf.take().unwrap();
+        a.picked(m.kind, "bw".into());
+        assert_eq!(a.abbrev_for("bw").as_deref(), Some("way"));
+        let mut a = app("I said btw");
+        a.docs[a.cur].ed.exec("end-of-buffer", 1);
+        a.abbrev_add("inverse-global");
+        let m = a.minibuf.take().unwrap();
+        a.picked(m.kind, "by the way".into());
+        assert_eq!(a.docs[a.cur].ed.text(), "I said by the way", "the inverse expands at once");
+        a.abbrev_mode = true;
+        a.docs[a.cur].ed.replace_text(17, 17, " btw");
+        assert!(a.expand_abbrev_here());
+        assert_eq!(a.docs[a.cur].ed.text(), "I said by the way by the way");
     }
 }

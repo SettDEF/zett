@@ -412,6 +412,12 @@ struct App {
     /// :abbreviate, :command, :autocmd (mapcmds.rs): what they hold; the :augroup in use and those
     /// defined; how deep autocommands run each other; the mode last frame (InsertEnter/Leave)
     abbrevs: Vec<(String, String)>,
+    /// Emacs's mode abbrevs (C-x a +): by file type, before the global ones
+    mode_abbrevs: std::collections::HashMap<String, Vec<(String, String)>>,
+    /// the expansion C-x a g asks a name for; abbrev-mode (expand as you type, Emacs profile); M-'
+    pending_abbrev: Option<(String, bool)>,
+    abbrev_mode: bool,
+    abbrev_prefix: Option<usize>,
     /// the : line's abbreviations (:cabbrev; :abbreviate sets both)
     cabbrevs: Vec<(String, String)>,
     /// CTRL-K on the : line: waiting for the digraph's first character, or its second
@@ -643,6 +649,10 @@ impl App {
             replaying: 0,
             noremap: 0,
             abbrevs: Vec::new(),
+            mode_abbrevs: Default::default(),
+            pending_abbrev: None,
+            abbrev_mode: false,
+            abbrev_prefix: None,
             cabbrevs: Vec::new(),
             cmd_digraph: None,
             sign_defs: Default::default(),

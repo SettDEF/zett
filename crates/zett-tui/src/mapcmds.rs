@@ -364,7 +364,7 @@ impl App {
     /// Insert mode: a word just ended (a key that is not part of one): an abbreviation for it is
     /// put in its place before the key goes on.
     pub(crate) fn expand_abbrev(&mut self, typed: char) {
-        if self.abbrevs.is_empty() || typed.is_alphanumeric() || typed == '_' {
+        if (self.abbrevs.is_empty() && self.mode_abbrevs.is_empty()) || typed.is_alphanumeric() || typed == '_' {
             return;
         }
         let d = &self.docs[self.cur];
@@ -372,7 +372,7 @@ impl App {
         let line: Vec<char> = d.ed.buf.line(c.line).chars().take(c.col).collect();
         let start = line.iter().rposition(|ch| !(ch.is_alphanumeric() || *ch == '_')).map_or(0, |i| i + 1);
         let word: String = line[start..].iter().collect();
-        let Some((_, rhs)) = self.abbrevs.iter().find(|(l, _)| *l == word).cloned() else { return };
+        let Some(rhs) = self.abbrev_for(&word) else { return };
         let ed = &mut self.docs[self.cur].ed;
         for _ in 0..word.chars().count() {
             ed.key(zett_edit::keys::Key::code(zett_edit::keys::Code::Backspace));

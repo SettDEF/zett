@@ -348,4 +348,21 @@ mod tests {
         e.exec_char("quoted-insert", '\t', None);
         assert_eq!(e.text(), "a\tb");
     }
+
+    #[test]
+    fn rectangle_mark_mode_shows_a_block_and_c_w_kills_it() {
+        let mut e = Editor::from_str("abcd\nefgh\nijkl");
+        e.set_emacs(true);
+        e.cursor = 1;
+        e.exec("rectangle-mark-mode", 1);
+        e.cursor = 13; // line 2, column 3
+        assert_eq!(e.block(), Some((0, 2, 1, 2)), "columns 1-2 on three lines");
+        assert_eq!(e.selection_range().is_some(), true, "the region is still there for commands");
+        e.exec("kill-region", 1);
+        assert_eq!(e.text(), "ad\neh\nil");
+        assert_eq!(e.block(), None, "and the rectangle ends");
+        e.cursor = 0;
+        e.exec("yank-rectangle", 1);
+        assert_eq!(e.text(), "bcad\nfgeh\njkil");
+    }
 }

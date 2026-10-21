@@ -8,6 +8,13 @@ impl Editor {
     /// The block: (first line, last line, first column, last column), the last column usize::MAX
     /// when it reaches every line's end ($).
     pub fn block(&self) -> Option<(usize, usize, usize, usize)> {
+        // Emacs's rectangle-mark-mode (C-x SPC): the region as a rectangle, its right column left out
+        if self.emacs && self.rect_mark && self.mark_active {
+            let m = self.mark?;
+            let (a, b) = (self.buf.to_pos(m), self.buf.to_pos(self.cursor));
+            let (c1, c2) = (a.col.min(b.col), a.col.max(b.col));
+            return (c2 > c1).then(|| (a.line.min(b.line), a.line.max(b.line), c1, c2 - 1));
+        }
         if self.mode != Mode::VisualBlock {
             return None;
         }

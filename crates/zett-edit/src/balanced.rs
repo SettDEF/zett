@@ -581,6 +581,8 @@ impl Editor {
                 let word = self.buf.slice(a, b);
                 self.cursor = a;
                 self.search_command("isearch-forward");
+                // a whole symbol, as Emacs's M-s .
+                self.isearch_kind(crate::search::SearchKind::Symbol);
                 for c in word.chars() {
                     self.isearch_char(c);
                 }

@@ -411,6 +411,10 @@ impl App {
                 match k.code {
                     KeyCode::Char(c) if plain && seq.len() == 1 => {
                         // C-u 5 a types aaaaa
+                        // abbrev-mode: a character that ends a word expands the one before it
+                        if self.abbrev_mode && !(c.is_alphanumeric() || c == '_') {
+                            self.expand_abbrev_here();
+                        }
                         let times = self.arg.take().map_or(1, |n| n.unsigned_abs().max(1));
                         let before = self.docs[self.cur].ed.cursor().line;
                         for _ in 0..times {
@@ -541,6 +545,9 @@ impl App {
                     let arg = self.arg.take().or((n > 1).then_some(n as i64));
                     if arg.is_some() {
                         self.msg = None; // the "C-u 4-" prompt is answered
+                    }
+                    if self.abbrev_mode && name == "newline" {
+                        self.expand_abbrev_here();
                     }
                     // M-g g with no argument asks for the number
                     if let (Some(p), None) = (zett_edit::screen::asks_number(zett_edit::emacs::resolve(&name)), arg) {

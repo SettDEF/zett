@@ -156,6 +156,8 @@ pub struct Editor {
     overwrite: bool,
     goal: Option<usize>,
     fill_prefix_set: Option<String>,
+    /// rectangle-mark-mode (C-x SPC): the region is a rectangle
+    rect_mark: bool,
 }
 
 impl Editor {
@@ -189,6 +191,7 @@ impl Editor {
             overwrite: false,
             goal: None,
             fill_prefix_set: None,
+            rect_mark: false,
             kill_ring: KillRing::shared(),
             isearch: None,
             last_search: String::new(),

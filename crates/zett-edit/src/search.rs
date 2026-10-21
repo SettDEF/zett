@@ -14,7 +14,91 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("isearch-delete-char", "Undo the last step of the search"),
     ("isearch-exit", "End the search where it is (the mark stays where it began)"),
     ("isearch-abort", "Cancel the search and go back to where it began"),
+    ("isearch-forward-regexp", "Search forward for a regexp as you type (Emacs's syntax: \\( \\| \\) groups)"),
+    ("isearch-backward-regexp", "Search backward for a regexp as you type"),
+    ("isearch-forward-word", "Search forward for words, whatever is between them"),
+    ("isearch-forward-symbol", "Search forward for a whole symbol"),
+    ("isearch-forward-thing-at-point", "Search for the symbol at the cursor, as a whole symbol"),
+    ("isearch-toggle-regexp", "During a search: as a regexp, or as text again"),
+    ("isearch-toggle-word", "During a search: by words, or as text again"),
+    ("isearch-toggle-symbol", "During a search: a whole symbol, or as text again"),
 ];
+
+/// What a search looks for: the text, a regexp, words, a symbol.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum SearchKind {
+    #[default]
+    Text,
+    Regexp,
+    Word,
+    Symbol,
+}
+
+/// Emacs's regexp syntax in the regex crate's: \( \) \| \{ \} group and count, bare ones are
+/// themselves; \< \> word edges, \` \' the buffer's ends, \s- a blank, \_< \_> symbol edges.
+pub fn emacs_regex(p: &str) -> String {
+    let mut out = String::new();
+    let mut it = p.chars().peekable();
+    while let Some(c) = it.next() {
+        match c {
+            '\\' => match it.next() {
+                Some(d @ ('(' | ')' | '|' | '{' | '}')) => {
+                    // \(?: a shy group
+                    if d == '(' && it.peek() == Some(&'?') {
+                        it.next();
+                        if it.peek() == Some(&':') {
+                            it.next();
+                        }
+                        out.push_str("(?:");
+                    } else {
+                        out.push(d);
+                    }
+                }
+                Some('<' | '>') => out.push_str(r"\b"),
+                Some('_') => {
+                    it.next();
+                    out.push_str(r"\b");
+                }
+                Some('`') => out.push_str(r"\A"),
+                Some('\'') => out.push_str(r"\z"),
+                Some('s') => {
+                    it.next();
+                    out.push_str(r"\s");
+                }
+                Some('S') => {
+                    it.next();
+                    out.push_str(r"\S");
+                }
+                Some(d @ ('w' | 'W' | 'b' | 'B' | '1'..='9')) => {
+                    out.push('\\');
+                    out.push(d);
+                }
+                Some(d) => out.push_str(&regex::escape(&d.to_string())),
+                None => out.push_str(r"\\"),
+            },
+            '(' | ')' | '|' | '{' | '}' => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The pattern a search of this kind runs (None for plain text): Err for a regexp not finished yet.
+fn pattern(query: &str, kind: SearchKind, fold: bool) -> Option<Result<regex::Regex, ()>> {
+    let p = match kind {
+        SearchKind::Text => return None,
+        SearchKind::Regexp => emacs_regex(query),
+        // words: whatever is between them (blanks, punctuation, line breaks)
+        SearchKind::Word => query.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|w| !w.is_empty()).map(regex::escape).collect::<Vec<_>>().join(r"\W+"),
+        SearchKind::Symbol => regex::escape(query),
+    };
+    // a word or a symbol: whole, never part of a longer one
+    let p = if matches!(kind, SearchKind::Word | SearchKind::Symbol) { format!(r"\b{p}\b") } else { p };
+    Some(regex::RegexBuilder::new(&p).case_insensitive(fold).multi_line(true).build().map_err(|_| ()))
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct Step {
@@ -29,10 +113,14 @@ struct Step {
 #[derive(Debug, Clone)]
 pub struct Isearch {
     origin: usize,
+    /// what it looks for (C-M-s: a regexp, M-s w: words, M-s _: a symbol)
+    pub kind: SearchKind,
     /// started with `/` or `?` (the prompt reads as Vim's)
     vim: bool,
     /// the case rule the last step ran with
     fold: bool,
+    /// the regexp typed so far does not parse yet
+    incomplete: bool,
     now: Step,
     /// every step before this one, for isearch-delete-char
     back: Vec<Step>,
@@ -50,7 +138,15 @@ impl Isearch {
             (false, true) => "Wrapped ",
             _ => "",
         };
-        format!("{state}I-search{}: {}", if s.forward { "" } else { " backward" }, s.query)
+        let kind = match self.kind {
+            SearchKind::Text => "",
+            SearchKind::Regexp => "Regexp ",
+            SearchKind::Word => "Word ",
+            SearchKind::Symbol => "Symbol ",
+        };
+        // a regexp still being typed (an open \\( ): not a failure yet
+        let state = if self.incomplete { "Pending " } else { state };
+        format!("{state}{kind}I-search{}: {}", if s.forward { "" } else { " backward" }, s.query)
     }
 
     pub(crate) fn origin(&self) -> usize {
@@ -76,6 +172,27 @@ impl Isearch {
 }
 
 impl Editor {
+    /// The next match of a search from `from` (char index) either way: (start, end); Err when a
+    /// regexp does not parse yet.
+    fn search_find(&self, query: &str, kind: SearchKind, from: usize, forward: bool, fold: bool) -> Result<Option<(usize, usize)>, ()> {
+        let Some(re) = pattern(query, kind, fold) else {
+            let n = query.chars().count();
+            return Ok(self.buf.find(query, from, forward, fold).map(|i| (i, i + n)));
+        };
+        let re = re?;
+        let text = self.buf.text();
+        let byte_of = |c: usize| text.char_indices().nth(c).map_or(text.len(), |(b, _)| b);
+        let char_of = |b: usize| text[..b].chars().count();
+        let at = byte_of(from);
+        let hit = if forward {
+            re.find_at(&text, at).filter(|m| m.end() > m.start())
+        } else {
+            // backward: the last match starting before `from`
+            re.find_iter(&text).filter(|m| m.start() < at && m.end() > m.start()).last()
+        };
+        Ok(hit.map(|m| (char_of(m.start()), char_of(m.end()))))
+    }
+
     pub fn isearch(&self) -> Option<&Isearch> {
         self.isearch.as_ref()
     }
@@ -84,15 +201,17 @@ impl Editor {
     /// drawing the other matches dimmer than the current one.
     pub fn isearch_matches(&self, from: usize, to: usize) -> Vec<(usize, usize)> {
         let Some(s) = &self.isearch else { return Vec::new() };
-        let n = s.now.query.chars().count();
+        if s.now.query.is_empty() {
+            return Vec::new();
+        }
         let mut out = Vec::new();
         let mut at = from;
-        while let Some(i) = self.buf.find(&s.now.query, at, true, s.folds()) {
-            if i >= to || out.len() >= 1000 {
+        while let Ok(Some((a, b))) = self.search_find(&s.now.query, s.kind, at, true, s.folds()) {
+            if a >= to || out.len() >= 1000 {
                 break;
             }
-            out.push((i, i + n));
-            at = i + 1;
+            out.push((a, b));
+            at = a + 1;
         }
         out
     }
@@ -101,6 +220,28 @@ impl Editor {
     pub(crate) fn search_command(&mut self, name: &str) -> bool {
         match name {
             "isearch-forward" | "isearch-backward" => self.isearch_start(name == "isearch-forward"),
+            "isearch-forward-regexp" | "isearch-backward-regexp" => {
+                self.isearch_start(name == "isearch-forward-regexp");
+                self.isearch_kind(SearchKind::Regexp);
+            }
+            "isearch-forward-word" | "isearch-forward-symbol" => {
+                self.isearch_start(true);
+                self.isearch_kind(if name.ends_with("word") { SearchKind::Word } else { SearchKind::Symbol });
+            }
+            "isearch-forward-thing-at-point" => {
+                let Some(w) = self.word_at_cursor() else { return true };
+                self.isearch_start(true);
+                self.isearch_kind(SearchKind::Symbol);
+                for c in w.chars() {
+                    self.isearch_char(c);
+                }
+            }
+            "isearch-toggle-regexp" | "isearch-toggle-word" | "isearch-toggle-symbol" => {
+                let want = match name { "isearch-toggle-regexp" => SearchKind::Regexp, "isearch-toggle-word" => SearchKind::Word, _ => SearchKind::Symbol };
+                let Some(s) = &self.isearch else { return true };
+                let k = if s.kind == want { SearchKind::Text } else { want };
+                self.isearch_kind(k);
+            }
             "isearch-repeat-forward" | "isearch-repeat-backward" => {
                 let forward = name == "isearch-repeat-forward";
                 if self.isearch.is_none() {
@@ -159,11 +300,23 @@ impl Editor {
         }
     }
 
+    /// The search in progress looks for this kind; the query so far is tried again that way.
+    pub(crate) fn isearch_kind(&mut self, kind: SearchKind) {
+        let Some(s) = self.isearch.as_mut() else { return };
+        s.kind = kind;
+        let (q, fwd, origin) = (s.now.query.clone(), s.now.forward, s.origin);
+        if !q.is_empty() {
+            self.isearch_go(q, fwd, origin, false);
+        }
+    }
+
     fn isearch_start(&mut self, forward: bool) {
         let at = self.cursor;
         self.mark_active = false;
         self.isearch = Some(Isearch {
             origin: at,
+            kind: SearchKind::Text,
+            incomplete: false,
             vim: false,
             fold: true,
             now: Step { query: String::new(), forward, at: None, cursor: at, wrapped: false },
@@ -180,7 +333,9 @@ impl Editor {
         let from = match (s.now.at, s.now.forward) {
             (Some((a, _)), true) => a,
             (Some((a, _)), false) => a + 1,
-            (None, _) => s.now.cursor,
+            // failing (or a regexp not finished): from where the last match was, else where it began
+            (None, true) => s.back.iter().rev().find_map(|st| st.at).map_or(s.origin, |(a, _)| a),
+            (None, false) => s.back.iter().rev().find_map(|st| st.at).map_or(s.origin, |(a, _)| a + 1),
         };
         let forward = s.now.forward;
         let wrapped = s.now.wrapped;
@@ -215,9 +370,13 @@ impl Editor {
 
     fn isearch_go(&mut self, query: String, forward: bool, from: usize, wrapped: bool) {
         let fold = self.folds_for(&query);
-        let n = query.chars().count();
-        let at = self.buf.find(&query, from, forward, fold).map(|i| (i, i + n));
+        let kind = self.isearch.as_ref().map_or(SearchKind::Text, |s| s.kind);
+        let (at, incomplete) = match self.search_find(&query, kind, from, forward, fold) {
+            Ok(at) => (at, false),
+            Err(()) => (None, true),
+        };
         let Some(s) = &mut self.isearch else { return };
+        s.incomplete = incomplete;
         let cursor = s.now.cursor;
         s.fold = fold;
         let prev = std::mem::replace(&mut s.now, Step { query, forward, at, cursor, wrapped });
@@ -234,12 +393,12 @@ impl Editor {
 mod tests {
     use crate::Editor;
 
-    fn ed(text: &str) -> Editor {
+    pub(super) fn ed(text: &str) -> Editor {
         let mut e = Editor::from_str(text);
         e.set_emacs(true);
         e
     }
-    fn typed(e: &mut Editor, s: &str) {
+    pub(super) fn typed(e: &mut Editor, s: &str) {
         for c in s.chars() {
             e.isearch_char(c);
         }
@@ -322,6 +481,7 @@ mod tests {
 #[cfg(test)]
 mod case_tests {
     use crate::Editor;
+    use super::tests::{ed, typed};
 
     #[test]
     fn ignorecase_and_smartcase_decide_the_match() {
@@ -339,5 +499,32 @@ mod case_tests {
             e.isearch_char(c);
         }
         assert_eq!(e.isearch().unwrap().current(), Some((6, 11)), "exact: skips Alpha");
+    }
+
+    #[test]
+    fn regexp_word_and_symbol_searches() {
+        let mut e = ed("foo12 bar foo_x foo-bar\nfoo  bar");
+        e.exec("isearch-forward-regexp", 1);
+        typed(&mut e, r"foo[0-9]+");
+        assert_eq!(e.isearch().unwrap().current(), Some((0, 5)));
+        assert!(e.isearch().unwrap().prompt().starts_with("Regexp I-search"));
+        e.exec("isearch-abort", 1);
+        e.exec("isearch-forward-regexp", 1);
+        typed(&mut e, r"\(ba");
+        assert!(e.isearch().unwrap().prompt().starts_with("Pending"), "an open group is not a failure");
+        typed(&mut e, r"r\)");
+        assert_eq!(e.isearch().unwrap().current(), Some((6, 9)));
+        e.exec("isearch-abort", 1);
+        e.exec("isearch-forward-word", 1);
+        typed(&mut e, "foo bar");
+        assert_eq!(e.isearch().unwrap().current(), Some((16, 23)), "foo-bar: words, whatever is between");
+        e.exec("isearch-repeat-forward", 1);
+        assert_eq!(e.isearch().unwrap().current(), Some((24, 32)), "across two blanks too");
+        e.exec("isearch-abort", 1);
+        e.exec("isearch-forward-symbol", 1);
+        typed(&mut e, "foo");
+        assert_eq!(e.isearch().unwrap().current(), Some((16, 19)), "not foo12 nor foo_x: a whole symbol");
+        e.exec("isearch-toggle-symbol", 1);
+        assert_eq!(e.isearch().unwrap().current(), Some((0, 3)), "as text again: from where it began");
     }
 }

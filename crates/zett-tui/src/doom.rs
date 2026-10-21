@@ -370,6 +370,10 @@ impl App {
                 w.top = line.saturating_sub(2);
             }
             self.flash = Some((i, line, line + n.max(1), Instant::now()));
+        } else {
+            // a whole topic (:help config): its title is drawn under, as a found section is
+            self.goto_line(1);
+            self.flash = Some((i, 0, 1, Instant::now()));
         }
     }
 
