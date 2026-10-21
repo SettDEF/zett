@@ -100,6 +100,12 @@ enum Cmd {
     /// "1\tkeys" when the Vim profile does something with it, "0\tkeys" when not
     #[command(hide = true)]
     ProbeKeys,
+    /// The settings (zett's and Neovim's options): ✓ zett acts on it, ◐ kept but not acted on yet
+    Options {
+        /// only the working ones, a name per line (short names too)
+        #[arg(long)]
+        working: bool,
+    },
     /// List the key mappings of a mode (n = normal)
     Keys {
         #[arg(default_value = "n")]
@@ -166,6 +172,19 @@ fn main() {
     };
     if let Cmd::Completions { shell } = cmd {
         clap_complete::generate(shell, &mut Cli::command(), "zett", &mut std::io::stdout());
+        return;
+    }
+    if let Cmd::Options { working } = cmd {
+        for (name, short, works) in zett_tui::options() {
+            if working {
+                if works {
+                    println!("{name}");
+                    short.iter().for_each(|s| println!("{s}"));
+                }
+            } else {
+                println!("{} {name}{}", if works { "✓" } else { "◐" }, if short.is_empty() { String::new() } else { format!(" ({})", short.join(", ")) });
+            }
+        }
         return;
     }
     if let Cmd::ProbeKeys = cmd {
@@ -238,7 +257,7 @@ fn main() {
             f.save_page(p).unwrap_or_else(|e| fail(&e.to_string(), 1));
             print!("{}", markdown::to_markdown(&f.ws, p));
         }
-        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::ProbeKeys | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
+        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::ProbeKeys | Cmd::Options { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
     }
 }
 

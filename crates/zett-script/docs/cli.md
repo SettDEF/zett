@@ -8,6 +8,7 @@
     zett run COMMAND        run a command headless
     zett lua CODE           run Lua with the zett API
     zett commands / keys    list them
+    zett options            every setting and Neovim option: ✓ acted on, ◐ kept only
 
 `zett --help` and `zett COMMAND --help` say more. `--json` makes output
 machine-readable.

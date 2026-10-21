@@ -397,6 +397,12 @@ struct App {
 }
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
+/// The settings and Neovim options with what zett does with each: (name, short names, true when
+/// it acts on it). For `zett options` and the parity count.
+pub fn options() -> Vec<(&'static str, &'static [&'static str], bool)> {
+    settings::all().into_iter().map(|s| (s.name, s.short, settings::works(s))).collect()
+}
+
 pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
     // "+ and "* reach the system clipboard
     fn clip_get() -> Option<String> {
