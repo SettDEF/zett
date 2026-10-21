@@ -35,6 +35,8 @@ pub enum Effect {
     Ui(String, String),
     /// run an editing command (zett-edit's emacs.rs: forward-char, kill-line…) this many times
     Edit(String, usize),
+    /// type these keys (Vim notation) as if typed; false: past the mappings (:noremap)
+    Keys(String, bool),
 }
 
 /// A start screen made in the config: `zett.dashboard{ banner = {…}, buttons = {…}, footer = true }`.
@@ -71,6 +73,8 @@ pub enum Feed {
 enum Action {
     Command(String),
     Lua(RegistryKey),
+    /// keys typed in again (Vim's :map; false: :noremap, the keys skip the maps)
+    Keys(String, bool),
 }
 
 struct Map {
@@ -470,6 +474,35 @@ impl Engine {
 
     /// Keys typed in a mode (`n`, `i`, …). A mapping that matches exactly runs; a prefix of
     /// longer mappings waits and lists what can follow (which-key).
+    /// Vim's :map: `lhs` types `rhs` (keys) in `mode`; `remap` false is :noremap.
+    pub fn map_keys(&mut self, mode: &str, lhs: &str, rhs: &str, remap: bool) {
+        let k = keys(lhs);
+        let mut s = self.st.borrow_mut();
+        let list = s.maps.entry(mode.to_string()).or_default();
+        list.retain(|m| m.keys != k);
+        list.push(Map { keys: k, action: Action::Keys(rhs.to_string(), remap), desc: rhs.to_string() });
+    }
+
+    /// :unmap: true when there was a mapping.
+    pub fn unmap_keys(&mut self, mode: &str, lhs: &str) -> bool {
+        let k = keys(lhs);
+        let mut s = self.st.borrow_mut();
+        let Some(l) = s.maps.get_mut(mode) else { return false };
+        let n = l.len();
+        l.retain(|m| m.keys != k);
+        l.len() != n
+    }
+
+    /// :mapclear: every mapping of a mode.
+    pub fn clear_maps(&mut self, mode: &str) {
+        self.st.borrow_mut().maps.remove(mode);
+    }
+
+    /// A mode has mappings (the host only asks the keymap then).
+    pub fn has_maps(&self, mode: &str) -> bool {
+        self.st.borrow().maps.get(mode).is_some_and(|l| !l.is_empty())
+    }
+
     pub fn feed(&mut self, mode: &str, typed: &[String]) -> Feed {
         // the host types `<CR>`, maps say `<Enter>`: one spelling for both
         let typed: Vec<String> = typed.iter().map(|t| if t.starts_with('<') && t.len() > 2 { normalize(t) } else { t.clone() }).collect();
@@ -530,6 +563,7 @@ impl Engine {
                     Ok(f) => Do::Fun(f),
                     Err(e) => return vec![Effect::Notify(e.to_string())],
                 },
+                Action::Keys(k, remap) => return vec![Effect::Keys(k.clone(), *remap)],
             }
         };
         match what {

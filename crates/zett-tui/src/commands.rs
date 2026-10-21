@@ -269,6 +269,7 @@ impl App {
         if self.flag(i, "readonly") && !self.bang {
             return self.say("E45: 'readonly' option is set (add ! to override)");
         }
+        self.emit("write_pre");
         // trim_trailing_whitespace, final_newline (settings.rs)
         self.tidy_for_save(i);
         let lines = self.docs[i].ed.buf.len_lines();

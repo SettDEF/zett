@@ -288,6 +288,7 @@ fn script(cmd: Cmd, f: Folder, json: bool) {
                 Effect::Open(p) => println!("opened: {}", folder.borrow().ws.text(p)),
                 Effect::Ui(name, _) => eprintln!("zett: that opens {name} in the window (run `zett` for it)"),
                 Effect::Edit(name, _) => eprintln!("zett: {name} edits text in the editor (run `zett -t`)"),
+                Effect::Keys(k, _) => eprintln!("zett: {k} are keys for the editor (run `zett -t`)"),
                 Effect::Refresh => {}
             }
         }

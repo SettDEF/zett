@@ -552,6 +552,7 @@ impl qobject::Zett {
                 Effect::Ui(name, arg) => ui.push(serde_json::json!({ "name": name, "arg": arg })),
                 // the page view edits blocks with Vim; Emacs editing commands are the code editor's for now
                 Effect::Edit(name, _) => notes.push(format!("{name}: only in the code editor (zett -t) for now")),
+                Effect::Keys(k, _) => notes.push(format!("{k}: keys for the code editor (zett -t)")),
             }
         }
         if changed {

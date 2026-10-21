@@ -38,6 +38,10 @@ impl App {
     }
 
     pub(crate) fn emit(&mut self, event: &str) {
+        // Vim's autocommands for the same moment (mapcmds.rs)
+        for e in crate::mapcmds::vim_events(event) {
+            self.fire_autocmds(e, None);
+        }
         if !self.engine.has_hooks(event) {
             return;
         }

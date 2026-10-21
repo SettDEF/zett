@@ -239,6 +239,9 @@ impl App {
             }
             // the argument list, windows, tabs, lines, marks, modifiers … (excmds.rs)
             n if crate::excmds::ex_name(n).is_some() => self.ex_more(n, arg, bang, range),
+            // mappings, abbreviations, user commands, autocommands (mapcmds.rs); a user command by name
+            n if crate::mapcmds::map_name(n).is_some() => self.map_command(n, arg, bang),
+            n if self.user_cmds.contains_key(n) => self.run_user_command(n, arg, bang, range),
             "s" | "su" | "substitute" | "&" => {
                 let (a, b) = range.unwrap_or(here);
                 let spec = if name == "&" { self.last_sub.clone() } else { split_sub(arg) };

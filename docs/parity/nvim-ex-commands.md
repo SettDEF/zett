@@ -22,8 +22,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:3match` | `:3mat[ch]` | define a third match to highlight |
 | ✓ | `:Next` | `:N[ext]` | go to previous file in the argument list |
 | · | `:append` | `:a[ppend]` | append text |
-| · | `:abbreviate` | `:ab[breviate]` | enter abbreviation |
-| · | `:abclear` | `:abc[lear]` | remove all abbreviations |
+| ✓ | `:abbreviate` | `:ab[breviate]` | enter abbreviation |
+| ✓ | `:abclear` | `:abc[lear]` | remove all abbreviations |
 | ✓ | `:aboveleft` | `:abo[veleft]` | make split window appear left or above |
 | ✓ | `:all` | `:al[l]` | open a window for each file in the argument |
 | · | `:amenu` | `:am[enu]` | enter new menu item for all modes |
@@ -38,8 +38,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:arglocal` | `:argl[ocal]` | define a local argument list |
 | ✓ | `:argument` | `:argu[ment]` | go to specific file in the argument list |
 | ✓ | `:ascii` | `:as[cii]` | print ascii value of character under the cursor |
-| · | `:autocmd` | `:au[tocmd]` | enter or show autocommands |
-| · | `:augroup` | `:aug[roup]` | select the autocommand group to use |
+| ✓ | `:autocmd` | `:au[tocmd]` | enter or show autocommands |
+| ✓ | `:augroup` | `:aug[roup]` | select the autocommand group to use |
 | · | `:aunmenu` | `:aun[menu]` | remove menu for all modes |
 | ✓ | `:buffer` | `:b[uffer]` | go to specific buffer in the buffer list |
 | ✓ | `:bNext` | `:bN[ext]` | go to previous buffer in the buffer list |
@@ -115,7 +115,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:colder` | `:col[der]` | go to older error list |
 | · | `:colorscheme` | `:colo[rscheme]` | load a specific color scheme |
 | ✓ | `:command` | `:com[mand]` | create user-defined command |
-| · | `:comclear` | `:comc[lear]` | clear all user-defined commands |
+| ✓ | `:comclear` | `:comc[lear]` | clear all user-defined commands |
 | · | `:compiler` | `:comp[iler]` | do settings for a specific compiler |
 | · | `:continue` | `:con[tinue]` | go back to :while |
 | ✓ | `:confirm` | `:conf[irm]` | prompt user when confirmation required |
@@ -133,7 +133,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:debug` | `:deb[ug]` | run a command in debugging mode |
 | · | `:debuggreedy` | `:debugg[reedy]` | read debug mode commands from normal input |
 | · | `:defer` | `:defe[r]` | call function when current function is done |
-| · | `:delcommand` | `:delc[ommand]` | delete user-defined command |
+| ✓ | `:delcommand` | `:delc[ommand]` | delete user-defined command |
 | · | `:delfunction` | `:delf[unction]` | delete a user function |
 | ✓ | `:delmarks` | `:delm[arks]` | delete marks |
 | · | `:detach` | `:detach` | detach the current UI |
@@ -149,8 +149,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:djump` | `:dj[ump]` | jump to #define |
 | · | `:dl` | `:dl` | short for \|:delete\| with the 'l' flag |
 | · | `:dlist` | `:dli[st]` | list #defines |
-| · | `:doautocmd` | `:do[autocmd]` | apply autocommands to current buffer |
-| · | `:doautoall` | `:doautoa[ll]` | apply autocommands for all loaded buffers |
+| ✓ | `:doautocmd` | `:do[autocmd]` | apply autocommands to current buffer |
+| ✓ | `:doautoall` | `:doautoa[ll]` | apply autocommands for all loaded buffers |
 | ✓ | `:dp` | `:d[elete]p` | short for \|:delete\| with the 'p' flag |
 | ✓ | `:drop` | `:dr[op]` | jump to window editing file or edit file in |
 | · | `:dsearch` | `:ds[earch]` | list one #define |
@@ -207,23 +207,23 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:history` | `:his[tory]` | print a history list |
 | ✓ | `:horizontal` | `:hor[izontal]` | following window command work horizontally |
 | · | `:insert` | `:i[nsert]` | insert text |
-| · | `:iabbrev` | `:ia[bbrev]` | like ":abbrev" but for Insert mode |
-| · | `:iabclear` | `:iabc[lear]` | like ":abclear" but for Insert mode |
+| ✓ | `:iabbrev` | `:ia[bbrev]` | like ":abbrev" but for Insert mode |
+| ✓ | `:iabclear` | `:iabc[lear]` | like ":abclear" but for Insert mode |
 | · | `:if` | `:if` | execute commands when condition met |
 | · | `:ijump` | `:ij[ump]` | jump to definition of identifier |
 | · | `:ilist` | `:il[ist]` | list lines where identifier matches |
-| · | `:imap` | `:im[ap]` | like ":map" but for Insert mode |
-| · | `:imapclear` | `:imapc[lear]` | like ":mapclear" but for Insert mode |
+| ✓ | `:imap` | `:im[ap]` | like ":map" but for Insert mode |
+| ✓ | `:imapclear` | `:imapc[lear]` | like ":mapclear" but for Insert mode |
 | · | `:imenu` | `:ime[nu]` | add menu for Insert mode |
-| · | `:inoremap` | `:ino[remap]` | like ":noremap" but for Insert mode |
-| · | `:inoreabbrev` | `:inorea[bbrev]` | like ":noreabbrev" but for Insert mode |
+| ✓ | `:inoremap` | `:ino[remap]` | like ":noremap" but for Insert mode |
+| ✓ | `:inoreabbrev` | `:inorea[bbrev]` | like ":noreabbrev" but for Insert mode |
 | · | `:inoremenu` | `:inoreme[nu]` | like ":noremenu" but for Insert mode |
 | ✓ | `:intro` | `:int[ro]` | print the introductory message |
 | · | `:iput` | `:ip[ut]` | like \|:put\|, but adjust the indent to the |
 | · | `:isearch` | `:is[earch]` | list one line where identifier matches |
 | · | `:isplit` | `:isp[lit]` | split window and jump to definition of |
-| · | `:iunmap` | `:iu[nmap]` | like ":unmap" but for Insert mode |
-| · | `:iunabbrev` | `:iuna[bbrev]` | like ":unabbrev" but for Insert mode |
+| ✓ | `:iunmap` | `:iu[nmap]` | like ":unmap" but for Insert mode |
+| ✓ | `:iunabbrev` | `:iuna[bbrev]` | like ":unabbrev" but for Insert mode |
 | · | `:iunmenu` | `:iunme[nu]` | remove menu for Insert mode |
 | ✓ | `:join` | `:j[oin]` | join lines |
 | ✓ | `:jumps` | `:ju[mps]` | print the jump list |
@@ -298,7 +298,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:mark` | `:ma[rk]` | set a mark |
 | ✓ | `:make` | `:mak[e]` | execute external command 'makeprg' and parse |
 | ✓ | `:map` | `:map` | show or enter a mapping |
-| · | `:mapclear` | `:mapc[lear]` | clear all mappings for Normal and Visual mode |
+| ✓ | `:mapclear` | `:mapc[lear]` | clear all mappings for Normal and Visual mode |
 | ✓ | `:marks` | `:marks` | list all marks |
 | ✓ | `:match` | `:mat[ch]` | define a match to highlight |
 | · | `:menu` | `:me[nu]` | enter a new menu item |
@@ -313,14 +313,14 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:next` | `:n[ext]` | go to next file in the argument list |
 | ✓ | `:new` | `:new` | create a new empty window |
 | ✓ | `:nmap` | `:nm[ap]` | like ":map" but for Normal mode |
-| · | `:nmapclear` | `:nmapc[lear]` | clear all mappings for Normal mode |
+| ✓ | `:nmapclear` | `:nmapc[lear]` | clear all mappings for Normal mode |
 | · | `:nmenu` | `:nme[nu]` | add menu for Normal mode |
 | ✓ | `:nnoremap` | `:nn[oremap]` | like ":noremap" but for Normal mode |
 | · | `:nnoremenu` | `:nnoreme[nu]` | like ":noremenu" but for Normal mode |
 | ✓ | `:noautocmd` | `:noa[utocmd]` | following commands don't trigger autocommands |
 | ✓ | `:noremap` | `:no[remap]` | enter a mapping that will not be remapped |
 | ✓ | `:nohlsearch` | `:noh[lsearch]` | suspend 'hlsearch' highlighting |
-| · | `:noreabbrev` | `:norea[bbrev]` | enter an abbreviation that will not be |
+| ✓ | `:noreabbrev` | `:norea[bbrev]` | enter an abbreviation that will not be |
 | · | `:noremenu` | `:noreme[nu]` | enter a menu that will not be remapped |
 | ✓ | `:normal` | `:norm[al]` | execute Normal mode commands |
 | ✓ | `:noswapfile` | `:nos[wapfile]` | following commands don't create a swap file |
@@ -510,7 +510,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:undo` | `:u[ndo]` | undo last change(s) |
 | · | `:undojoin` | `:undoj[oin]` | join next change with previous undo block |
 | ✓ | `:undolist` | `:undol[ist]` | list leafs of the undo tree |
-| · | `:unabbreviate` | `:una[bbreviate]` | remove abbreviation |
+| ✓ | `:unabbreviate` | `:una[bbreviate]` | remove abbreviation |
 | ✓ | `:unhide` | `:unh[ide]` | open a window for each loaded file in the |
 | ✓ | `:uniq` | `:uni[q]` | uniq lines |
 | · | `:unlet` | `:unl[et]` | delete variable |
@@ -528,14 +528,14 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:visual` | `:vi[sual]` | same as ":edit", but turns off "Ex" mode |
 | ✓ | `:viusage` | `:viu[sage]` | overview of Normal mode commands |
 | ✓ | `:view` | `:vie[w]` | edit a file read-only |
-| · | `:vmap` | `:vm[ap]` | like ":map" but for Visual+Select mode |
-| · | `:vmapclear` | `:vmapc[lear]` | remove all mappings for Visual+Select mode |
+| ✓ | `:vmap` | `:vm[ap]` | like ":map" but for Visual+Select mode |
+| ✓ | `:vmapclear` | `:vmapc[lear]` | remove all mappings for Visual+Select mode |
 | · | `:vmenu` | `:vme[nu]` | add menu for Visual+Select mode |
 | ✓ | `:vnew` | `:vne[w]` | create a new empty window, vertically split |
-| · | `:vnoremap` | `:vn[oremap]` | like ":noremap" but for Visual+Select mode |
+| ✓ | `:vnoremap` | `:vn[oremap]` | like ":noremap" but for Visual+Select mode |
 | · | `:vnoremenu` | `:vnoreme[nu]` | like ":noremenu" but for Visual+Select mode |
 | ✓ | `:vsplit` | `:vs[plit]` | split current window vertically |
-| · | `:vunmap` | `:vu[nmap]` | like ":unmap" but for Visual+Select mode |
+| ✓ | `:vunmap` | `:vu[nmap]` | like ":unmap" but for Visual+Select mode |
 | · | `:vunmenu` | `:vunme[nu]` | remove menu for Visual+Select mode |
 | ✓ | `:windo` | `:wind[o]` | execute command in each window |
 | ✓ | `:write` | `:w[rite]` | write to a file |
@@ -553,12 +553,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:wundo` | `:wu[ndo]` | write undo information to a file |
 | ✓ | `:xit` | `:x[it]` | write if buffer changed and close window |
 | ✓ | `:xall` | `:xa[ll]` | same as ":wqall" |
-| · | `:xmapclear` | `:xmapc[lear]` | remove all mappings for Visual mode |
-| · | `:xmap` | `:xm[ap]` | like ":map" but for Visual mode |
+| ✓ | `:xmapclear` | `:xmapc[lear]` | remove all mappings for Visual mode |
+| ✓ | `:xmap` | `:xm[ap]` | like ":map" but for Visual mode |
 | · | `:xmenu` | `:xme[nu]` | add menu for Visual mode |
-| · | `:xnoremap` | `:xn[oremap]` | like ":noremap" but for Visual mode |
+| ✓ | `:xnoremap` | `:xn[oremap]` | like ":noremap" but for Visual mode |
 | · | `:xnoremenu` | `:xnoreme[nu]` | like ":noremenu" but for Visual mode |
-| · | `:xunmap` | `:xu[nmap]` | like ":unmap" but for Visual mode |
+| ✓ | `:xunmap` | `:xu[nmap]` | like ":unmap" but for Visual mode |
 | · | `:xunmenu` | `:xunme[nu]` | remove menu for Visual mode |
 | ✓ | `:yank` | `:y[ank]` | yank lines into a register |
 | ✓ | `:z` | `:z` | print some lines |

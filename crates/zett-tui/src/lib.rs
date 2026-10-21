@@ -27,6 +27,7 @@ mod files;
 mod quickfix;
 mod qfcmd;
 mod excmds;
+mod mapcmds;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -371,6 +372,18 @@ struct App {
     redir: Option<(String, String)>,
     /// the window being drawn (draw_text: its :match)
     drawing_win: usize,
+    /// mapped keys being typed in again, and how many of those skip the mappings (:noremap)
+    replaying: usize,
+    noremap: usize,
+    /// :abbreviate, :command, :autocmd (mapcmds.rs): what they hold; the :augroup in use and those
+    /// defined; how deep autocommands run each other; the mode last frame (InsertEnter/Leave)
+    abbrevs: Vec<(String, String)>,
+    user_cmds: std::collections::HashMap<String, mapcmds::UserCmd>,
+    autocmds: Vec<mapcmds::AutoCmd>,
+    augroup: String,
+    augroups: std::collections::HashSet<String>,
+    au_depth: usize,
+    last_mode: Option<Mode>,
     cmd_hist: Vec<String>,
     clear: bool,
     suspend: bool,
@@ -539,6 +552,15 @@ impl App {
             win_match: Default::default(),
             redir: None,
             drawing_win: 0,
+            replaying: 0,
+            noremap: 0,
+            abbrevs: Vec::new(),
+            user_cmds: Default::default(),
+            autocmds: Vec::new(),
+            augroup: String::new(),
+            augroups: Default::default(),
+            au_depth: 0,
+            last_mode: None,
             cmd_hist: Vec::new(),
             clear: false,
             suspend: false,
@@ -669,6 +691,20 @@ impl App {
             if sync {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EndSynchronizedUpdate);
             }
+            // InsertEnter / InsertLeave, and VimEnter on the first frame (autocommands)
+            let m = self.docs[self.cur].ed.mode();
+            if self.last_mode != Some(m) {
+                match (self.last_mode, m) {
+                    (None, _) => {
+                        self.fire_autocmds("vimenter", None);
+                        self.fire_autocmds("uienter", None);
+                    }
+                    (_, Mode::Insert) => self.emit("insert_enter"),
+                    (Some(Mode::Insert), _) => self.emit("insert_leave"),
+                    _ => {}
+                }
+                self.last_mode = Some(m);
+            }
             // files changed outside: every second (autoread, W11)
             if self.checked.elapsed() >= Duration::from_secs(1) {
                 self.checked = Instant::now();
@@ -719,6 +755,11 @@ impl App {
                             self.keyseq.clear();
                             self.menu.clear();
                             self.after_lua(fx);
+                        }
+                        // insert and visual mode: the keys that started no mapping are typed after all
+                        _ if mode != "n" && mode != "e" => {
+                            let seq = std::mem::take(&mut self.keyseq);
+                            self.after_feed(Feed::None, seq);
                         }
                         _ => self.key_at = Instant::now() + Duration::from_secs(3600),
                     }

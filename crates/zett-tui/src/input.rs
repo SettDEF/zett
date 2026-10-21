@@ -87,6 +87,21 @@ impl App {
                 _ => {}
             }
         }
+        // :vmap / :imap: keys in visual and insert mode go through their mappings first
+        if matches!(mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock | Mode::Insert) && self.noremap == 0 {
+            let km = if mode == Mode::Insert { "i" } else { "v" };
+            if self.engine.has_maps(km) && !(mode == Mode::Insert && self.comp.is_some()) {
+                let tok = token(&k);
+                if !tok.is_empty() {
+                    let mut seq = std::mem::take(&mut self.keyseq);
+                    seq.push(tok);
+                    let feed = self.with_lua(|e| e.feed(km, &seq));
+                    if !matches!(feed, Feed::None) || seq.len() > 1 {
+                        return self.after_feed(feed, seq);
+                    }
+                }
+            }
+        }
         if mode == Mode::Normal {
             let tok = token(&k);
             if tok.is_empty() {
@@ -102,7 +117,7 @@ impl App {
             }
             let mut seq = std::mem::take(&mut self.keyseq);
             seq.push(tok);
-            let feed = self.with_lua(|e| e.feed("n", &seq));
+            let feed = if self.noremap > 0 { Feed::None } else { self.with_lua(|e| e.feed("n", &seq)) };
             return self.after_feed(feed, seq);
         }
         // the completion popup takes its keys first
@@ -125,6 +140,16 @@ impl App {
             KeyCode::Backspace => None,
             _ => Some('\0'),
         };
+        // insert mode: a key that ends a word expands an abbreviation first
+        if mode == Mode::Insert {
+            match k.code {
+                KeyCode::Char(c) if !ctrl => self.expand_abbrev(c),
+                KeyCode::Enter => self.expand_abbrev('\n'),
+                KeyCode::Tab => self.expand_abbrev('\t'),
+                KeyCode::Esc => self.expand_abbrev('\x1b'),
+                _ => {}
+            }
+        }
         self.edit_key(ek);
         if mode == Mode::Insert {
             self.comp_after_key(typed);
@@ -191,6 +216,10 @@ impl App {
                 let ft = crate::settings::ft_key(&self.docs[i].syntax);
                 self.docs[i].local.entry("filetype".into()).or_insert(ft);
                 self.apply_modeline(i);
+                let keep = self.cur;
+                self.cur = i;
+                self.emit("buf_read");
+                self.cur = keep;
             }
         }
         let emacs = self.emacs;
@@ -212,7 +241,14 @@ impl App {
     }
     /// The keymap mode keys go through: "e" (Emacs) or Vim's normal-mode "n".
     pub(crate) fn keymode(&self) -> &'static str {
-        if self.emacs_keys() { "e" } else { "n" }
+        if self.emacs_keys() {
+            return "e";
+        }
+        match self.docs[self.cur].ed.mode() {
+            Mode::Insert => "i",
+            Mode::Visual | Mode::VisualLine | Mode::VisualBlock => "v",
+            _ => "n",
+        }
     }
 
     /// Emacs profile: every key goes through the keymap (chords like C-x C-f wait for more);
@@ -335,6 +371,8 @@ impl App {
     pub(crate) fn effects(&mut self, fx: Vec<Effect>) {
         for e in fx {
             match e {
+                // a Vim mapping's keys, typed in again (through the mappings unless :noremap)
+                Effect::Keys(keys, remap) => self.replay(&keys, remap),
                 Effect::Notify(m) => {
                     // plugins may show messages too (fidget); a message they send is not sent back
                     if !self.notifying && self.engine.has_hooks("notify") {
@@ -588,4 +626,62 @@ impl App {
         }
     }
 
+}
+
+impl App {
+    /// Keys in Vim notation ("dd", ":w<CR>", "<C-w>j") as if typed: the : line, the mappings (unless
+    /// `remap` is false) and the editor all see them. Deep enough nesting stops (maxmapdepth).
+    pub(crate) fn replay(&mut self, keys: &str, remap: bool) {
+        let depth = self.num(self.cur, "maxmapdepth").max(1);
+        if self.replaying >= depth {
+            return self.say("E223: recursive mapping");
+        }
+        self.replaying += 1;
+        if !remap {
+            self.noremap += 1;
+        }
+        for k in zett_edit::keys::parse(keys) {
+            self.key(key_event(&k));
+        }
+        if !remap {
+            self.noremap -= 1;
+        }
+        self.replaying -= 1;
+    }
+}
+
+/// zett-edit's key as the terminal's key event.
+pub(crate) fn key_event(k: &zett_edit::keys::Key) -> KeyEvent {
+    use zett_edit::keys::Code as C;
+    let code = match k.code {
+        C::Char(c) => KeyCode::Char(c),
+        C::Esc => KeyCode::Esc,
+        C::Enter => KeyCode::Enter,
+        C::Backspace => KeyCode::Backspace,
+        C::Delete => KeyCode::Delete,
+        C::Tab if k.shift => KeyCode::BackTab,
+        C::Tab => KeyCode::Tab,
+        C::Left => KeyCode::Left,
+        C::Right => KeyCode::Right,
+        C::Up => KeyCode::Up,
+        C::Down => KeyCode::Down,
+        C::Home => KeyCode::Home,
+        C::End => KeyCode::End,
+        C::PageUp => KeyCode::PageUp,
+        C::PageDown => KeyCode::PageDown,
+        C::Insert => KeyCode::Insert,
+        C::F(n) => KeyCode::F(n),
+        _ => KeyCode::Null,
+    };
+    let mut m = KeyModifiers::NONE;
+    if k.ctrl {
+        m |= KeyModifiers::CONTROL;
+    }
+    if k.alt {
+        m |= KeyModifiers::ALT;
+    }
+    if k.shift && !matches!(code, KeyCode::BackTab | KeyCode::Char(_)) {
+        m |= KeyModifiers::SHIFT;
+    }
+    KeyEvent::new(code, m)
 }

@@ -27,7 +27,7 @@ awk "/\*option-list\*/{f=1} f && /^'[a-z]/" "$RT/doc/quickref.txt" | sed "s/^'\(
 "$ZETT" doc commands 2>/dev/null | grep -o '^- `[^`]*`' | sed 's/^- `//; s/`$//' | sort -u > "$tmp/zett-cmds.txt"
 grep -oh '^\s*"[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs crates/zett-tui/src/commands.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
 # the quickfix, location and other Ex commands kept as tables (qfcmd.rs, excmds.rs NAMES): full names and shortest forms
-grep -oh '("[A-Za-z~@*#]*", "[A-Za-z~@*#]*")' crates/zett-tui/src/qfcmd.rs crates/zett-tui/src/excmds.rs | grep -o '"[A-Za-z~@*#]*"' | tr -d '"' >> "$tmp/zett-ex.txt"
+grep -oh '("[A-Za-z~@*#]*", "[A-Za-z~@*#]*")' crates/zett-tui/src/qfcmd.rs crates/zett-tui/src/excmds.rs crates/zett-tui/src/mapcmds.rs | grep -o '"[A-Za-z~@*#]*"' | tr -d '"' >> "$tmp/zett-ex.txt"
 "$ZETT" options --working > "$tmp/zett-opts.txt"
 grep -o 'name: "[a-z]*"' crates/zett-tui/src/nvim_options.rs | cut -d'"' -f2 > "$tmp/zett-kept.txt"
 has() { grep -qxF -- "$1" "$2"; }
