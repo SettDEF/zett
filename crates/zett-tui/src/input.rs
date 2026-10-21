@@ -186,6 +186,9 @@ impl App {
                 if self.docs[i].ed.buf.path().is_some() {
                     self.take_disk(i);
                 }
+                // the file type it was opened as, for :set ft? and to switch from
+                let ft = crate::settings::ft_key(&self.docs[i].syntax);
+                self.docs[i].local.entry("filetype".into()).or_insert(ft);
                 self.apply_modeline(i);
             }
         }

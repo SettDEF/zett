@@ -461,3 +461,27 @@ mod shifting {
         assert!(e.take_requests().contains(&crate::vim::Request::Ex("1,1!fmt -w 20".into())));
     }
 }
+
+mod paste_langmap_comments {
+    use crate::Editor;
+
+    #[test]
+    fn paste_langmap_and_comment_strings() {
+        let mut e = Editor::from_str("    a\n");
+        e.set_opt("paste", "true");
+        e.set_opt("textwidth", "5");
+        e.feed("ob c d e f g<Esc>");
+        assert_eq!(e.text(), "    a\nb c d e f g\n", "paste: no indent, no wrapping");
+        let mut e = Editor::from_str("abc\n");
+        e.set_opt("langmap", "фы;dl");
+        e.feed("ыфы");
+        assert_eq!(e.text(), "ac\n", "langmap: ы is l, ф is d");
+        e.feed("iы<Esc>");
+        assert_eq!(e.text(), "aыc\n", "not in insert mode");
+        let mut e = Editor::from_str("x\n");
+        e.toggle_comment_with(0, 0, "/*", "*/");
+        assert_eq!(e.text(), "/* x */\n");
+        e.toggle_comment_with(0, 0, "/*", "*/");
+        assert_eq!(e.text(), "x\n");
+    }
+}

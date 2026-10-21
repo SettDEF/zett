@@ -604,7 +604,15 @@ impl App {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EnterAlternateScreen, ratatui::crossterm::event::EnableMouseCapture);
                 term.clear()?;
             }
+            // termsync: the frame reaches the terminal as one update (no half-drawn screens)
+            let sync = self.flag(self.cur, "termsync");
+            if sync {
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::BeginSynchronizedUpdate);
+            }
             term.draw(|f| self.draw(f))?;
+            if sync {
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EndSynchronizedUpdate);
+            }
             // files changed outside: every second (autoread, W11)
             if self.checked.elapsed() >= Duration::from_secs(1) {
                 self.checked = Instant::now();
@@ -621,11 +629,13 @@ impl App {
             if std::env::var_os("ZETT_EXIT_AFTER_DRAW").is_some() {
                 self.quit = true;
             }
-            // the cursor's shape follows the mode
-            let bar = self.cmdline.is_some() || self.minibuf.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
-            if shape != Some(bar) {
-                let _ = execute!(std::io::stdout(), if bar { SetCursorStyle::SteadyBar } else { SetCursorStyle::SteadyBlock });
-                shape = Some(bar);
+            // the cursor's shape follows the mode, as guicursor says (empty: left as the terminal has it)
+            let want = self.cursor_shape();
+            if shape != Some(want) {
+                if let Some(w) = want {
+                    let _ = execute!(std::io::stdout(), crate::display::cursor_style(w));
+                }
+                shape = Some(want);
             }
             // a pending key sequence ends after timeoutlen (never with notimeout)
             let timeoutlen = if self.flag(self.cur, "timeout") { Duration::from_millis(self.num(self.cur, "timeoutlen") as u64) } else { Duration::from_secs(86_400) };

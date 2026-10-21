@@ -13,6 +13,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
     "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions", "equalprg", "formatprg", "incsearch",
+    "paste", "langmap",
 ];
 
 impl Editor {
@@ -20,6 +21,9 @@ impl Editor {
     pub fn set_opt(&mut self, name: &str, value: &str) {
         if name == "iskeyword" {
             self.vim.kw = parse_iskeyword(value);
+        }
+        if name == "langmap" && self.opt("langmap") != Some(value) {
+            self.vim.langmap = parse_langmap(value);
         }
         // the spell checker is shared: it takes the languages and the word file from here
         match name {
@@ -91,6 +95,10 @@ impl Editor {
     /// more after an opening brace and one less before a closing one with smartindent or cindent;
     /// copyindent keeps the characters, else they are made anew.
     pub(crate) fn next_indent(&self, line: usize, below: bool, upto: Option<usize>) -> String {
+        // paste: text typed in (pasted) keeps its own indent
+        if self.opt_on("paste", false) {
+            return String::new();
+        }
         if !self.opt_on("autoindent", true) && !self.opt_on("smartindent", false) && !self.opt_on("cindent", false) {
             return String::new();
         }
@@ -139,7 +147,7 @@ impl Editor {
         if self.cursor <= insert_start && !at_start && !self.opt_has("backspace", "start", "indent,eol,start") {
             return;
         }
-        let sts = match self.opt_num("softtabstop", 0) {
+        let sts = match if self.opt_on("paste", false) { 0 } else { self.opt_num("softtabstop", 0) } {
             n if n < 0 => self.shiftwidth(),
             n => n as usize,
         };
@@ -162,6 +170,9 @@ impl Editor {
 
     /// Tab in insert mode with softtabstop or smarttab: blanks to the next stop.
     pub(crate) fn vim_tab_width(&self) -> Option<usize> {
+        if self.opt_on("paste", false) {
+            return None;
+        }
         let line = self.cur_line();
         let before = &self.buf.line(line)[..];
         let col = self.cursor().col;
@@ -179,6 +190,9 @@ impl Editor {
     /// While typing: past textwidth (or the window's width less wrapmargin) the line breaks at its
     /// last blank, when formatoptions has t.
     pub(crate) fn vim_autowrap(&mut self) {
+        if self.opt_on("paste", false) {
+            return;
+        }
         let tw = match self.opt_num("textwidth", 0) {
             n if n > 0 => n as usize,
             _ => match self.opt_num("wrapmargin", 0) {
@@ -281,4 +295,42 @@ fn parse_iskeyword(v: &str) -> Option<[bool; 256]> {
         }
     }
     Some(t)
+}
+
+/// langmap ("ФИСВУАПРШОЛДЬТЩЗЙКЫЕГМЦЧНЯ;ABCDEFGHIJKLMNOPQRSTUVWXYZ", or pairs "aA,bB"): the
+/// characters another keyboard layout types, as the commands they stand for.
+pub(crate) fn parse_langmap(v: &str) -> std::collections::HashMap<char, char> {
+    let mut map = std::collections::HashMap::new();
+    // the parts, split at commas that are not escaped
+    let mut parts: Vec<Vec<(char, bool)>> = vec![Vec::new()];
+    let mut esc = false;
+    for c in v.chars() {
+        if esc {
+            parts.last_mut().unwrap().push((c, true));
+            esc = false;
+        } else if c == '\\' {
+            esc = true;
+        } else if c == ',' {
+            parts.push(Vec::new());
+        } else {
+            parts.last_mut().unwrap().push((c, false));
+        }
+    }
+    for p in parts {
+        match p.iter().position(|&(c, e)| c == ';' && !e) {
+            Some(i) => {
+                for (a, b) in p[..i].iter().zip(&p[i + 1..]) {
+                    map.insert(a.0, b.0);
+                }
+            }
+            None => {
+                for pair in p.chunks(2) {
+                    if let [a, b] = pair {
+                        map.insert(a.0, b.0);
+                    }
+                }
+            }
+        }
+    }
+    map
 }

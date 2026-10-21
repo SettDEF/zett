@@ -1013,14 +1013,19 @@ pub(crate) fn comment_prefix(name: &str) -> &'static str {
 impl App {
     /// gcc / visual gc: the line, or the selected lines, commented out or back in.
     pub(crate) fn comment(&mut self) {
-        let prefix = comment_prefix(&self.docs[self.cur].name);
+        // commentstring ("// %s", "/* %s */") when set, else by the file's extension
+        let cs = self.setting(self.cur, "commentstring");
+        let (prefix, suffix) = match cs.split_once("%s") {
+            Some((p, s)) if !p.trim().is_empty() => (p.trim().to_string(), s.trim().to_string()),
+            _ => (comment_prefix(&self.docs[self.cur].name).to_string(), String::new()),
+        };
         let d = &mut self.docs[self.cur];
         let (from, to) = match d.ed.selection_range() {
             Some((a, b)) => (d.ed.buf.to_pos(a).line, d.ed.buf.to_pos(b.saturating_sub(1).max(a)).line),
             None => (d.ed.cursor().line, d.ed.cursor().line),
         };
         let before = d.ed.cursor().line;
-        d.ed.toggle_comment(from, to, prefix);
+        d.ed.toggle_comment_with(from, to, &prefix, &suffix);
         d.touched(before.min(from));
     }
 }

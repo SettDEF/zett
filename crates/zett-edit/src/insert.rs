@@ -62,6 +62,11 @@ impl Editor {
     /// Comments lines `from..=to` out with `prefix` (`//`, `#`), or back in when every
     /// non-empty one already is (evil-commentary's gc). One undo step; leaves visual mode.
     pub fn toggle_comment(&mut self, from: usize, to: usize, prefix: &str) {
+        self.toggle_comment_with(from, to, prefix, "");
+    }
+
+    /// As toggle_comment, with a closing part too (commentstring "/* %s */").
+    pub fn toggle_comment_with(&mut self, from: usize, to: usize, prefix: &str, suffix: &str) {
         let last = self.buf.len_lines().saturating_sub(1);
         let (from, to) = (from.min(last), to.min(last));
         let lines: Vec<(usize, String)> = (from..=to).map(|l| (l, self.buf.line(l))).collect();
@@ -70,7 +75,7 @@ impl Editor {
         if filled.is_empty() {
             return;
         }
-        let commented = filled.iter().all(|(_, t)| body(t).trim_start().starts_with(prefix));
+        let commented = filled.iter().all(|(_, t)| body(t).trim_start().starts_with(prefix) && body(t).trim_end().ends_with(suffix));
         let indent = filled.iter().map(|(_, t)| body(t).len() - body(t).trim_start().len()).min().unwrap_or(0);
         self.begin();
         // bottom up, so earlier char positions stay right
@@ -78,6 +83,15 @@ impl Editor {
             let t = body(t);
             let start = self.buf.to_char(Pos { line: *l, col: 0 });
             if commented {
+                // the closing part first (at the end), then the opening one
+                if !suffix.is_empty() {
+                    let end = start + t.trim_end().chars().count();
+                    let mut n = suffix.chars().count();
+                    if t.trim_end()[..t.trim_end().len() - suffix.len()].ends_with(' ') {
+                        n += 1;
+                    }
+                    self.rem(end - n, end);
+                }
                 let lead = t.chars().count() - t.trim_start().chars().count();
                 let mut n = prefix.chars().count();
                 if t.trim_start()[prefix.len()..].starts_with(' ') {
@@ -85,6 +99,9 @@ impl Editor {
                 }
                 self.rem(start + lead, start + lead + n);
             } else {
+                if !suffix.is_empty() {
+                    self.ins(start + t.trim_end().chars().count(), &format!(" {suffix}"));
+                }
                 self.ins(start + t.chars().take(indent).count(), &format!("{prefix} "));
             }
         }

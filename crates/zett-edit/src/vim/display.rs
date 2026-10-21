@@ -59,6 +59,11 @@ impl Editor {
         None
     }
 
+    /// An operator waits for its motion (guicursor's o mode).
+    pub fn pending_op(&self) -> bool {
+        self.op.is_some()
+    }
+
     /// :nohlsearch: the matches stop showing until the next search.
     pub fn nohlsearch(&mut self) {
         self.vim.hl_off = true;

@@ -69,15 +69,25 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "readonly", "modified", "modeline", "modelines", "modelineexpr",
     "mouse", "mousescroll", "mousetime", "mousemodel",
     "spell", "spellcapcheck",
+    "filetype", "syntax", "guicursor", "termsync",
+    "commentstring",
     "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
     "bomb", "endofline", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 
+/// Options Neovim's terminal UI ignores (for GUIs, for Windows, or kept only for old scripts): zett
+/// ignores them the same way (decided 2026-10-21) and the settings page says so.
+pub(crate) const LIKE_NVIM_TUI: &[&str] = &[
+    "guifont", "guifontwide", "guioptions", "guitablabel", "guitabtooltip", "linespace", "browsedir", "winaltkeys", "langmenu",
+    "menuitems", "mousehide", "mouseshape", "opendevice", "shellslash", "completeslash", "termencoding", "ttyfast", "compatible",
+    "edcompatible", "insertmode", "maxcombine", "encoding",
+];
+
 /// The setting does something in zett (zett's table, or acted on elsewhere); false: accepted and kept,
 /// no effect yet.
 pub(crate) fn works(s: &Setting) -> bool {
-    SETTINGS.iter().any(|x| std::ptr::eq(x, s)) || WORKS_ELSEWHERE.contains(&s.name) || zett_edit::vim::options::EDITOR_OPTIONS.contains(&s.name)
+    SETTINGS.iter().any(|x| std::ptr::eq(x, s)) || WORKS_ELSEWHERE.contains(&s.name) || LIKE_NVIM_TUI.contains(&s.name) || zett_edit::vim::options::EDITOR_OPTIONS.contains(&s.name)
 }
 
 /// The file type as settings name it: "markdown", "plain_text", "rust".
@@ -219,6 +229,14 @@ impl App {
             self.docs[i].ed.set_case(ic, scs);
             let ws = self.flag(i, "wrapscan");
             self.docs[i].ed.set_wrapscan(ws);
+            // filetype and syntax: the highlighting follows them (:set ft=rust, :set syntax=off)
+            let (ft, syn) = (self.setting(i, "filetype"), self.setting(i, "syntax"));
+            let key = if syn.is_empty() || syn.eq_ignore_ascii_case("on") { ft } else { syn };
+            let want = if key.eq_ignore_ascii_case("off") { Some("Plain Text".to_string()) } else { self.ss.find_syntax_by_token(&key).map(|s| s.name.clone()) };
+            if let Some(w) = want.filter(|w| *w != self.docs[i].syntax && !key.is_empty()) {
+                self.docs[i].syntax = w;
+                self.docs[i].states.clear();
+            }
             // every option the editor acts on (zett_edit::vim::options), with this buffer's value;
             // textwidth only once set (zett's fill_column default is for M-q, not for wrapping while typing)
             for &name in zett_edit::vim::options::EDITOR_OPTIONS {
@@ -309,7 +327,13 @@ pub(crate) fn settings_topic() -> String {
         };
         let short = if s.short.is_empty() { String::new() } else { format!(" · `{}`", s.short.join("`, `")) };
         let d = if s.default.is_empty() { "\"\"" } else { s.default };
-        let state = if works(s) { "" } else { " · ◐ kept, no effect yet" };
+        let state = if LIKE_NVIM_TUI.contains(&s.name) {
+            " · ignored in a terminal, as by Neovim's"
+        } else if works(s) {
+            ""
+        } else {
+            " · ◐ kept, no effect yet"
+        };
         out.push_str(&format!("- `{}`{short} · {kind} · default `{d}`{state}\n  {}\n", s.name, s.about));
     }
     out

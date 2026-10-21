@@ -204,6 +204,11 @@ impl Editor {
     }
 
     pub fn key(&mut self, k: Key) {
+        // langmap: outside insert mode another layout's characters are the commands they stand for
+        let k = match k.char().and_then(|c| self.vim.langmap.get(&c).copied()) {
+            Some(to) if !self.emacs && self.mode != Mode::Insert && self.isearch.is_none() && self.prefix.is_none() && !k.ctrl && !k.alt => Key { code: Code::Char(to), ..k },
+            _ => k,
+        };
         // the Vim search line, macros, the dot (vim.rs)
         if self.vim_before(k) {
             return self.vim_after();

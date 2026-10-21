@@ -114,6 +114,8 @@ pub(crate) struct VimState {
     pub fold_auto: Option<String>,
     pub fold_level: Option<i64>,
     pub fold_enable: Option<bool>,
+    /// langmap: typed character to the command character
+    pub langmap: std::collections::HashMap<char, char>,
     /// z{height}<CR>: the height typed so far
     pub z_height: usize,
     /// a block reaching every line's end ($), and a block insert waiting for Esc: (first line, last line,

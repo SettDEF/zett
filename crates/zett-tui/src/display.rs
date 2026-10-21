@@ -177,6 +177,11 @@ mod tests {
         assert_eq!(fold_cells(2, 1, Some(true), &f), "+ ");
         assert_eq!(fold_cells(2, 2, None, &f), "││");
         assert_eq!(fold_cells(2, 0, None, &f), "  ");
+        let gc = "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,a:blinkon0";
+        assert_eq!(cursor_for(gc, "i"), Some(("ver", false)));
+        assert_eq!(cursor_for(gc, "o"), Some(("hor", false)));
+        assert_eq!(cursor_for("n:block-blinkon250", "n"), Some(("block", true)));
+        assert_eq!(cursor_for("", "n"), None);
     }
 }
 
@@ -225,4 +230,61 @@ pub(crate) fn spell_marks(line: &str, camel: bool, capcheck: bool, starts_senten
     }
     let to_screen = |v: Vec<(usize, usize)>| v.into_iter().map(|(a, b)| (crate::screen_col(line, a), crate::screen_col(line, b))).collect();
     (to_screen(bad), to_screen(cap))
+}
+
+impl App {
+    /// guicursor ("n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20"): the cursor for the mode now; None
+    /// when guicursor is empty (the terminal's own cursor stays).
+    pub(crate) fn cursor_shape(&self) -> Option<(&'static str, bool)> {
+        let ed = &self.docs[self.cur].ed;
+        let mode = if self.cmdline.is_some() || self.minibuf.is_some() {
+            "c"
+        } else {
+            match ed.mode() {
+                Mode::Insert if ed.replacing() => "r",
+                Mode::Insert => "i",
+                Mode::Normal if ed.pending_op() => "o",
+                Mode::Normal => "n",
+                _ => "v",
+            }
+        };
+        cursor_for(&self.setting(self.cur, "guicursor"), mode)
+    }
+}
+
+/// The guicursor parts for `mode` as a terminal cursor style.
+pub(crate) fn cursor_for(gc: &str, mode: &str) -> Option<(&'static str, bool)> {
+    if gc.trim().is_empty() {
+        return None;
+    }
+    // "a:" parts apply to every mode (blinking, highlight); the mode's own part sets the shape
+    let mut shape = "block";
+    let mut blink = false;
+    for part in gc.split(',') {
+        let Some((modes, args)) = part.split_once(':') else { continue };
+        if !modes.split('-').any(|m| m == mode || m == "a") {
+            continue;
+        }
+        for a in args.split('-') {
+            if a == "block" || a.starts_with("ver") || a.starts_with("hor") {
+                shape = if a.starts_with("ver") { "ver" } else if a.starts_with("hor") { "hor" } else { "block" };
+            } else if let Some(n) = a.strip_prefix("blinkon") {
+                blink = n.parse::<u32>().is_ok_and(|n| n > 0);
+            }
+        }
+    }
+    Some((shape, blink))
+}
+
+/// A shape from cursor_for as the terminal's cursor style.
+pub(crate) fn cursor_style((shape, blink): (&str, bool)) -> ratatui::crossterm::cursor::SetCursorStyle {
+    use ratatui::crossterm::cursor::SetCursorStyle as C;
+    match (shape, blink) {
+        ("ver", true) => C::BlinkingBar,
+        ("ver", false) => C::SteadyBar,
+        ("hor", true) => C::BlinkingUnderScore,
+        ("hor", false) => C::SteadyUnderScore,
+        (_, true) => C::BlinkingBlock,
+        _ => C::SteadyBlock,
+    }
 }
