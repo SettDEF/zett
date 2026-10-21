@@ -102,6 +102,8 @@ pub(crate) struct Win {
     pub doc: usize,
     pub top: usize,
     pub left: usize,
+    /// its own folder (:lcd); a new window gets the one it was split from
+    pub lcd: Option<PathBuf>,
 }
 
 /// What a picker lists, and what Enter does with it.
@@ -650,7 +652,7 @@ impl App {
             }
             Pick::Projects => {
                 let p = PathBuf::from(expand_home(&item));
-                self.root = p.clone();
+                self.set_global_dir(p.clone());
                 self.pick(Pick::Files(p));
             }
             Pick::Everything(root) if self.open_past(&root, &item) => {}

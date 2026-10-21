@@ -29,6 +29,7 @@ mod qfcmd;
 mod tagcmd;
 mod excmds;
 mod mapcmds;
+mod dircmd;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -150,6 +151,8 @@ struct Doc {
     mtime: Option<std::time::SystemTime>,
     /// its modeline and file permissions were looked at (sync_profile, once)
     seen: bool,
+    /// the tab's own folder (:tcd; zett's tabs are its buffers)
+    tcd: Option<PathBuf>,
 }
 
 impl Doc {
@@ -172,7 +175,7 @@ impl Doc {
 
     fn new(ed: Editor, name: String, syntax: String) -> Doc {
         let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
-        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), mtime: None, seen: false }
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), mtime: None, seen: false, tcd: None }
     }
 
     fn dirty(&self) -> bool {
@@ -367,6 +370,10 @@ struct App {
     qf_job: Option<qfcmd::QfJob>,
     /// the tag stack: each jump a tag made, newest last (tagcmd.rs)
     tag_stack: Vec<tagcmd::TagEntry>,
+    /// the global folder (:cd; root follows the scope that applies, dircmd.rs), and the one before
+    /// each scope's last change (global, tab, window) for :cd -
+    global_dir: PathBuf,
+    prev_dirs: [Option<PathBuf>; 3],
     /// a found place zash draws a line under (x, y, its text, the flash it is for), and the flash sent
     fx_mark: Option<(u16, u16, String, Instant)>,
     /// the mark drawn (its flash and place), and the place seen last with the time it was first seen there
@@ -378,7 +385,8 @@ struct App {
     last_bang: Option<String>,
     /// the register the last :@ ran (:@@)
     last_at: Option<char>,
-    win_match: std::collections::HashMap<usize, (String, String)>,
+    /// :match :2match :3match: each window's patterns (by window and number) and their groups
+    win_match: std::collections::HashMap<(usize, u8), (String, String)>,
     redir: Option<(String, String)>,
     /// the window being drawn (draw_text: its :match)
     drawing_win: usize,
@@ -388,6 +396,8 @@ struct App {
     /// :abbreviate, :command, :autocmd (mapcmds.rs): what they hold; the :augroup in use and those
     /// defined; how deep autocommands run each other; the mode last frame (InsertEnter/Leave)
     abbrevs: Vec<(String, String)>,
+    /// the : line's abbreviations (:cabbrev; :abbreviate sets both)
+    cabbrevs: Vec<(String, String)>,
     user_cmds: std::collections::HashMap<String, mapcmds::UserCmd>,
     autocmds: Vec<mapcmds::AutoCmd>,
     augroup: String,
@@ -518,7 +528,7 @@ impl App {
         let mut app = App {
             docs,
             cur: 0,
-            root,
+            root: root.clone(),
             ss,
             theme: palette_theme(),
             engine,
@@ -560,6 +570,8 @@ impl App {
             loclists: Default::default(),
             qf_job: None,
             tag_stack: Vec::new(),
+            global_dir: root.clone(),
+            prev_dirs: [None, None, None],
             fx_mark: None,
             fx_sent: None,
             fx_seen: None,
@@ -573,6 +585,7 @@ impl App {
             replaying: 0,
             noremap: 0,
             abbrevs: Vec::new(),
+            cabbrevs: Vec::new(),
             user_cmds: Default::default(),
             autocmds: Vec::new(),
             augroup: String::new(),
@@ -687,6 +700,7 @@ impl App {
                 self.after_lua(fx);
             }
             self.sync_profile();
+            self.sync_dir();
             self.agent_poll();
             self.notebook_poll();
             self.qf_poll();

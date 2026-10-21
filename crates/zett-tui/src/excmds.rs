@@ -34,7 +34,8 @@ const NAMES: &[(&str, &str)] = &[
     ("echomsg", "echom"), ("echoerr", "echoe"), ("eval", "ev"), ("execute", "exe"), ("fclose", "fc"),
     ("silent", "sil"), ("unsilent", "uns"), ("verbose", "verb"), ("keepalt", "keepa"), ("keepmarks", "kee"), ("keepjumps", "keepj"),
     ("keeppatterns", "keepp"), ("lockmarks", "loc"), ("noautocmd", "noa"), ("sandbox", "san"), ("filter", "filt"), ("browse", "bro"),
-    ("confirm", "conf"), ("noswapfile", "nos"), ("match", "mat"),
+    ("confirm", "conf"), ("noswapfile", "nos"), ("match", "mat"), ("2match", "2mat"), ("3match", "3mat"), ("k", "k"), ("list", "l"), ("goto", "go"), ("iput", "ip"), ("dl", "dl"),
+    ("smagic", "sm"), ("snomagic", "sno"), ("undojoin", "undoj"),
     ("spellgood", "spe"), ("spellwrong", "spellw"), ("spellrare", "spellra"), ("spellundo", "spellu"), ("spellinfo", "spelli"),
     ("spelldump", "spelld"), ("fold", "fo"), ("foldclose", "foldc"), ("foldopen", "foldo"), ("folddoopen", "foldd"),
     ("folddoclosed", "folddoc"), ("luado", "luad"), ("redir", "redi"),
@@ -409,7 +410,60 @@ impl App {
                 }
             }
             // ── marks, jumps, changes, registers ──
-            "mark" => match arg.trim().chars().next() {
+            // :list: the lines as :print shows them, a tab as ^I and the end as $
+            "list" => {
+                let d = &self.docs[self.cur];
+                let rows = (a..=b).map(|l| (format!("{:>4}", l + 1), format!("{}$", d.ed.buf.line(l).trim_end_matches('\n').replace('\t', "^I")))).collect();
+                self.popup = Some(Popup::Help(format!("lines {}-{}", a + 1, b + 1), rows));
+            }
+            // :dl: delete, then list the line that is current now
+            "dl" => {
+                let r = range.map(|(a, b)| format!("{},{}", a + 1, b + 1)).unwrap_or_default();
+                self.ex(&format!("{r}delete {}", arg.trim()));
+                let l = self.docs[self.cur].ed.cursor().line;
+                let text = self.docs[self.cur].ed.buf.line(l).trim_end_matches('\n').replace('\t', "^I");
+                self.say(format!("{text}$"));
+            }
+            // :goto N: to byte N of the buffer (1 the first; a range gives it too)
+            "goto" => {
+                let n = num.or(range.map(|(_, b)| b + 1)).unwrap_or(1).max(1);
+                let text = self.docs[self.cur].ed.buf.text();
+                let mut byte = (n - 1).min(text.len().saturating_sub(1));
+                while byte > 0 && !text.is_char_boundary(byte) {
+                    byte -= 1;
+                }
+                let at = text[..byte].chars().count();
+                let d = &mut self.docs[self.cur];
+                let p = d.ed.buf.to_pos(at);
+                d.ed.set_cursor(p);
+            }
+            // :iput: :put with the lines indented as the current one (as ]p)
+            "iput" => {
+                let r = arg.trim().chars().next().unwrap_or('"');
+                let Some((text, _)) = self.docs[self.cur].ed.register(r) else { return self.say(format!("E353: Nothing in register {r}")) };
+                let want: String = self.docs[self.cur].ed.buf.line(b).chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+                let lines: Vec<&str> = text.trim_end_matches('\n').split('\n').collect();
+                let least = lines.iter().filter(|l| !l.trim().is_empty()).map(|l| l.chars().take_while(|c| *c == ' ' || *c == '\t').count()).min().unwrap_or(0);
+                let text: String = lines.iter().map(|l| if l.trim().is_empty() { "\n".to_string() } else { format!("{want}{}\n", l.chars().skip(least).collect::<String>()) }).collect();
+                let at = if bang { b } else { b + 1 };
+                self.put_lines(at, &text);
+            }
+            // :smagic :snomagic: :s with 'magic' on or off for its pattern (\m, \M)
+            "smagic" | "snomagic" => {
+                let r = range.map(|(a, b)| format!("{},{}", a + 1, b + 1)).unwrap_or_default();
+                let t = arg.trim_start();
+                let line = match t.chars().next() {
+                    Some(d) if !d.is_alphanumeric() && d != '\\' && d != '"' && d != '|' => format!("{r}s{d}{}{}", if cmd == "snomagic" { "\\M" } else { "\\m" }, &t[d.len_utf8()..]),
+                    _ => format!("{r}s {t}"),
+                };
+                self.ex(&line);
+            }
+            "undojoin" => {
+                if let Err(e) = self.docs[self.cur].ed.undo_join() {
+                    self.say(e);
+                }
+            }
+            "mark" | "k" => match arg.trim().chars().next() {
                 Some(c) if c.is_ascii_alphabetic() || "'`[]<>".contains(c) => {
                     let at = self.docs[self.cur].ed.buf.to_char(Pos { line: b, col: 0 });
                     self.docs[self.cur].ed.set_vim_mark(c, at);
@@ -577,8 +631,8 @@ impl App {
                 Err(e) => self.say(e),
             },
             "fclose" => self.popup = None,
-            "match" => {
-                let w = self.focus;
+            "match" | "2match" | "3match" => {
+                let w = (self.focus, if cmd == "match" { 1 } else { cmd.as_bytes()[0] - b'0' });
                 let t = arg.trim();
                 if t.is_empty() || t == "none" {
                     self.win_match.remove(&w);
@@ -751,6 +805,76 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    fn app_with(text: &str) -> crate::App {
+        let mut app = crate::App::new(Vec::new());
+        let d = &mut app.docs[app.cur];
+        d.ed = zett_edit::Editor::from_str(text);
+        app
+    }
+
+    fn text(app: &crate::App) -> String {
+        app.docs[app.cur].ed.buf.text()
+    }
+
+    #[test]
+    fn goto_iput_dl_k_and_the_match_numbers() {
+        let mut app = app_with("ab\ncdé\nfg\n");
+        app.command("goto 5");
+        assert_eq!(app.docs[app.cur].ed.cursor(), zett_core::Pos { line: 1, col: 1 }, ":goto 5 is byte 5: 'd'");
+        app.command("goto 9");
+        assert_eq!(app.docs[app.cur].ed.cursor(), zett_core::Pos { line: 2, col: 0 }, "é is two bytes: f is byte 9");
+        app.command("goto 7");
+        assert_eq!(app.docs[app.cur].ed.cursor(), zett_core::Pos { line: 1, col: 2 }, "inside é: on é");
+        // :iput: the register's lines at the current line's indent
+        let mut app = app_with("    x\n");
+        app.docs[app.cur].ed.set_register('a', "a\n  b\n");
+        app.command("iput a");
+        assert_eq!(text(&app), "    x\n    a\n      b\n");
+        // :dl deletes and lists the next line
+        let mut app = app_with("one\ntwo\n");
+        app.command("1dl");
+        assert_eq!(text(&app), "two\n");
+        // :ka is :mark a
+        let mut app = app_with("one\ntwo\n");
+        app.command("2ka");
+        assert!(app.docs[app.cur].ed.marks().iter().any(|m| m.0 == 'a' && m.1 == 1), "{:?}", app.docs[app.cur].ed.marks());
+        // :2match and :3match beside :match
+        app.command("2match Error /two/");
+        app.command("match Search /one/");
+        assert_eq!(app.win_match.len(), 2);
+        app.command("2match none");
+        assert_eq!(app.win_match.len(), 1);
+    }
+
+    #[test]
+    fn snomagic_and_undojoin() {
+        let mut app = app_with("a.c abc\n");
+        app.command("snomagic/a.c/X/g");
+        assert_eq!(text(&app), "X abc\n", "nomagic: . is a dot");
+        let mut app = app_with("a.c abc\n");
+        app.command("smagic/a.c/X/g");
+        assert_eq!(text(&app), "X X\n", "magic: . is any character");
+        // \M in a pattern on its own
+        let mut app = app_with("a*b aab\n");
+        app.command("s/\\Ma*b/Y/");
+        assert_eq!(text(&app), "Y aab\n");
+        // :undojoin: two changes undone as one
+        let mut app = app_with("x\n");
+        for k in zett_edit::keys::parse("Aa<Esc>") {
+            app.key(crate::input::key_event(&k));
+        }
+        app.command("undojoin");
+        for k in zett_edit::keys::parse("Ab<Esc>u") {
+            app.key(crate::input::key_event(&k));
+        }
+        assert_eq!(text(&app), "x\n", "u undid both");
+        for k in zett_edit::keys::parse("Ac<Esc>u") {
+            app.key(crate::input::key_event(&k));
+        }
+        app.command("undojoin");
+        assert!(app.msg.as_ref().is_some_and(|m| m.0.starts_with("E790")), "{:?}", app.msg);
+    }
+
     #[test]
     fn names_and_shortest_forms() {
         assert_eq!(super::ex_name("n"), Some("next"));

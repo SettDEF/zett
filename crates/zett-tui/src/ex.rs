@@ -57,6 +57,7 @@ pub(crate) fn parse_range(s: &str, cur: usize, last: usize, vis: Option<(usize, 
 
 /// Vim's pattern habits into the regex syntax: \( \) \| \+ \? \< \> and \v.
 pub(crate) fn vim_regex(p: &str, icase: bool) -> Result<Regex, String> {
+    let p = magic_form(p);
     let mut out = String::new();
     let mut it = p.chars().peekable();
     while let Some(c) = it.next() {
@@ -84,6 +85,34 @@ pub(crate) fn vim_regex(p: &str, icase: bool) -> Result<Regex, String> {
         out.insert_str(0, "(?i)");
     }
     Regex::new(&out).map_err(|e| format!("pattern: {e}"))
+}
+
+/// \M (nomagic, :snomagic) and \m into the magic form: under \M a bare . * [ ~ is itself and the
+/// backslashed one special, as Vim reads them; \m goes back.
+fn magic_form(p: &str) -> String {
+    let mut out = String::new();
+    let mut magic = true;
+    let mut it = p.chars();
+    while let Some(c) = it.next() {
+        match (c, magic) {
+            ('\\', _) => match it.next() {
+                Some('m') => magic = true,
+                Some('M') => magic = false,
+                Some(o @ ('.' | '*' | '[' | '~')) if !magic => out.push(o),
+                Some(o) => {
+                    out.push('\\');
+                    out.push(o);
+                }
+                None => out.push('\\'),
+            },
+            ('.' | '*' | '[' | '~', false) => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// A replacement in Vim's terms: \1 & \r \n \\ into the regex crate's ($1, $0, newline).
@@ -208,6 +237,15 @@ impl App {
 
     /// A `:` line Neovim would understand; false: not one of these (the caller tries its own).
     pub(crate) fn ex(&mut self, line: &str) -> bool {
+        // :2match :3match: the digit is the name's, not a line number
+        let t = line.trim_start();
+        if t.starts_with(['2', '3']) && t[1..].starts_with("mat") {
+            let (name, arg) = t.split_at(t.find(char::is_whitespace).unwrap_or(t.len()));
+            if crate::excmds::ex_name(name).is_some() {
+                self.ex_more(name, arg.trim_start(), false, None);
+                return true;
+            }
+        }
         let cur = self.docs[self.cur].ed.cursor().line;
         let last = self.last_line();
         let (range, rest) = parse_range(line, cur, last, self.vis_range);
@@ -231,11 +269,17 @@ impl App {
             arg = &arg[1..];
         }
         let arg = arg.trim_start();
+        // :ka: :k and its mark without a space (:kee and longer are :keepmarks and the like)
+        if name.len() == 2 && name.starts_with('k') && crate::excmds::ex_name(name).is_none() {
+            self.ex_more("k", &name[1..], false, range);
+            return true;
+        }
         let here = (cur, cur);
         let all = (0, last);
         match name {
             // tags (tagcmd.rs)
             n if crate::tagcmd::tag_name(n).is_some() => self.tag_command(n, arg, range.map(|(_, b)| b + 1)),
+            n if crate::dircmd::dir_name(n).is_some() => self.dir_command(n, arg),
             // the quickfix and location lists (qfcmd.rs)
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);
@@ -545,7 +589,7 @@ impl App {
                 }
                 self.show_doc(start);
             }
-            "pw" | "pwd" => self.say(self.root.display().to_string()),
+            "pw" | "pwd" => self.pwd(),
             "f" | "file" => {
                 let d = &self.docs[self.cur];
                 let c = d.ed.cursor();

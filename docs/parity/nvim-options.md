@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-208 ✓ do something in zett, 166 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+210 ✓ do something in zett, 164 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -38,8 +38,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `buftype` | bt | string | buf | `` | special type of buffer |
 | ◐ | `busy` |  | number | buf | `0` |  |
 | ◐ | `casemap` | cmp | string | global | `internal,keepascii` | specifies how case of letters is changed |
-| ◐ | `cdhome` | cdh | boolean | global | `true` | change directory to the home directory by ":cd" |
-| ◐ | `cdpath` | cd | string | global | `,,` | list of directories searched with ":cd" |
+| ✓ | `cdhome` | cdh | boolean | global | `true` | change directory to the home directory by ":cd" |
+| ✓ | `cdpath` | cd | string | global | `,,` | list of directories searched with ":cd" |
 | ✓ | `cedit` |  | string | global | `` | key used to open the command-line window |
 | ◐ | `channel` |  | number | buf | `0` |  |
 | ◐ | `charconvert` | ccv | string | global | `` | expression for character encoding conversion |

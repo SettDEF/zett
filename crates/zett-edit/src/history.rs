@@ -13,6 +13,12 @@ impl Editor {
     pub(crate) fn close(&mut self) {
         if let Some(c) = self.open.take() {
             if !c.edits.is_empty() {
+                let cur = self.undo.cur;
+                if std::mem::take(&mut self.join_undo) && cur != 0 && cur != self.undo.floor {
+                    // :undojoin: one step with the change before
+                    self.undo.nodes[cur].change.edits.extend(c.edits);
+                    return;
+                }
                 self.undo.push(c);
                 // 'undolevels': -1 none, 0 one (as Vi), else that many
                 let levels = self.opt_num("undolevels", 1000);
@@ -43,6 +49,18 @@ impl Editor {
         }
         gone
     }
+    /// :undojoin: the next change is undone together with the last one. Not right after an undo
+    /// (Vim's E790), nor with nothing to join.
+    pub fn undo_join(&mut self) -> Result<(), &'static str> {
+        self.close();
+        let cur = self.undo.cur;
+        if self.undo.nodes[cur].redo.is_some() {
+            return Err("E790: undojoin is not allowed after undo");
+        }
+        self.join_undo = cur != 0 && cur != self.undo.floor;
+        Ok(())
+    }
+
     pub(crate) fn undo_once(&mut self) {
         self.close();
         let n = self.undo.cur;

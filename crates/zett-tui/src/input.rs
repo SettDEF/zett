@@ -19,6 +19,26 @@ impl App {
             return self.travel_key(k);
         }
         if self.cmdline.is_some() {
+            // :cmap: the line's keys through its mappings first
+            if self.noremap == 0 && self.engine.has_maps("c") {
+                let tok = token(&k);
+                if !tok.is_empty() {
+                    let mut seq = std::mem::take(&mut self.keyseq);
+                    seq.push(tok);
+                    match self.with_lua(|e| e.feed("c", &seq)) {
+                        Feed::None => {
+                            self.menu.clear();
+                            for t in seq {
+                                for k in zett_edit::keys::parse(&t) {
+                                    self.cmdline_key(key_event(&k));
+                                }
+                            }
+                        }
+                        feed => self.after_feed(feed, seq),
+                    }
+                    return;
+                }
+            }
             return self.cmdline_key(k);
         }
         if self.panel_key(k) {
@@ -117,7 +137,9 @@ impl App {
             }
             let mut seq = std::mem::take(&mut self.keyseq);
             seq.push(tok);
-            let feed = if self.noremap > 0 { Feed::None } else { self.with_lua(|e| e.feed("n", &seq)) };
+            // after an operator (d c y …) the keys are its motion: :omap's mappings, not :nmap's
+            let km = if self.docs[self.cur].ed.op_pending() { "o" } else { "n" };
+            let feed = if self.noremap > 0 { Feed::None } else { self.with_lua(|e| e.feed(km, &seq)) };
             return self.after_feed(feed, seq);
         }
         // the completion popup takes its keys first

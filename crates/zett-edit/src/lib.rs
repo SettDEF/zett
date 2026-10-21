@@ -132,6 +132,8 @@ pub struct Editor {
     vim: crate::vim::VimState,
     /// an agent's suggestions, not yet taken (suggest.rs)
     pending: suggest::Pending,
+    /// :undojoin: the next change goes into the last undo step
+    join_undo: bool,
     /// textops.rs: where M-q wraps, M-@ in a row, M-/ in a row
     fill_column: usize,
     last_cmd_was_mark_word: bool,
@@ -174,11 +176,17 @@ impl Editor {
             view: outline::View::default(),
             vim: crate::vim::VimState::default(),
             pending: suggest::Pending::default(),
+            join_undo: false,
         }
     }
 
     pub fn from_str(s: &str) -> Self {
         Self::new(Buffer::from_str(s))
+    }
+
+    /// An operator waits for its motion (d, c, y … typed, not yet i/a): :omap's keys apply.
+    pub fn op_pending(&self) -> bool {
+        self.op.is_some() && self.prefix.is_none()
     }
 
     pub fn mode(&self) -> Mode {

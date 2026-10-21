@@ -10,8 +10,11 @@ const NAMES: &[(&str, &str)] = &[
     ("vnoremap", "vn"), ("xnoremap", "xn"), ("inoremap", "ino"), ("unmap", "unm"), ("nunmap", "nun"), ("vunmap", "vu"),
     ("xunmap", "xu"), ("iunmap", "iu"), ("mapclear", "mapc"), ("nmapclear", "nmapc"), ("vmapclear", "vmapc"), ("xmapclear", "xmapc"),
     ("imapclear", "imapc"),
+    ("cmap", "cm"), ("cnoremap", "cno"), ("cunmap", "cu"), ("cmapclear", "cmapc"),
+    ("omap", "om"), ("onoremap", "ono"), ("ounmap", "ou"), ("omapclear", "omapc"),
     ("abbreviate", "ab"), ("iabbrev", "ia"), ("noreabbrev", "norea"), ("inoreabbrev", "inorea"), ("unabbreviate", "una"),
     ("iunabbrev", "iuna"), ("abclear", "abc"), ("iabclear", "iabc"),
+    ("cabbrev", "ca"), ("cnoreabbrev", "cnorea"), ("cunabbrev", "cuna"), ("cabclear", "cabc"),
     ("command", "com"), ("delcommand", "delc"), ("comclear", "comc"),
     ("autocmd", "au"), ("augroup", "aug"), ("doautocmd", "do"), ("doautoall", "doautoa"),
     ("menu", "me"), ("amenu", "am"), ("nmenu", "nme"), ("vmenu", "vme"), ("xmenu", "xme"), ("smenu", "sme"), ("omenu", "ome"),
@@ -67,14 +70,18 @@ impl App {
     pub(crate) fn map_command(&mut self, name: &str, arg: &str, bang: bool) {
         let Some(cmd) = map_name(name) else { return };
         match cmd {
-            "map" | "nmap" | "vmap" | "xmap" | "imap" | "noremap" | "nnoremap" | "vnoremap" | "xnoremap" | "inoremap" => {
+            "map" | "nmap" | "vmap" | "xmap" | "imap" | "noremap" | "nnoremap" | "vnoremap" | "xnoremap" | "inoremap" | "cmap" | "cnoremap" | "omap"
+            | "onoremap" => {
                 let remap = !cmd.contains("noremap");
+                // c: the : line (and prompts), o: after an operator, before its motion
                 let modes: &[&str] = match cmd.chars().next().unwrap() {
                     'n' if cmd != "noremap" => &["n"],
                     'v' | 'x' => &["v"],
                     'i' => &["i"],
-                    _ if bang => &["i"],
-                    _ => &["n", "v"],
+                    'c' => &["c"],
+                    'o' => &["o"],
+                    _ if bang => &["i", "c"],
+                    _ => &["n", "v", "o"],
                 };
                 // <buffer> <silent> <nowait> <unique> <special> <script> <expr> in front
                 let mut rest = arg.trim();
@@ -101,8 +108,16 @@ impl App {
                     }
                 }
             }
-            "unmap" | "nunmap" | "vunmap" | "xunmap" | "iunmap" => {
-                let modes: &[&str] = match cmd { "nunmap" => &["n"], "vunmap" | "xunmap" => &["v"], "iunmap" => &["i"], _ if bang => &["i"], _ => &["n", "v"] };
+            "unmap" | "nunmap" | "vunmap" | "xunmap" | "iunmap" | "cunmap" | "ounmap" => {
+                let modes: &[&str] = match cmd {
+                    "nunmap" => &["n"],
+                    "vunmap" | "xunmap" => &["v"],
+                    "iunmap" => &["i"],
+                    "cunmap" => &["c"],
+                    "ounmap" => &["o"],
+                    _ if bang => &["i", "c"],
+                    _ => &["n", "v", "o"],
+                };
                 let lhs = arg.trim().trim_start_matches("<buffer>").trim();
                 let mut any = false;
                 for m in modes {
@@ -112,33 +127,65 @@ impl App {
                     self.say("E31: No such mapping");
                 }
             }
-            "mapclear" | "nmapclear" | "vmapclear" | "xmapclear" | "imapclear" => {
-                let modes: &[&str] = match cmd { "nmapclear" => &["n"], "vmapclear" | "xmapclear" => &["v"], "imapclear" => &["i"], _ if bang => &["i"], _ => &["n", "v"] };
+            "mapclear" | "nmapclear" | "vmapclear" | "xmapclear" | "imapclear" | "cmapclear" | "omapclear" => {
+                let modes: &[&str] = match cmd {
+                    "nmapclear" => &["n"],
+                    "vmapclear" | "xmapclear" => &["v"],
+                    "imapclear" => &["i"],
+                    "cmapclear" => &["c"],
+                    "omapclear" => &["o"],
+                    _ if bang => &["i", "c"],
+                    _ => &["n", "v", "o"],
+                };
                 for m in modes {
                     self.engine.clear_maps(m);
                 }
             }
-            "abbreviate" | "iabbrev" | "noreabbrev" | "inoreabbrev" => {
+            "abbreviate" | "iabbrev" | "noreabbrev" | "inoreabbrev" | "cabbrev" | "cnoreabbrev" => {
+                // :ab for both, :iab for insert, :cab for the : line
+                let (ins, cmdl) = (!cmd.starts_with('c'), !cmd.starts_with('i'));
                 let t = arg.trim().trim_start_matches("<buffer>").trim();
                 match t.split_once(char::is_whitespace) {
                     Some((lhs, rhs)) => {
-                        self.abbrevs.retain(|(l, _)| l != lhs);
-                        self.abbrevs.push((lhs.to_string(), rhs.trim().to_string()));
+                        for (on, list) in [(ins, &mut self.abbrevs), (cmdl, &mut self.cabbrevs)] {
+                            if on {
+                                list.retain(|(l, _)| l != lhs);
+                                list.push((lhs.to_string(), rhs.trim().to_string()));
+                            }
+                        }
                     }
                     None => {
-                        let rows = self.abbrevs.iter().filter(|(l, _)| t.is_empty() || l.starts_with(t)).map(|(l, r)| (format!("i  {l}"), r.clone())).collect();
+                        let mut rows: Vec<(String, String)> = Vec::new();
+                        for (on, m, list) in [(ins, "i", &self.abbrevs), (cmdl, "c", &self.cabbrevs)] {
+                            if on {
+                                rows.extend(list.iter().filter(|(l, _)| t.is_empty() || l.starts_with(t)).map(|(l, r)| (format!("{m}  {l}"), r.clone())));
+                            }
+                        }
                         self.popup = Some(Popup::Help("abbreviations".into(), rows));
                     }
                 }
             }
-            "unabbreviate" | "iunabbrev" => {
-                let n = self.abbrevs.len();
-                self.abbrevs.retain(|(l, _)| l != arg.trim());
-                if self.abbrevs.len() == n {
+            "unabbreviate" | "iunabbrev" | "cunabbrev" => {
+                let (ins, cmdl) = (!cmd.starts_with('c'), !cmd.starts_with('i'));
+                let n = self.abbrevs.len() + self.cabbrevs.len();
+                if ins {
+                    self.abbrevs.retain(|(l, _)| l != arg.trim());
+                }
+                if cmdl {
+                    self.cabbrevs.retain(|(l, _)| l != arg.trim());
+                }
+                if self.abbrevs.len() + self.cabbrevs.len() == n {
                     self.say("E24: No such abbreviation");
                 }
             }
-            "abclear" | "iabclear" => self.abbrevs.clear(),
+            "abclear" | "iabclear" | "cabclear" => {
+                if cmd != "cabclear" {
+                    self.abbrevs.clear();
+                }
+                if cmd != "iabclear" {
+                    self.cabbrevs.clear();
+                }
+            }
             "command" => self.user_command(arg, bang),
             "delcommand" => {
                 if self.user_cmds.remove(arg.trim()).is_none() {
@@ -338,6 +385,57 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    fn typed(app: &mut crate::App, keys: &str) {
+        for k in zett_edit::keys::parse(keys) {
+            app.key(crate::input::key_event(&k));
+        }
+    }
+
+    fn app_with(text: &str) -> crate::App {
+        let mut app = crate::App::new(Vec::new());
+        let d = &mut app.docs[app.cur];
+        d.ed = zett_edit::Editor::from_str(text);
+        app
+    }
+
+    #[test]
+    fn the_command_line_has_its_maps_and_abbreviations() {
+        let mut app = app_with("x\n");
+        app.command("cnoremap kk abc");
+        typed(&mut app, ":xkk");
+        assert_eq!(app.cmdline.as_deref(), Some("xabc"), ":cnoremap");
+        typed(&mut app, "<Esc>");
+        app.command("cabbrev Wq wq");
+        typed(&mut app, ":Wq ");
+        assert_eq!(app.cmdline.as_deref(), Some("wq "), ":cabbrev before a space");
+        typed(&mut app, "<Esc>");
+        app.command("iabbrev teh the");
+        typed(&mut app, ":teh ");
+        assert_eq!(app.cmdline.as_deref(), Some("teh "), ":iabbrev is insert mode's only");
+        typed(&mut app, "<Esc>");
+        app.command("cunmap kk");
+        typed(&mut app, ":kk");
+        assert_eq!(app.cmdline.as_deref(), Some("kk"), ":cunmap");
+    }
+
+    #[test]
+    fn operator_pending_keys_have_their_maps() {
+        let mut app = app_with("one two three\n");
+        app.command("onoremap L $");
+        typed(&mut app, "dL");
+        assert_eq!(app.docs[app.cur].ed.buf.line(0).trim_end(), "", ":onoremap L $: dL deletes to the end");
+        // plain :noremap is Normal, Visual and Operator-pending
+        let mut app = app_with("one two three\n");
+        app.command("noremap Q $");
+        typed(&mut app, "dQ");
+        assert_eq!(app.docs[app.cur].ed.buf.line(0).trim_end(), "", ":noremap reaches operator-pending");
+        // and :nnoremap does not
+        let mut app = app_with("one two\n");
+        app.command("nnoremap Q $");
+        typed(&mut app, "dw");
+        assert_eq!(app.docs[app.cur].ed.buf.line(0).trim_end(), "two");
+    }
+
     #[test]
     fn names() {
         assert_eq!(super::map_name("nn"), Some("nnoremap"));

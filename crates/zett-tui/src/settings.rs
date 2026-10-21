@@ -80,7 +80,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "breakat", "breakindentopt",
     "wildmenu", "wildmode", "wildignore", "wildignorecase", "wildoptions", "fileignorecase", "suffixes",
     "keywordprg",
-    "tags", "tagcase", "taglength", "tagrelative", "tagstack",
+    "tags", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath",
     "makeprg", "errorformat", "grepprg", "grepformat", "shell", "shellcmdflag", "shellquote", "shellxquote", "makeencoding",
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",
@@ -92,7 +92,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
 /// Options Neovim's terminal UI ignores (for GUIs, for Windows, or kept only for old scripts): zett
 /// ignores them the same way (decided 2026-10-21) and the settings page says so.
 pub(crate) const LIKE_NVIM_TUI: &[&str] = &[
-    "guifont", "guifontwide", "guioptions", "guitablabel", "guitabtooltip", "linespace", "browsedir", "winaltkeys", "langmenu",
+    "cdhome", "guifont", "guifontwide", "guioptions", "guitablabel", "guitabtooltip", "linespace", "browsedir", "winaltkeys", "langmenu",
     "menuitems", "mousehide", "mouseshape", "opendevice", "shellslash", "completeslash", "termencoding", "ttyfast", "compatible",
     "edcompatible", "insertmode", "maxcombine", "encoding",
 ];

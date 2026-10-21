@@ -18,8 +18,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:>` | `:>` | shift lines one 'shiftwidth' right |
 | ✓ | `:@` | `:@` | execute contents of a register |
 | ✓ | `:@@` | `:@@` | repeat the previous ":@" |
-| · | `:2match` | `:2mat[ch]` | define a second match to highlight |
-| · | `:3match` | `:3mat[ch]` | define a third match to highlight |
+| ✓ | `:2match` | `:2mat[ch]` | define a second match to highlight |
+| ✓ | `:3match` | `:3mat[ch]` | define a third match to highlight |
 | ✓ | `:Next` | `:N[ext]` | go to previous file in the argument list |
 | · | `:append` | `:a[ppend]` | append text |
 | ✓ | `:abbreviate` | `:ab[breviate]` | enter abbreviation |
@@ -64,11 +64,11 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:buffers` | `:buffers` | list all files in the buffer list |
 | ✓ | `:bunload` | `:bun[load]` | unload a specific buffer |
 | ✓ | `:bwipeout` | `:bw[ipeout]` | really delete a buffer |
-| ✓ | `:change` | `:c[hange]` | replace a line or series of lines |
+| · | `:change` | `:c[hange]` | replace a line or series of lines |
 | ✓ | `:cNext` | `:cN[ext]` | go to previous error |
 | ✓ | `:cNfile` | `:cNf[ile]` | go to last error in previous file |
-| · | `:cabbrev` | `:ca[bbrev]` | like ":abbreviate" but for Command-line mode |
-| · | `:cabclear` | `:cabc[lear]` | clear all abbreviations for Command-line mode |
+| ✓ | `:cabbrev` | `:ca[bbrev]` | like ":abbreviate" but for Command-line mode |
+| ✓ | `:cabclear` | `:cabc[lear]` | clear all abbreviations for Command-line mode |
 | ✓ | `:cabove` | `:cabo[ve]` | go to error above current line |
 | ✓ | `:caddbuffer` | `:cad[dbuffer]` | add errors from buffer |
 | ✓ | `:caddexpr` | `:cadde[xpr]` | add errors from expr |
@@ -82,7 +82,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:cbuffer` | `:cb[uffer]` | parse error messages and jump to first error |
 | ✓ | `:cc` | `:cc` | go to specific error |
 | ✓ | `:cclose` | `:ccl[ose]` | close quickfix window |
-| · | `:cd` | `:cd` | change directory |
+| ✓ | `:cd` | `:cd` | change directory |
 | ✓ | `:cdo` | `:cdo` | execute command in each valid error list entry |
 | ✓ | `:cfdo` | `:cfd[o]` | execute command in each file in error list |
 | ✓ | `:center` | `:ce[nter]` | format lines at the center |
@@ -93,7 +93,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:cgetexpr` | `:cgete[xpr]` | get errors from expr |
 | ✓ | `:cgetfile` | `:cg[etfile]` | read file with error messages |
 | ✓ | `:changes` | `:changes` | print the change list |
-| · | `:chdir` | `:chd[ir]` | change directory |
+| ✓ | `:chdir` | `:chd[ir]` | change directory |
 | ✓ | `:checkhealth` | `:che[ckhealth]` | run healthchecks |
 | · | `:checkpath` | `:checkp[ath]` | list included files |
 | ✓ | `:checktime` | `:checkt[ime]` | check timestamp of loaded buffers |
@@ -102,14 +102,14 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:clearjumps` | `:cle[arjumps]` | clear the jump list |
 | ✓ | `:clist` | `:cl[ist]` | list all errors |
 | ✓ | `:close` | `:clo[se]` | close current window |
-| · | `:cmap` | `:cm[ap]` | like ":map" but for Command-line mode |
-| · | `:cmapclear` | `:cmapc[lear]` | clear all mappings for Command-line mode |
+| ✓ | `:cmap` | `:cm[ap]` | like ":map" but for Command-line mode |
+| ✓ | `:cmapclear` | `:cmapc[lear]` | clear all mappings for Command-line mode |
 | ✓ | `:cmenu` | `:cme[nu]` | add menu for Command-line mode |
 | ✓ | `:cnext` | `:cn[ext]` | go to next error |
 | ✓ | `:cnewer` | `:cnew[er]` | go to newer error list |
 | ✓ | `:cnfile` | `:cnf[ile]` | go to first error in next file |
-| · | `:cnoremap` | `:cno[remap]` | like ":noremap" but for Command-line mode |
-| · | `:cnoreabbrev` | `:cnorea[bbrev]` | like ":noreabbrev" but for Command-line mode |
+| ✓ | `:cnoremap` | `:cno[remap]` | like ":noremap" but for Command-line mode |
+| ✓ | `:cnoreabbrev` | `:cnorea[bbrev]` | like ":noreabbrev" but for Command-line mode |
 | ✓ | `:cnoremenu` | `:cnoreme[nu]` | like ":noremenu" but for Command-line mode |
 | ✓ | `:copy` | `:co[py]` | copy lines |
 | ✓ | `:colder` | `:col[der]` | go to older error list |
@@ -125,8 +125,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:cpfile` | `:cpf[ile]` | go to last error in previous file |
 | ✓ | `:cquit` | `:cq[uit]` | quit Vim with an error code |
 | ✓ | `:crewind` | `:cr[ewind]` | go to the specified error, default first one |
-| · | `:cunmap` | `:cu[nmap]` | like ":unmap" but for Command-line mode |
-| · | `:cunabbrev` | `:cuna[bbrev]` | like ":unabbrev" but for Command-line mode |
+| ✓ | `:cunmap` | `:cu[nmap]` | like ":unmap" but for Command-line mode |
+| ✓ | `:cunabbrev` | `:cuna[bbrev]` | like ":unabbrev" but for Command-line mode |
 | ✓ | `:cunmenu` | `:cunme[nu]` | remove menu for Command-line mode |
 | ✓ | `:cwindow` | `:cw[indow]` | open or close quickfix window |
 | ✓ | `:delete` | `:d[elete]` | delete lines |
@@ -147,7 +147,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:digraphs` | `:dig[raphs]` | show or enter digraphs |
 | ✓ | `:display` | `:di[splay]` | display registers |
 | · | `:djump` | `:dj[ump]` | jump to #define |
-| · | `:dl` | `:dl` | short for \|:delete\| with the 'l' flag |
+| ✓ | `:dl` | `:dl` | short for \|:delete\| with the 'l' flag |
 | · | `:dlist` | `:dli[st]` | list #defines |
 | ✓ | `:doautocmd` | `:do[autocmd]` | apply autocommands to current buffer |
 | ✓ | `:doautoall` | `:doautoa[ll]` | apply autocommands for all loaded buffers |
@@ -193,7 +193,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:for` | `:for` | for loop |
 | · | `:function` | `:fu[nction]` | define a user function |
 | ✓ | `:global` | `:g[lobal]` | execute commands for matching lines |
-| · | `:goto` | `:go[to]` | go to byte in the buffer |
+| ✓ | `:goto` | `:go[to]` | go to byte in the buffer |
 | ✓ | `:grep` | `:gr[ep]` | run 'grepprg' and jump to first match |
 | ✓ | `:grepadd` | `:grepa[dd]` | like :grep, but append to current list |
 | · | `:gui` | `:gu[i]` | start the GUI |
@@ -219,7 +219,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:inoreabbrev` | `:inorea[bbrev]` | like ":noreabbrev" but for Insert mode |
 | ✓ | `:inoremenu` | `:inoreme[nu]` | like ":noremenu" but for Insert mode |
 | ✓ | `:intro` | `:int[ro]` | print the introductory message |
-| · | `:iput` | `:ip[ut]` | like \|:put\|, but adjust the indent to the |
+| ✓ | `:iput` | `:ip[ut]` | like \|:put\|, but adjust the indent to the |
 | · | `:isearch` | `:is[earch]` | list one line where identifier matches |
 | · | `:isplit` | `:isp[lit]` | split window and jump to definition of |
 | ✓ | `:iunmap` | `:iu[nmap]` | like ":unmap" but for Insert mode |
@@ -247,8 +247,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lbelow` | `:lbel[ow]` | go to location below current line |
 | ✓ | `:lbottom` | `:lbo[ttom]` | scroll to the bottom of the location window |
 | ✓ | `:lbuffer` | `:lb[uffer]` | parse locations and jump to first location |
-| · | `:lcd` | `:lc[d]` | change directory locally |
-| · | `:lchdir` | `:lch[dir]` | change directory locally |
+| ✓ | `:lcd` | `:lc[d]` | change directory locally |
+| ✓ | `:lchdir` | `:lch[dir]` | change directory locally |
 | ✓ | `:lclose` | `:lcl[ose]` | close location window |
 | ✓ | `:ldo` | `:ld[o]` | execute command in valid location list entries |
 | ✓ | `:lfdo` | `:lfd[o]` | execute command in each file in location list |
@@ -328,14 +328,14 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:nunmap` | `:nun[map]` | like ":unmap" but for Normal mode |
 | ✓ | `:nunmenu` | `:nunme[nu]` | remove menu for Normal mode |
 | ✓ | `:oldfiles` | `:ol[dfiles]` | list files that have marks in the \|shada\| file |
-| · | `:omap` | `:om[ap]` | like ":map" but for Operator-pending mode |
-| · | `:omapclear` | `:omapc[lear]` | remove all mappings for Operator-pending mode |
+| ✓ | `:omap` | `:om[ap]` | like ":map" but for Operator-pending mode |
+| ✓ | `:omapclear` | `:omapc[lear]` | remove all mappings for Operator-pending mode |
 | ✓ | `:omenu` | `:ome[nu]` | add menu for Operator-pending mode |
 | ✓ | `:only` | `:on[ly]` | close all windows except the current one |
-| · | `:onoremap` | `:ono[remap]` | like ":noremap" but for Operator-pending mode |
+| ✓ | `:onoremap` | `:ono[remap]` | like ":noremap" but for Operator-pending mode |
 | ✓ | `:onoremenu` | `:onoreme[nu]` | like ":noremenu" but for Operator-pending mode |
 | ✓ | `:options` | `:opt[ions]` | open the options-window |
-| · | `:ounmap` | `:ou[nmap]` | like ":unmap" but for Operator-pending mode |
+| ✓ | `:ounmap` | `:ou[nmap]` | like ":unmap" but for Operator-pending mode |
 | ✓ | `:ounmenu` | `:ounme[nu]` | remove menu for Operator-pending mode |
 | · | `:packadd` | `:pa[ckadd]` | add a plugin from 'packpath' |
 | · | `:packloadall` | `:packl[oadall]` | load all packages under 'packpath' |
@@ -428,12 +428,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:sleep` | `:sl[eep]` | do nothing for a few seconds |
 | ✓ | `:sleep!` | `:sl[eep]!` | do nothing for a few seconds, without the |
 | ✓ | `:slast` | `:sla[st]` | split window and go to last file in the |
-| · | `:smagic` | `:sm[agic]` | :substitute with 'magic' |
+| ✓ | `:smagic` | `:sm[agic]` | :substitute with 'magic' |
 | · | `:smap` | `:smap` | like ":map" but for Select mode |
 | · | `:smapclear` | `:smapc[lear]` | remove all mappings for Select mode |
 | ✓ | `:smenu` | `:sme[nu]` | add menu for Select mode |
 | ✓ | `:snext` | `:sn[ext]` | split window and go to next file in the |
-| · | `:snomagic` | `:sno[magic]` | :substitute with 'nomagic' |
+| ✓ | `:snomagic` | `:sno[magic]` | :substitute with 'nomagic' |
 | · | `:snoremap` | `:snor[emap]` | like ":noremap" but for Select mode |
 | ✓ | `:snoremenu` | `:snoreme[nu]` | like ":noremenu" but for Select mode |
 | ✓ | `:sort` | `:sor[t]` | sort lines |
@@ -484,8 +484,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:tab` | `:tab` | create new tab when opening new window |
 | ✓ | `:tag` | `:ta[g]` | jump to tag |
 | ✓ | `:tags` | `:tags` | show the contents of the tag stack |
-| · | `:tcd` | `:tc[d]` | change directory for tabpage |
-| · | `:tchdir` | `:tch[dir]` | change directory for tabpage |
+| ✓ | `:tcd` | `:tc[d]` | change directory for tabpage |
+| ✓ | `:tchdir` | `:tch[dir]` | change directory for tabpage |
 | ✓ | `:terminal` | `:te[rminal]` | open a terminal buffer |
 | ✓ | `:tfirst` | `:tf[irst]` | jump to first matching tag |
 | · | `:throw` | `:th[row]` | throw an exception |
@@ -508,7 +508,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:tunmap` | `:tunma[p]` | like ":unmap" but for \|Terminal-mode\| |
 | · | `:tunmenu` | `:tu[nmenu]` | remove menu tooltip |
 | ✓ | `:undo` | `:u[ndo]` | undo last change(s) |
-| · | `:undojoin` | `:undoj[oin]` | join next change with previous undo block |
+| ✓ | `:undojoin` | `:undoj[oin]` | join next change with previous undo block |
 | ✓ | `:undolist` | `:undol[ist]` | list leafs of the undo tree |
 | ✓ | `:unabbreviate` | `:una[bbreviate]` | remove abbreviation |
 | ✓ | `:unhide` | `:unh[ide]` | open a window for each loaded file in the |

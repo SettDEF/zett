@@ -89,6 +89,7 @@ impl App {
                 }
             }
             KeyCode::Enter => {
+                expand_abbrev(line, &self.cabbrevs);
                 let l = std::mem::take(line);
                 self.cmdline = None;
                 if self.prompt.take().is_some() {
@@ -118,6 +119,10 @@ impl App {
             KeyCode::Char('n') if k.modifiers.contains(KeyModifiers::CONTROL) => self.cmd_sel += 1,
             KeyCode::Char('p') if k.modifiers.contains(KeyModifiers::CONTROL) => self.cmd_sel = self.cmd_sel.saturating_sub(1),
             KeyCode::Char(c) => {
+                // :cabbrev: a word before a key that cannot be part of one
+                if !(c.is_alphanumeric() || c == '_') {
+                    expand_abbrev(line, &self.cabbrevs);
+                }
                 line.push(c);
                 self.cmd_sel = 0;
             }
@@ -225,13 +230,6 @@ impl App {
                 let list: Vec<String> = self.docs.iter().enumerate().map(|(i, d)| format!("{}{}{}", if i == self.cur { "%" } else { " " }, d.name, if d.dirty() { " [+]" } else { "" })).collect();
                 self.say(list.join("   "));
             }
-            "cd" if !arg.is_empty() => {
-                let p = PathBuf::from(arg);
-                if p.is_dir() {
-                    self.root = std::fs::canonicalize(&p).unwrap_or(p);
-                    self.say(format!("project: {}", self.root.display()));
-                }
-            }
             "lua" => match self.with_lua(|e| e.eval(arg)) {
                 Ok((out, fx)) => {
                     self.after_lua(fx);
@@ -314,4 +312,14 @@ fn cedit_is(cedit: &str, c: char) -> bool {
         s => s.strip_prefix("<C-").and_then(|r| r.strip_suffix('>')).and_then(|r| r.chars().next()).map(|x| x.to_ascii_lowercase()),
     };
     want == Some(c.to_ascii_lowercase())
+}
+
+/// The : line's last word as its abbreviation (:cabbrev), when it is one and stands alone.
+pub(crate) fn expand_abbrev(line: &mut String, abbrevs: &[(String, String)]) {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    let start = line.char_indices().rev().take_while(|(_, c)| word(*c)).last().map(|(i, _)| i);
+    let Some(start) = start else { return };
+    if let Some((_, rhs)) = abbrevs.iter().find(|(l, _)| *l == line[start..]) {
+        line.replace_range(start.., rhs);
+    }
 }
