@@ -4910,26 +4910,26 @@ plugin, not the core.
 
 ## vc
 
-- · `vc-add-working-tree` Create working tree DIRECTORY with same backing repository as this tree.
-- · `vc-annotate` Display the edit history of the current FILE using colors.
+- ✓ `vc-add-working-tree` Create working tree DIRECTORY with same backing repository as this tree.
+- ✓ `vc-annotate` Display the edit history of the current FILE using colors.
 - · `vc-apply-root-to-other-working-tree` Apply all local changes in this working tree to the tree under DIRECTORY.
 - · `vc-apply-to-other-working-tree` Apply VC fileset's local changes to working tree under DIRECTORY.
 - · `vc-auto-revert-mode` Toggle Auto-Revert mode in many buffers.
 - · `vc-change-backend` Make BACKEND the current version control system for FILE.
 - · `vc-cherry-pick` Copy the changes from a single revision REV to the current branch.
-- · `vc-create-branch` Make a branch called NAME in directory DIR.
-- · `vc-create-tag` Descending recursively from DIR, make a tag called NAME.
-- · `vc-delete-file` Delete file and mark it as such in the version control system.
+- ✓ `vc-create-branch` Make a branch called NAME in directory DIR.
+- ✓ `vc-create-tag` Descending recursively from DIR, make a tag called NAME.
+- ✓ `vc-delete-file` Delete file and mark it as such in the version control system.
 - · `vc-delete-revision` Delete revision REV from the revision history.
 - · `vc-delete-revisions-from-end` Delete revisions newer than REV.
-- · `vc-delete-working-tree` Delete working tree DIRECTORY with same backing repository as this tree.
-- · `vc-diff` Display diffs between file revisions.
+- ✓ `vc-delete-working-tree` Delete working tree DIRECTORY with same backing repository as this tree.
+- ✓ `vc-diff` Display diffs between file revisions.
 - · `vc-diff-incoming` Report changes to VC fileset that would be pulled from UPSTREAM-LOCATION.
-- · `vc-diff-mergebase` Report diffs between the merge base of REV1 and REV2 revisions.
+- ✓ `vc-diff-mergebase` Report diffs between the merge base of REV1 and REV2 revisions.
 - · `vc-diff-outgoing` Report changes to VC fileset that would be pushed to UPSTREAM-LOCATION.
-- · `vc-diff-outgoing-and-edited` Report combined diff of outgoing and uncommitted changes to VC fileset.
-- · `vc-diff-remote-unintegrated` Show remote fileset changes since merge base with UPSTREAM-LOCATION.
-- · `vc-diff-unintegrated` Report changes to VC fileset since the merge base with UPSTREAM-LOCATION.
+- ✓ `vc-diff-outgoing-and-edited` Report combined diff of outgoing and uncommitted changes to VC fileset.
+- ✓ `vc-diff-remote-unintegrated` Show remote fileset changes since merge base with UPSTREAM-LOCATION.
+- ✓ `vc-diff-unintegrated` Report changes to VC fileset since the merge base with UPSTREAM-LOCATION.
 - ✓ `vc-dir` Show the VC status for "interesting" files in and below DIR.
 - · `vc-dir-root` Run `vc-dir' in the repository root directory without prompt.
 - · `vc-ediff` Display diffs between file revisions using ediff.
@@ -4937,57 +4937,57 @@ plugin, not the core.
 - · `vc-find-conflicted-file` Visit the next conflicted file in the current project.
 - · `vc-find-file-hook` Refresh the VC state of the current buffer's file.
 - · `vc-git-grep` Run git grep, searching for REGEXP in FILES in directory DIR.
-- · `vc-ignore` Ignore FILE under the VCS of DIRECTORY.
+- ✓ `vc-ignore` Ignore FILE under the VCS of DIRECTORY.
 - · `vc-insert-headers` Insert headers into a file for use with a version control system.
 - · `vc-kill-other-working-tree-buffers` Kill buffers visiting versions of this file in other working trees.
-- · `vc-log-mergebase` Show a log of changes between the merge base of revisions REV1 and REV2.
-- · `vc-log-remote-unintegrated` Show remote log for VC fileset since merge base with UPSTREAM-LOCATION.
+- ✓ `vc-log-mergebase` Show a log of changes between the merge base of revisions REV1 and REV2.
+- ✓ `vc-log-remote-unintegrated` Show remote log for VC fileset since merge base with UPSTREAM-LOCATION.
 - · `vc-log-search` Search the VC log of changes for PATTERN and show log of matching changes.
-- · `vc-log-unintegrated` Show log for the VC fileset since the merge base with UPSTREAM-LOCATION.
-- · `vc-merge` Perform a version control merge operation.
+- ✓ `vc-log-unintegrated` Show log for the VC fileset since the merge base with UPSTREAM-LOCATION.
+- ✓ `vc-merge` Perform a version control merge operation.
 - · `vc-mode-line` Set `vc-mode' to display type of version control for FILE.
-- · `vc-move-working-tree` Relocate a working tree from FROM to TO, two directory file names.
-- · `vc-next-action` Do the next logical version control operation on the current fileset.
+- ✓ `vc-move-working-tree` Relocate a working tree from FROM to TO, two directory file names.
+- ✓ `vc-next-action` Do the next logical version control operation on the current fileset.
 - · `vc-prepare-patch` Compose an Email sending patches for REVISIONS to ADDRESSEE.
 - · `vc-print-change-log` Show in another window the VC change history of the current fileset.
-- · `vc-print-fileset-branch-log` Show log of VC changes on BRANCH, limited to the current fileset.
-- · `vc-print-log` Show in another window the VC change history of the current fileset.
-- · `vc-print-root-branch-log` Show root log of VC changes on BRANCH in another window.
+- ✓ `vc-print-fileset-branch-log` Show log of VC changes on BRANCH, limited to the current fileset.
+- ✓ `vc-print-log` Show in another window the VC change history of the current fileset.
+- ✓ `vc-print-root-branch-log` Show root log of VC changes on BRANCH in another window.
 - · `vc-print-root-change-log` Show in another window the VC change history of the whole tree.
-- · `vc-print-root-log` Show in another window VC change history of the current VC controlled tree.
+- ✓ `vc-print-root-log` Show in another window VC change history of the current VC controlled tree.
 - · `vc-pull` Update the current fileset or branch.
 - · `vc-pull-and-push` First pull, and then push the current branch.
-- · `vc-push` Push the current branch.
+- ✓ `vc-push` Push the current branch.
 - · `vc-refresh-state` Refresh the VC state of the current buffer's file.
 - ✓ `vc-region-history` Show the history of the region between FROM and TO.
-- · `vc-register` Register into a version control system.
-- · `vc-rename-file` Rename file OLD to NEW in both working tree and repository.
+- ✓ `vc-register` Register into a version control system.
+- ✓ `vc-rename-file` Rename file OLD to NEW in both working tree and repository.
 - · `vc-resolve-conflicts` Invoke ediff to resolve the conflicts.
 - · `vc-restore` Revert working copies of the selected fileset to their repository contents.
-- · `vc-retrieve-tag` For each file in or below DIR, retrieve their version identified by tag NAME.
-- · `vc-revert` Revert working copies of the selected fileset to their repository contents.
+- ✓ `vc-retrieve-tag` For each file in or below DIR, retrieve their version identified by tag NAME.
+- ✓ `vc-revert` Revert working copies of the selected fileset to their repository contents.
 - · `vc-revert-or-delete-revision` Undo the effects of revision REV.
 - · `vc-revert-revision` Make a commit undoing the effects of revision REV.
-- · `vc-revision-other-window` Visit revision REV of the current file in another window.
-- · `vc-root-diff` Display diffs between VC-controlled whole tree revisions.
+- ✓ `vc-revision-other-window` Visit revision REV of the current file in another window.
+- ✓ `vc-root-diff` Display diffs between VC-controlled whole tree revisions.
 - · `vc-root-diff-incoming` Report diff of all changes that would be pulled from UPSTREAM-LOCATION.
 - · `vc-root-diff-outgoing` Report diff of all changes that would be pushed to UPSTREAM-LOCATION.
-- · `vc-root-diff-outgoing-and-edited` Report combined diff of all outgoing and uncommitted changes.
-- · `vc-root-diff-remote-unintegrated` Report diff of remote changes since merge base with UPSTREAM-LOCATION.
-- · `vc-root-diff-unintegrated` Report diff of all changes since the merge base with UPSTREAM-LOCATION.
-- · `vc-root-log-incoming` Show log of changes that will be received with pull from UPSTREAM-LOCATION.
-- · `vc-root-log-outgoing` Show log of changes that will be sent with a push to UPSTREAM-LOCATION.
-- · `vc-root-log-remote-unintegrated` Show log of remote revisions since merge base with UPSTREAM-LOCATION.
-- · `vc-root-log-unintegrated` Show log of revisions since the merge base with UPSTREAM-LOCATION.
+- ✓ `vc-root-diff-outgoing-and-edited` Report combined diff of all outgoing and uncommitted changes.
+- ✓ `vc-root-diff-remote-unintegrated` Report diff of remote changes since merge base with UPSTREAM-LOCATION.
+- ✓ `vc-root-diff-unintegrated` Report diff of all changes since the merge base with UPSTREAM-LOCATION.
+- ✓ `vc-root-log-incoming` Show log of changes that will be received with pull from UPSTREAM-LOCATION.
+- ✓ `vc-root-log-outgoing` Show log of changes that will be sent with a push to UPSTREAM-LOCATION.
+- ✓ `vc-root-log-remote-unintegrated` Show log of remote revisions since merge base with UPSTREAM-LOCATION.
+- ✓ `vc-root-log-unintegrated` Show log of revisions since the merge base with UPSTREAM-LOCATION.
 - · `vc-root-version-diff` Report diffs between REV1 and REV2 revisions of the whole tree.
-- · `vc-switch-branch` Switch to the branch NAME in the directory DIR.
-- · `vc-switch-working-tree` Switch to the version of this file in working tree under DIRECTORY.
+- ✓ `vc-switch-branch` Switch to the branch NAME in the directory DIR.
+- ✓ `vc-switch-working-tree` Switch to the version of this file in working tree under DIRECTORY.
 - · `vc-uncommit-revisions-from-end` Delete revisions newer than REV without touching the working tree.
-- · `vc-update` Update the current fileset or branch.
+- ✓ `vc-update` Update the current fileset or branch.
 - · `vc-update-change-log` Find change log file and add entries from recent version control logs.
 - · `vc-version-diff` Report diffs between revisions REV1 and REV2 in the repository history.
 - · `vc-version-ediff` Show differences between REV1 and REV2 of FILES using ediff.
-- · `vc-working-tree-switch-project` Like \[project-switch-project] but limited to projects with the same backing repository.
+- ✓ `vc-working-tree-switch-project` Like \[project-switch-project] but limited to projects with the same backing repository.
 
 ## vera
 

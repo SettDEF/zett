@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-267 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
+307 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
 
 | | key | command |
 |---|---|---|
@@ -349,52 +349,52 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x t u` | `tab-undo` |
 | ✓ | `C-x u` | `undo` |
 | · | `C-x v !` | `vc-edit-next-command` |
-| · | `C-x v +` | `vc-update` |
-| · | `C-x v =` | `vc-diff` |
-| · | `C-x v @` | `vc-revert` |
-| · | `C-x v D` | `vc-root-diff` |
-| · | `C-x v E =` | `vc-diff-outgoing-and-edited` |
-| · | `C-x v E D` | `vc-root-diff-outgoing-and-edited` |
-| · | `C-x v G` | `vc-ignore` |
-| · | `C-x v I` | `vc-root-log-incoming` |
-| · | `C-x v L` | `vc-print-root-log` |
-| · | `C-x v M D` | `vc-diff-mergebase` |
-| · | `C-x v M L` | `vc-log-mergebase` |
-| · | `C-x v O` | `vc-root-log-outgoing` |
-| · | `C-x v P` | `vc-push` |
-| · | `C-x v R` | `vc-rename-file` |
-| · | `C-x v T =` | `vc-diff-unintegrated` |
-| · | `C-x v T D` | `vc-root-diff-unintegrated` |
-| · | `C-x v T L` | `vc-root-log-unintegrated` |
-| · | `C-x v T R =` | `vc-diff-remote-unintegrated` |
-| · | `C-x v T R D` | `vc-root-diff-remote-unintegrated` |
-| · | `C-x v T R L` | `vc-root-log-remote-unintegrated` |
-| · | `C-x v T R l` | `vc-log-remote-unintegrated` |
-| · | `C-x v T l` | `vc-log-unintegrated` |
+| ✓ | `C-x v +` | `vc-update` |
+| ✓ | `C-x v =` | `vc-diff` |
+| ✓ | `C-x v @` | `vc-revert` |
+| ✓ | `C-x v D` | `vc-root-diff` |
+| ✓ | `C-x v E =` | `vc-diff-outgoing-and-edited` |
+| ✓ | `C-x v E D` | `vc-root-diff-outgoing-and-edited` |
+| ✓ | `C-x v G` | `vc-ignore` |
+| ✓ | `C-x v I` | `vc-root-log-incoming` |
+| ✓ | `C-x v L` | `vc-print-root-log` |
+| ✓ | `C-x v M D` | `vc-diff-mergebase` |
+| ✓ | `C-x v M L` | `vc-log-mergebase` |
+| ✓ | `C-x v O` | `vc-root-log-outgoing` |
+| ✓ | `C-x v P` | `vc-push` |
+| ✓ | `C-x v R` | `vc-rename-file` |
+| ✓ | `C-x v T =` | `vc-diff-unintegrated` |
+| ✓ | `C-x v T D` | `vc-root-diff-unintegrated` |
+| ✓ | `C-x v T L` | `vc-root-log-unintegrated` |
+| ✓ | `C-x v T R =` | `vc-diff-remote-unintegrated` |
+| ✓ | `C-x v T R D` | `vc-root-diff-remote-unintegrated` |
+| ✓ | `C-x v T R L` | `vc-root-log-remote-unintegrated` |
+| ✓ | `C-x v T R l` | `vc-log-remote-unintegrated` |
+| ✓ | `C-x v T l` | `vc-log-unintegrated` |
 | · | `C-x v a` | `vc-update-change-log` |
-| · | `C-x v b L` | `vc-print-root-branch-log` |
-| · | `C-x v b c` | `vc-create-branch` |
-| · | `C-x v b l` | `vc-print-fileset-branch-log` |
-| · | `C-x v b s` | `vc-switch-branch` |
+| ✓ | `C-x v b L` | `vc-print-root-branch-log` |
+| ✓ | `C-x v b c` | `vc-create-branch` |
+| ✓ | `C-x v b l` | `vc-print-fileset-branch-log` |
+| ✓ | `C-x v b s` | `vc-switch-branch` |
 | ✓ | `C-x v d` | `vc-dir` |
-| · | `C-x v g` | `vc-annotate` |
+| ✓ | `C-x v g` | `vc-annotate` |
 | ✓ | `C-x v h` | `vc-region-history` |
-| · | `C-x v i` | `vc-register` |
-| · | `C-x v l` | `vc-print-log` |
-| · | `C-x v m` | `vc-merge` |
-| · | `C-x v r` | `vc-retrieve-tag` |
-| · | `C-x v s` | `vc-create-tag` |
-| · | `C-x v v` | `vc-next-action` |
+| ✓ | `C-x v i` | `vc-register` |
+| ✓ | `C-x v l` | `vc-print-log` |
+| ✓ | `C-x v m` | `vc-merge` |
+| ✓ | `C-x v r` | `vc-retrieve-tag` |
+| ✓ | `C-x v s` | `vc-create-tag` |
+| ✓ | `C-x v v` | `vc-next-action` |
 | · | `C-x v w A` | `vc-apply-root-to-other-working-tree` |
-| · | `C-x v w R` | `vc-move-working-tree` |
+| ✓ | `C-x v w R` | `vc-move-working-tree` |
 | · | `C-x v w a` | `vc-apply-to-other-working-tree` |
-| · | `C-x v w c` | `vc-add-working-tree` |
+| ✓ | `C-x v w c` | `vc-add-working-tree` |
 | · | `C-x v w k` | `vc-kill-other-working-tree-buffers` |
-| · | `C-x v w s` | `vc-working-tree-switch-project` |
-| · | `C-x v w w` | `vc-switch-working-tree` |
-| · | `C-x v w x` | `vc-delete-working-tree` |
-| · | `C-x v x` | `vc-delete-file` |
-| · | `C-x v ~` | `vc-revision-other-window` |
+| ✓ | `C-x v w s` | `vc-working-tree-switch-project` |
+| ✓ | `C-x v w w` | `vc-switch-working-tree` |
+| ✓ | `C-x v w x` | `vc-delete-working-tree` |
+| ✓ | `C-x v x` | `vc-delete-file` |
+| ✓ | `C-x v ~` | `vc-revision-other-window` |
 | · | `C-x w -` | `fit-window-to-buffer` |
 | · | `C-x w 0` | `delete-windows-on` |
 | ✓ | `C-x w 2` | `split-root-window-below` |
