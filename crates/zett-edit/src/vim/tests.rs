@@ -376,3 +376,48 @@ mod clipboard {
         assert_eq!(*FAKE.lock().unwrap(), "from outside\n", "without the option it stays out of it");
     }
 }
+
+mod foldmethod {
+    use crate::Editor;
+
+    fn ed(text: &str, opts: &[(&str, &str)]) -> Editor {
+        let mut e = Editor::from_str(text);
+        for (k, v) in opts {
+            e.set_opt(k, v);
+        }
+        e.refresh_view();
+        e
+    }
+
+    #[test]
+    fn indent_and_marker_folds_with_their_options() {
+        let code = "fn a() {\n    x\n    if y {\n        z\n    }\n}\nfn b() {}\n";
+        let e = ed(code, &[("foldmethod", "indent"), ("shiftwidth", "4")]);
+        assert!(e.is_hidden(2) && e.is_hidden(4), "level 0: the indented lines are folded under their first");
+        assert!(!e.is_hidden(1) && !e.is_hidden(0) && !e.is_hidden(5) && !e.is_hidden(6));
+        let e = ed(code, &[("foldmethod", "indent"), ("shiftwidth", "4"), ("foldlevel", "1")]);
+        assert!(!e.is_hidden(2) && !e.is_hidden(4), "foldlevel 1: only the deeper fold closes, and it is one line (foldminlines)");
+        let mut e = ed(code, &[("foldmethod", "indent"), ("shiftwidth", "4")]);
+        e.feed("jzo");
+        e.refresh_view();
+        assert!(!e.is_hidden(2), "zo opens a fold worked out from the text");
+        e.feed("Gonew<Esc>");
+        e.refresh_view();
+        assert!(!e.is_hidden(2), "an edit elsewhere keeps it open");
+        e.feed("zf");
+        assert!(e.take_requests().iter().any(|r| matches!(r, crate::vim::Request::Message(m) if m.starts_with("E350"))));
+        let m = "a {{{\nb\nc }}}\nd {{{1\ne\nf {{{2\ng\n";
+        let e = ed(m, &[("foldmethod", "marker")]);
+        assert!(e.is_hidden(1) && e.is_hidden(2) && !e.is_hidden(3), "a start marker to its end marker");
+        assert!(e.is_hidden(4) && e.is_hidden(6), "a level-1 marker runs to the end, a level-2 one nests in it");
+        let e = ed(m, &[("foldmethod", "marker"), ("foldenable", "false")]);
+        assert!(!e.is_hidden(1), "nofoldenable shows everything");
+        let mut e = ed(code, &[("foldmethod", "indent"), ("shiftwidth", "4"), ("foldclose", "all")]);
+        e.feed("jzo");
+        e.refresh_view();
+        assert!(!e.is_hidden(2));
+        e.feed("G");
+        e.refresh_view();
+        assert!(e.is_hidden(2), "foldclose=all: the fold the cursor left closes");
+    }
+}

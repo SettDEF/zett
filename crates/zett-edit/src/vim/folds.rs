@@ -24,7 +24,9 @@ impl Editor {
         if self.vim.folds_off {
             return Vec::new();
         }
-        self.fold_lines().into_iter().filter(|f| f.2 && f.1 > f.0).map(|(a, b, _)| (a + 1, b + 1)).collect()
+        // foldminlines: a fold of that many lines or fewer stays open
+        let min = self.opt_num("foldminlines", 1).max(0) as usize;
+        self.fold_lines().into_iter().filter(|f| f.2 && f.1 > f.0 && f.1 - f.0 >= min).map(|(a, b, _)| (a + 1, b + 1)).collect()
     }
 
     fn folds_changed(&mut self) {
@@ -52,6 +54,12 @@ impl Editor {
         let line = self.cur_line();
         let around = self.folds_at(line);
         let none = || Request::Message("E490: No fold found".into());
+        // folds worked out from the text are not made or erased by hand
+        if self.opt("foldmethod").is_some_and(|m| m != "manual") && matches!(c, 'f' | 'F' | 'd' | 'D' | 'E') {
+            let m = if matches!(c, 'f' | 'F') { "E350: Cannot create fold with current 'foldmethod'" } else { "E351: Cannot delete fold with current 'foldmethod'" };
+            self.vim.requests.push(Request::Message(m.into()));
+            return true;
+        }
         match c {
             'y' => {
                 self.op = Some(Op::YankTrim);

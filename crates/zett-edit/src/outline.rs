@@ -212,6 +212,8 @@ impl Editor {
 
     /// Brings folds and the narrowing up to date with the text (after any edit, however made).
     pub fn refresh_view(&mut self) {
+        // foldmethod indent or marker: the folds from the text first (vim/foldmethod.rs)
+        self.fold_update();
         if self.view.rev == Some(self.buf.rev()) {
             return;
         }
@@ -258,6 +260,11 @@ impl Editor {
                 }
             }
         };
+    }
+
+    /// The hidden lines are to be worked out again at the next refresh (foldmethod).
+    pub(crate) fn view_stale(&mut self) {
+        self.view.rev = None;
     }
 
     /// Folds changed outside the outline (Vim's zf zo zc …): the hidden lines are worked out again.

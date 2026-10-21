@@ -11,6 +11,8 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "shiftround", "joinspaces", "startofline", "whichwrap", "tildeop", "nrformats", "iskeyword", "matchpairs",
     "selection", "report", "modifiable", "textwidth", "wrapmargin", "formatoptions", "quoteescape", "paragraphs",
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
+    "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
+    "foldopen", "foldclose",
 ];
 
 impl Editor {

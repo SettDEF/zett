@@ -12,7 +12,9 @@ impl Editor {
         }
         let ls = self.fold_lines();
         let depth = ls.iter().filter(|f| f.0 <= line && line <= f.1).count();
-        let start = ls.iter().filter(|f| f.0 == line).min_by_key(|f| f.1).map(|f| f.2);
+        // closed only when it hides lines (foldminlines keeps short ones open)
+        let min = self.opt_num("foldminlines", 1).max(0) as usize;
+        let start = ls.iter().filter(|f| f.0 == line).min_by_key(|f| f.1).map(|f| f.2 && f.1 > f.0 && f.1 - f.0 >= min);
         (depth, start)
     }
 

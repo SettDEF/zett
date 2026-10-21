@@ -81,6 +81,7 @@ impl Editor {
             return;
         }
         self.vim_note_jump(&keys);
+        self.fold_after(&keys);
         let changed = self.edit_marker() != self.vim.typing_from;
         let first = keys[0].char();
         // undo, redo and the dot itself are not changes to repeat

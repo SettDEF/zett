@@ -109,6 +109,11 @@ pub(crate) struct VimState {
     pub folds_off: bool,
     /// :nohlsearch was given since the last search
     pub hl_off: bool,
+    /// foldmethod indent / marker: what the folds were worked out from (method, text, options),
+    /// and the foldlevel and foldenable last applied
+    pub fold_auto: Option<String>,
+    pub fold_level: Option<i64>,
+    pub fold_enable: Option<bool>,
     /// z{height}<CR>: the height typed so far
     pub z_height: usize,
     /// a block reaching every line's end ($), and a block insert waiting for Esc: (first line, last line,
@@ -180,6 +185,7 @@ mod keys;
 mod motions;
 pub mod options;
 mod display;
+mod foldmethod;
 mod ops;
 mod search;
 mod special;
