@@ -75,6 +75,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "pumheight", "pumwidth", "pummaxwidth",
     "cedit", "termguicolors", "messagesopt", "winfixbuf",
     "scrollbind", "cursorbind", "scrollopt",
+    "winheight", "winwidth", "winminheight", "winminwidth",
     "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
     "bomb", "endofline", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",

@@ -72,6 +72,44 @@ impl App {
         let mut placed = Vec::new();
         let mut seps = Vec::new();
         self.tree.place(body, &mut placed, &mut seps);
+        // winheight / winwidth: the focused window at least that many lines / columns (placed again if it grew)
+        if let Some(&(_, r)) = placed.iter().find(|(i, _)| *i == self.focus) {
+            let (wh, ww) = (self.num(cur, "winheight") + 1, self.num(cur, "winwidth"));
+            let mut grew = false;
+            if (r.height as usize) < wh && placed.len() > 1 {
+                grew |= self.tree.resize(self.focus, false, (wh - r.height as usize) as i32, body);
+            }
+            if (r.width as usize) < ww && placed.len() > 1 {
+                grew |= self.tree.resize(self.focus, true, (ww - r.width as usize) as i32, body);
+            }
+            if grew {
+                placed.clear();
+                seps.clear();
+                self.tree.place(body, &mut placed, &mut seps);
+                // winminheight / winminwidth: no other window smaller than that; what is missing goes back
+                let (mh, mw) = (self.num(cur, "winminheight") + 1, self.num(cur, "winminwidth").max(1));
+                for step in 1..=4i32 {
+                let short_h = placed.iter().filter(|(i, _)| *i != self.focus).map(|(_, x)| mh.saturating_sub(x.height as usize)).max().unwrap_or(0) as i32;
+                let short_w = placed.iter().filter(|(i, _)| *i != self.focus).map(|(_, x)| mw.saturating_sub(x.width as usize)).max().unwrap_or(0) as i32;
+                // rounding can swallow a small step: each try gives back more
+                let (short_h, short_w) = (if short_h > 0 { short_h + step - 1 } else { 0 }, if short_w > 0 { short_w + step - 1 } else { 0 });
+                if short_h == 0 && short_w == 0 {
+                    break;
+                }
+                {
+                    if short_h > 0 {
+                        self.tree.resize(self.focus, false, -short_h, body);
+                    }
+                    if short_w > 0 {
+                        self.tree.resize(self.focus, true, -short_w, body);
+                    }
+                    placed.clear();
+                    seps.clear();
+                    self.tree.place(body, &mut placed, &mut seps);
+                }
+                }
+            }
+        }
         self.win_rects = placed.clone();
         // fillchars vert: the character between windows
         let vert = crate::display::fillchars(&self.setting(self.cur.min(self.docs.len() - 1), "fillchars")).vert.to_string();
