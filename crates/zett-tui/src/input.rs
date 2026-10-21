@@ -518,6 +518,32 @@ impl App {
         if let MouseEventKind::Down(_) = m.kind {
             self.engine.focus_panel(None);
         }
+        // a mapping for this mouse action, as Neovim has them: :map <C-LeftMouse> …, <M-LeftDrag>,
+        // <S-ScrollWheelUp>, <2-LeftMouse> (a double click); it replaces what the mouse does here
+        if self.noremap == 0 {
+            let within = Duration::from_millis(self.num(self.cur, "mousetime") as u64);
+            let clicks = match (m.kind, self.click) {
+                (MouseEventKind::Down(_), Some((t, c, r, n))) if t.elapsed() <= within && (c, r) == (m.column, m.row) => n + 1,
+                _ => 1,
+            };
+            if let Some(tok) = mouse_token(&m, clicks) {
+                let km = match mode {
+                    'c' => "c",
+                    'i' => "i",
+                    'v' => "v",
+                    _ if self.docs[self.cur].ed.op_pending() => "o",
+                    _ => "n",
+                };
+                if self.engine.has_maps(km) {
+                    self.last_mouse = Some(m);
+                    match self.with_lua(|e| e.feed(km, std::slice::from_ref(&tok))) {
+                        Feed::None => {}
+                        // (a <LeftMouse> in the mapping counts its own clicks, as the mouse does)
+                        feed => return self.after_feed(feed, vec![tok]),
+                    }
+                }
+            }
+        }
         // a click in another window focuses it first
         if let MouseEventKind::Down(_) = m.kind {
             if let Some(&(id, r)) = self.win_rects.iter().find(|(_, r)| m.column >= r.x && m.column < r.right() && m.row >= r.y && m.row < r.bottom()) {
@@ -662,6 +688,21 @@ impl App {
     /// Keys in Vim notation ("dd", ":w<CR>", "<C-w>j") as if typed: the : line, the mappings (unless
     /// `remap` is false) and the editor all see them. Deep enough nesting stops (maxmapdepth).
     pub(crate) fn replay(&mut self, keys: &str, remap: bool) {
+        // a mapping with mouse actions in it (<LeftMouse>gd): those are done where the mouse was
+        if let Some(at) = self.last_mouse.filter(|_| { let l = keys.to_lowercase(); l.contains("mouse>") || l.contains("drag>") || l.contains("release>") || l.contains("scrollwheel") }) {
+            for tok in zett_script::keys(keys) {
+                match mouse_key(&tok, &at) {
+                    Some(ev) => {
+                        // what the mouse does by itself: no mapping again
+                        self.noremap += 1;
+                        self.mouse(ev);
+                        self.noremap -= 1;
+                    }
+                    None => self.replay(&tok, remap),
+                }
+            }
+            return;
+        }
         // noremap: every mapping as if :noremap
         let remap = remap && self.flag(self.cur, "remap");
         let depth = self.num(self.cur, "maxmapdepth").max(1);
@@ -716,4 +757,82 @@ pub(crate) fn key_event(k: &zett_edit::keys::Key) -> KeyEvent {
         m |= KeyModifiers::SHIFT;
     }
     KeyEvent::new(code, m)
+}
+
+/// A mouse event as Vim names it in mappings: <LeftMouse> <C-LeftDrag> <M-RightRelease>
+/// <S-ScrollWheelUp> <2-LeftMouse> (clicks in a row); None for a move.
+pub(crate) fn mouse_token(m: &ratatui::crossterm::event::MouseEvent, clicks: u8) -> Option<String> {
+    use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEventKind};
+    let button = |b: MouseButton| match b {
+        MouseButton::Left => "Left",
+        MouseButton::Right => "Right",
+        MouseButton::Middle => "Middle",
+    };
+    let name = match m.kind {
+        MouseEventKind::Down(b) => format!("{}{}Mouse", if clicks > 1 { format!("{}-", clicks.min(4)) } else { String::new() }, button(b)),
+        MouseEventKind::Drag(b) => format!("{}Drag", button(b)),
+        MouseEventKind::Up(b) => format!("{}Release", button(b)),
+        MouseEventKind::ScrollUp => "ScrollWheelUp".into(),
+        MouseEventKind::ScrollDown => "ScrollWheelDown".into(),
+        MouseEventKind::ScrollLeft => "ScrollWheelLeft".into(),
+        MouseEventKind::ScrollRight => "ScrollWheelRight".into(),
+        MouseEventKind::Moved => return None,
+    };
+    let mut mods = String::new();
+    if m.modifiers.contains(KeyModifiers::CONTROL) {
+        mods.push_str("C-");
+    }
+    if m.modifiers.contains(KeyModifiers::ALT) {
+        mods.push_str("M-");
+    }
+    if m.modifiers.contains(KeyModifiers::SHIFT) {
+        mods.push_str("S-");
+    }
+    Some(format!("<{mods}{name}>"))
+}
+
+/// A mapping's key that is a mouse action (<LeftMouse>, <C-ScrollWheelUp> …): its event, at `at`.
+pub(crate) fn mouse_key(tok: &str, at: &ratatui::crossterm::event::MouseEvent) -> Option<ratatui::crossterm::event::MouseEvent> {
+    use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEventKind};
+    let inner = tok.strip_prefix('<')?.strip_suffix('>')?;
+    let mut rest = inner;
+    let mut mods = KeyModifiers::NONE;
+    loop {
+        let l = rest.to_lowercase();
+        if l.starts_with("c-") {
+            mods |= KeyModifiers::CONTROL;
+        } else if l.starts_with("m-") || l.starts_with("a-") {
+            mods |= KeyModifiers::ALT;
+        } else if l.starts_with("s-") {
+            mods |= KeyModifiers::SHIFT;
+        } else if l.len() > 2 && l.as_bytes()[0].is_ascii_digit() && l.as_bytes()[1] == b'-' {
+            // <2-LeftMouse>: the click itself (a double click comes from two of them)
+        } else {
+            break;
+        }
+        rest = &rest[2..];
+    }
+    let l = rest.to_lowercase();
+    let b = |s: &str| match s {
+        "left" => Some(MouseButton::Left),
+        "right" => Some(MouseButton::Right),
+        "middle" => Some(MouseButton::Middle),
+        _ => None,
+    };
+    let kind = if let Some(s) = l.strip_suffix("mouse") {
+        MouseEventKind::Down(b(s)?)
+    } else if let Some(s) = l.strip_suffix("drag") {
+        MouseEventKind::Drag(b(s)?)
+    } else if let Some(s) = l.strip_suffix("release") {
+        MouseEventKind::Up(b(s)?)
+    } else {
+        match l.as_str() {
+            "scrollwheelup" => MouseEventKind::ScrollUp,
+            "scrollwheeldown" => MouseEventKind::ScrollDown,
+            "scrollwheelleft" => MouseEventKind::ScrollLeft,
+            "scrollwheelright" => MouseEventKind::ScrollRight,
+            _ => return None,
+        }
+    };
+    Some(ratatui::crossterm::event::MouseEvent { kind, column: at.column, row: at.row, modifiers: mods })
 }

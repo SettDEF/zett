@@ -89,6 +89,8 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
 
 ## Mappings, folders, included files
 
+- the mouse by its Vim names, keys held too: `:nnoremap <C-LeftMouse> <LeftMouse>gd`, `<M-LeftDrag>`,
+  `<S-ScrollWheelUp>`, `<2-LeftMouse>` (a double click); `<LeftMouse>` in the keys clicks where it was
 - `:cmap :cnoremap` and `:cabbrev` work on the `:` line, `:omap :onoremap` after an operator (`dL`
   with `:onoremap L $`); `:map` covers Normal, Visual and operator-pending, `:map!` and `:ab` insert
   mode and the `:` line

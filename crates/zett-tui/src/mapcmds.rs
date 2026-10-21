@@ -419,6 +419,27 @@ mod tests {
     }
 
     #[test]
+    fn mouse_actions_with_keys_held_have_their_maps() {
+        use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let mut app = app_with("one\ntwo\nthree\n");
+        app.area = ratatui::layout::Rect::new(0, 0, 80, 20);
+        app.gutter = 0;
+        let click = |mods| MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: 1, row: 1, modifiers: mods };
+        app.command("nnoremap <C-LeftMouse> <LeftMouse>dd");
+        app.mouse(click(KeyModifiers::CONTROL));
+        assert_eq!(app.docs[app.cur].ed.buf.text(), "one\nthree\n", "Ctrl+click: the clicked line deleted");
+        // a plain click still only places the cursor
+        app.mouse(click(KeyModifiers::NONE));
+        assert_eq!(app.docs[app.cur].ed.buf.text(), "one\nthree\n");
+        assert_eq!(app.docs[app.cur].ed.cursor().line, 1);
+        // the wheel with Shift, by its name
+        app.command("nnoremap <S-ScrollWheelDown> G");
+        app.mouse(MouseEvent { kind: MouseEventKind::ScrollDown, column: 0, row: 0, modifiers: KeyModifiers::SHIFT });
+        assert_eq!(app.docs[app.cur].ed.cursor().line, 1, "G on the last line (of two)");
+        assert_eq!(crate::input::mouse_token(&click(KeyModifiers::ALT), 2).as_deref(), Some("<M-2-LeftMouse>"));
+    }
+
+    #[test]
     fn operator_pending_keys_have_their_maps() {
         let mut app = app_with("one two three\n");
         app.command("onoremap L $");

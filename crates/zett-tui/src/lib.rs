@@ -353,6 +353,8 @@ struct App {
     /// the last mouse click (when, column, row, how many in a row: double and triple clicks), and
     /// where a drag began
     click: Option<(Instant, u16, u16, u8)>,
+    /// the mouse event a mapping ran for (<LeftMouse> in its keys is done there)
+    last_mouse: Option<ratatui::crossterm::event::MouseEvent>,
     drag_from: Option<Pos>,
     /// when files were last checked for changes made outside (autoread)
     checked: Instant,
@@ -569,6 +571,7 @@ impl App {
             title_set: None,
             bang: false,
             click: None,
+            last_mouse: None,
             drag_from: None,
             checked: Instant::now(),
             wins: vec![Some(Win::default())],
