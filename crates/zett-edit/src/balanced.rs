@@ -33,6 +33,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("narrow-to-page", "Show only the page"),
     ("prog-fill-reindent-defun", "Fill the comment or paragraph at the cursor; in code, reindent the definition"),
     ("isearch-forward-symbol-at-point", "Search for the symbol at the cursor (C-s goes on)"),
+    ("reposition-window", "Scroll so the definition at the cursor shows whole (its start at the top)"),
+    ("indent-pp-sexp", "Reindent the lines of the expression after the cursor"),
 ];
 
 pub fn is_command(name: &str) -> bool {
@@ -568,6 +570,22 @@ impl Editor {
                 }
                 let (a, b) = self.defun_here().unwrap_or((self.cursor, self.cursor));
                 let (l1, l2) = (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line);
+                let at = self.cursor();
+                self.vim_apply(crate::Op::Reindent, crate::Span::Lines(l1, l2));
+                self.cursor = self.line_start(at.line) + at.col.min(self.buf.line_len(at.line));
+            }
+            "reposition-window" => {
+                let Some((a, b)) = self.defun_here() else { return true };
+                let (la, lb) = (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line);
+                let (top, height, _) = self.vim.screen;
+                let height = height.max(3);
+                // already whole on the screen: its start to the top; longer than the window: as much as fits
+                let t = if la >= top && lb < top + height { la } else if lb - la + 1 <= height { la } else { la.max(self.cur_line().saturating_sub(height - 2)) };
+                self.vim_top(t);
+            }
+            "indent-pp-sexp" => {
+                let Some(end) = self.sexp_end(self.cursor) else { return true };
+                let (l1, l2) = (self.cur_line(), self.buf.to_pos(end).line);
                 let at = self.cursor();
                 self.vim_apply(crate::Op::Reindent, crate::Span::Lines(l1, l2));
                 self.cursor = self.line_start(at.line) + at.col.min(self.buf.line_len(at.line));

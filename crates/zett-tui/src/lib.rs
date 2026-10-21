@@ -422,6 +422,14 @@ struct App {
     pending_abbrev: Option<(String, bool)>,
     abbrev_mode: bool,
     abbrev_prefix: Option<usize>,
+    /// Emacs registers that hold a buffer, a file or the windows (C-x r B F w): by name
+    places: std::collections::HashMap<char, emacs::Place>,
+    /// the marks set in each buffer, last last (C-x C-@ goes back through them)
+    global_marks: Vec<(String, usize)>,
+    /// the last command that asked (C-x M-: runs it again): its action and the answers
+    last_prompt: Option<(String, Vec<String>)>,
+    /// M-s h's patterns, for M-s h w
+    hl_patterns: Vec<String>,
     /// the : line's abbreviations (:cabbrev; :abbreviate sets both)
     cabbrevs: Vec<(String, String)>,
     /// CTRL-K on the : line: waiting for the digraph's first character, or its second
@@ -660,6 +668,10 @@ impl App {
             pending_abbrev: None,
             abbrev_mode: false,
             abbrev_prefix: None,
+            places: Default::default(),
+            global_marks: Vec::new(),
+            last_prompt: None,
+            hl_patterns: Vec::new(),
             cabbrevs: Vec::new(),
             cmd_digraph: None,
             sign_defs: Default::default(),

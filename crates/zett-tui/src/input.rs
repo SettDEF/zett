@@ -303,6 +303,13 @@ impl App {
                 KeyCode::Esc => '\u{1b}',
                 _ => return self.say("not a character"),
             };
+            // registers that hold a buffer, a file or the windows (C-x r B F w): the front end's
+            if let Some(what) = name.strip_prefix("place:") {
+                return self.place_to_register(what, c);
+            }
+            if name == "jump-to-register" && self.jump_to_place(c) {
+                return;
+            }
             let before = self.docs[self.cur].ed.cursor().line;
             let kills = self.docs[self.cur].ed.kill_count();
             self.doc().ed.exec_char(&name, c, arg);
@@ -314,6 +321,25 @@ impl App {
             self.doc().touched(before);
             self.edit_at = Instant::now();
             return;
+        }
+        // the completion popup (C-M-i, or after typing) takes its keys first
+        if self.comp.is_some() && !self.meta {
+            let n = self.comp.as_ref().map(|c| c.shown.len()).unwrap_or(0).max(1);
+            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+            let c = self.comp.as_mut().unwrap();
+            match k.code {
+                KeyCode::Tab | KeyCode::Down => return c.sel = (c.sel + 1) % n,
+                KeyCode::Char('n') if ctrl => return c.sel = (c.sel + 1) % n,
+                KeyCode::BackTab | KeyCode::Up => return c.sel = (c.sel + n - 1) % n,
+                KeyCode::Char('p') if ctrl => return c.sel = (c.sel + n - 1) % n,
+                KeyCode::Enter => return self.comp_accept(),
+                KeyCode::Char('g') if ctrl => {
+                    self.comp = None;
+                    return;
+                }
+                KeyCode::Esc => self.comp = None,
+                _ => {}
+            }
         }
         // Esc, as in Emacs and zsh: Meta on the next key (Esc f = M-f). Esc Esc, or Esc in the
         // middle of a chord, cancels everything (Emacs' keyboard-escape-quit)
@@ -422,6 +448,8 @@ impl App {
                         }
                         self.doc().touched(before);
                         self.edit_at = Instant::now();
+                        // the language server's completions while typing, as in Vim's insert mode
+                        self.comp_after_key(Some(c));
                     }
                     _ => {
                         self.arg.take();
@@ -557,6 +585,25 @@ impl App {
                     self.doc().ed.exec_arg(&name, arg);
                     // messages and window moves the command asked for (C-x =, C-v, C-l)
                     self.editor_requests();
+                    // the completion popup: DEL narrows it again, any other command closes it
+                    if self.comp.is_some() {
+                        if matches!(zett_edit::emacs::resolve(&name), "delete-backward-char") {
+                            self.comp_after_key(None);
+                        } else {
+                            self.comp = None;
+                        }
+                    }
+                    // C-SPC: where the mark went joins the global mark ring (C-x C-@)
+                    if name == "set-mark-command" && arg.is_none() {
+                        let ed = &self.docs[self.cur].ed;
+                        let at = ed.buf.to_char(ed.cursor());
+                        let doc = self.docs[self.cur].name.clone();
+                        self.global_marks.retain(|(d, _)| *d != doc);
+                        self.global_marks.push((doc, at));
+                        if self.global_marks.len() > 16 {
+                            self.global_marks.remove(0);
+                        }
+                    }
                     if self.docs[self.cur].ed.kill_count() != kills {
                         if let Some(t) = self.docs[self.cur].ed.last_kill() {
                             clipboard::copy(&t);

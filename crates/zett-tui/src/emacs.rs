@@ -134,6 +134,9 @@ impl App {
     }
 
     fn prompt_done(&mut self, what: &str, got: &[String]) {
+        if !what.starts_with("repeat") {
+            self.last_prompt = Some((what.to_string(), got.to_vec()));
+        }
         let line = fill(what, got);
         let (kind, body) = line.split_once(':').unwrap_or(("ex", line.as_str()));
         match kind {
@@ -156,6 +159,24 @@ impl App {
             "emoji" => self.insert_emoji(body),
             "delwins" => {
                 self.emacs_ui("deleteWindowsOn", body);
+            }
+            "search" => {
+                let ed = &self.docs[self.cur].ed;
+                let at = ed.buf.to_char(ed.cursor());
+                let fold = ed.folds_for(body);
+                match ed.buf.find(body, at + 1, true, fold) {
+                    Some(i) => {
+                        let to = ed.buf.to_pos(i + body.chars().count());
+                        self.doc().ed.set_cursor(to);
+                    }
+                    None => self.say(format!("Search failed: \"{body}\"")),
+                }
+            }
+            "display" => {
+                let Some(i) = self.docs.iter().position(|d| self.buffer_label(d) == body) else { return self.say(format!("No buffer {body}")) };
+                self.doom_ui("split", "right");
+                self.show_doc(i);
+                self.command("wincmd p");
             }
             "bookmark-set" => {
                 self.bookmark_set(body);
@@ -344,6 +365,15 @@ impl App {
             "repeat" => self.repeat_last(),
             "mouse" => self.mouse_command(arg),
             "tab" => self.emacs_tab(arg),
+            "complete" => self.complete_at_point(),
+            "placeRegister" => {
+                self.char_for = Some((format!("place:{arg}"), None));
+                self.say(match arg { "buffer" => "Buffer to register: ", "file" => "File to register: ", _ => "Window configuration to register: " });
+            }
+            "clone" => self.clone_or_rename(arg),
+            "popGlobalMark" => self.pop_global_mark(),
+            "repeatComplex" => self.repeat_complex(),
+            "hiLock" => self.hi_lock(arg),
             "abbrevAdd" => self.abbrev_add(arg),
             "abbrevExpand" => {
                 if !self.expand_abbrev_here() {
@@ -408,6 +438,7 @@ impl App {
             },
             "unhighlight" => {
                 self.hl_slot = 0;
+                self.hl_patterns.clear();
                 for m in ["match none", "2match none", "3match none"] {
                     self.command(m);
                 }
@@ -560,6 +591,8 @@ impl App {
 
     /// M-s h: the pattern highlighted in the next of :match, :2match, :3match (the oldest goes).
     pub(crate) fn highlight(&mut self, pat: &str) {
+        self.hl_patterns.retain(|p| p != pat);
+        self.hl_patterns.push(pat.to_string());
         self.hl_slot = self.hl_slot % 3 + 1;
         let (cmd, group) = [("match", "Search"), ("2match", "IncSearch"), ("3match", "Visual")][self.hl_slot as usize - 1];
         self.command(&format!("{cmd} {group} /{}/", pat.replace('/', "\\/")));
@@ -882,6 +915,152 @@ impl App {
     }
 }
 
+/// What an Emacs register holds besides text and a place in the buffer (those are Vim's).
+#[derive(Clone)]
+pub(crate) enum Place {
+    Buffer(String),
+    File(PathBuf, usize),
+    /// the windows: their layout, each one's buffer by name (buffers may move), the focused one
+    Windows(crate::doom::WTree, Vec<Option<(Win, String)>>, usize),
+}
+
+impl App {
+    /// C-x r B / F / w / f: this buffer, its file (and line), the windows, kept in register `r`.
+    pub(crate) fn place_to_register(&mut self, what: &str, r: char) {
+        let d = &self.docs[self.cur];
+        let place = match what {
+            "buffer" => Place::Buffer(self.buffer_label(d)),
+            "file" => match d.abs_path() {
+                Some(p) => Place::File(p, d.ed.cursor().line),
+                None => return self.say("This buffer is not a file"),
+            },
+            _ => {
+                let cur = self.cur;
+                if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+                    w.doc = cur;
+                }
+                let wins = self.wins.iter().map(|w| w.as_ref().map(|w| (w.clone(), self.docs.get(w.doc).map(|d| d.name.clone()).unwrap_or_default()))).collect();
+                Place::Windows(self.tree.clone(), wins, self.focus)
+            }
+        };
+        self.places.insert(r, place);
+        self.say(format!("Saved to register {r}"));
+    }
+
+    /// C-x r j on one of those registers; false when `r` is not one (the editor's mark then).
+    pub(crate) fn jump_to_place(&mut self, r: char) -> bool {
+        let Some(place) = self.places.get(&r).cloned() else { return false };
+        match place {
+            Place::Buffer(name) => match self.docs.iter().position(|d| self.buffer_label(d) == name) {
+                Some(i) => self.show_doc(i),
+                None => self.say(format!("No buffer {name} any more")),
+            },
+            Place::File(p, line) => {
+                self.open(&p);
+                self.goto_line(line + 1);
+            }
+            Place::Windows(tree, wins, focus) => {
+                let wins = wins
+                    .into_iter()
+                    .map(|w| {
+                        w.map(|(mut w, name)| {
+                            w.doc = self.docs.iter().position(|d| d.name == name).unwrap_or(0);
+                            w
+                        })
+                    })
+                    .collect();
+                self.wins = wins;
+                self.tree = tree;
+                self.win_rects.clear();
+                self.focus_win(focus);
+            }
+        }
+        true
+    }
+
+    /// C-M-i: the language server's completions here (else the buffer's words, M-/).
+    pub(crate) fn complete_at_point(&mut self) {
+        if self.docs[self.cur].lsp {
+            self.comp_due = Some(Instant::now());
+        } else {
+            self.after_lua(vec![Effect::Edit("dabbrev-expand".into(), 1)]);
+        }
+    }
+
+    /// C-x x n: a copy of this buffer as a new one (name<2>); C-x x u: this one renamed so
+    /// another of its name can come (a buffer that is not a file).
+    pub(crate) fn clone_or_rename(&mut self, how: &str) {
+        let base = self.docs[self.cur].name.clone();
+        let free = |app: &App| (2..).map(|n| format!("{base}<{n}>")).find(|n| !app.docs.iter().any(|d| d.name == *n)).unwrap_or_default();
+        let name = free(self);
+        if how == "rename" {
+            if self.docs[self.cur].abs_path().is_some() {
+                return self.say("A file's buffer keeps its file's name");
+            }
+            self.docs[self.cur].name = name;
+            return;
+        }
+        let d = &self.docs[self.cur];
+        let mut ed = Editor::from_str(&d.ed.text());
+        ed.set_emacs(d.ed.is_emacs());
+        let syntax = d.syntax.clone();
+        self.docs.push(Doc::new(ed, name, syntax));
+        let i = self.docs.len() - 1;
+        if how == "indirect" {
+            self.doom_ui("split", "right");
+        }
+        self.show_doc(i);
+    }
+
+    /// C-x C-@: back to the last mark set in another buffer (the global mark ring).
+    pub(crate) fn pop_global_mark(&mut self) {
+        let here = self.docs[self.cur].name.clone();
+        let Some(k) = self.global_marks.iter().rposition(|(d, _)| *d != here) else { return self.say("No global mark set") };
+        let (doc, at) = self.global_marks.remove(k);
+        match self.docs.iter().position(|d| d.name == doc) {
+            Some(i) => {
+                self.show_doc(i);
+                let pos = self.docs[i].ed.buf.to_pos(at.min(self.docs[i].ed.buf.len_chars()));
+                self.doc().ed.set_cursor(pos);
+            }
+            None => self.say(format!("{doc} is not open any more")),
+        }
+    }
+
+    /// C-x M-: the last command that asked something, again with the same answers.
+    pub(crate) fn repeat_complex(&mut self) {
+        match self.last_prompt.clone() {
+            Some((what, got)) => self.prompt_done(&what, &got),
+            None => self.say("No command to repeat"),
+        }
+    }
+
+    /// M-s h w: the highlights written into the buffer, as Emacs's hi-lock writes them (in a
+    /// comment, at the top); M-s h f: such lines read back and highlighted.
+    pub(crate) fn hi_lock(&mut self, how: &str) {
+        let cs = self.setting(self.cur, "commentstring");
+        let (pre, post) = cs.split_once("%s").map(|(a, b)| (a.to_string(), b.to_string())).unwrap_or(("# ".into(), String::new()));
+        if how == "write" {
+            if self.hl_patterns.is_empty() {
+                return self.say("No highlights to write");
+            }
+            let pats: Vec<String> = self.hl_patterns.iter().map(|p| format!("(\"{}\")", p.replace('"', "\\\""))).collect();
+            let line = format!("{pre}Hi-lock: ({}){post}\n", pats.join(" "));
+            self.doc().ed.replace_text(0, 0, &line);
+            return;
+        }
+        let text: Vec<String> = (0..self.docs[self.cur].ed.buf.len_lines().min(10)).map(|l| self.docs[self.cur].ed.buf.line(l).to_string()).collect();
+        let mut n = 0;
+        for l in text.iter().filter(|l| l.contains("Hi-lock: ")) {
+            for p in l.split("(\"").skip(1).filter_map(|s| s.split("\")").next()) {
+                self.highlight(&p.replace("\\\"", "\""));
+                n += 1;
+            }
+        }
+        self.say(format!("{n} highlight{} found", if n == 1 { "" } else { "s" }));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1029,5 +1208,22 @@ mod tests {
         a.docs[a.cur].ed.replace_text(17, 17, " btw");
         assert!(a.expand_abbrev_here());
         assert_eq!(a.docs[a.cur].ed.text(), "I said by the way by the way");
+    }
+
+    #[test]
+    fn registers_for_windows_and_buffers() {
+        let mut a = app("one");
+        a.place_to_register("windows", 'w');
+        a.command("vsplit");
+        a.command("vsplit");
+        assert_eq!(a.tree.ids().len(), 3);
+        assert!(a.jump_to_place('w'));
+        assert_eq!(a.tree.ids().len(), 1, "C-x r j w: the one window again");
+        a.place_to_register("buffer", 'b');
+        a.doom_ui("newBuffer", "");
+        let other = a.cur;
+        assert!(a.jump_to_place('b'));
+        assert_ne!(a.cur, other, "back to the buffer kept");
+        assert!(!a.jump_to_place('z'), "not one of these: the editor's mark then");
     }
 }
