@@ -10,7 +10,7 @@ pub const TOPICS: &[(&str, &str, &str)] = &[
     ("plugins", "explorer, undo tree, settings, writing one", include_str!("../docs/plugins.md")),
     ("terminal", "zett with zeit and zash", include_str!("../docs/terminal.md")),
     ("cli", "zett on the command line", include_str!("../docs/cli.md")),
-    ("query", "live query blocks, block references, backlinks", include_str!("../docs/query.md")),
+    ("query", "query blocks, references, backlinks, code that runs", include_str!("../docs/query.md")),
 ];
 
 /// A topic by name or by its start (`ls` → lsp); `index` for nothing.

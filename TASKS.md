@@ -83,7 +83,11 @@ See PLAN.md for the vision and milestones.
   code block (by outline section) under it, read again every 3 s; C-c C-o follows it; every note ends
   with what links to it, from notes and code comments; C-c b / SPC s b lists them
   - [ ] references by block id (once blocks have ids, M2), editing through a reference, the window
-- [ ] 6 notebook blocks
+- [x] 6 notebook blocks (zett-tui notebook.rs): C-c C-c / SPC m r runs a fenced sh, bash, zsh, fish,
+  python, js, lua or ruby block in the note's folder (background, 30 s, C-g stops waiting); its output
+  and exit under the block, tied to that code; C-c C-v / SPC m i writes it in as an ```output block
+  (replacing the last one)
+  - [ ] sessions (a REPL kept between blocks), variables from one block to the next, the window
 - [ ] 7 search everything incl. history · [ ] 8 git buffer + blame · [ ] 9 sync without a server
 - [ ] 10 canvas
 

@@ -38,3 +38,12 @@ at that part.
 
 At the end of every note: what links to it, `[[name]]`, `[[name#part]]` or `(name.md)`, in notes and
 in code comments (`// design: [[plan]]`). `C-c b` (`SPC s b`) lists them all.
+
+# Code blocks that run
+
+`C-c C-c` (`SPC m r`) in a fenced block of `sh`, `bash`, `zsh`, `fish`, `python`, `js`, `lua` or
+`ruby` runs it in the note's folder, in the background (30 s at most; `C-g` stops waiting). What it
+prints, and how it ended, is drawn under the block; it belongs to that code, so changing the code
+takes it away until the block runs again. `C-c C-v` (`SPC m i`) writes it into the note as an
+`output` block under the code (one undo step); write again after another run and it replaces that
+block.

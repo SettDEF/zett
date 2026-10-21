@@ -619,6 +619,8 @@ impl App {
             "timeTravel" => self.travel_start(),
             "queryOpen" => self.query_open(),
             "backlinks" => self.backlinks(),
+            "notebookRun" => self.notebook_run(),
+            "notebookInsert" => self.notebook_insert(),
             "agentAsk" => self.agent_ask(),
             "save" => self.save(None),
             "yankPath" => {

@@ -106,6 +106,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("RefBar", "fg=5"),
     ("RefHead", "fg=5 bold"),
     ("RefText", "fg=7"),
+    ("NoteOk", "fg=2"),
+    ("NoteOut", "fg=7"),
     ("PmenuSel", "fg=0 bg=4"),
     ("PmenuKind", "fg=5"),
     ("PmenuExtra", "fg=8"),

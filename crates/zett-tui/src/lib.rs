@@ -13,6 +13,7 @@ mod travel;
 mod agent;
 mod query;
 mod refs;
+mod notebook;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -261,6 +262,8 @@ struct App {
     queries: query::Cache,
     /// what the block references show (refs.rs)
     embeds: refs::Embeds,
+    /// code blocks running and what they printed (notebook.rs)
+    notebook: notebook::Notebook,
     /// where the minibuffer is drawn (zett.opt.minibuffer)
     placement: Placement,
     popup: Option<Popup>,
@@ -386,6 +389,7 @@ impl App {
             agent: None,
             queries: Default::default(),
             embeds: Default::default(),
+            notebook: Default::default(),
             asking: false,
             placement: Placement::Bottom,
             popup: None,
@@ -479,6 +483,7 @@ impl App {
             }
             self.sync_profile();
             self.agent_poll();
+            self.notebook_poll();
             term.draw(|f| self.draw(f))?;
             // the cursor's shape follows the mode
             let bar = self.cmdline.is_some() || self.minibuf.is_some() || self.docs[self.cur].ed.mode() == Mode::Insert;
@@ -489,7 +494,7 @@ impl App {
             // a pending key sequence ends after a moment (Neovim's timeoutlen)
             let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { Duration::from_millis(900).saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
             // servers answer on their own time: look more often while any runs
-            let wait = if self.lsp.clients.is_empty() && self.agent.is_none() { wait } else { wait.min(Duration::from_millis(100)) };
+            let wait = if self.lsp.clients.is_empty() && self.agent.is_none() && !self.notebook.busy() { wait } else { wait.min(Duration::from_millis(100)) };
             // a plugin's timer (zett.defer) wakes the loop when it is due
             let wait = match self.engine.next_timer() {
                 Some(t) => wait.min(t.saturating_duration_since(Instant::now())),
@@ -744,6 +749,10 @@ impl App {
         // C-g drops a question the agent is still answering
         if tok == "<C-g>" && self.agent.take().is_some() {
             return self.say("dropped the question");
+        }
+        // and stops waiting for running code blocks
+        if tok == "<C-g>" && self.notebook_drop() {
+            return self.say("stopped waiting for the code");
         }
         // C-g abandons a half-typed chord or argument (and, bound, deactivates the mark)
         if tok == "<C-g>" && (!self.keyseq.is_empty() || self.arg.active()) {
@@ -1350,7 +1359,7 @@ impl App {
         let (ss, theme) = (&self.ss, &self.theme);
         let hl = Highlighter::new(theme);
         let (numbers, relative) = (self.numbers, self.relative);
-        let (queries, embeds, root) = (&mut self.queries, &mut self.embeds, self.root.clone());
+        let (queries, embeds, nb, root) = (&mut self.queries, &mut self.embeds, &self.notebook, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
         // live query blocks: their results under the closing fence (Markdown only)
@@ -1361,6 +1370,8 @@ impl App {
             // and the block references' text, and what links here (refs.rs)
             let mut rows = query::rows(queries, &root, &text);
             rows.extend(refs::rows(embeds, queries, &root, file.as_deref(), &text));
+            // and what the code blocks printed (notebook.rs)
+            rows.extend(nb.rows(&d.name, &text));
             rows
         } else {
             Vec::new()
