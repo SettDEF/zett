@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# parity.sh: the complete lists of what Neovim and Emacs offer, from the installed programs
+# (clean, no user config), with what zett already has marked: docs/parity/*.md.
+#   scripts/parity.sh            regenerate (needs nvim, emacs, and zett on PATH or ~/.local/bin)
+# Re-run as zett grows: the marks come from zett itself (its commands, :ex names, settings).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+out=docs/parity
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$out"
+ZETT=${ZETT:-$(command -v zett || echo "$HOME/.local/bin/zett")}
+EMACS=${EMACS:-/usr/bin/emacs}
+RT=$(nvim --clean --headless -c 'lua io.write(vim.env.VIMRUNTIME)' -c q 2>&1)
+
+# ── what Neovim and Emacs have ──
+nvim --clean --headless -c "lua local o=vim.api.nvim_get_all_options_info(); local t={}; for n,i in pairs(o) do t[#t+1]=(string.format('%s\t%s\t%s\t%s\t%s', n, (i.shortname ~= '' and i.shortname) or '-', i.type, i.scope, (tostring(i.default) ~= '' and tostring(i.default)) or '""'):gsub('[\n\t]+$',''):gsub('\n',' ')) end; table.sort(t); vim.fn.writefile(t, '$tmp/opts.tsv')" -c q
+nvim --clean --headless -c "lua local t={} for k in pairs(vim.api) do t[#t+1]=k end table.sort(t) vim.fn.writefile(t,'$tmp/api.txt')" -c q
+nvim --clean --headless -c "lua local t={} for _,n in ipairs(vim.fn.getcompletion('', 'function')) do if not n:find('#') then t[#t+1]=(n:gsub('%(%)?$','')) end end table.sort(t) vim.fn.writefile(t,'$tmp/fn.txt')" -c q
+awk '/\*ex-cmd-index\*/{f=1} f && /^\|:/' "$RT/doc/index.txt" | sed 's/^|\([^|]*\)|\t*\([^\t]*\)\t*\(.*\)/\1\t\2\t\3/' > "$tmp/ex.tsv"
+awk '/\*normal-index\*/{f=1} /\*visual-index\*/{f=0} f && /^\|[^|]*\|/' "$RT/doc/index.txt" | sed 's/^|\([^|]*\)|\t*\([^\t]*\)\t*\(.*\)/\1\t\2\t\3/' > "$tmp/normal.tsv"
+awk "/\*option-list\*/{f=1} f && /^'[a-z]/" "$RT/doc/quickref.txt" | sed "s/^'\([a-z]*\)'[ \t]*\('[a-z]*'\)\{0,1\}[ \t]*\(.*\)/\1\t\3/" > "$tmp/optdesc.tsv"
+"$EMACS" -Q --batch --eval "(let (out) (mapatoms (lambda (s) (when (commandp s) (push (format \"%s\t%s\" s (let ((d (ignore-errors (documentation s t)))) (if d (car (split-string d \"\n\")) \"\"))) out)))) (with-temp-file \"$tmp/emacs-cmds.tsv\" (insert (mapconcat (function identity) (sort out (function string<)) \"\n\"))))"
+"$EMACS" -Q --batch --eval "(let (out) (mapatoms (lambda (s) (when (commandp s) (let ((k (where-is-internal s nil t))) (when k (push (format \"%s\t%s\" (key-description k) s) out)))))) (with-temp-file \"$tmp/emacs-keys.tsv\" (insert (mapconcat (function identity) (sort out (function string<)) \"\n\"))))"
+
+# ── what zett has (from zett itself and its sources) ──
+"$ZETT" doc commands 2>/dev/null | grep -o '^- `[^`]*`' | sed 's/^- `//; s/`$//' | sort -u > "$tmp/zett-cmds.txt"
+grep -oh '^\s*"[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
+grep -o 's("[a-z_]*", &\[[^]]*\]' crates/zett-tui/src/settings.rs | grep -o '"[a-z_]*"' | tr -d '"' > "$tmp/zett-opts.txt"
+printf 'number\nnu\nrelativenumber\nrnu\ntextwidth\ntw\nincsearch\nis\nundofile\nudf\n' >> "$tmp/zett-opts.txt"
+has() { grep -qxF -- "$1" "$2"; }
+stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | head -1), $("$EMACS" --version | head -1) and zett $("$ZETT" --version 2>/dev/null | awk '{print $2}')."
+
+# ── Neovim's options ──
+{
+    n=$(wc -l < "$tmp/opts.tsv"); have=0
+    while IFS=$'\t' read -r name short _ _ _; do { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; } && have=$((have + 1)); done < "$tmp/opts.tsv"
+    echo "# Neovim's options in zett"; echo; echo "$stamp"; echo
+    echo "$have of $n. ✓ zett has it (\`:set\`, \`zett.opt\`, \`zett.ft.<type>\`), · not yet. Settings: \`:help settings\`."; echo
+    echo "| | option | short | type | scope | default | what it does |"; echo "|---|---|---|---|---|---|---|"
+    while IFS=$'\t' read -r name short type scope def; do
+        mark="·"; { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; } && mark="✓"
+        desc=$(awk -F'\t' -v n="$name" '$1==n{print $2; exit}' "$tmp/optdesc.tsv")
+        [ "$short" = - ] && short=""
+        printf '| %s | `%s` | %s | %s | %s | `%s` | %s |\n' "$mark" "$name" "$short" "$type" "$scope" "${def//|/\\|}" "${desc//|/\\|}"
+    done < "$tmp/opts.tsv"
+} > "$out/nvim-options.md"
+
+# ── Neovim's Ex commands ──
+{
+    echo "# Neovim's Ex commands in zett"; echo; echo "$stamp"; echo
+    echo "✓ zett's \`:\` line has it (by its full or short name), · not yet."; echo
+    echo "| | command | written | what it does |"; echo "|---|---|---|---|"
+    while IFS=$'\t' read -r tag written desc; do
+        full=${written#:}; full=${full//[\[\]]/}; short=${written#:}; short=${short%%\[*}
+        mark="·"; { has "$full" "$tmp/zett-ex.txt" || has "$short" "$tmp/zett-ex.txt"; } && mark="✓"
+        printf '| %s | `%s` | `%s` | %s |\n' "$mark" "${tag//|/\\|}" "${written//|/\\|}" "${desc//|/\\|}"
+    done < "$tmp/ex.tsv"
+} > "$out/nvim-ex-commands.md"
+
+# ── Neovim's Normal-mode keys (not checked one by one yet) ──
+{
+    echo "# Neovim's Normal-mode keys"; echo; echo "$stamp"; echo
+    echo "zett's Vim profile has the everyday ones (motions, operators, text objects, counts, registers,"
+    echo "dot-repeat); this list is not checked against it key by key yet."; echo
+    echo "| key | what it does |"; echo "|---|---|"
+    while IFS=$'\t' read -r tag written desc; do printf '| `%s` | %s |\n' "${written//|/\\|}" "$(echo "${desc//|/\\|}" | sed 's/^[0-9]  *//')"; done < "$tmp/normal.tsv"
+} > "$out/nvim-normal-keys.md"
+
+# ── Neovim's Lua API and functions ──
+{
+    echo "# Neovim's API (vim.api) and functions (vim.fn)"; echo; echo "$stamp"; echo
+    echo "What a plugin can call. zett's own plugin API is \`zett.*\` (\`:help config\`, \`:help plugins\`); this is what"
+    echo "it is measured against."; echo
+    echo "## vim.api ($(wc -l < "$tmp/api.txt"))"; echo; sed 's/^/- `/; s/$/`/' "$tmp/api.txt"; echo
+    echo "## vim.fn ($(wc -l < "$tmp/fn.txt"))"; echo; paste -sd' ' "$tmp/fn.txt" | fold -s -w 100
+} > "$out/nvim-api.md"
+
+# ── Emacs's keys and commands ──
+{
+    n=$(wc -l < "$tmp/emacs-keys.tsv"); have=0
+    while IFS=$'\t' read -r k cmd; do has "$cmd" "$tmp/zett-cmds.txt" && have=$((have + 1)); done < "$tmp/emacs-keys.tsv"
+    echo "# Emacs's default keys in zett"; echo; echo "$stamp"; echo
+    echo "$have of $n bound commands. ✓ zett has the command under the same name (\`M-x\`), · not yet."; echo
+    echo "| | key | command |"; echo "|---|---|---|"
+    while IFS=$'\t' read -r k cmd; do mark="·"; has "$cmd" "$tmp/zett-cmds.txt" && mark="✓"; printf '| %s | `%s` | `%s` |\n' "$mark" "${k//|/\\|}" "$cmd"; done < "$tmp/emacs-keys.tsv"
+} > "$out/emacs-keys.md"
+{
+    n=$(wc -l < "$tmp/emacs-cmds.tsv")
+    echo "# Emacs's commands"; echo; echo "$stamp"; echo
+    echo "All $n interactive commands of a plain Emacs (\`emacs -Q\`), by their package's prefix. ✓ zett has it under"
+    echo "the same name. Most are packages (mail, games, modes for other languages): zett's answer to many is a"
+    echo "plugin, not the core."; echo
+    awk -F'\t' '{p=$1; sub(/-.*/, "", p); print p "\t" $0}' "$tmp/emacs-cmds.tsv" | sort -t$'\t' -k1,1 -k2,2 | awk -F'\t' -v z="$tmp/zett-cmds.txt" '
+        BEGIN { while ((getline l < z) > 0) have[l] = 1 }
+        $1 != last { printf "\n## %s\n\n", $1; last = $1 }
+        { d = $3; gsub(/\|/, "\\|", d); printf "- %s `%s` %s\n", ($2 in have) ? "✓" : "·", $2, d }'
+} > "$out/emacs-commands.md"
+
+# ── the index ──
+{
+    echo "# Parity: Neovim and Emacs, and what zett has"; echo; echo "$stamp"; echo
+    for f in nvim-options nvim-ex-commands nvim-normal-keys nvim-api emacs-keys emacs-commands; do
+        t=$(head -1 "$out/$f.md" | sed 's/^# //'); c=$(grep -c '| ✓ \|^- ✓' "$out/$f.md" || true); a=$(grep -c '^| [✓·] \|^- [✓·] \|^| `' "$out/$f.md" || true)
+        echo "- [$t]($f.md): $c ✓ of $a"
+    done
+} > "$out/README.md"
+cat "$out/README.md"
