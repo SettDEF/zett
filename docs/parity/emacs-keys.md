@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-199 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
+267 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
 
 | | key | command |
 |---|---|---|
@@ -15,7 +15,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `<bottom-right-corner> <down-mouse-1>` | `mouse-drag-bottom-right-corner` |
 | · | `<compose-last-chars>` | `compose-last-chars` |
 | · | `<delete-frame>` | `handle-delete-frame` |
-| · | `<deletechar>` | `delete-forward-char` |
+| ✓ | `<deletechar>` | `delete-forward-char` |
 | · | `<down-mouse-1>` | `mouse-drag-region` |
 | · | `<drag-mouse-1>` | `mouse-set-region` |
 | · | `<f10>` | `menu-bar-open` |
@@ -24,7 +24,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `<f4>` | `kmacro-end-or-call-macro` |
 | · | `<find>` | `search-forward` |
 | · | `<horizontal-scroll-bar> <mouse-1>` | `scroll-bar-toolkit-horizontal-scroll` |
-| · | `<insertchar>` | `overwrite-mode` |
+| ✓ | `<insertchar>` | `overwrite-mode` |
 | · | `<left-edge> <down-mouse-1>` | `mouse-drag-left-edge` |
 | ✓ | `<left>` | `left-char` |
 | · | `<mouse-1>` | `mouse-set-point` |
@@ -58,17 +58,17 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-M-%` | `query-replace-regexp` |
 | ✓ | `C-M-,` | `xref-go-forward` |
 | ✓ | `C-M-.` | `xref-find-apropos` |
-| · | `C-M-/` | `dabbrev-completion` |
+| ✓ | `C-M-/` | `dabbrev-completion` |
 | ✓ | `C-M-<backspace>` | `backward-kill-sexp` |
 | · | `C-M-<down-mouse-1>` | `mouse-drag-region-rectangle` |
 | · | `C-M-<wheel-up>` | `mouse-wheel-global-text-scale` |
 | ✓ | `C-M-@` | `mark-sexp` |
-| · | `C-M-S-l` | `recenter-other-window` |
+| ✓ | `C-M-S-l` | `recenter-other-window` |
 | ✓ | `C-M-\` | `indent-region` |
 | ✓ | `C-M-_` | `undo-redo` |
 | ✓ | `C-M-a` | `beginning-of-defun` |
 | ✓ | `C-M-b` | `backward-sexp` |
-| · | `C-M-c` | `exit-recursive-edit` |
+| ✓ | `C-M-c` | `exit-recursive-edit` |
 | ✓ | `C-M-d` | `down-list` |
 | ✓ | `C-M-e` | `end-of-defun` |
 | ✓ | `C-M-f` | `forward-sexp` |
@@ -85,23 +85,23 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-M-s` | `isearch-forward-regexp` |
 | ✓ | `C-M-t` | `transpose-sexps` |
 | ✓ | `C-M-u` | `backward-up-list` |
-| · | `C-M-v` | `scroll-other-window` |
+| ✓ | `C-M-v` | `scroll-other-window` |
 | ✓ | `C-M-w` | `append-next-kill` |
-| · | `C-M-x` | `eval-defun` |
+| ✓ | `C-M-x` | `eval-defun` |
 | ✓ | `C-S-<backspace>` | `kill-whole-line` |
 | ✓ | `C-SPC` | `set-mark-command` |
 | · | `C-\` | `toggle-input-method` |
-| · | `C-]` | `abort-recursive-edit` |
+| ✓ | `C-]` | `abort-recursive-edit` |
 | ✓ | `C-a` | `move-beginning-of-line` |
 | ✓ | `C-b` | `backward-char` |
 | · | `C-c C-b` | `elisp-byte-compile-buffer` |
-| · | `C-c C-e` | `elisp-eval-region-or-buffer` |
+| ✓ | `C-c C-e` | `elisp-eval-region-or-buffer` |
 | ✓ | `C-d` | `delete-char` |
 | ✓ | `C-e` | `move-end-of-line` |
 | ✓ | `C-f` | `forward-char` |
 | ✓ | `C-g` | `keyboard-quit` |
-| · | `C-h .` | `display-local-help` |
-| · | `C-h 4 i` | `info-other-window` |
+| ✓ | `C-h .` | `display-local-help` |
+| ✓ | `C-h 4 i` | `info-other-window` |
 | · | `C-h 4 s` | `help-find-source` |
 | ✓ | `C-h ?` | `help-for-help` |
 | · | `C-h C` | `describe-coding-system` |
@@ -116,14 +116,14 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-h C-s` | `search-forward-help-for-help` |
 | · | `C-h C-t` | `view-emacs-todo` |
 | · | `C-h C-w` | `describe-no-warranty` |
-| · | `C-h F` | `Info-goto-emacs-command-node` |
+| ✓ | `C-h F` | `Info-goto-emacs-command-node` |
 | · | `C-h I` | `describe-input-method` |
-| · | `C-h K` | `Info-goto-emacs-key-command-node` |
+| ✓ | `C-h K` | `Info-goto-emacs-key-command-node` |
 | · | `C-h L` | `describe-language-environment` |
-| · | `C-h P` | `describe-package` |
-| · | `C-h R` | `info-display-manual` |
+| ✓ | `C-h P` | `describe-package` |
+| ✓ | `C-h R` | `info-display-manual` |
 | · | `C-h RET` | `view-order-manuals` |
-| · | `C-h S` | `info-lookup-symbol` |
+| ✓ | `C-h S` | `info-lookup-symbol` |
 | ✓ | `C-h a` | `apropos-command` |
 | ✓ | `C-h b` | `describe-bindings` |
 | ✓ | `C-h c` | `describe-key-briefly` |
@@ -138,8 +138,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-h m` | `describe-mode` |
 | · | `C-h n` | `view-emacs-news` |
 | ✓ | `C-h o` | `describe-symbol` |
-| · | `C-h p` | `finder-by-keyword` |
-| · | `C-h q` | `help-quit` |
+| ✓ | `C-h p` | `finder-by-keyword` |
+| ✓ | `C-h q` | `help-quit` |
 | ✓ | `C-h r` | `info-emacs-manual` |
 | · | `C-h s` | `describe-syntax` |
 | ✓ | `C-h t` | `help-with-tutorial` |
@@ -147,7 +147,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-h v` | `describe-variable` |
 | ✓ | `C-h w` | `where-is` |
 | ✓ | `C-h x` | `describe-command` |
-| · | `C-j` | `eval-print-last-sexp` |
+| ✓ | `C-j` | `eval-print-last-sexp` |
 | ✓ | `C-k` | `kill-line` |
 | ✓ | `C-l` | `recenter-top-bottom` |
 | ✓ | `C-n` | `next-line` |
@@ -167,7 +167,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x *` | `calc-dispatch` |
 | ✓ | `C-x +` | `balance-windows` |
 | · | `C-x -` | `shrink-window-if-larger-than-buffer` |
-| · | `C-x .` | `set-fill-prefix` |
+| ✓ | `C-x .` | `set-fill-prefix` |
 | ✓ | `C-x 0` | `delete-window` |
 | ✓ | `C-x 1` | `delete-other-windows` |
 | ✓ | `C-x 2` | `split-window-below` |
@@ -177,15 +177,15 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x 4 1` | `same-window-prefix` |
 | · | `C-x 4 4` | `other-window-prefix` |
 | ✓ | `C-x 4 C-f` | `find-file-other-window` |
-| · | `C-x 4 C-j` | `dired-jump-other-window` |
+| ✓ | `C-x 4 C-j` | `dired-jump-other-window` |
 | · | `C-x 4 C-o` | `display-buffer` |
 | · | `C-x 4 a` | `add-change-log-entry-other-window` |
 | ✓ | `C-x 4 b` | `switch-to-buffer-other-window` |
 | · | `C-x 4 c` | `clone-indirect-buffer-other-window` |
-| · | `C-x 4 d` | `dired-other-window` |
+| ✓ | `C-x 4 d` | `dired-other-window` |
 | · | `C-x 4 m` | `compose-mail-other-window` |
 | · | `C-x 4 p` | `project-other-window-command` |
-| · | `C-x 4 r` | `find-file-read-only-other-window` |
+| ✓ | `C-x 4 r` | `find-file-read-only-other-window` |
 | · | `C-x 5 .` | `xref-find-definitions-other-frame` |
 | · | `C-x 5 0` | `delete-frame` |
 | · | `C-x 5 1` | `delete-other-frames` |
@@ -223,17 +223,17 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x C-M-0` | `global-text-scale-adjust` |
 | ✓ | `C-x C-b` | `list-buffers` |
 | ✓ | `C-x C-c` | `save-buffers-kill-terminal` |
-| · | `C-x C-d` | `list-directory` |
-| · | `C-x C-e` | `eval-last-sexp` |
+| ✓ | `C-x C-d` | `list-directory` |
+| ✓ | `C-x C-e` | `eval-last-sexp` |
 | ✓ | `C-x C-f` | `find-file` |
-| · | `C-x C-j` | `dired-jump` |
+| ✓ | `C-x C-j` | `dired-jump` |
 | · | `C-x C-k` | `kmacro-keymap` |
 | ✓ | `C-x C-l` | `downcase-region` |
-| · | `C-x C-n` | `set-goal-column` |
+| ✓ | `C-x C-n` | `set-goal-column` |
 | ✓ | `C-x C-o` | `delete-blank-lines` |
-| · | `C-x C-p` | `mark-page` |
+| ✓ | `C-x C-p` | `mark-page` |
 | ✓ | `C-x C-q` | `read-only-mode` |
-| · | `C-x C-r` | `find-file-read-only` |
+| ✓ | `C-x C-r` | `find-file-read-only` |
 | ✓ | `C-x C-s` | `save-buffer` |
 | ✓ | `C-x C-t` | `transpose-lines` |
 | ✓ | `C-x C-u` | `upcase-region` |
@@ -256,9 +256,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x RET x` | `set-selection-coding-system` |
 | · | `C-x SPC` | `rectangle-mark-mode` |
 | ✓ | `C-x TAB` | `indent-rigidly` |
-| · | `C-x [` | `backward-page` |
+| ✓ | `C-x [` | `backward-page` |
 | · | `C-x \` | `activate-transient-input-method` |
-| · | `C-x ]` | `forward-page` |
+| ✓ | `C-x ]` | `forward-page` |
 | ✓ | `C-x ^` | `enlarge-window` |
 | ✓ | `C-x `` | `next-error` |
 | · | `C-x a +` | `add-mode-abbrev` |
@@ -268,7 +268,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x a n` | `expand-jump-to-next-slot` |
 | · | `C-x a p` | `expand-jump-to-previous-slot` |
 | ✓ | `C-x b` | `switch-to-buffer` |
-| · | `C-x d` | `dired` |
+| ✓ | `C-x d` | `dired` |
 | ✓ | `C-x e` | `kmacro-end-and-call-macro` |
 | ✓ | `C-x f` | `set-fill-column` |
 | ✓ | `C-x h` | `mark-whole-buffer` |
@@ -277,48 +277,48 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-x l` | `count-lines-page` |
 | · | `C-x m` | `compose-mail` |
 | ✓ | `C-x n d` | `narrow-to-defun` |
-| · | `C-x n g` | `goto-line-relative` |
+| ✓ | `C-x n g` | `goto-line-relative` |
 | ✓ | `C-x n n` | `narrow-to-region` |
-| · | `C-x n p` | `narrow-to-page` |
+| ✓ | `C-x n p` | `narrow-to-page` |
 | ✓ | `C-x n w` | `widen` |
 | ✓ | `C-x o` | `other-window` |
-| · | `C-x p !` | `project-shell-command` |
-| · | `C-x p &` | `project-async-shell-command` |
-| · | `C-x p C-b` | `project-list-buffers` |
-| · | `C-x p C-x s` | `project-save-some-buffers` |
-| · | `C-x p D` | `project-dired` |
-| · | `C-x p F` | `project-or-external-find-file` |
-| · | `C-x p G` | `project-or-external-find-regexp` |
-| · | `C-x p b` | `project-switch-to-buffer` |
+| ✓ | `C-x p !` | `project-shell-command` |
+| ✓ | `C-x p &` | `project-async-shell-command` |
+| ✓ | `C-x p C-b` | `project-list-buffers` |
+| ✓ | `C-x p C-x s` | `project-save-some-buffers` |
+| ✓ | `C-x p D` | `project-dired` |
+| ✓ | `C-x p F` | `project-or-external-find-file` |
+| ✓ | `C-x p G` | `project-or-external-find-regexp` |
+| ✓ | `C-x p b` | `project-switch-to-buffer` |
 | ✓ | `C-x p c` | `project-compile` |
-| · | `C-x p d` | `project-find-dir` |
+| ✓ | `C-x p d` | `project-find-dir` |
 | ✓ | `C-x p e` | `project-eshell` |
 | ✓ | `C-x p f` | `project-find-file` |
 | ✓ | `C-x p g` | `project-find-regexp` |
-| · | `C-x p k` | `project-kill-buffers` |
-| · | `C-x p o` | `project-any-command` |
+| ✓ | `C-x p k` | `project-kill-buffers` |
+| ✓ | `C-x p o` | `project-any-command` |
 | ✓ | `C-x p p` | `project-switch-project` |
 | · | `C-x p r` | `project-query-replace-regexp` |
 | ✓ | `C-x p s` | `project-shell` |
 | ✓ | `C-x p v` | `project-vc-dir` |
-| · | `C-x p x` | `project-execute-extended-command` |
+| ✓ | `C-x p x` | `project-execute-extended-command` |
 | · | `C-x q` | `kbd-macro-query` |
 | ✓ | `C-x r +` | `increment-register` |
 | · | `C-x r B` | `buffer-to-register` |
 | · | `C-x r F` | `file-to-register` |
-| · | `C-x r M` | `bookmark-set-no-overwrite` |
+| ✓ | `C-x r M` | `bookmark-set-no-overwrite` |
 | ✓ | `C-x r M-w` | `copy-rectangle-as-kill` |
 | ✓ | `C-x r N` | `rectangle-number-lines` |
 | ✓ | `C-x r SPC` | `point-to-register` |
-| · | `C-x r b` | `bookmark-jump` |
+| ✓ | `C-x r b` | `bookmark-jump` |
 | ✓ | `C-x r c` | `clear-rectangle` |
 | ✓ | `C-x r d` | `delete-rectangle` |
 | · | `C-x r f` | `frameset-to-register` |
 | ✓ | `C-x r g` | `insert-register` |
 | ✓ | `C-x r j` | `jump-to-register` |
 | ✓ | `C-x r k` | `kill-rectangle` |
-| · | `C-x r l` | `bookmark-bmenu-list` |
-| · | `C-x r m` | `bookmark-set` |
+| ✓ | `C-x r l` | `bookmark-bmenu-list` |
+| ✓ | `C-x r m` | `bookmark-set` |
 | ✓ | `C-x r n` | `number-to-register` |
 | ✓ | `C-x r o` | `open-rectangle` |
 | ✓ | `C-x r r` | `copy-rectangle-to-register` |
@@ -397,8 +397,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x v ~` | `vc-revision-other-window` |
 | · | `C-x w -` | `fit-window-to-buffer` |
 | · | `C-x w 0` | `delete-windows-on` |
-| · | `C-x w 2` | `split-root-window-below` |
-| · | `C-x w 3` | `split-root-window-right` |
+| ✓ | `C-x w 2` | `split-root-window-below` |
+| ✓ | `C-x w 3` | `split-root-window-right` |
 | · | `C-x w ^ f` | `tear-off-window` |
 | · | `C-x w ^ t` | `tab-window-detach` |
 | · | `C-x w d` | `toggle-window-dedicated` |
@@ -412,21 +412,21 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x w s` | `window-toggle-side-windows` |
 | · | `C-x w t` | `window-layout-transpose` |
 | · | `C-x x @` | `tramp-revert-buffer-with-sudo` |
-| · | `C-x x f` | `font-lock-update` |
+| ✓ | `C-x x f` | `font-lock-update` |
 | ✓ | `C-x x g` | `revert-buffer-quick` |
-| · | `C-x x i` | `insert-buffer` |
+| ✓ | `C-x x i` | `insert-buffer` |
 | · | `C-x x n` | `clone-buffer` |
 | ✓ | `C-x x r` | `rename-buffer` |
 | ✓ | `C-x x t` | `toggle-truncate-lines` |
 | · | `C-x x u` | `rename-uniquely` |
-| · | `C-x z` | `repeat` |
+| ✓ | `C-x z` | `repeat` |
 | ✓ | `C-x {` | `shrink-window-horizontally` |
 | ✓ | `C-x }` | `enlarge-window-horizontally` |
 | ✓ | `C-y` | `yank` |
 | ✓ | `C-z` | `suspend-frame` |
 | ✓ | `DEL` | `backward-delete-char-untabify` |
 | ✓ | `M-!` | `shell-command` |
-| · | `M-$` | `ispell-word` |
+| ✓ | `M-$` | `ispell-word` |
 | ✓ | `M-%` | `query-replace` |
 | ✓ | `M-&` | `async-shell-command` |
 | · | `M-'` | `abbrev-prefix-mark` |
@@ -439,15 +439,15 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-:` | `eval-expression` |
 | ✓ | `M-;` | `comment-dwim` |
 | ✓ | `M-<` | `beginning-of-buffer` |
-| · | `M-<begin>` | `beginning-of-buffer-other-window` |
+| ✓ | `M-<begin>` | `beginning-of-buffer-other-window` |
 | · | `M-<down-mouse-1>` | `mouse-drag-secondary` |
 | · | `M-<drag-mouse-1>` | `mouse-set-secondary` |
-| · | `M-<end>` | `end-of-buffer-other-window` |
+| ✓ | `M-<end>` | `end-of-buffer-other-window` |
 | · | `M-<f10>` | `toggle-frame-maximized` |
 | · | `M-<mouse-1>` | `mouse-start-secondary` |
 | · | `M-<mouse-2>` | `mouse-yank-secondary` |
 | · | `M-<mouse-3>` | `mouse-secondary-save-then-kill` |
-| · | `M-<prior>` | `scroll-other-window-down` |
+| ✓ | `M-<prior>` | `scroll-other-window-down` |
 | · | `M-<wheel-right>` | `mwheel-scroll` |
 | ✓ | `M-=` | `count-words-region` |
 | ✓ | `M->` | `end-of-buffer` |
@@ -456,7 +456,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-DEL` | `backward-kill-word` |
 | ✓ | `M-ESC ESC` | `keyboard-escape-quit` |
 | ✓ | `M-SPC` | `cycle-spacing` |
-| · | `M-X` | `execute-extended-command-for-buffer` |
+| ✓ | `M-X` | `execute-extended-command-for-buffer` |
 | ✓ | `M-\` | `delete-horizontal-space` |
 | ✓ | `M-^` | `delete-indentation` |
 | · | `M-`` | `tmm-menubar` |
@@ -476,18 +476,18 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-k` | `kill-sentence` |
 | ✓ | `M-l` | `downcase-word` |
 | ✓ | `M-m` | `back-to-indentation` |
-| · | `M-q` | `prog-fill-reindent-defun` |
+| ✓ | `M-q` | `prog-fill-reindent-defun` |
 | ✓ | `M-r` | `move-to-window-line-top-bottom` |
-| · | `M-s .` | `isearch-forward-symbol-at-point` |
+| ✓ | `M-s .` | `isearch-forward-symbol-at-point` |
 | · | `M-s M-.` | `isearch-forward-thing-at-point` |
-| · | `M-s M-w` | `eww-search-words` |
+| ✓ | `M-s M-w` | `eww-search-words` |
 | · | `M-s _` | `isearch-forward-symbol` |
-| · | `M-s h .` | `highlight-symbol-at-point` |
+| ✓ | `M-s h .` | `highlight-symbol-at-point` |
 | · | `M-s h f` | `hi-lock-find-patterns` |
-| · | `M-s h l` | `highlight-lines-matching-regexp` |
-| · | `M-s h p` | `highlight-phrase` |
-| · | `M-s h r` | `highlight-regexp` |
-| · | `M-s h u` | `unhighlight-regexp` |
+| ✓ | `M-s h l` | `highlight-lines-matching-regexp` |
+| ✓ | `M-s h p` | `highlight-phrase` |
+| ✓ | `M-s h r` | `highlight-regexp` |
+| ✓ | `M-s h u` | `unhighlight-regexp` |
 | · | `M-s h w` | `hi-lock-write-interactive-patterns` |
 | ✓ | `M-s o` | `occur` |
 | · | `M-s w` | `isearch-forward-word` |

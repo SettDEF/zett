@@ -34,7 +34,7 @@ plugin, not the core.
 ## abort
 
 - · `abort-minibuffers` Abort the current minibuffer.
-- · `abort-recursive-edit` Abort the command that requested this recursive edit or minibuffer input.
+- ✓ `abort-recursive-edit` Abort the command that requested this recursive edit or minibuffer input.
 
 ## about
 
@@ -201,7 +201,7 @@ plugin, not the core.
 - ✓ `backward-kill-sexp` Kill the sexp (balanced expression) preceding point.
 - ✓ `backward-kill-word` Kill characters backward until encountering the beginning of a word.
 - ✓ `backward-list` Move backward across one balanced group of parentheses.
-- · `backward-page` Move backward to page boundary.  With arg, repeat, or go fwd if negative.
+- ✓ `backward-page` Move backward to page boundary.  With arg, repeat, or go fwd if negative.
 - ✓ `backward-paragraph` Move backward to start of paragraph.
 - ✓ `backward-sentence` Move backward to start of sentence.
 - ✓ `backward-sexp` Move backward across one balanced expression (sexp).
@@ -243,7 +243,7 @@ plugin, not the core.
 ## beginning
 
 - ✓ `beginning-of-buffer` Move point to the beginning of the buffer.
-- · `beginning-of-buffer-other-window` Move point to the beginning of the buffer in the other window.
+- ✓ `beginning-of-buffer-other-window` Move point to the beginning of the buffer in the other window.
 - ✓ `beginning-of-defun` Move backward to the beginning of a defun.
 - · `beginning-of-defun-comments` Move to the beginning of ARGth defun, including comments.
 - · `beginning-of-defun-raw` Move point to the character that starts a defun.
@@ -283,13 +283,13 @@ plugin, not the core.
 
 ## bookmark
 
-- · `bookmark-bmenu-list` Display a list of existing bookmarks.
+- ✓ `bookmark-bmenu-list` Display a list of existing bookmarks.
 - · `bookmark-bmenu-search` Incremental search of bookmarks, hiding the non-matches as we go.
 - · `bookmark-delete` Delete BOOKMARK-NAME from the bookmark list.
 - · `bookmark-delete-all` Permanently delete all bookmarks.
 - · `bookmark-insert` Insert the text of the file pointed to by bookmark BOOKMARK-NAME.
 - · `bookmark-insert-location` Insert the name of the file associated with BOOKMARK-NAME.
-- · `bookmark-jump` Jump to bookmark BOOKMARK (a point in some file).
+- ✓ `bookmark-jump` Jump to bookmark BOOKMARK (a point in some file).
 - · `bookmark-jump-other-frame` Jump to BOOKMARK in another frame.  See `bookmark-jump' for more.
 - · `bookmark-jump-other-window` Jump to BOOKMARK in another window.  See `bookmark-jump' for more.
 - · `bookmark-load` Load bookmarks from FILE (which must be in bookmark format).
@@ -297,8 +297,8 @@ plugin, not the core.
 - · `bookmark-relocate` Relocate BOOKMARK-NAME to another file, reading file name with minibuffer.
 - · `bookmark-rename` Change the name of OLD-NAME bookmark to NEW-NAME name.
 - · `bookmark-save` Save currently defined bookmarks in FILE.
-- · `bookmark-set` Set a bookmark named NAME at the current location.
-- · `bookmark-set-no-overwrite` Set a bookmark named NAME at the current location.
+- ✓ `bookmark-set` Set a bookmark named NAME at the current location.
+- ✓ `bookmark-set-no-overwrite` Set a bookmark named NAME at the current location.
 - · `bookmark-write` Write bookmarks to a file (reading the file name with the minibuffer).
 
 ## bovine
@@ -807,7 +807,7 @@ plugin, not the core.
 
 ## dabbrev
 
-- · `dabbrev-completion` Completion on current word.
+- ✓ `dabbrev-completion` Completion on current word.
 - ✓ `dabbrev-expand` Expand previous word "dynamically".
 
 ## dbus
@@ -884,7 +884,7 @@ plugin, not the core.
 - · `delete-file` Delete file named FILENAME.  If it is a symlink, remove the symlink.
 - · `delete-file-local-variable` Delete all settings of file-local VARIABLE from the Local Variables list.
 - · `delete-file-local-variable-prop-line` Delete all settings of file-local VARIABLE from the -*- line.
-- · `delete-forward-char` Delete the following N characters (previous if N is negative).
+- ✓ `delete-forward-char` Delete the following N characters (previous if N is negative).
 - · `delete-frame` Delete FRAME, eliminating it from use.
 - ✓ `delete-horizontal-space` Delete all spaces and tabs around point.
 - ✓ `delete-indentation` Join this line to previous and fix up whitespace at join.
@@ -953,7 +953,7 @@ plugin, not the core.
 - · `describe-minor-mode-from-symbol` Display documentation of a minor mode given as a symbol, SYMBOL.
 - ✓ `describe-mode` Display documentation of current major mode and minor modes.
 - · `describe-no-warranty` Display info on all the kinds of warranty Emacs does NOT have.
-- · `describe-package` Display the full documentation of PACKAGE (a symbol).
+- ✓ `describe-package` Display the full documentation of PACKAGE (a symbol).
 - · `describe-personal-keybindings` Display all the personal keybindings defined by `bind-key'.
 - · `describe-prefix-bindings` Describe the bindings of the prefix used to reach this command.
 - · `describe-specified-language-support` Describe how Emacs supports the specified language environment.
@@ -1015,14 +1015,14 @@ plugin, not the core.
 
 ## dired
 
-- · `dired` "Edit" directory DIRNAME--delete, rename, print, etc. some files in it.
+- ✓ `dired` "Edit" directory DIRNAME--delete, rename, print, etc. some files in it.
 - · `dired-at-point` Start Dired, defaulting to file at point.  See `ffap'.
 - · `dired-from-menubar` Edit an existing directory.
-- · `dired-jump` Jump to Dired buffer corresponding to current buffer.
-- · `dired-jump-other-window` Like \[dired-jump] (`dired-jump') but in other window.
+- ✓ `dired-jump` Jump to Dired buffer corresponding to current buffer.
+- ✓ `dired-jump-other-window` Like \[dired-jump] (`dired-jump') but in other window.
 - · `dired-other-frame` "Edit" directory DIRNAME.  Like `dired' but make a new frame.
 - · `dired-other-tab` "Edit" directory DIRNAME.  Like `dired' but make a new tab.
-- · `dired-other-window` "Edit" directory DIRNAME.  Like `dired' but select in another window.
+- ✓ `dired-other-window` "Edit" directory DIRNAME.  Like `dired' but select in another window.
 
 ## dirtrack
 
@@ -1046,7 +1046,7 @@ plugin, not the core.
 - · `display-call-tree` Display a call graph of a specified file.
 - · `display-fill-column-indicator-mode` Toggle display of `fill-column' indicator.
 - ✓ `display-line-numbers-mode` Toggle display of line numbers in the buffer.
-- · `display-local-help` Display in the echo area `kbd-help' or `help-echo' text at point.
+- ✓ `display-local-help` Display in the echo area `kbd-help' or `help-echo' text at point.
 - · `display-time` Enable display of time, load level, and mail flag in mode lines.
 - · `display-time-mode` Toggle display of time, load level, and mail flag in mode lines.
 - · `display-time-world` Display a world clock buffer with times in various time zones.
@@ -1322,7 +1322,7 @@ plugin, not the core.
 - · `elisp-byte-compile-buffer` Byte compile the current buffer, but don't write a file.
 - · `elisp-byte-compile-file` Byte compile the file the current buffer is visiting.
 - · `elisp-enable-lexical-binding` Make the current buffer use `lexical-binding'.
-- · `elisp-eval-region-or-buffer` Evaluate the forms in the active region or the whole current buffer.
+- ✓ `elisp-eval-region-or-buffer` Evaluate the forms in the active region or the whole current buffer.
 - · `elisp-flymake--batch-compile-for-flymake` Helper for `elisp-flymake-byte-compile'.
 - · `elisp-index-search` Look up TOPIC in the indices of the Emacs Lisp Reference Manual.
 - · `elisp-last-sexp-toggle-display` Toggle between abbreviated and unabbreviated printed representations.
@@ -1396,7 +1396,7 @@ plugin, not the core.
 
 - · `end-kbd-macro` Finish defining a keyboard macro.
 - ✓ `end-of-buffer` Move point to the end of the buffer.
-- · `end-of-buffer-other-window` Move point to the end of the buffer in the other window.
+- ✓ `end-of-buffer-other-window` Move point to the end of the buffer in the other window.
 - ✓ `end-of-defun` Move forward to next end of defun.
 - ✓ `end-of-line` Move point to end of current line (in the logical order).
 - · `end-of-visual-line` Move point to end of current visual line.
@@ -1530,10 +1530,10 @@ plugin, not the core.
 ## eval
 
 - · `eval-buffer` Execute the accessible portion of current buffer as Lisp code.
-- · `eval-defun` Evaluate top-level form around point and instrument it if EDEBUG-IT is non-nil.
+- ✓ `eval-defun` Evaluate top-level form around point and instrument it if EDEBUG-IT is non-nil.
 - ✓ `eval-expression` Evaluate EXP and print value in the echo area.
-- · `eval-last-sexp` Evaluate sexp before point; print value in the echo area.
-- · `eval-print-last-sexp` Evaluate sexp before point; print value into current buffer.
+- ✓ `eval-last-sexp` Evaluate sexp before point; print value in the echo area.
+- ✓ `eval-print-last-sexp` Evaluate sexp before point; print value into current buffer.
 - · `eval-region` Execute the region as Lisp code.
 
 ## eww
@@ -1542,7 +1542,7 @@ plugin, not the core.
 - · `eww-browse` Function to be run to parse command line URLs.
 - · `eww-list-bookmarks` Display the eww bookmarks.
 - · `eww-open-file` Render FILE using EWW.
-- · `eww-search-words` Search the web for the text in the region.
+- ✓ `eww-search-words` Search the web for the text in the region.
 
 ## exchange
 
@@ -1557,12 +1557,12 @@ plugin, not the core.
 
 - ✓ `execute-extended-command` Read a command name, then read the arguments and call the command.
 - · `execute-extended-command-cycle` Choose the next version of the extended command predicates.
-- · `execute-extended-command-for-buffer` Query user for a command relevant for the current mode, and then execute it.
+- ✓ `execute-extended-command-for-buffer` Query user for a command relevant for the current mode, and then execute it.
 
 ## exit
 
 - · `exit-minibuffer` Terminate this minibuffer argument.
-- · `exit-recursive-edit` Exit from the innermost recursive edit or minibuffer.
+- ✓ `exit-recursive-edit` Exit from the innermost recursive edit or minibuffer.
 - · `exit-splash-screen` Stop displaying the splash screen buffer.
 
 ## expand
@@ -1655,10 +1655,10 @@ plugin, not the core.
 - · `find-file-other-frame` Edit file FILENAME, in another frame.
 - · `find-file-other-tab` Edit file FILENAME, in another tab.
 - ✓ `find-file-other-window` Edit file FILENAME, in another window.
-- · `find-file-read-only` Edit file FILENAME but don't allow changes.
+- ✓ `find-file-read-only` Edit file FILENAME but don't allow changes.
 - · `find-file-read-only-other-frame` Edit file FILENAME in another frame but don't allow changes.
 - · `find-file-read-only-other-tab` Edit file FILENAME, in another tab, but don't allow changes.
-- · `find-file-read-only-other-window` Edit file FILENAME in another window but don't allow changes.
+- ✓ `find-file-read-only-other-window` Edit file FILENAME in another window but don't allow changes.
 - · `find-function` Find the definition of the Emacs Lisp FUNCTION near point.
 - · `find-function-at-point` Find directly the function at point in the other window.
 - · `find-function-mode` Enable some key bindings for the `find-function' family of functions.
@@ -1690,7 +1690,7 @@ plugin, not the core.
 
 ## finder
 
-- · `finder-by-keyword` Find packages matching a given keyword.
+- ✓ `finder-by-keyword` Find packages matching a given keyword.
 - · `finder-commentary` Display FILE's commentary section.
 - · `finder-list-keywords` Display descriptions of the keywords in the Finder buffer.
 
@@ -1744,7 +1744,7 @@ plugin, not the core.
 - · `font-lock-fontify-block` Fontify some lines the way `font-lock-fontify-buffer' would.
 - · `font-lock-fontify-buffer` Fontify the current buffer the way the function `font-lock-mode' would.
 - · `font-lock-mode` Toggle syntax highlighting in this buffer (Font Lock mode).
-- · `font-lock-update` Update the syntax highlighting in this buffer.
+- ✓ `font-lock-update` Update the syntax highlighting in this buffer.
 - · `font-show-log` Show log of font listing and opening.
 
 ## footnote
@@ -1786,7 +1786,7 @@ plugin, not the core.
 - ✓ `forward-char` Move point N characters forward (backward if N is negative).
 - · `forward-line` Move N lines forward (backward if N is negative).
 - ✓ `forward-list` Move forward across one balanced group of parentheses.
-- · `forward-page` Move forward to page boundary.  With arg, repeat, or go back if negative.
+- ✓ `forward-page` Move forward to page boundary.  With arg, repeat, or go back if negative.
 - ✓ `forward-paragraph` Move forward to end of paragraph.
 - · `forward-same-syntax` Move point past all characters with the same syntax class.
 - ✓ `forward-sentence` Move forward to next end of sentence.  With argument ARG, repeat.
@@ -1965,7 +1965,7 @@ plugin, not the core.
 - ✓ `goto-char` Set point to POSITION, a number or marker.
 - · `goto-history-element` Insert into the minibuffer the element of minibuffer history specified by NABS.
 - ✓ `goto-line` Go to LINE, counting from line 1 at beginning of buffer.
-- · `goto-line-relative` Go to LINE, counting from line at (point-min).
+- ✓ `goto-line-relative` Go to LINE, counting from line at (point-min).
 - · `goto-next-locus` Visit next `next-error' message and corresponding source code.
 
 ## gpm
@@ -2036,7 +2036,7 @@ plugin, not the core.
 - · `help-mode` Major mode for viewing help text and navigating references in it.
 - · `help-quick` Display a quick-help buffer showing popular commands and their bindings.
 - · `help-quick-toggle` Toggle display of a window showing popular commands and their bindings.
-- · `help-quit` Just exit from the Help command's command loop.
+- ✓ `help-quit` Just exit from the Help command's command loop.
 - ✓ `help-with-tutorial` Select the Emacs learn-by-doing tutorial.
 - · `help-with-tutorial-spec-language` Use the Emacs tutorial, specifying which language you want.
 - · `help-xref-interned` Display the full documentation of SYMBOL.
@@ -2081,10 +2081,10 @@ plugin, not the core.
 - · `highlight-compare-buffers` Compare two buffers and highlight the differences.
 - · `highlight-compare-with-file` Compare this buffer with a file, and highlight differences.
 - · `highlight-confusing-reorderings` Highlight text in region that might be bidi-reordered in suspicious ways.
-- · `highlight-lines-matching-regexp` Highlight all lines that match REGEXP using FACE.
-- · `highlight-phrase` Set face of each match of phrase REGEXP to FACE.
-- · `highlight-regexp` Set face of each match of REGEXP to FACE.
-- · `highlight-symbol-at-point` Highlight each instance of the symbol at point.
+- ✓ `highlight-lines-matching-regexp` Highlight all lines that match REGEXP using FACE.
+- ✓ `highlight-phrase` Set face of each match of phrase REGEXP to FACE.
+- ✓ `highlight-regexp` Set face of each match of REGEXP to FACE.
+- ✓ `highlight-symbol-at-point` Highlight each instance of the symbol at point.
 
 ## hippie
 
@@ -2292,14 +2292,14 @@ plugin, not the core.
 - · `info-apropos` Search indices of all known Info files on your system for STRING.
 - · `info-complete-file` Perform completion on file preceding point.
 - · `info-complete-symbol` Perform completion on symbol preceding point.
-- · `info-display-manual` Display an Info buffer displaying MANUAL.
+- ✓ `info-display-manual` Display an Info buffer displaying MANUAL.
 - · `info-emacs-bug` Display the "Reporting Bugs" section of the Emacs manual in Info mode.
 - ✓ `info-emacs-manual` Display the Emacs manual in Info mode.
 - · `info-finder` Display descriptions of the keywords in the Finder virtual manual.
 - · `info-lookup-file` Look up and display documentation of FILE in the relevant Info manual.
 - · `info-lookup-reset` Throw away all cached data.
-- · `info-lookup-symbol` Look up and display documentation of SYMBOL in the relevant Info manual.
-- · `info-other-window` Like `info' but show the Info buffer in another window.
+- ✓ `info-lookup-symbol` Look up and display documentation of SYMBOL in the relevant Info manual.
+- ✓ `info-other-window` Like `info' but show the Info buffer in another window.
 - · `info-xref-check` Check external references in FILENAME, an info document.
 - · `info-xref-check-all` Check external references in all info documents in the info path.
 - · `info-xref-check-all-custom` Check info references in all customize groups and variables.
@@ -2308,8 +2308,8 @@ plugin, not the core.
 ## Info
 
 - · `Info-directory` Go to the Info directory node.
-- · `Info-goto-emacs-command-node` Go to the Info node in the Emacs manual for command COMMAND.
-- · `Info-goto-emacs-key-command-node` Go to the node in the Emacs manual which describes the command bound to KEY.
+- ✓ `Info-goto-emacs-command-node` Go to the Info node in the Emacs manual for command COMMAND.
+- ✓ `Info-goto-emacs-key-command-node` Go to the node in the Emacs manual which describes the command bound to KEY.
 - · `Info-index` Look up a string TOPIC in the index for this manual and go to that entry.
 - · `Info-mode` Info mode provides commands for browsing through the Info documentation tree.
 - · `Info-on-current-buffer` Use Info mode to browse the current Info buffer.
@@ -2325,7 +2325,7 @@ plugin, not the core.
 ## insert
 
 - · `insert-abbrevs` Insert the description of all defined abbrevs after point.
-- · `insert-buffer` Insert after point the contents of BUFFER.
+- ✓ `insert-buffer` Insert after point the contents of BUFFER.
 - · `insert-char` Insert COUNT copies of CHARACTER.
 - ✓ `insert-file` Insert contents of file FILENAME into buffer after point.
 - · `insert-file-literally` Insert contents of file FILENAME into buffer after point with no conversion.
@@ -2371,7 +2371,7 @@ plugin, not the core.
 - · `isearch-forward-exit-minibuffer` Resume isearching forward from the minibuffer that edits the search string.
 - · `isearch-forward-regexp` Do incremental search forward for regular expression.
 - · `isearch-forward-symbol` Do incremental search forward for a symbol.
-- · `isearch-forward-symbol-at-point` Do incremental search forward for a symbol found near point.
+- ✓ `isearch-forward-symbol-at-point` Do incremental search forward for a symbol found near point.
 - · `isearch-forward-thing-at-point` Do incremental search forward for the "thing" found near point.
 - · `isearch-forward-word` Do incremental search forward for a sequence of words.
 - · `isearch-help-for-help` Display Isearch help menu.
@@ -2453,7 +2453,7 @@ plugin, not the core.
 - · `ispell-minor-mode` Toggle last-word spell checking (Ispell minor mode).
 - · `ispell-pdict-save` Check to see if the personal dictionary has been modified.
 - · `ispell-region` Interactively check region between REG-START and REG-END for spelling errors.
-- · `ispell-word` Check spelling of word under or before the cursor.
+- ✓ `ispell-word` Check spelling of word under or before the cursor.
 
 ## iswitchb
 
@@ -2657,7 +2657,7 @@ plugin, not the core.
 - · `list-coding-systems` Display a list of all coding systems.
 - · `list-colors-display` Display names of defined colors, and show what they look like.
 - · `list-command-history` List history of commands that used the minibuffer.
-- · `list-directory` Display a list of files in or matching DIRNAME, a la `ls'.
+- ✓ `list-directory` Display a list of files in or matching DIRNAME, a la `ls'.
 - · `list-dynamic-libraries` Display a list of all dynamic libraries known to Emacs.
 - · `list-faces-display` List all faces, using the same sample text in each.
 - · `list-fontsets` Display a list of all fontsets.
@@ -2820,7 +2820,7 @@ plugin, not the core.
 - ✓ `mark-defun` Put mark at end of this defun, point at beginning.
 - · `mark-end-of-buffer` Set mark at the end of the buffer.
 - · `mark-end-of-sentence` Put mark at end of sentence.
-- · `mark-page` Put mark at end of page, point at beginning.
+- ✓ `mark-page` Put mark at end of page, point at beginning.
 - ✓ `mark-paragraph` Put point at beginning of this paragraph, mark at end.
 - ✓ `mark-sexp` Set mark ARG sexps from point or move mark one sexp.
 - ✓ `mark-whole-buffer` Put point at beginning and mark at end of buffer.
@@ -3137,7 +3137,7 @@ plugin, not the core.
 ## narrow
 
 - ✓ `narrow-to-defun` Make text outside current defun invisible.
-- · `narrow-to-page` Make text outside current page invisible.
+- ✓ `narrow-to-page` Make text outside current page invisible.
 - ✓ `narrow-to-region` Restrict editing in this buffer to the current region.
 
 ## native
@@ -3340,7 +3340,7 @@ plugin, not the core.
 
 ## overwrite
 
-- · `overwrite-mode` Toggle Overwrite mode.
+- ✓ `overwrite-mode` Toggle Overwrite mode.
 
 ## package
 
@@ -3595,31 +3595,31 @@ plugin, not the core.
 
 ## prog
 
-- · `prog-fill-reindent-defun` Refill or reindent the paragraph or defun that contains point.
+- ✓ `prog-fill-reindent-defun` Refill or reindent the paragraph or defun that contains point.
 - · `prog-fill-reindent-defun-default` Default implementation of `prog-fill-reindent-defun'.
 - · `prog-indent-sexp` Indent the expression after point.
 - · `prog-mode` Major mode for editing programming language source code.
 
 ## project
 
-- · `project-any-command` Run the next command in the current project.
-- · `project-async-shell-command` Run `async-shell-command' in the current project's root directory.
+- ✓ `project-any-command` Run the next command in the current project.
+- ✓ `project-async-shell-command` Run `async-shell-command' in the current project's root directory.
 - ✓ `project-compile` Run `compile' in the project root.
 - · `project-customize-dirlocals` Run `customize-dirlocals' in current project's root.
-- · `project-dired` Start Dired in the current project's root.
+- ✓ `project-dired` Start Dired in the current project's root.
 - · `project-display-buffer` Display BUFFER-OR-NAME in some window, without selecting it.
 - · `project-display-buffer-other-frame` Display BUFFER-OR-NAME preferably in another frame.
 - ✓ `project-eshell` Start Eshell in the current project's root directory.
-- · `project-execute-extended-command` Execute an extended command in project root.
-- · `project-find-dir` Start Dired in a directory inside the current project.
+- ✓ `project-execute-extended-command` Execute an extended command in project root.
+- ✓ `project-find-dir` Start Dired in a directory inside the current project.
 - ✓ `project-find-file` Visit a file (with completion) in the current project.
 - · `project-find-matching-buffer` Switch to a matching buffer in another project.
 - ✓ `project-find-regexp` Find all matches for REGEXP in the current project's roots.
 - · `project-forget-project` Remove directory PROJECT-ROOT from the project list.
-- · `project-kill-buffers` Kill the buffers belonging to the current project.
-- · `project-list-buffers` Display a list of project buffers.
-- · `project-or-external-find-file` Visit a file (with completion) in the current project or external roots.
-- · `project-or-external-find-regexp` Find all matches for REGEXP in the project roots or external roots.
+- ✓ `project-kill-buffers` Kill the buffers belonging to the current project.
+- ✓ `project-list-buffers` Display a list of project buffers.
+- ✓ `project-or-external-find-file` Visit a file (with completion) in the current project or external roots.
+- ✓ `project-or-external-find-regexp` Find all matches for REGEXP in the project roots or external roots.
 - · `project-other-frame-command` Run project command, displaying resultant buffer in another frame.
 - · `project-other-tab-command` Run project command, displaying resultant buffer in a new tab.
 - · `project-other-window-command` Run project command, displaying resultant buffer in another window.
@@ -3628,12 +3628,12 @@ plugin, not the core.
 - · `project-recompile` Run `recompile' in the project root with an appropriate buffer.
 - · `project-remember-project` Add project PR to the front of the project list.
 - · `project-root-find-file` Edit file FILENAME.
-- · `project-save-some-buffers` Like `save-some-buffers', but only for this project's buffers.
+- ✓ `project-save-some-buffers` Like `save-some-buffers', but only for this project's buffers.
 - · `project-search` Search for REGEXP in all the files of the project.
 - ✓ `project-shell` Start an inferior shell in the current project's root directory.
-- · `project-shell-command` Run `shell-command' in the current project's root directory.
+- ✓ `project-shell-command` Run `shell-command' in the current project's root directory.
 - ✓ `project-switch-project` "Switch" to another project by running an Emacs command.
-- · `project-switch-to-buffer` Display buffer BUFFER-OR-NAME in the selected window.
+- ✓ `project-switch-to-buffer` Display buffer BUFFER-OR-NAME in the selected window.
 - ✓ `project-vc-dir` Run VC-Dir in the current project's root.
 
 ## prolog
@@ -3736,7 +3736,7 @@ plugin, not the core.
 
 - · `recenter` Center point in selected window and maybe redisplay frame.
 - · `recenter-current-error` Recenter the current displayed error in the `next-error' buffer.
-- · `recenter-other-window` Call `recenter-top-bottom' in the other window.
+- ✓ `recenter-other-window` Call `recenter-top-bottom' in the other window.
 - ✓ `recenter-top-bottom` Scroll the window so that current line is in the middle of the window.
 
 ## recentf
@@ -3823,7 +3823,7 @@ plugin, not the core.
 
 ## repeat
 
-- · `repeat` Repeat most recently executed command.
+- ✓ `repeat` Repeat most recently executed command.
 - · `repeat-complex-command` Edit and re-evaluate last complex command, or ARGth from last.
 - · `repeat-exit` Exit the repeating sequence.
 - · `repeat-matching-complex-command` Edit and re-evaluate complex command with name matching PATTERN.
@@ -4021,8 +4021,8 @@ plugin, not the core.
 - · `scroll-down-line` Scroll text of selected window down ARG lines; or one line if no ARG.
 - ✓ `scroll-left` Scroll selected window display ARG columns left.
 - · `scroll-lock-mode` Buffer-local minor mode for pager-like scrolling.
-- · `scroll-other-window` Scroll next window upward LINES lines; or near full screen if no ARG.
-- · `scroll-other-window-down` Scroll next window downward LINES lines; or near full screen if no ARG.
+- ✓ `scroll-other-window` Scroll next window upward LINES lines; or near full screen if no ARG.
+- ✓ `scroll-other-window-down` Scroll next window downward LINES lines; or near full screen if no ARG.
 - ✓ `scroll-right` Scroll selected window display ARG columns right.
 - · `scroll-up` Scroll text of selected window upward ARG lines.
 - ✓ `scroll-up-command` Scroll text of selected window upward ARG lines; or near full screen if no ARG.
@@ -4105,14 +4105,14 @@ plugin, not the core.
 - · `set-file-modes` Set mode bits of file named FILENAME to MODE (an integer).
 - · `set-file-name-coding-system` Set coding system for decoding and encoding file names to CODING-SYSTEM.
 - ✓ `set-fill-column` Set `fill-column' to specified argument.
-- · `set-fill-prefix` Set the fill prefix to the current line up to point.
+- ✓ `set-fill-prefix` Set the fill prefix to the current line up to point.
 - · `set-foreground-color` Set the foreground color of the selected frame to COLOR-NAME.
 - · `set-frame-font` Set the default font to FONT.
 - · `set-frame-height` Set text height of frame FRAME to HEIGHT lines.
 - · `set-frame-name` Set the name of the selected frame to NAME.
 - · `set-frame-width` Set text width of frame FRAME to WIDTH columns.
 - · `set-fringe-style` Set the default appearance of fringes on the selected frame.
-- · `set-goal-column` Set the current horizontal position as a goal column.
+- ✓ `set-goal-column` Set the current horizontal position as a goal column.
 - · `set-input-method` Select and activate input method INPUT-METHOD for the current buffer.
 - · `set-justification` Set the region's justification style to STYLE.
 - · `set-justification-center` Make paragraphs in the region centered.
@@ -4288,8 +4288,8 @@ plugin, not the core.
 
 - · `split-frame` Split windows of specified FRAME into two separate frames.
 - ✓ `split-line` Split current line, moving portion beyond point vertically down.
-- · `split-root-window-below` Split root window of current frame in two.
-- · `split-root-window-right` Split root window of current frame into two side-by-side windows.
+- ✓ `split-root-window-below` Split root window of current frame in two.
+- ✓ `split-root-window-right` Split root window of current frame into two side-by-side windows.
 - · `split-tab` Split windows of specified TAB into two separate tabs.
 - ✓ `split-window-below` Split WINDOW-TO-SPLIT into two windows, one above the other.
 - · `split-window-horizontally` Split WINDOW-TO-SPLIT into two side-by-side windows.
@@ -4831,7 +4831,7 @@ plugin, not the core.
 
 ## unhighlight
 
-- · `unhighlight-regexp` Remove highlighting of each match to REGEXP set by hi-lock.
+- ✓ `unhighlight-regexp` Remove highlighting of each match to REGEXP set by hi-lock.
 
 ## uniquify
 
