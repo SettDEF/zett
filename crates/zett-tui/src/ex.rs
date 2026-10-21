@@ -223,7 +223,8 @@ impl App {
             return true;
         }
         // the command's name: letters, or one of the sign commands
-        let name_len = if rest.starts_with(['!', '&', '<', '>', '=', '@', '*', '~', '#']) { 1 } else { rest.chars().take_while(|c| c.is_ascii_alphabetic()).count() };
+        // :python3, :py3do: digits belong to those names
+        let name_len = if rest.starts_with(['!', '&', '<', '>', '=', '@', '*', '~', '#']) { 1 } else if rest.starts_with("py") { rest.chars().take_while(|c| c.is_ascii_alphanumeric()).count() } else { rest.chars().take_while(|c| c.is_ascii_alphabetic()).count() };
         let (name, mut arg) = rest.split_at(name_len);
         let bang = arg.starts_with('!') && !name.is_empty() && name != "!";
         if bang {

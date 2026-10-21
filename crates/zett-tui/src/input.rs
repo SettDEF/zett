@@ -632,6 +632,8 @@ impl App {
     /// Keys in Vim notation ("dd", ":w<CR>", "<C-w>j") as if typed: the : line, the mappings (unless
     /// `remap` is false) and the editor all see them. Deep enough nesting stops (maxmapdepth).
     pub(crate) fn replay(&mut self, keys: &str, remap: bool) {
+        // noremap: every mapping as if :noremap
+        let remap = remap && self.flag(self.cur, "remap");
         let depth = self.num(self.cur, "maxmapdepth").max(1);
         if self.replaying >= depth {
             return self.say("E223: recursive mapping");

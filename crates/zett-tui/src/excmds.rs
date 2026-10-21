@@ -38,6 +38,9 @@ const NAMES: &[(&str, &str)] = &[
     ("spellgood", "spe"), ("spellwrong", "spellw"), ("spellrare", "spellra"), ("spellundo", "spellu"), ("spellinfo", "spelli"),
     ("spelldump", "spelld"), ("fold", "fo"), ("foldclose", "foldc"), ("foldopen", "foldo"), ("folddoopen", "foldd"),
     ("folddoclosed", "folddoc"), ("luado", "luad"), ("redir", "redi"),
+    ("python3", "py3"), ("py3do", "py3d"), ("py3file", "py3f"), ("python", "py"), ("pydo", "pyd"), ("pyfile", "pyf"), ("pythonx", "pyx"),
+    ("pyxdo", "pyxd"), ("pyxfile", "pyxf"), ("perl", "pe"), ("perldo", "perld"), ("perlfile", "perlf"), ("ruby", "rub"), ("rubydo", "rubyd"),
+    ("rubyfile", "rubyf"),
 ];
 
 /// A typed name as one of these commands (its full name).
@@ -646,6 +649,8 @@ impl App {
                 }
                 self.replace_lines(a, b, &out);
             }
+            // the other languages: their own interpreters, if installed (decided 2026-10-21)
+            c if c.starts_with("py") || c.starts_with("perl") || c.starts_with("rub") => self.provider(c, arg, range),
             "redir" => {
                 let t = arg.trim();
                 if t == "END" || t == "end" {
@@ -755,5 +760,60 @@ mod tests {
         assert_eq!(super::ex_name("vert"), Some("vertical"));
         assert_eq!(super::ex_name("sl"), Some("sleep"));
         assert_eq!(super::ex_name("s"), None, ":s is :substitute");
+    }
+}
+
+impl App {
+    /// :python3 :perl :ruby (code), their …do (each line: Python's `line`, Perl's and Ruby's $_;
+    /// what comes back replaces the line) and …file (a script); E319 when the interpreter is missing.
+    fn provider(&mut self, cmd: &str, arg: &str, range: Option<(usize, usize)>) {
+        let (prog, flag) = if cmd.starts_with("py") { ("python3", "-c") } else if cmd.starts_with("perl") { ("perl", "-e") } else { ("ruby", "-e") };
+        let have = std::process::Command::new("sh").args(["-c", &format!("command -v {prog}")]).output().is_ok_and(|o| o.status.success());
+        if !have {
+            return self.say(format!("E319: No \"{prog}\" provider found. Run \":checkhealth vim.provider\""));
+        }
+        let dir = self.root.clone();
+        let run = |args: Vec<String>, input: Option<String>| -> Result<String, String> {
+            use std::io::Write;
+            let mut c = std::process::Command::new(prog);
+            c.args(&args).current_dir(&dir).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).stdin(if input.is_some() { std::process::Stdio::piped() } else { std::process::Stdio::null() });
+            let mut child = c.spawn().map_err(|e| e.to_string())?;
+            if let (Some(t), Some(mut si)) = (input, child.stdin.take()) {
+                std::thread::spawn(move || {
+                    let _ = si.write_all(t.as_bytes());
+                });
+            }
+            let o = child.wait_with_output().map_err(|e| e.to_string())?;
+            if !o.status.success() {
+                return Err(String::from_utf8_lossy(&o.stderr).trim().to_string());
+            }
+            Ok(String::from_utf8_lossy(&o.stdout).to_string())
+        };
+        if cmd.ends_with("do") {
+            let (a, b) = range.unwrap_or((0, self.docs[self.cur].ed.buf.len_lines().saturating_sub(1)));
+            let lines: Vec<String> = (a..=b).map(|l| self.docs[self.cur].ed.buf.line(l).trim_end_matches('\n').to_string()).collect();
+            let script = match prog {
+                "python3" => format!("import sys\ndef _zett(line, linenr):\n    {arg}\nfor _i, _l in enumerate(sys.stdin.read().split('\\n')):\n    _r = _zett(_l, {} + _i)\n    print(_l if _r is None else _r)", a + 1),
+                "perl" => format!("while (<STDIN>) {{ chomp; {arg}; print \"$_\\n\" }}"),
+                _ => format!("$stdin.each_line {{ |l| $_ = l.chomp; {arg}; puts $_ }}"),
+            };
+            match run(vec![flag.into(), script], Some(lines.join("\n"))) {
+                Ok(out) => {
+                    let new: Vec<String> = out.trim_end_matches('\n').split('\n').map(str::to_string).collect();
+                    self.replace_lines(a, b, &new);
+                }
+                Err(e) => self.say(e),
+            }
+        } else if cmd.ends_with("file") {
+            match run(vec![crate::files::expand_env(arg.trim())], None) {
+                Ok(out) => self.say(out.trim_end().to_string()),
+                Err(e) => self.say(e),
+            }
+        } else {
+            match run(vec![flag.into(), arg.to_string()], None) {
+                Ok(out) => self.say(out.trim_end().to_string()),
+                Err(e) => self.say(e),
+            }
+        }
     }
 }

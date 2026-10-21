@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-199 ✓ do something in zett, 175 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+201 ✓ do something in zett, 173 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -191,7 +191,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `matchtime` | mat | number | global | `5` | tenths of a second to show matching paren |
 | ✓ | `maxcombine` | mco | number | global | `6` | maximum nr of combining characters displayed |
 | ◐ | `maxfuncdepth` | mfd | number | global | `100` | maximum recursive depth for user functions |
-| ◐ | `maxmapdepth` | mmd | number | global | `1000` | maximum recursive depth for mapping |
+| ✓ | `maxmapdepth` | mmd | number | global | `1000` | maximum recursive depth for mapping |
 | ◐ | `maxmempattern` | mmp | number | global | `1000` | maximum memory (in Kbyte) used for pattern search |
 | ✓ | `maxsearchcount` | msc | number | global | `999` |  |
 | ✓ | `menuitems` | mis | number | global | `25` | maximum number of items in a menu |
@@ -241,7 +241,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `redrawtime` | rdt | number | global | `2000` | timeout for 'hlsearch' and \|:match\| highlighting |
 | ◐ | `regexpengine` | re | number | global | `0` | default regexp engine to use |
 | ✓ | `relativenumber` | rnu | boolean | win | `false` | show relative line number in front of each line |
-| ◐ | `remap` |  | boolean | global | `true` |  |
+| ✓ | `remap` |  | boolean | global | `true` |  |
 | ✓ | `report` |  | number | global | `2` | threshold for reporting nr. of lines changed |
 | ◐ | `revins` | ri | boolean | global | `false` | inserting characters will work backwards |
 | ◐ | `rightleft` | rl | boolean | win | `false` | window is right-to-left oriented |

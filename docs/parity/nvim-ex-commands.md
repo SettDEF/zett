@@ -342,9 +342,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:pbuffer` | `:pb[uffer]` | edit buffer in the preview window |
 | ✓ | `:pclose` | `:pc[lose]` | close preview window |
 | ✓ | `:pedit` | `:ped[it]` | edit file in the preview window |
-| · | `:perl` | `:pe[rl]` | execute perl command |
-| · | `:perldo` | `:perld[o]` | execute perl command for each line |
-| · | `:perlfile` | `:perlf[ile]` | execute perl script file |
+| ✓ | `:perl` | `:pe[rl]` | execute perl command |
+| ✓ | `:perldo` | `:perld[o]` | execute perl command for each line |
+| ✓ | `:perlfile` | `:perlf[ile]` | execute perl script file |
 | ✓ | `:print` | `:p[rint]` | print lines |
 | · | `:profdel` | `:profd[el]` | stop profiling a function or script |
 | · | `:profile` | `:prof[ile]` | profiling functions and scripts |
@@ -369,13 +369,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:python3` | `:python3` | same as :py3 |
 | · | `:py3do` | `:py3d[o]` | execute Python 3 command for each line |
 | · | `:py3file` | `:py3f[ile]` | execute Python 3 script file |
-| · | `:python` | `:py[thon]` | execute Python command |
-| · | `:pydo` | `:pyd[o]` | execute Python command for each line |
-| · | `:pyfile` | `:pyf[ile]` | execute Python script file |
-| · | `:pyx` | `:pyx` | execute \|python_x\| command |
-| · | `:pythonx` | `:pythonx` | same as :pyx |
-| · | `:pyxdo` | `:pyxd[o]` | execute \|python_x\| command for each line |
-| · | `:pyxfile` | `:pyxf[ile]` | execute \|python_x\| script file |
+| ✓ | `:python` | `:py[thon]` | execute Python command |
+| ✓ | `:pydo` | `:pyd[o]` | execute Python command for each line |
+| ✓ | `:pyfile` | `:pyf[ile]` | execute Python script file |
+| ✓ | `:pyx` | `:pyx` | execute \|python_x\| command |
+| ✓ | `:pythonx` | `:pythonx` | same as :pyx |
+| ✓ | `:pyxdo` | `:pyxd[o]` | execute \|python_x\| command for each line |
+| ✓ | `:pyxfile` | `:pyxf[ile]` | execute \|python_x\| script file |
 | ✓ | `:quit` | `:q[uit]` | quit current window (when one window quit Vim) |
 | ✓ | `:quitall` | `:quita[ll]` | quit Vim |
 | ✓ | `:qall` | `:qa[ll]` | quit Vim |
@@ -395,9 +395,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:right` | `:ri[ght]` | right align text |
 | ✓ | `:rightbelow` | `:rightb[elow]` | make split window appear right or below |
 | · | `:rshada` | `:rsh[ada]` | read from \|shada\| file |
-| · | `:ruby` | `:rub[y]` | execute Ruby command |
-| · | `:rubydo` | `:rubyd[o]` | execute Ruby command for each line |
-| · | `:rubyfile` | `:rubyf[ile]` | execute Ruby script file |
+| ✓ | `:ruby` | `:rub[y]` | execute Ruby command |
+| ✓ | `:rubydo` | `:rubyd[o]` | execute Ruby command for each line |
+| ✓ | `:rubyfile` | `:rubyf[ile]` | execute Ruby script file |
 | · | `:rundo` | `:rund[o]` | read undo information from a file |
 | · | `:runtime` | `:ru[ntime]` | source vim scripts in 'runtimepath' |
 | ✓ | `:substitute` | `:s[ubstitute]` | find and replace text |
