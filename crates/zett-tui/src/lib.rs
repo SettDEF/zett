@@ -36,6 +36,7 @@ mod runtime;
 mod signs;
 mod emacs;
 mod vc;
+mod tabs;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -469,6 +470,10 @@ struct App {
     hl_slot: u8,
     /// a status line (false) or a line between windows (true) being dragged: the window, where it was
     border_drag: Option<(usize, bool, u16)>,
+    /// tab pages (tabs.rs): every tab (empty while there is one), the shown one, closed ones
+    tab_pages: Vec<tabs::TabPage>,
+    tab: usize,
+    closed_tabs: Vec<tabs::TabPage>,
     /// the mouse command that ran last (mouse-3 twice kills)
     last_key_cmd: Option<String>,
     /// Emacs profile: a numeric argument being typed (C-u 4, M-5), for the next command
@@ -676,6 +681,9 @@ impl App {
             repeat_again: false,
             hl_slot: 0,
             border_drag: None,
+            tab_pages: Vec::new(),
+            tab: 0,
+            closed_tabs: Vec::new(),
             last_key_cmd: None,
             arg: Default::default(),
             last_key: String::new(),

@@ -168,6 +168,7 @@ impl App {
             (KeyCode::Char('q'), _) => {
                 if let Some(i) = self.docs.iter().position(|d| d.name == NAME) {
                     self.docs.remove(i);
+                    self.doc_removed(i);
                     if self.docs.is_empty() {
                         self.docs.push(Doc::new(Editor::from_str(""), "[scratch]".into(), "Plain Text".into()));
                     }

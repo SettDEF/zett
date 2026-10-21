@@ -288,55 +288,59 @@ impl App {
                     None => self.command(&format!("e {}", arg.trim())),
                 }
             }
-            // ── tab commands: zett's tabs are its buffers ──
-            "tabnew" | "tabedit" | "tabfind" | "tab" if cmd != "tab" => {
-                if arg.trim().is_empty() {
+            // ── tab pages (tabs.rs): each with its own windows ──
+            "tabnew" | "tabedit" | "tabfind" => {
+                self.tab_new(None, num.map(|n| n.min(self.tab_count())));
+                if !arg.trim().is_empty() {
+                    self.command(&format!("{} {}", if cmd == "tabfind" { "find" } else { "e" }, arg.trim()));
+                } else if cmd == "tabnew" {
                     self.doom_ui("newBuffer", "");
-                } else {
-                    self.command(&format!("e {}", arg.trim()));
                 }
             }
-            "tab" => self.command(arg),
-            "tabclose" => self.command(if bang { "bd!" } else { "bd" }),
-            "tabonly" => {
-                // the other buffers go, the changed ones stay
-                let keep = self.cur;
-                let mut i = self.docs.len();
-                while i > 0 {
-                    i -= 1;
-                    if i != keep && !self.docs[i].dirty() {
-                        self.show_doc(i);
-                        self.close(false);
-                    }
-                }
+            // :tab {cmd}: what it opens, in a new tab (:tab split, :tab help)
+            "tab" => {
+                self.tab_new(None, None);
+                self.command(arg);
             }
-            "tabnext" => match num {
-                Some(k) => self.show_doc(k.saturating_sub(1)),
+            "tabclose" => {
+                let i = match arg.trim() {
+                    "" => num.map_or(self.tab, |n| n.saturating_sub(1)),
+                    "$" => self.tab_count() - 1,
+                    t => t.parse::<usize>().map_or(self.tab, |n| n.saturating_sub(1)),
+                };
+                self.tab_close(i.min(self.tab_count() - 1));
+            }
+            "tabonly" => self.tab_only(),
+            "tabnext" => match num.or_else(|| arg.trim().parse().ok()) {
+                Some(k) => self.tab_goto(k.saturating_sub(1)),
+                None if self.tab_count() > 1 => self.tab_step(1),
+                // one tab: zett's way, the next buffer
                 None => self.command("bn"),
             },
             "tabNext" | "tabprevious" => {
-                for _ in 0..n {
-                    self.command("bp");
+                if self.tab_count() > 1 {
+                    self.tab_step(-(n as i64));
+                } else {
+                    for _ in 0..n {
+                        self.command("bp");
+                    }
                 }
             }
-            "tabfirst" | "tabrewind" => self.show_doc(0),
-            "tablast" => self.show_doc(self.docs.len() - 1),
+            "tabfirst" | "tabrewind" => self.tab_goto(0),
+            "tablast" => self.tab_goto(self.tab_count() - 1),
             "tabmove" => {
                 let t = arg.trim();
-                let len = self.docs.len();
-                let to = if t.is_empty() || t == "$" { len - 1 } else if let Some(k) = t.strip_prefix('+') { (self.cur + k.parse::<usize>().unwrap_or(1)).min(len - 1) } else if let Some(k) = t.strip_prefix('-') { self.cur.saturating_sub(k.parse::<usize>().unwrap_or(1)) } else { t.parse::<usize>().unwrap_or(0).min(len - 1) };
-                self.move_doc_to(self.cur, to);
+                let len = self.tab_count();
+                let to = if t.is_empty() || t == "$" { len - 1 } else if let Some(k) = t.strip_prefix('+') { self.tab + k.parse::<usize>().unwrap_or(1) } else if let Some(k) = t.strip_prefix('-') { self.tab.saturating_sub(k.parse::<usize>().unwrap_or(1)) } else { t.parse::<usize>().unwrap_or(0) };
+                self.tab_move(to);
             }
             "tabdo" => {
-                for i in 0..self.docs.len() {
-                    self.show_doc(i);
+                for i in 0..self.tab_count() {
+                    self.tab_goto(i);
                     self.command(arg);
                 }
             }
-            "tabs" => {
-                let rows = self.docs.iter().enumerate().map(|(i, d)| (format!("{}{}", if i == self.cur { ">" } else { " " }, i + 1), format!("{}{}", d.name, if d.dirty() { " +" } else { "" }))).collect();
-                self.popup = Some(Popup::Help("Tabs (zett's tabs are its buffers)".into(), rows));
-            }
+            "tabs" => self.tab_list(),
             // ── lines ──
             "print" | "number" | "#" | "z" => {
                 let d = &self.docs[self.cur];
@@ -833,21 +837,6 @@ impl App {
         let end = Pos { line: b, col: d.ed.buf.line(b).trim_end_matches('\n').chars().count() };
         d.ed.apply_edits(vec![(Pos { line: a, col: 0 }, end, new.join("\n"))]);
         d.states.clear();
-    }
-
-    /// Moves buffer `from` to place `to` in the tab line; the windows keep showing theirs.
-    fn move_doc_to(&mut self, from: usize, to: usize) {
-        if from == to || from >= self.docs.len() {
-            return;
-        }
-        let d = self.docs.remove(from);
-        self.docs.insert(to, d);
-        let map = |i: usize| if i == from { to } else if from < to && i > from && i <= to { i - 1 } else if to < from && i >= to && i < from { i + 1 } else { i };
-        for w in self.wins.iter_mut().flatten() {
-            w.doc = map(w.doc);
-        }
-        self.cur = map(self.cur);
-        self.last_doc = self.last_doc.map(map);
     }
 
     /// :redir END: what was said goes to a file (> or >>) or a register (@r, @r>>).

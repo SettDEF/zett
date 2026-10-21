@@ -97,6 +97,15 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
   status, `C-x v h` the commits of the section at the cursor
 - `C-x C-c` quit (with unsaved buffers it says so: `C-x s` saves them), `C-z` back to the shell
 
+## Tabs
+
+- each tab keeps its own windows (the buffers are shared): `C-x t 2` a new one, `C-x t 0` close,
+  `C-x t 1` the others, `C-x t o O` (and `C-Tab` `C-S-Tab`) next and previous, `C-x t r` a name,
+  `C-x t RET` by name, `C-x t m M` move, `C-x t n` the same windows again, `C-x t u` the one closed
+  last; `C-x t b C-f d p` a buffer, file, folder, project in a new tab
+- from two tabs on the tab line lists them (the buffers otherwise); Vim's `:tabnew` and `gt` are
+  the same tabs
+
 ## Version control (git)
 
 - `C-x v =` the file's changes, `C-x v D` all of them (coloured: added, removed); `C-x v E =` and

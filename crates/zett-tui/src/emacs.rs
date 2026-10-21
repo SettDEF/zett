@@ -145,6 +145,9 @@ impl App {
         if let Some(t) = title.strip_suffix(" @settings") {
             return (t.to_string(), crate::settings::all().into_iter().map(|s| Cand::noted(s.name, s.about)).collect());
         }
+        if let Some(t) = title.strip_suffix(" @tabs") {
+            return (t.to_string(), self.tab_items());
+        }
         for src in ["branches", "tags", "worktrees"] {
             if let Some(t) = title.strip_suffix(&format!(" @{src}")) {
                 return (t.to_string(), self.vc_items(src));
@@ -185,6 +188,7 @@ impl App {
                 }
             }
             "hl" => self.highlight(body),
+            "tab" => self.emacs_tab(body),
             "bookmark-set" => {
                 self.bookmark_set(body);
             }
@@ -371,6 +375,7 @@ impl App {
             "edit" => self.after_lua(vec![Effect::Edit(arg.to_string(), 1)]),
             "repeat" => self.repeat_last(),
             "mouse" => self.mouse_command(arg),
+            "tab" => self.emacs_tab(arg),
             "frame" => self.frame_toggle(arg),
             "vc" => {
                 let (w, a) = arg.split_once(' ').unwrap_or((arg, ""));
@@ -698,6 +703,60 @@ impl App {
     }
 }
 
+impl App {
+    /// Emacs's tab-bar (C-x t) on zett's tab pages: "new", "close", "next" … with an argument
+    /// after a space where the command takes one (a name, a place, a buffer).
+    pub(crate) fn emacs_tab(&mut self, spec: &str) {
+        let (what, arg) = spec.split_once(' ').unwrap_or((spec, ""));
+        let n = self.arg.take().unwrap_or(1);
+        match what {
+            "new" => self.tab_new(None, None),
+            "new-to" => {
+                // C-x t N: at a place (the argument; 0 or none: after this one)
+                let at = (n > 0).then(|| (n as usize).saturating_sub(1)).filter(|_| n != 1);
+                self.tab_new(None, at);
+            }
+            "duplicate" => {
+                // the same windows in a new tab
+                let (wins, tree, focus) = (self.wins.clone(), self.tree.clone(), self.focus);
+                self.tab_new(None, None);
+                self.wins = wins;
+                self.tree = tree;
+                self.focus_win(focus);
+            }
+            "close" => {
+                let t = self.tab;
+                self.tab_close(t);
+            }
+            "close-other" => self.tab_only(),
+            "next" => self.tab_step(n),
+            "previous" => self.tab_step(-n),
+            "move" => {
+                let to = (self.tab as i64 + n).clamp(0, self.tab_count() as i64 - 1) as usize;
+                self.tab_move(to);
+            }
+            "move-to" => self.tab_move((n.max(1) - 1) as usize),
+            "rename" => self.tab_rename(arg),
+            "switch" => {
+                if let Some(i) = (0..self.tab_count()).find(|&i| self.tab_label(i) == arg.trim()) {
+                    self.tab_goto(i);
+                } else if let Ok(k) = arg.trim().parse::<usize>() {
+                    self.tab_goto(k.saturating_sub(1));
+                } else {
+                    self.say(format!("No tab {}", arg.trim()));
+                }
+            }
+            "undo" => self.tab_undo(),
+            other => self.say(format!("tab: no {other}")),
+        }
+    }
+
+    /// The tabs' labels, for C-x t RET.
+    pub(crate) fn tab_items(&self) -> Vec<Cand> {
+        (0..self.tab_count()).map(|i| Cand::noted(self.tab_label(i), format!("tab {}", i + 1))).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -792,5 +851,21 @@ mod tests {
         let before = a.tree.ids().len();
         assert!(a.window_mouse(&ev(MouseEventKind::Down(MouseButton::Middle), 50, 19, KeyModifiers::CONTROL)), "C-middle on a status line");
         assert_eq!(a.tree.ids().len(), before + 1, "split there");
+    }
+
+    #[test]
+    fn emacs_tabs() {
+        let mut a = app("x");
+        a.emacs_tab("new");
+        a.emacs_tab("rename notes");
+        assert_eq!(a.tab_label(1), "notes");
+        a.emacs_tab("previous");
+        assert_eq!(a.tab, 0);
+        a.emacs_tab("switch notes");
+        assert_eq!(a.tab, 1);
+        a.emacs_tab("close");
+        assert_eq!(a.tab_count(), 1);
+        a.emacs_tab("undo");
+        assert_eq!((a.tab_count(), a.tab_label(a.tab)), (2, "notes".to_string()), "C-x t u brings it back, name and all");
     }
 }

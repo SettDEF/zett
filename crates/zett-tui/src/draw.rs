@@ -19,7 +19,7 @@ impl App {
         let tabs = match self.setting(cur, "showtabline").as_str() {
             "0" => false,
             "2" => true,
-            _ => self.tabs && self.docs.len() > 1,
+            _ => (self.tabs && self.docs.len() > 1) || self.tab_count() > 1,
         };
         // cmdheight: the rows under the windows (0: only while there is something to show)
         let busy = self.cmdline.is_some() || self.msg.is_some() || self.minibuf.is_some() || self.docs[cur].ed.isearch().is_some() || !self.keyseq.is_empty();
@@ -43,7 +43,10 @@ impl App {
         if tabs {
             // tabline: its own format, else zett's buffer tabs
             let fmt = self.setting(cur, "tabline");
-            if fmt.is_empty() {
+            if fmt.is_empty() && self.tab_count() > 1 {
+                // tab pages, from two on
+                self.draw_tab_pages(f, tabline);
+            } else if fmt.is_empty() {
                 self.draw_tabs(f, tabline);
             } else {
                 let p = self.fmt_line(&fmt, cur, body.height as usize, tabline.width as usize);

@@ -139,7 +139,9 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
 - `CTRL-D CTRL-U` half a page, `CTRL-F CTRL-B` a page, `CTRL-E CTRL-Y` a line
 - `zt zz zb` (and `z<CR> z. z-`) put the cursor's line at the top, middle, bottom; `zh zl zs ze`
   sideways; `z{N}<CR>` the window N lines high
-- `gt gT` the next / previous buffer, `CTRL-^` the other one, `CTRL-]` `CTRL-T` to a definition
+- `gt gT` the next / previous tab (with one tab: buffer), `:tabnew :tabclose :tabonly :tabmove
+  :tabs :tab {cmd}` tab pages, each with its own windows; `CTRL-W T` the window into a tab of its own;
+  `CTRL-^` the other buffer, `CTRL-]` `CTRL-T` to a definition
   and back (the language server), `K` help for the word
 
 ## The rest

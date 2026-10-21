@@ -550,7 +550,7 @@ impl App {
     /// A buffer went away: windows that showed it show another.
     pub(crate) fn doc_removed(&mut self, gone: usize) {
         let n = self.docs.len().max(1);
-        for w in self.wins.iter_mut().flatten() {
+        let fix = |w: &mut Win| {
             if w.doc > gone {
                 w.doc -= 1;
             } else if w.doc == gone {
@@ -558,7 +558,21 @@ impl App {
                 w.top = 0;
                 w.left = 0;
             }
+        };
+        self.wins.iter_mut().flatten().for_each(fix);
+        // and the windows of the other tabs
+        self.tabs_each_win(|w| fix(w), |c| if *c > gone { *c -= 1 } else if *c == gone { *c = gone.min(n - 1) });
+    }
+
+    /// Buffer `from` moved to place `to`: every window (in every tab) follows its buffer.
+    pub(crate) fn doc_moved(&mut self, from: usize, to: usize) {
+        let remap = |k: usize| if k == from { to } else if from < to && k > from && k <= to { k - 1 } else if to < from && k >= to && k < from { k + 1 } else { k };
+        for w in self.wins.iter_mut().flatten() {
+            w.doc = remap(w.doc);
         }
+        self.tabs_each_win(|w| w.doc = remap(w.doc), |c| *c = remap(*c));
+        self.last_doc = self.last_doc.map(remap);
+        self.cur = remap(self.cur);
     }
 
     // ── pickers (the minibuffer) ──
@@ -740,12 +754,7 @@ impl App {
         }
         let d = self.docs.remove(from);
         self.docs.insert(to, d);
-        let remap = |k: usize| if k == from { to } else if from < to && k > from && k <= to { k - 1 } else if to < from && k >= to && k < from { k + 1 } else { k };
-        for w in self.wins.iter_mut().flatten() {
-            w.doc = remap(w.doc);
-        }
-        self.last_doc = self.last_doc.map(remap);
-        self.cur = to;
+        self.doc_moved(from, to);
     }
 
     /// Every other buffer closed, but the ones with unsaved changes (they stay, and it says so).
@@ -1160,6 +1169,9 @@ impl App {
                     }
                 }
                 Request::Keyword(w) => self.keyword(&w),
+                // Ngt: tab N when there are tabs, else buffer N
+                Request::Tab(n) if n > 1000 && self.tab_count() > 1 => self.tab_goto((n - 1001) as usize),
+                Request::Tab(n) if n <= 1000 && self.tab_count() > 1 => self.tab_step(n as i64),
                 Request::Tab(n) if n > 1000 => {
                     let i = (n - 1001) as usize;
                     if i < self.docs.len() {
@@ -1451,7 +1463,7 @@ impl App {
                 let i = (self.cur as i32 + by).rem_euclid(len.max(1)) as usize;
                 self.show_doc(i);
             }
-            "T" => self.say("zett has buffers, not tab pages: the window stays (SPC b lists the buffers)".to_string()),
+            "T" => self.win_to_tab(),
             "z" | "P" => self.say("E441: There is no preview window".to_string()),
             other => self.say(format!("CTRL-W {other}: not a window command")),
         }
