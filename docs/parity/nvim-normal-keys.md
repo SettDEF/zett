@@ -8,12 +8,12 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | | key | fed as | what it does |
 |---|---|---|---|
 | ✓ | `CTRL-A` | `<C-a>` | add N to number at/after cursor |
-| · | `CTRL-B` | `<C-b>` | scroll N screens Backwards |
+| ✓ | `CTRL-B` | `<C-b>` | scroll N screens Backwards |
 | · | `CTRL-C` | `<C-c>` |    interrupt current (search) command |
-| · | `CTRL-D` | `<C-d>` |    scroll Down N lines (default: half a screen) |
-| · | `CTRL-E` | `<C-e>` |    scroll N lines upwards (N lines Extra) |
-| · | `CTRL-F` | `<C-f>` | scroll N screens Forward |
-| · | `CTRL-G` | `<C-g>` |    display current file name and position |
+| ✓ | `CTRL-D` | `<C-d>` |    scroll Down N lines (default: half a screen) |
+| ✓ | `CTRL-E` | `<C-e>` |    scroll N lines upwards (N lines Extra) |
+| ✓ | `CTRL-F` | `<C-f>` | scroll N screens Forward |
+| ✓ | `CTRL-G` | `<C-g>` |    display current file name and position |
 | ✓ | `<BS>` | `<BS>` | same as "h" |
 | ✓ | `CTRL-H` | `<C-h>` | same as "h" |
 | · | `<Tab>` | `<Tab>` | go to N newer entry in jump list |
@@ -29,17 +29,17 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `CTRL-O` | `<C-o>` | go to N older entry in jump list |
 | ✓ | `CTRL-P` | `<C-p>` | same as "k" |
 | ✓ | `CTRL-R` | `<C-r>` | redo changes which were undone with 'u' |
-| · | `CTRL-T` | `<C-t>` |    jump to N older Tag in tag list |
-| · | `CTRL-U` | `<C-u>` |    scroll N lines Upwards (default: half a |
+| ✓ | `CTRL-T` | `<C-t>` |    jump to N older Tag in tag list |
+| ✓ | `CTRL-U` | `<C-u>` |    scroll N lines Upwards (default: half a |
 | · | `CTRL-V` | `<C-v>` |    start blockwise Visual mode |
-| · | `CTRL-W {char}` | `<C-w>a` |    window commands, see \|CTRL-W\| |
+| ✓ | `CTRL-W {char}` | `<C-w>a` |    window commands, see \|CTRL-W\| |
 | ✓ | `CTRL-X` | `<C-x>` | subtract N from number at/after cursor |
-| · | `CTRL-Y` | `<C-y>` |    scroll N lines downwards |
-| · | `CTRL-Z` | `<C-z>` |    suspend program (or start new shell) |
+| ✓ | `CTRL-Y` | `<C-y>` |    scroll N lines downwards |
+| ✓ | `CTRL-Z` | `<C-z>` |    suspend program (or start new shell) |
 | · | `CTRL-\ CTRL-N` | `<C-\><C-n>` |    go to Normal mode (no-op) |
 | · | `CTRL-\ CTRL-G` | `<C-\><C-g>` |    go to Normal mode (no-op) |
-| · | `CTRL-]` | `<C-]>` |    :ta to ident under cursor |
-| · | `CTRL-^` | `<C-^>` |    edit Nth alternate file (equivalent to |
+| ✓ | `CTRL-]` | `<C-]>` |    :ta to ident under cursor |
+| ✓ | `CTRL-^` | `<C-^>` |    edit Nth alternate file (equivalent to |
 | · | `CTRL-<Tab>` | `<C-<>Tab>` |    same as `g<Tab>` : go to last accessed tab |
 | ✓ | `<Space>` | `<Space>` | same as "l" |
 | · | `!{motion}{filter}` | `` | 1 |
@@ -158,9 +158,9 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | ✓ | `q{0-9a-zA-Z"}` | `qa` |    record typed characters into named register |
 | · | `q` | `q` |    (while recording) stops recording |
 | ✓ | `Q` | `Q` | replay last recorded register |
-| · | `q:` | `q:` |    edit : command-line in command-line window |
-| · | `q/` | `q/` |    edit / command-line in command-line window |
-| · | `q?` | `q?` |    edit ? command-line in command-line window |
+| ✓ | `q:` | `q:` |    edit : command-line in command-line window |
+| ✓ | `q/` | `q/` |    edit / command-line in command-line window |
+| ✓ | `q?` | `q?` |    edit ? command-line in command-line window |
 | ✓ | `r{char}` | `ra` | replace N chars with {char} |
 | ✓ | `["x]s` | `s` | (substitute) delete N characters [into |
 | ✓ | `t{char}` | `ta` | cursor till before Nth occurrence of {char} |
@@ -242,81 +242,81 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | ✓ | `iw` | `diw` |    "inner word" |
 | · | `i{` | `di{` |    same as iB |
 | · | `i}` | `di}` |    same as iB |
-| · | `CTRL-W CTRL-B` | `<C-w><C-b>` |    same as "CTRL-W b" |
+| ✓ | `CTRL-W CTRL-B` | `<C-w><C-b>` |    same as "CTRL-W b" |
 | · | `CTRL-W CTRL-C` | `<C-w><C-c>` |    no-op |
-| · | `CTRL-W CTRL-D` | `<C-w><C-d>` |    same as "CTRL-W d" |
-| · | `CTRL-W CTRL-F` | `<C-w><C-f>` |    same as "CTRL-W f" |
-| · | `CTRL-W CTRL-H` | `<C-w><C-h>` |    same as "CTRL-W h" |
-| · | `CTRL-W CTRL-I` | `<C-w><C-i>` |    same as "CTRL-W i" |
-| · | `CTRL-W CTRL-J` | `<C-w><C-j>` |    same as "CTRL-W j" |
-| · | `CTRL-W CTRL-K` | `<C-w><C-k>` |    same as "CTRL-W k" |
-| · | `CTRL-W CTRL-L` | `<C-w><C-l>` |    same as "CTRL-W l" |
-| · | `CTRL-W CTRL-N` | `<C-w><C-n>` |    same as "CTRL-W n" |
-| · | `CTRL-W CTRL-O` | `<C-w><C-o>` |    same as "CTRL-W o" |
-| · | `CTRL-W CTRL-P` | `<C-w><C-p>` |    same as "CTRL-W p" |
-| · | `CTRL-W CTRL-Q` | `<C-w><C-q>` |    same as "CTRL-W q" |
+| ✓ | `CTRL-W CTRL-D` | `<C-w><C-d>` |    same as "CTRL-W d" |
+| ✓ | `CTRL-W CTRL-F` | `<C-w><C-f>` |    same as "CTRL-W f" |
+| ✓ | `CTRL-W CTRL-H` | `<C-w><C-h>` |    same as "CTRL-W h" |
+| ✓ | `CTRL-W CTRL-I` | `<C-w><C-i>` |    same as "CTRL-W i" |
+| ✓ | `CTRL-W CTRL-J` | `<C-w><C-j>` |    same as "CTRL-W j" |
+| ✓ | `CTRL-W CTRL-K` | `<C-w><C-k>` |    same as "CTRL-W k" |
+| ✓ | `CTRL-W CTRL-L` | `<C-w><C-l>` |    same as "CTRL-W l" |
+| ✓ | `CTRL-W CTRL-N` | `<C-w><C-n>` |    same as "CTRL-W n" |
+| ✓ | `CTRL-W CTRL-O` | `<C-w><C-o>` |    same as "CTRL-W o" |
+| ✓ | `CTRL-W CTRL-P` | `<C-w><C-p>` |    same as "CTRL-W p" |
+| ✓ | `CTRL-W CTRL-Q` | `<C-w><C-q>` |    same as "CTRL-W q" |
 | · | `CTRL-W CTRL-R` | `<C-w><C-r>` |    same as "CTRL-W r" |
-| · | `CTRL-W CTRL-S` | `<C-w><C-s>` |    same as "CTRL-W s" |
-| · | `CTRL-W CTRL-T` | `<C-w><C-t>` |    same as "CTRL-W t" |
-| · | `CTRL-W CTRL-V` | `<C-w><C-v>` |    same as "CTRL-W v" |
-| · | `CTRL-W CTRL-W` | `<C-w><C-w>` |    same as "CTRL-W w" |
-| · | `CTRL-W CTRL-X` | `<C-w><C-x>` |    same as "CTRL-W x" |
-| · | `CTRL-W CTRL-Z` | `<C-w><C-z>` |    same as "CTRL-W z" |
-| · | `CTRL-W CTRL-]` | `<C-w><C-]>` |    same as "CTRL-W ]" |
-| · | `CTRL-W CTRL-^` | `<C-w><C-^>` |    same as "CTRL-W ^" |
-| · | `CTRL-W CTRL-_` | `<C-w><C-_>` |    same as "CTRL-W _" |
-| · | `CTRL-W +` | `<C-w>+` |    increase current window height N lines |
-| · | `CTRL-W -` | `<C-w>-` |    decrease current window height N lines |
-| · | `CTRL-W <` | `<C-w><` |    decrease current window width N columns |
-| · | `CTRL-W =` | `<C-w>=` |    make all windows the same height & width |
-| · | `CTRL-W >` | `<C-w>>` |    increase current window width N columns |
-| · | `CTRL-W H` | `<C-w>H` |    move current window to the far left |
-| · | `CTRL-W J` | `<C-w>J` |    move current window to the very bottom |
-| · | `CTRL-W K` | `<C-w>K` |    move current window to the very top |
-| · | `CTRL-W L` | `<C-w>L` |    move current window to the far right |
-| · | `CTRL-W P` | `<C-w>P` |    go to preview window |
-| · | `CTRL-W R` | `<C-w>R` |    rotate windows upwards N times |
-| · | `CTRL-W S` | `<C-w>S` |    same as "CTRL-W s" |
-| · | `CTRL-W T` | `<C-w>T` |    move current window to a new tabpage |
-| · | `CTRL-W W` | `<C-w>W` |    go to N previous window (wrap around) |
-| · | `CTRL-W ]` | `<C-w>]` |    split window and jump to tag under cursor |
-| · | `CTRL-W ^` | `<C-w>^` |    split current window and edit alternate |
-| · | `CTRL-W _` | `<C-w>_` |    set current window height to N (default: |
-| · | `CTRL-W b` | `<C-w>b` |    go to bottom window |
-| · | `CTRL-W c` | `<C-w>c` |    close current window (like \|:close\|) |
-| · | `CTRL-W d` | `<C-w>d` |    split window and jump to definition under |
-| · | `CTRL-W f` | `<C-w>f` |    split window and edit file name under the |
-| · | `CTRL-W F` | `<C-w>F` |    split window and edit file name under the |
-| · | ` CTRL-W g CTRL-]  split window and do \|:tjump\| to tag under` | `` | 0 |
-| · | `CTRL-W g ]` | `<C-w>g]` |    split window and do \|:tselect\| for tag |
-| · | `CTRL-W g }` | `<C-w>g}` |    do a \|:ptjump\| to the tag under the cursor |
-| · | `CTRL-W g f` | `<C-w>gf` |    edit file name under the cursor in a new |
-| · | `CTRL-W g F` | `<C-w>gF` |    edit file name under the cursor in a new |
-| · | `CTRL-W g t` | `<C-w>gt` |    same as `gt`: go to next tabpage |
-| · | `CTRL-W g T` | `<C-w>gT` |    same as `gT`: go to previous tabpage |
+| ✓ | `CTRL-W CTRL-S` | `<C-w><C-s>` |    same as "CTRL-W s" |
+| ✓ | `CTRL-W CTRL-T` | `<C-w><C-t>` |    same as "CTRL-W t" |
+| ✓ | `CTRL-W CTRL-V` | `<C-w><C-v>` |    same as "CTRL-W v" |
+| ✓ | `CTRL-W CTRL-W` | `<C-w><C-w>` |    same as "CTRL-W w" |
+| ✓ | `CTRL-W CTRL-X` | `<C-w><C-x>` |    same as "CTRL-W x" |
+| ✓ | `CTRL-W CTRL-Z` | `<C-w><C-z>` |    same as "CTRL-W z" |
+| ✓ | `CTRL-W CTRL-]` | `<C-w><C-]>` |    same as "CTRL-W ]" |
+| ✓ | `CTRL-W CTRL-^` | `<C-w><C-^>` |    same as "CTRL-W ^" |
+| ✓ | `CTRL-W CTRL-_` | `<C-w><C-_>` |    same as "CTRL-W _" |
+| ✓ | `CTRL-W +` | `<C-w>+` |    increase current window height N lines |
+| ✓ | `CTRL-W -` | `<C-w>-` |    decrease current window height N lines |
+| ✓ | `CTRL-W <` | `<C-w><` |    decrease current window width N columns |
+| ✓ | `CTRL-W =` | `<C-w>=` |    make all windows the same height & width |
+| ✓ | `CTRL-W >` | `<C-w>>` |    increase current window width N columns |
+| ✓ | `CTRL-W H` | `<C-w>H` |    move current window to the far left |
+| ✓ | `CTRL-W J` | `<C-w>J` |    move current window to the very bottom |
+| ✓ | `CTRL-W K` | `<C-w>K` |    move current window to the very top |
+| ✓ | `CTRL-W L` | `<C-w>L` |    move current window to the far right |
+| ✓ | `CTRL-W P` | `<C-w>P` |    go to preview window |
+| ✓ | `CTRL-W R` | `<C-w>R` |    rotate windows upwards N times |
+| ✓ | `CTRL-W S` | `<C-w>S` |    same as "CTRL-W s" |
+| ✓ | `CTRL-W T` | `<C-w>T` |    move current window to a new tabpage |
+| ✓ | `CTRL-W W` | `<C-w>W` |    go to N previous window (wrap around) |
+| ✓ | `CTRL-W ]` | `<C-w>]` |    split window and jump to tag under cursor |
+| ✓ | `CTRL-W ^` | `<C-w>^` |    split current window and edit alternate |
+| ✓ | `CTRL-W _` | `<C-w>_` |    set current window height to N (default: |
+| ✓ | `CTRL-W b` | `<C-w>b` |    go to bottom window |
+| ✓ | `CTRL-W c` | `<C-w>c` |    close current window (like \|:close\|) |
+| ✓ | `CTRL-W d` | `<C-w>d` |    split window and jump to definition under |
+| ✓ | `CTRL-W f` | `<C-w>f` |    split window and edit file name under the |
+| ✓ | `CTRL-W F` | `<C-w>F` |    split window and edit file name under the |
+| · | ` CTRL-W g CTRL-]  split window and do \|:tjump\| to tag under` | `` | 1 |
+| ✓ | `CTRL-W g ]` | `<C-w>g]` |    split window and do \|:tselect\| for tag |
+| ✓ | `CTRL-W g }` | `<C-w>g}` |    do a \|:ptjump\| to the tag under the cursor |
+| ✓ | `CTRL-W g f` | `<C-w>gf` |    edit file name under the cursor in a new |
+| ✓ | `CTRL-W g F` | `<C-w>gF` |    edit file name under the cursor in a new |
+| ✓ | `CTRL-W g t` | `<C-w>gt` |    same as `gt`: go to next tabpage |
+| ✓ | `CTRL-W g T` | `<C-w>gT` |    same as `gT`: go to previous tabpage |
 | · | `CTRL-W g <Tab>` | `<C-w>g<Tab>` |    same as \|g<Tab>\|: go to last accessed tab |
-| · | `CTRL-W h` | `<C-w>h` |    go to Nth left window (stop at first window) |
-| · | `CTRL-W i` | `<C-w>i` |    split window and jump to declaration of |
-| · | `CTRL-W j` | `<C-w>j` |    go N windows down (stop at last window) |
-| · | `CTRL-W k` | `<C-w>k` |    go N windows up (stop at first window) |
-| · | `CTRL-W l` | `<C-w>l` |    go to Nth right window (stop at last window) |
-| · | `CTRL-W n` | `<C-w>n` |    open new window, N lines high |
-| · | `CTRL-W o` | `<C-w>o` |    close all but current window (like \|:only\|) |
-| · | `CTRL-W p` | `<C-w>p` |    go to previous (last accessed) window |
-| · | `CTRL-W q` | `<C-w>q` |    quit current window (like \|:quit\|) |
-| · | `CTRL-W r` | `<C-w>r` |    rotate windows downwards N times |
-| · | `CTRL-W s` | `<C-w>s` |    split current window in two parts, new |
-| · | `CTRL-W t` | `<C-w>t` |    go to top window |
-| · | `CTRL-W v` | `<C-w>v` |    split current window vertically, new window |
-| · | `CTRL-W w` | `<C-w>w` |    go to N next window (wrap around) |
-| · | `CTRL-W x` | `<C-w>x` |    exchange current window with window N |
-| · | `CTRL-W z` | `<C-w>z` |    close preview window |
-| · | `CTRL-W \|` | `<C-w>\|` |    set window width to N columns |
-| · | `CTRL-W }` | `<C-w>}` |    show tag under cursor in preview window |
-| · | `CTRL-W <Down>` | `<C-w><Down>` |    same as "CTRL-W j" |
-| · | `CTRL-W <Up>` | `<C-w><Up>` |    same as "CTRL-W k" |
-| · | `CTRL-W <Left>` | `<C-w><Left>` |    same as "CTRL-W h" |
-| · | ` CTRL-W <Right>` | `<C-w><Right>` |    same as "CTRL-W l" |
+| ✓ | `CTRL-W h` | `<C-w>h` |    go to Nth left window (stop at first window) |
+| ✓ | `CTRL-W i` | `<C-w>i` |    split window and jump to declaration of |
+| ✓ | `CTRL-W j` | `<C-w>j` |    go N windows down (stop at last window) |
+| ✓ | `CTRL-W k` | `<C-w>k` |    go N windows up (stop at first window) |
+| ✓ | `CTRL-W l` | `<C-w>l` |    go to Nth right window (stop at last window) |
+| ✓ | `CTRL-W n` | `<C-w>n` |    open new window, N lines high |
+| ✓ | `CTRL-W o` | `<C-w>o` |    close all but current window (like \|:only\|) |
+| ✓ | `CTRL-W p` | `<C-w>p` |    go to previous (last accessed) window |
+| ✓ | `CTRL-W q` | `<C-w>q` |    quit current window (like \|:quit\|) |
+| ✓ | `CTRL-W r` | `<C-w>r` |    rotate windows downwards N times |
+| ✓ | `CTRL-W s` | `<C-w>s` |    split current window in two parts, new |
+| ✓ | `CTRL-W t` | `<C-w>t` |    go to top window |
+| ✓ | `CTRL-W v` | `<C-w>v` |    split current window vertically, new window |
+| ✓ | `CTRL-W w` | `<C-w>w` |    go to N next window (wrap around) |
+| ✓ | `CTRL-W x` | `<C-w>x` |    exchange current window with window N |
+| ✓ | `CTRL-W z` | `<C-w>z` |    close preview window |
+| ✓ | `CTRL-W \|` | `<C-w>\|` |    set window width to N columns |
+| ✓ | `CTRL-W }` | `<C-w>}` |    show tag under cursor in preview window |
+| ✓ | `CTRL-W <Down>` | `<C-w><Down>` |    same as "CTRL-W j" |
+| ✓ | `CTRL-W <Up>` | `<C-w><Up>` |    same as "CTRL-W k" |
+| ✓ | `CTRL-W <Left>` | `<C-w><Left>` |    same as "CTRL-W h" |
+| ✓ | ` CTRL-W <Right>` | `<C-w><Right>` |    same as "CTRL-W l" |
 | · | `[ CTRL-D` | `[<C-d>` |    jump to first #define found in current and |
 | · | `[ CTRL-I` | `[<C-i>` |    jump to first line in current and included |
 | · | `[#` | `[#` | cursor to N previous unmatched #if, #else |
@@ -363,8 +363,8 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `]z` | `]z` | move to end of open fold |
 | · | `]}` | `]}` | cursor N times forward to unmatched '}' |
 | · | ` ]<MiddleMouse>` | `]<MiddleMouse>` | same as "]p" |
-| · | `g CTRL-G` | `g<C-g>` |    show information about current cursor |
-| · | `g CTRL-H` | `g<C-h>` |    start Select block mode |
+| ✓ | `g CTRL-G` | `g<C-g>` |    show information about current cursor |
+| ✓ | `g CTRL-H` | `g<C-h>` |    start Select block mode |
 | · | `g CTRL-]` | `g<C-]>` |    \|:tjump\| to the tag under the cursor |
 | · | `g#` | `g#` | like "#", but without using "\<" and "\>" |
 | · | `g$` | `g$` | when 'wrap' off go to rightmost character of |
@@ -429,11 +429,11 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `g<RightMouse>` | `g<RightMouse>` |    same as <C-RightMouse> |
 | · | `g<Tab>` | `g<Tab>` |    go to last accessed tabpage |
 | · | `g<Up>` | `g<Up>` | same as "gk" |
-| · | `z<CR>` | `z<CR>` |    redraw, cursor line to top of window, |
+| ✓ | `z<CR>` | `z<CR>` |    redraw, cursor line to top of window, |
 | · | `z{height}<CR>` | `z5<CR>` |    redraw, make window {height} lines high |
-| · | `z+` | `z+` |    cursor on line N (default line below |
-| · | `z-` | `z-` |    redraw, cursor line at bottom of window, |
-| · | `z.` | `z.` |    redraw, cursor line to center of window, |
+| ✓ | `z+` | `z+` |    cursor on line N (default line below |
+| ✓ | `z-` | `z-` |    redraw, cursor line at bottom of window, |
+| ✓ | `z.` | `z.` |    redraw, cursor line to center of window, |
 | · | `z=` | `z=` |    give spelling suggestions |
 | · | `zA` | `zA` |    open a closed fold or close an open fold |
 | · | `zC` | `zC` |    close folds recursively |
@@ -441,35 +441,35 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `zE` | `zE` |    eliminate all folds |
 | · | `zF` | `zF` |    create a fold for N lines |
 | · | `zG` | `zG` |    temporarily mark word as correctly spelled |
-| · | `zH` | `zH` |    when 'wrap' off scroll half a screenwidth |
-| · | `zL` | `zL` |    when 'wrap' off scroll half a screenwidth |
+| ✓ | `zH` | `zH` |    when 'wrap' off scroll half a screenwidth |
+| ✓ | `zL` | `zL` |    when 'wrap' off scroll half a screenwidth |
 | · | `zM` | `zM` |    set 'foldlevel' to zero |
 | · | `zN` | `zN` |    set 'foldenable' |
 | · | `zO` | `zO` |    open folds recursively |
 | · | `zR` | `zR` |    set 'foldlevel' to the deepest fold |
 | · | `zW` | `zW` |    temporarily mark word as incorrectly spelled |
 | · | `zX` | `zX` |    re-apply 'foldlevel' |
-| · | `z^` | `z^` |    cursor on line N (default line above |
+| ✓ | `z^` | `z^` |    cursor on line N (default line above |
 | · | `za` | `za` |    open a closed fold, close an open fold |
-| · | `zb` | `zb` |    redraw, cursor line at bottom of window |
+| ✓ | `zb` | `zb` |    redraw, cursor line at bottom of window |
 | · | `zc` | `zc` |    close a fold |
 | · | `zd` | `zd` |    delete a fold |
-| · | `ze` | `ze` |    when 'wrap' off scroll horizontally to |
+| ✓ | `ze` | `ze` |    when 'wrap' off scroll horizontally to |
 | · | `zf{motion}` | `zfw` |    create a fold for Nmove text |
 | · | `zg` | `zg` |    permanently mark word as correctly spelled |
-| · | `zh` | `zh` |    when 'wrap' off scroll screen N characters |
+| ✓ | `zh` | `zh` |    when 'wrap' off scroll screen N characters |
 | · | `zi` | `zi` |    toggle 'foldenable' |
 | · | `zj` | `zj` | move to the start of the next fold |
 | · | `zk` | `zk` | move to the end of the previous fold |
-| · | `zl` | `zl` |    when 'wrap' off scroll screen N characters |
+| ✓ | `zl` | `zl` |    when 'wrap' off scroll screen N characters |
 | · | `zm` | `zm` |    subtract one from 'foldlevel' |
 | · | `zn` | `zn` |    reset 'foldenable' |
 | · | `zo` | `zo` |    open fold |
 | · | `zp` | `zp` |    paste in block-mode without trailing spaces |
 | · | `zP` | `zP` |    paste in block-mode without trailing spaces |
 | · | `zr` | `zr` |    add one to 'foldlevel' |
-| · | `zs` | `zs` |    when 'wrap' off scroll horizontally to |
-| · | `zt` | `zt` |    redraw, cursor line at top of window |
+| ✓ | `zs` | `zs` |    when 'wrap' off scroll horizontally to |
+| ✓ | `zt` | `zt` |    redraw, cursor line at top of window |
 | · | `zuw` | `zuw` |    undo \|zw\| |
 | · | `zug` | `zug` |    undo \|zg\| |
 | · | `zuW` | `zuW` |    undo \|zW\| |
@@ -478,9 +478,9 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `zw` | `zw` |    permanently mark word as incorrectly spelled |
 | · | `zx` | `zx` |    re-apply 'foldlevel' and do "zv" |
 | · | `zy` | `zy` |    yank without trailing spaces |
-| · | `zz` | `zz` |    redraw, cursor line at center of window |
-| · | `z<Left>` | `z<Left>` |    same as "zh" |
-| · | `z<Right>` | `z<Right>` |    same as "zl" |
+| ✓ | `zz` | `zz` |    redraw, cursor line at center of window |
+| ✓ | `z<Left>` | `z<Left>` |    same as "zh" |
+| ✓ | `z<Right>` | `z<Right>` |    same as "zl" |
 | ✓ | `v` | `v` | force operator to work charwise |
 | ✓ | `V` | `V` | force operator to work linewise |
 | · | `CTRL-V` | `<C-v>` | force operator to work blockwise |

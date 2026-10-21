@@ -341,7 +341,16 @@ impl Editor {
                 Code::Down => 'j',
                 Code::Home => '0',
                 Code::End => '$',
+                Code::Enter if self.prefix == Some('z') => {
+                    self.prefix = None;
+                    self.vim_z('\r');
+                    return;
+                }
                 Code::Enter => return self.normal_key(Key::ch('+')),
+                Code::Tab => {
+                    self.vim_ctrl('i');
+                    return;
+                }
                 Code::Backspace => return self.normal_key(Key::ctrl('h')),
                 Code::Delete => 'x',
                 _ => return,

@@ -28,6 +28,23 @@ pub enum Request {
     Sleep(u64),
     /// run the operator function on these characters (g@)
     OperatorFunc(usize, usize),
+    /// a window command: what follows CTRL-W (`s`, `v`, `C-w`, `+`, `gf`…) and its count
+    Window(String, Option<usize>),
+    /// show the buffer from this line at the window's top (scrolling: CTRL-E, CTRL-D, zt, zz…)
+    Top(usize),
+    /// scroll sideways: by columns (+ right), or so this column is at the left edge
+    Sideways(i32),
+    LeftAt(usize),
+    /// the other buffer (CTRL-^), the definition under the cursor (CTRL-], g]), back from it (CTRL-T)
+    Alternate(Option<usize>),
+    Definition,
+    Back,
+    /// the file's name and where the cursor is (CTRL-G), redraw (CTRL-L), suspend (CTRL-Z)
+    FileInfo,
+    Redraw,
+    Suspend,
+    /// the command-line window (q: q/ q?)
+    CmdWindow(char),
 }
 
 /// The system clipboard, for `"+` and `"*`: the window sets it (the editor itself reads no
@@ -68,6 +85,11 @@ pub(crate) struct VimState {
     /// the window's lines around the buffer (top, height) and width: H M L, gm
     pub screen: (usize, usize, usize),
     pub requests: Vec<Request>,
+    /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
+    pub jumps: Vec<usize>,
+    jump_at: usize,
+    /// where the command under way started (a jump records it)
+    typing_pos: usize,
 }
 
 impl VimState {
@@ -80,6 +102,7 @@ impl VimState {
         };
         self.marks.values_mut().for_each(mv);
         self.changes.iter_mut().for_each(mv);
+        self.jumps.iter_mut().for_each(mv);
         if let Some(p) = self.last_insert.as_mut() {
             mv(p);
         }
@@ -94,6 +117,7 @@ impl VimState {
         };
         self.marks.values_mut().for_each(mv);
         self.changes.iter_mut().for_each(mv);
+        self.jumps.iter_mut().for_each(mv);
         if let Some(p) = self.last_insert.as_mut() {
             mv(p);
         }
@@ -117,6 +141,7 @@ impl Editor {
         if self.vim.replaying == 0 {
             if self.vim.typing.is_empty() {
                 self.vim.typing_from = self.edit_marker();
+                self.vim.typing_pos = self.cursor;
             }
             self.vim.typing.push(k);
         }
@@ -169,6 +194,7 @@ impl Editor {
         if keys.is_empty() || self.vim.replaying > 0 {
             return;
         }
+        self.vim_note_jump(&keys);
         let changed = self.edit_marker() != self.vim.typing_from;
         let first = keys[0].char();
         // undo, redo and the dot itself are not changes to repeat
@@ -342,6 +368,9 @@ impl Editor {
 
     /// A Ctrl key in normal mode; false when it is not one of these.
     pub(crate) fn vim_ctrl(&mut self, c: char) -> bool {
+        if self.vim_ctrl2(c) {
+            return true;
+        }
         match c {
             'a' | 'x' => {
                 let n = self.take_count() as i64;
@@ -581,6 +610,9 @@ impl Editor {
                 }
                 self.vim.replaying -= 1;
             }
+            ('z', c) => return self.vim_z(c),
+            ('q', w @ (':' | '/' | '?')) => self.vim.requests.push(Request::CmdWindow(w)),
+            (CW | CWG | CBS, c) => return self.vim_window_prefixed(p, c),
             ('Z', 'Z') => self.vim.requests.push(Request::Ex("x".into())),
             ('Z', 'Q') => self.vim.requests.push(Request::Ex("q!".into())),
             ('g', _) => return self.vim_g(c),
@@ -1113,5 +1145,271 @@ impl Editor {
     /// Where the history stands: a change since shows as a difference (an open change counts its edits).
     fn edit_marker(&self) -> (usize, usize, usize) {
         (self.undo.nodes.len(), self.undo.cur, self.open.as_ref().map_or(0, |c| c.edits.len()))
+    }
+}
+
+/// Prefixes beyond the visible keys: after CTRL-W, after CTRL-W g, after CTRL-\.
+pub(crate) const CW: char = '\u{17}';
+const CWG: char = '\u{1e}';
+const CBS: char = '\u{1c}';
+
+impl Editor {
+    /// Ctrl keys of batch 2: windows, scrolling, jumps, the file, the other buffer.
+    pub(crate) fn vim_ctrl2(&mut self, c: char) -> bool {
+        // after CTRL-W (or CTRL-W g): a window command
+        match self.prefix {
+            Some(CW) => {
+                self.prefix = None;
+                if c == 'c' {
+                    // CTRL-W CTRL-C cancels, as in Vim
+                    self.count = None;
+                    return true;
+                }
+                let n = self.count.take();
+                self.vim.requests.push(Request::Window(format!("C-{c}"), n));
+                return true;
+            }
+            Some(CBS) => {
+                // CTRL-\ CTRL-N / CTRL-G: to normal mode (here already)
+                self.prefix = None;
+                self.count = None;
+                return true;
+            }
+            Some('g') => {
+                self.prefix = None;
+                match c {
+                    ']' => self.vim.requests.push(Request::Definition),
+                    'g' => self.vim_word_count(),
+                    'h' => {
+                        self.anchor = self.cursor;
+                        self.mode = Mode::Visual;
+                    }
+                    _ => return false,
+                }
+                return true;
+            }
+            _ => {}
+        }
+        let (top, height, _) = self.vim.screen;
+        let height = height.max(2);
+        let last = self.buf.len_lines() - 1;
+        let line = self.cur_line();
+        match c {
+            'w' => self.prefix = Some(CW),
+            '\\' => self.prefix = Some(CBS),
+            'c' => {
+                self.count = None;
+                self.op = None;
+            }
+            'e' | 'y' => {
+                let n = self.take_count();
+                let t = if c == 'e' { (top + n).min(last) } else { top.saturating_sub(n) };
+                self.vim_top(t);
+                // the cursor stays on screen
+                let to = line.clamp(t, (t + height - 1).min(last));
+                if to != line {
+                    self.vertical_to(to);
+                }
+            }
+            'd' | 'u' => {
+                let n = self.count.take().unwrap_or(height / 2).max(1);
+                let (t, to) = if c == 'd' { ((top + n).min(last.saturating_sub(height / 2).max(top)), (line + n).min(last)) } else { (top.saturating_sub(n), line.saturating_sub(n)) };
+                self.vim_top(t);
+                self.cursor = self.first_non_blank(to);
+            }
+            'f' | 'b' => {
+                let n = self.take_count();
+                let page = height.saturating_sub(2).max(1) * n;
+                let t = if c == 'f' { (top + page).min(last) } else { top.saturating_sub(page) };
+                self.vim_top(t);
+                let to = if c == 'f' { t } else { (t + height - 1).min(last) };
+                self.cursor = self.first_non_blank(to);
+            }
+            'o' => self.vim_jump(-1),
+            'i' => self.vim_jump(1),
+            'g' => self.vim.requests.push(Request::FileInfo),
+            'l' => self.vim.requests.push(Request::Redraw),
+            '^' | '6' => {
+                let n = self.count.take();
+                self.vim.requests.push(Request::Alternate(n));
+            }
+            ']' => self.vim.requests.push(Request::Definition),
+            't' => self.vim.requests.push(Request::Back),
+            'z' => self.vim.requests.push(Request::Suspend),
+            _ => return false,
+        }
+        true
+    }
+
+    /// `g CTRL-G`: words, characters and lines, and where the cursor is among them.
+    fn vim_word_count(&mut self) {
+        let text = self.buf.text();
+        let before: String = text.chars().take(self.cursor).collect();
+        let (w, wb) = (text.split_whitespace().count(), before.split_whitespace().count());
+        let m = format!("Col {} of {}; Line {} of {}; Word {wb} of {w}; Char {} of {}", self.cursor().col + 1, self.buf.line_len(self.cur_line()), self.cur_line() + 1, self.buf.len_lines(), self.cursor + 1, self.buf.len_chars());
+        self.vim.requests.push(Request::Message(m));
+    }
+
+    /// The jump list: `dir` -1 back (CTRL-O), +1 forward (CTRL-I / Tab).
+    fn vim_jump(&mut self, dir: i32) {
+        let n = self.take_count();
+        for _ in 0..n {
+            let j = &mut self.vim;
+            if dir < 0 {
+                if j.jump_at == j.jumps.len() {
+                    j.jumps.push(self.cursor);
+                }
+                if j.jump_at == 0 {
+                    return;
+                }
+                j.jump_at -= 1;
+            } else {
+                if j.jump_at + 1 >= j.jumps.len() {
+                    return;
+                }
+                j.jump_at += 1;
+            }
+            self.cursor = self.vim.jumps[self.vim.jump_at].min(self.buf.len_chars());
+            self.clamp();
+            self.want_col = self.cursor().col;
+        }
+    }
+
+    /// After a jump (G, /, n, %, ', H…): where it came from goes on the jump list.
+    pub(crate) fn vim_note_jump(&mut self, keys: &[Key]) {
+        // past a count and a register: `50G`, `"a3n`
+        let mut rest = keys;
+        loop {
+            match rest.first().and_then(|k| k.char()) {
+                Some(c) if c.is_ascii_digit() => rest = &rest[1..],
+                Some('"') if rest.len() > 1 => rest = &rest[2..],
+                _ => break,
+            }
+        }
+        let first = rest.first().and_then(|k| k.char());
+        let second = rest.get(1).and_then(|k| k.char());
+        let jump = matches!(first, Some('G' | '/' | '?' | 'n' | 'N' | '*' | '#' | '%' | '(' | ')' | '{' | '}' | 'H' | 'M' | 'L' | '\'' | '`'))
+            || (first == Some('g') && matches!(second, Some('g' | 'd' | 'D' | '*' | '#')));
+        let from = self.vim.typing_pos;
+        if jump && self.buf.to_pos(from.min(self.buf.len_chars())).line != self.cur_line() {
+            let j = &mut self.vim;
+            j.jumps.truncate(j.jump_at);
+            j.jumps.retain(|p| *p != from);
+            j.jumps.push(from);
+            if j.jumps.len() > 100 {
+                j.jumps.remove(0);
+            }
+            j.jump_at = j.jumps.len();
+            j.marks.insert('\'', from);
+        }
+    }
+
+    /// `z` and a key: where the window stands (zt zz zb z<CR> z. z- z+ z^), sideways (zh zl zs ze zH zL).
+    pub(crate) fn vim_z(&mut self, c: char) -> bool {
+        let (top, height, width) = self.vim.screen;
+        let height = height.max(1);
+        let last = self.buf.len_lines() - 1;
+        let line = self.count.take().map(|n| n.saturating_sub(1).min(last)).unwrap_or(self.cur_line());
+        let fnb = matches!(c, '\r' | '.' | '-');
+        match c {
+            't' | '\r' => self.vim_top(line),
+            'z' | '.' => self.vim_top(line.saturating_sub(height / 2)),
+            'b' | '-' => self.vim_top((line + 1).saturating_sub(height)),
+            '+' => {
+                let t = (top + height).min(last);
+                self.vim_top(t);
+                self.cursor = self.first_non_blank(t);
+                return true;
+            }
+            '^' => {
+                let b = top.saturating_sub(1);
+                self.vim_top((b + 1).saturating_sub(height));
+                self.cursor = self.first_non_blank(b);
+                return true;
+            }
+            'h' | 'l' | 'H' | 'L' => {
+                let n = if c.is_uppercase() { width.max(2) / 2 } else { self.take_count() } as i32;
+                self.vim.requests.push(Request::Sideways(if c.eq_ignore_ascii_case(&'h') { -n } else { n }));
+            }
+            's' => self.vim.requests.push(Request::LeftAt(self.cursor().col)),
+            'e' => self.vim.requests.push(Request::LeftAt((self.cursor().col + 1).saturating_sub(width.max(1)))),
+            _ => return false,
+        }
+        if line != self.cur_line() || fnb {
+            self.cursor = if fnb { self.first_non_blank(line) } else { self.line_start(line) + self.cursor().col.min(self.buf.line_len(line).saturating_sub(1)) };
+            self.clamp();
+        }
+        true
+    }
+
+    /// The window-command prefixes, for vim_prefixed: CTRL-W x, CTRL-W g x.
+    pub(crate) fn vim_window_prefixed(&mut self, p: char, c: char) -> bool {
+        match p {
+            CW if c == 'g' => self.prefix = Some(CWG),
+            CW => {
+                let n = self.count.take();
+                self.vim.requests.push(Request::Window(c.to_string(), n));
+            }
+            CWG => {
+                let n = self.count.take();
+                self.vim.requests.push(Request::Window(format!("g{c}"), n));
+            }
+            CBS => {}
+            _ => return false,
+        }
+        true
+    }
+}
+
+#[cfg(test)]
+mod batch2 {
+    use super::Request;
+    use crate::Editor;
+
+    fn lines(n: usize) -> Editor {
+        let t: String = (1..=n).map(|i| format!("line {i}\n")).collect();
+        let mut e = Editor::from_str(&t);
+        e.set_screen(0, 10, 40);
+        e
+    }
+
+    #[test]
+    fn windows_scrolling_and_the_view() {
+        let mut e = lines(100);
+        e.feed("<C-w>v2<C-w>+<C-w><C-w><C-w>gf");
+        assert_eq!(e.take_requests(), vec![Request::Window("v".into(), None), Request::Window("+".into(), Some(2)), Request::Window("C-w".into(), None), Request::Window("gf".into(), None)]);
+        e.feed("<C-d>");
+        assert_eq!(e.cursor().line, 5);
+        assert_eq!(e.take_requests(), vec![Request::Top(5)]);
+        e.set_screen(5, 10, 40);
+        e.feed("<C-e><C-e>");
+        assert_eq!(e.take_requests(), vec![Request::Top(6), Request::Top(7)]);
+        e.feed("30Gzz");
+        assert_eq!(e.take_requests(), vec![Request::Top(24)]);
+        e.feed("zt");
+        assert_eq!(e.take_requests(), vec![Request::Top(29)]);
+    }
+
+    #[test]
+    fn the_jump_list_goes_back_and_forth() {
+        let mut e = lines(100);
+        e.feed("50G");
+        e.feed("80G");
+        e.feed("<C-o>");
+        assert_eq!(e.cursor().line, 49);
+        e.feed("<C-o>");
+        assert_eq!(e.cursor().line, 0);
+        e.feed("<C-i>");
+        assert_eq!(e.cursor().line, 49);
+        e.feed("<Tab>");
+        assert_eq!(e.cursor().line, 79);
+    }
+}
+
+impl Editor {
+    /// The window's top line moves to `t`: asked of the window, and kept here until it says otherwise.
+    fn vim_top(&mut self, t: usize) {
+        self.vim.screen.0 = t;
+        self.vim.requests.push(Request::Top(t));
     }
 }

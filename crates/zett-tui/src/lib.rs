@@ -318,6 +318,11 @@ struct App {
     dash: bool,
     dash_sel: usize,
     last_doc: Option<usize>,
+    /// the window focused before (CTRL-W p), the : lines run (q:), a full redraw asked for (CTRL-L)
+    last_win: Option<usize>,
+    cmd_hist: Vec<String>,
+    clear: bool,
+    suspend: bool,
     last_compile: Option<String>,
     numbers: bool,
     relative: bool,
@@ -452,6 +457,10 @@ impl App {
             dash: false,
             dash_sel: 0,
             last_doc: None,
+            last_win: None,
+            cmd_hist: Vec::new(),
+            clear: false,
+            suspend: false,
             last_compile: None,
             numbers: true,
             relative: false,
@@ -533,6 +542,18 @@ impl App {
             self.sync_profile();
             self.agent_poll();
             self.notebook_poll();
+            // CTRL-L: everything drawn again; CTRL-Z: back to the shell until `fg`
+            if std::mem::take(&mut self.clear) {
+                term.clear()?;
+            }
+            if std::mem::take(&mut self.suspend) {
+                let _ = ratatui::crossterm::terminal::disable_raw_mode();
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::LeaveAlternateScreen, ratatui::crossterm::event::DisableMouseCapture);
+                let _ = std::process::Command::new("kill").args(["-TSTP", &std::process::id().to_string()]).status();
+                let _ = ratatui::crossterm::terminal::enable_raw_mode();
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EnterAlternateScreen, ratatui::crossterm::event::EnableMouseCapture);
+                term.clear()?;
+            }
             term.draw(|f| self.draw(f))?;
             // ZETT_EXIT_AFTER_DRAW=1: quit after the first frame (start-up timing)
             if std::env::var_os("ZETT_EXIT_AFTER_DRAW").is_some() {
@@ -677,7 +698,7 @@ impl App {
             if tok.is_empty() {
                 return;
             }
-            if tok == "<CR>" && self.keyseq.is_empty() && self.follow_help() {
+            if tok == "<CR>" && self.keyseq.is_empty() && (self.follow_help() || self.follow_cmdwin()) {
                 return;
             }
             if tok == "<Esc>" && !self.keyseq.is_empty() {
@@ -1080,6 +1101,9 @@ impl App {
                 if self.prompt.take().is_some() {
                     let fx = self.with_lua(|e| e.input_done(Some(l)));
                     return self.after_lua(fx);
+                }
+                if !l.trim().is_empty() && self.prompt.is_none() {
+                    self.cmd_hist.push(l.trim().to_string());
                 }
                 self.command(l.trim());
             }

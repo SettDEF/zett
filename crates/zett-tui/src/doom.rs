@@ -7,14 +7,15 @@ use super::*;
 pub(crate) enum WTree {
     Leaf(usize),
     /// true: side by side
-    Split(bool, Box<WTree>, Box<WTree>),
+    /// side by side (true) or above and below; the first part's share of the space (0.5: halves)
+    Split(bool, Box<WTree>, Box<WTree>, f32),
 }
 
 impl WTree {
     pub(crate) fn ids(&self) -> Vec<usize> {
         match self {
             WTree::Leaf(i) => vec![*i],
-            WTree::Split(_, a, b) => {
+            WTree::Split(_, a, b, _) => {
                 let mut v = a.ids();
                 v.extend(b.ids());
                 v
@@ -25,14 +26,14 @@ impl WTree {
     pub(crate) fn place(&self, r: Rect, out: &mut Vec<(usize, Rect)>, seps: &mut Vec<Rect>) {
         match self {
             WTree::Leaf(i) => out.push((*i, r)),
-            WTree::Split(side, a, b) => {
+            WTree::Split(side, a, b, ratio) => {
                 if *side {
-                    let wa = r.width.saturating_sub(1) / 2;
+                    let wa = ((r.width.saturating_sub(1) as f32 * ratio).round() as u16).clamp(1.min(r.width), r.width.saturating_sub(2).max(1));
                     a.place(Rect { width: wa, ..r }, out, seps);
                     seps.push(Rect { x: r.x + wa, width: 1, ..r });
                     b.place(Rect { x: r.x + wa + 1, width: r.width.saturating_sub(wa + 1), ..r }, out, seps);
                 } else {
-                    let ha = r.height / 2;
+                    let ha = ((r.height as f32 * ratio).round() as u16).clamp(1.min(r.height), r.height.saturating_sub(1).max(1));
                     a.place(Rect { height: ha, ..r }, out, seps);
                     b.place(Rect { y: r.y + ha, height: r.height.saturating_sub(ha), ..r }, out, seps);
                 }
@@ -42,9 +43,9 @@ impl WTree {
 
     fn split(&mut self, at: usize, new: usize, side: bool) {
         match self {
-            WTree::Leaf(i) if *i == at => *self = WTree::Split(side, Box::new(WTree::Leaf(at)), Box::new(WTree::Leaf(new))),
+            WTree::Leaf(i) if *i == at => *self = WTree::Split(side, Box::new(WTree::Leaf(at)), Box::new(WTree::Leaf(new)), 0.5),
             WTree::Leaf(_) => {}
-            WTree::Split(_, a, b) => {
+            WTree::Split(_, a, b, _) => {
                 a.split(at, new, side);
                 b.split(at, new, side);
             }
@@ -54,9 +55,9 @@ impl WTree {
     /// As split, with the new window first (left of or above the old one).
     fn split_before(&mut self, at: usize, new: usize, side: bool) {
         match self {
-            WTree::Leaf(i) if *i == at => *self = WTree::Split(side, Box::new(WTree::Leaf(new)), Box::new(WTree::Leaf(at))),
+            WTree::Leaf(i) if *i == at => *self = WTree::Split(side, Box::new(WTree::Leaf(new)), Box::new(WTree::Leaf(at)), 0.5),
             WTree::Leaf(_) => {}
-            WTree::Split(_, a, b) => {
+            WTree::Split(_, a, b, _) => {
                 a.split_before(at, new, side);
                 b.split_before(at, new, side);
             }
@@ -67,8 +68,8 @@ impl WTree {
         match self {
             WTree::Leaf(i) if i == id => None,
             WTree::Leaf(_) => Some(self),
-            WTree::Split(s, a, b) => match (a.remove(id), b.remove(id)) {
-                (Some(a), Some(b)) => Some(WTree::Split(s, Box::new(a), Box::new(b))),
+            WTree::Split(s, a, b, r) => match (a.remove(id), b.remove(id)) {
+                (Some(a), Some(b)) => Some(WTree::Split(s, Box::new(a), Box::new(b), r)),
                 (Some(x), None) | (None, Some(x)) => Some(x),
                 (None, None) => None,
             },
@@ -1025,7 +1026,242 @@ impl App {
                 }
                 Request::Sleep(ms) => std::thread::sleep(Duration::from_millis(ms.min(10_000))),
                 Request::OperatorFunc(..) => self.say("g@: no operatorfunc set (zett.opt.operatorfunc)".to_string()),
+                Request::Window(c, n) => self.vim_window(&c, n),
+                Request::Top(t) => {
+                    let last = self.docs[self.cur].ed.buf.len_lines().saturating_sub(1);
+                    let t = t.min(last);
+                    self.docs[self.cur].top = t;
+                    if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+                        w.top = t;
+                    }
+                }
+                Request::Sideways(by) => {
+                    let l = (self.docs[self.cur].left as i64 + by as i64).max(0) as usize;
+                    self.docs[self.cur].left = l;
+                    if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+                        w.left = l;
+                    }
+                }
+                Request::LeftAt(c) => {
+                    self.docs[self.cur].left = c;
+                    if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+                        w.left = c;
+                    }
+                }
+                Request::Alternate(n) => match n.map(|k| k.saturating_sub(1)).or(self.last_doc) {
+                    Some(d) if d < self.docs.len() => self.show_doc(d),
+                    _ => self.say("E23: No alternate file".to_string()),
+                },
+                Request::Definition => self.lsp_definition(),
+                Request::Back => {
+                    self.doc().ed.feed("<C-o>");
+                }
+                Request::FileInfo => {
+                    let d = &self.docs[self.cur];
+                    let (line, lines) = (d.ed.cursor().line + 1, d.ed.buf.len_lines());
+                    let m = format!("\"{}\"{} {lines} line{} --{}%--", d.name, if d.dirty() { " [Modified]" } else { "" }, if lines == 1 { "" } else { "s" }, line * 100 / lines.max(1));
+                    self.say(m);
+                }
+                Request::Redraw => self.clear = true,
+                Request::Suspend => self.suspend = true,
+                Request::CmdWindow(c) => {
+                    // the : lines (or searches) so far as a buffer; Enter on one runs it
+                    let lines: Vec<String> = if c == ':' { self.cmd_hist.clone() } else { vec![self.docs[self.cur].ed.register('/').map(|r| r.0).unwrap_or_default()] };
+                    let title = "[Command Line]".to_string();
+                    if let Some(i) = self.docs.iter().position(|d| d.name == title) {
+                        self.docs.remove(i);
+                        self.doc_removed(i);
+                    }
+                    let mut text = lines.join("\n");
+                    text.push('\n');
+                    self.docs.push(Doc::new(Editor::from_str(&text), title, "Plain Text".into()));
+                    let i = self.docs.len() - 1;
+                    self.show_doc(i);
+                    self.goto_line(lines.len().max(1));
+                }
             }
         }
+    }
+}
+
+impl WTree {
+    /// Grows (or shrinks, `by` < 0) window `id` by cells along `side` (true: width), inside `r`:
+    /// the nearest split of that kind around it gives or takes the space. True if one did.
+    pub(crate) fn resize(&mut self, id: usize, side: bool, by: i32, r: Rect) -> bool {
+        let WTree::Split(s, a, b, ratio) = self else { return false };
+        let (ra, rb) = split_rects(*s, *ratio, r);
+        let in_a = a.ids().contains(&id);
+        if !in_a && !b.ids().contains(&id) {
+            return false;
+        }
+        // deeper first: the closest split decides
+        if (in_a && a.resize(id, side, by, ra)) || (!in_a && b.resize(id, side, by, rb)) {
+            return true;
+        }
+        if *s != side {
+            return false;
+        }
+        let total = if side { r.width.saturating_sub(1) } else { r.height } as f32;
+        if total < 2.0 {
+            return false;
+        }
+        let d = by as f32 / total;
+        *ratio = (*ratio + if in_a { d } else { -d }).clamp(0.05, 0.95);
+        true
+    }
+
+    /// Every split back to halves (CTRL-W =).
+    pub(crate) fn equalize(&mut self) {
+        if let WTree::Split(_, a, b, ratio) = self {
+            *ratio = 0.5;
+            a.equalize();
+            b.equalize();
+        }
+    }
+
+    /// Swaps two windows' places (CTRL-W x, r, R).
+    pub(crate) fn swap(&mut self, x: usize, y: usize) {
+        match self {
+            WTree::Leaf(i) if *i == x => *i = y,
+            WTree::Leaf(i) if *i == y => *i = x,
+            WTree::Leaf(_) => {}
+            WTree::Split(_, a, b, _) => {
+                a.swap(x, y);
+                b.swap(x, y);
+            }
+        }
+    }
+}
+
+/// The two parts of a split's rectangle (as `place` cuts them).
+fn split_rects(side: bool, ratio: f32, r: Rect) -> (Rect, Rect) {
+    if side {
+        let wa = ((r.width.saturating_sub(1) as f32 * ratio).round() as u16).clamp(1.min(r.width), r.width.saturating_sub(2).max(1));
+        (Rect { width: wa, ..r }, Rect { x: r.x + wa + 1, width: r.width.saturating_sub(wa + 1), ..r })
+    } else {
+        let ha = ((r.height as f32 * ratio).round() as u16).clamp(1.min(r.height), r.height.saturating_sub(1).max(1));
+        (Rect { height: ha, ..r }, Rect { y: r.y + ha, height: r.height.saturating_sub(ha), ..r })
+    }
+}
+
+impl App {
+    /// A Vim window command (what follows CTRL-W), with its count.
+    pub(crate) fn vim_window(&mut self, cmd: &str, n: Option<usize>) {
+        let ids = self.tree.ids();
+        let pos = ids.iter().position(|&i| i == self.focus).unwrap_or(0);
+        let area = self.win_rects.iter().fold(None::<Rect>, |acc, (_, r)| Some(acc.map_or(*r, |a| a.union(*r)))).unwrap_or_default();
+        let focus_rect = self.win_rects.iter().find(|(i, _)| *i == self.focus).map(|(_, r)| *r).unwrap_or_default();
+        let c = cmd.trim_start_matches("C-");
+        let prev = self.focus;
+        match c {
+            "s" | "S" => self.split(false),
+            "v" => self.split(true),
+            "n" => {
+                self.split(false);
+                self.command("enew");
+            }
+            "w" | "W" | "p" | "t" | "b" => {
+                let to = match (c, n) {
+                    (_, Some(k)) if c == "w" || c == "W" => ids.get(k.saturating_sub(1)).copied(),
+                    ("w", None) => ids.get((pos + 1) % ids.len()).copied(),
+                    ("W", None) => ids.get((pos + ids.len() - 1) % ids.len()).copied(),
+                    ("p", _) => self.last_win.filter(|w| ids.contains(w)),
+                    ("t", _) => ids.first().copied(),
+                    _ => ids.last().copied(),
+                };
+                if let Some(t) = to {
+                    self.focus_win(t);
+                }
+            }
+            "h" | "j" | "k" | "l" | "Left" | "Down" | "Up" | "Right" => {
+                let dir = match c { "h" | "Left" => "left", "j" | "Down" => "down", "k" | "Up" => "up", _ => "right" };
+                for _ in 0..n.unwrap_or(1) {
+                    self.focus_dir(dir);
+                }
+            }
+            "H" | "J" | "K" | "L" => self.move_to_win(match c { "H" => "left", "J" => "down", "K" => "up", _ => "right" }),
+            "c" | "q" => {
+                if !self.close_win() {
+                    if c == "q" {
+                        self.command("q");
+                    } else {
+                        self.say("E444: Cannot close last window".to_string());
+                    }
+                }
+            }
+            "o" => self.only_win(),
+            "x" | "r" | "R" => {
+                if ids.len() > 1 {
+                    let other = match (c, n) {
+                        ("x", Some(k)) => ids.get(k.saturating_sub(1)).copied(),
+                        ("x", None) | ("r", _) => ids.get((pos + 1) % ids.len()).copied(),
+                        _ => ids.get((pos + ids.len() - 1) % ids.len()).copied(),
+                    };
+                    if let Some(o) = other.filter(|o| *o != self.focus) {
+                        self.tree.swap(self.focus, o);
+                    }
+                }
+            }
+            "=" => self.tree.equalize(),
+            "+" | "-" | ">" | "<" => {
+                let side = matches!(c, ">" | "<");
+                let by = n.unwrap_or(1) as i32 * if matches!(c, "+" | ">") { 1 } else { -1 };
+                self.tree.resize(self.focus, side, by, area);
+            }
+            "_" | "|" => {
+                // to N lines/columns, or as big as it goes
+                let side = c == "|";
+                let now = if side { focus_rect.width } else { focus_rect.height } as i32;
+                let want = n.map(|k| k as i32).unwrap_or(1000);
+                self.tree.resize(self.focus, side, want - now, area);
+            }
+            "f" | "F" | "gf" | "gF" => {
+                self.split(false);
+                self.doc().ed.feed("gf");
+                self.editor_requests();
+            }
+            "]" | "g]" | "g C-]" | "d" | "i" | "}" | "g}" => {
+                self.split(false);
+                self.lsp_definition();
+            }
+            "^" => {
+                self.split(false);
+                if let Some(d) = n.map(|k| k.saturating_sub(1)).or(self.last_doc) {
+                    self.show_doc(d.min(self.docs.len() - 1));
+                }
+            }
+            "gt" | "g<Tab>" | "gT" => {
+                let by = if c == "gT" { -1 } else { 1 };
+                self.move_doc(0);
+                let len = self.docs.len() as i32;
+                let i = (self.cur as i32 + by).rem_euclid(len.max(1)) as usize;
+                self.show_doc(i);
+            }
+            "T" => self.say("zett has buffers, not tab pages: the window stays (SPC b lists the buffers)".to_string()),
+            "z" | "P" => self.say("E441: There is no preview window".to_string()),
+            other => self.say(format!("CTRL-W {other}: not a window command")),
+        }
+        if self.focus != prev {
+            self.last_win = Some(prev);
+        }
+    }
+}
+
+impl App {
+    /// Enter in the command-line window (q:): the line under the cursor runs, the window goes.
+    pub(crate) fn follow_cmdwin(&mut self) -> bool {
+        if self.docs[self.cur].name != "[Command Line]" {
+            return false;
+        }
+        let d = &self.docs[self.cur];
+        let line = d.ed.buf.line(d.ed.cursor().line).trim().to_string();
+        let i = self.cur;
+        self.docs.remove(i);
+        self.doc_removed(i);
+        if !line.is_empty() {
+            self.cmd_hist.push(line.clone());
+            self.command(&line);
+        }
+        true
     }
 }
