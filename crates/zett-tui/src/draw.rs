@@ -273,6 +273,9 @@ impl App {
 
     pub(crate) fn draw_text(&mut self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
         // H M L and gm need the lines and columns shown
+        // a section just found: drawn by zash (a hand-drawn line under it) where it can, else it pulses
+        let (flash, fx) = (self.flash, fx_draws());
+        let mut fx_mark: Option<(u16, u16, String, Instant)> = None;
         let top = self.docs[di].top;
         self.docs[di].ed.set_screen(top, a.height as usize, a.width as usize);
         if focused {
@@ -387,8 +390,10 @@ impl App {
                 if rows + margin < height || d.top >= c.line {
                     break;
                 }
+                // not past the margin above: in a short window with wrapped lines both margins cannot
+                // hold, and the top went up and down on every other frame (flickered)
                 let next = d.ed.step_shown(d.top, 1, false);
-                if next <= d.top {
+                if next <= d.top || next > above {
                     break;
                 }
                 d.top = next;
@@ -497,6 +502,10 @@ impl App {
             if ln >= lines {
                 out.push(Line::from(if gutter > 0 { Span::styled(gut(&format!("{} ", show.fill.eob), gutter as usize), hl::hl("EndOfBuffer")) } else { Span::styled(show.fill.eob.to_string(), hl::hl("EndOfBuffer")) }));
                 continue;
+            }
+            if let Some(fl) = flash.filter(|f| fx && f.0 == di && f.1 == ln) {
+                let t: String = d.ed.buf.line(ln).chars().filter(|c| *c != '\n').skip(d.left).take(a.width.saturating_sub(gutter) as usize).collect();
+                fx_mark = Some((a.x + gutter, a.y + out.len() as u16, t, fl.3));
             }
             // the cursor line's number stands out with cursorline (cursorlineopt number or both)
             let num_style = if ln == c.line && cul && show.cul_number { hl::hl("CursorLineNr") } else { hl::hl("LineNr") };
@@ -684,7 +693,7 @@ impl App {
             }
             // the current line stands out, and fades over the lines around it (CursorLine, CursorLineGlow…)
             // a section just found pulses: strong, softer, then the glow, over a second and a half
-            let pulse = self.flash.filter(|f| f.0 == di && ln >= f.1 && ln < f.2).map(|f| f.3.elapsed().as_millis()).and_then(|ms| match ms {
+            let pulse = self.flash.filter(|f| !fx && f.0 == di && ln >= f.1 && ln < f.2).map(|f| f.3.elapsed().as_millis()).and_then(|ms| match ms {
                 0..=350 => Some("IncSearch"),
                 351..=900 => Some("Visual"),
                 901..=1500 => Some("CursorLineGlow"),
@@ -752,6 +761,9 @@ impl App {
             }
         }
         f.render_widget(Paragraph::new(out), a);
+        if fx_mark.is_some() {
+            self.fx_mark = fx_mark;
+        }
         if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
             let x = a.x + gutter + (ccol.saturating_sub(d.left + starts[crow]) + if crow > 0 { cur_cont } else { 0 }) as u16;
             let y = a.y + cursor_row as u16;
@@ -869,4 +881,25 @@ impl App {
         f.render_widget(Paragraph::new(lines), inner);
     }
 
+}
+
+/// zash draws marks by hand (OSC 7733;fx) when zett runs right in it: not inside zeit, which
+/// composes its panes and has no room for an effect on a cell (its passthrough: zeit's PLAN.md).
+pub(crate) fn fx_draws() -> bool {
+    static OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OK.get_or_init(|| {
+        let zash = std::env::var("TERM_PROGRAM").is_ok_and(|t| t == "zash");
+        let zeit = std::env::var_os("ZEIT").is_some();
+        let ok = zash && !zeit;
+        if !ok {
+            // said once, in the log: why help's found places pulse instead of being drawn
+            let why = if !zash { "the terminal is not zash" } else { "inside zeit (it does not pass zash's effects on yet)" };
+            let _ = std::fs::create_dir_all(crate::doom::state_dir());
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(crate::doom::state_dir().join("zett.log")) {
+                use std::io::Write;
+                let _ = writeln!(f, "help: found places pulse, not drawn: {why}");
+            }
+        }
+        ok
+    })
 }

@@ -367,6 +367,11 @@ struct App {
     qf_job: Option<qfcmd::QfJob>,
     /// the tag stack: each jump a tag made, newest last (tagcmd.rs)
     tag_stack: Vec<tagcmd::TagEntry>,
+    /// a found place zash draws a line under (x, y, its text, the flash it is for), and the flash sent
+    fx_mark: Option<(u16, u16, String, Instant)>,
+    /// the mark drawn (its flash and place), and the place seen last with the time it was first seen there
+    fx_sent: Option<(Instant, u16, u16)>,
+    fx_seen: Option<(u16, u16, Instant)>,
     /// the argument list and the one in use; the last :! command; :match per window; :redir under way
     args: Vec<String>,
     arg_idx: usize,
@@ -555,6 +560,9 @@ impl App {
             loclists: Default::default(),
             qf_job: None,
             tag_stack: Vec::new(),
+            fx_mark: None,
+            fx_sent: None,
+            fx_seen: None,
             args: paths.iter().filter(|p| !p.is_dir()).map(|p| p.display().to_string()).collect(),
             arg_idx: 0,
             last_bang: None,
@@ -699,7 +707,32 @@ impl App {
             if sync {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::BeginSynchronizedUpdate);
             }
-            term.draw(|f| self.draw(f))?;
+            let done = term.draw(|f| self.draw(f))?;
+            // a found place: its cells written again, colours and all, inside zash's hand-drawn
+            // underline (draw.rs fx_draws); once its place has stayed for 150 ms (the jump scrolls the
+            // view, more than once), and again only if it moves: the cells stay, and the line with them
+            let mark = self.fx_mark.take();
+            if let Some((x, y, _, _)) = &mark {
+                if self.fx_seen.is_none_or(|s| (s.0, s.1) != (*x, *y)) {
+                    self.fx_seen = Some((*x, *y, Instant::now()));
+                }
+            }
+            let settled = self.fx_seen.is_some_and(|s| s.2.elapsed() >= Duration::from_millis(150));
+            if let Some((x, y, text, at)) = mark.filter(|m| settled && self.fx_sent != Some((m.3, m.0, m.1))) {
+                use std::io::Write;
+                let w = ratatui::text::Line::from(text.as_str()).width() as u16;
+                let mut cells = String::new();
+                for cx in x..x.saturating_add(w) {
+                    if let Some(c) = done.buffer.cell((cx, y)) {
+                        cells.push_str(&sgr(c));
+                        cells.push_str(c.symbol());
+                    }
+                }
+                let mut out = std::io::stdout();
+                let _ = write!(out, "\x1b7\x1b[{};{}H\x1b]7733;fx;underline;color=accent;draw=700ms\x1b\\{cells}\x1b[0m\x1b]7733;fx;end\x1b\\\x1b8", y + 1, x + 1);
+                let _ = out.flush();
+                self.fx_sent = Some((at, x, y));
+            }
             if sync {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EndSynchronizedUpdate);
             }
@@ -941,4 +974,43 @@ mod tests {
         assert_eq!(token(&k(KeyCode::Char('<'), KeyModifiers::NONE)), "<lt>");
         assert_eq!(token(&k(KeyCode::Enter, KeyModifiers::NONE)), "<CR>");
     }
+}
+
+/// A cell's colours and attributes as SGR (zash gets the cell exactly as ratatui drew it).
+fn sgr(c: &ratatui::buffer::Cell) -> String {
+    use ratatui::style::{Color, Modifier};
+    let col = |c: Color, fg: bool| -> Option<String> {
+        let base = if fg { 30 } else { 40 };
+        Some(match c {
+            Color::Reset => return None,
+            Color::Rgb(r, g, b) => format!("{};2;{r};{g};{b}", base + 8),
+            Color::Indexed(n) => format!("{};5;{n}", base + 8),
+            Color::Black => format!("{base}"),
+            Color::Red => format!("{}", base + 1),
+            Color::Green => format!("{}", base + 2),
+            Color::Yellow => format!("{}", base + 3),
+            Color::Blue => format!("{}", base + 4),
+            Color::Magenta => format!("{}", base + 5),
+            Color::Cyan => format!("{}", base + 6),
+            Color::Gray => format!("{}", base + 7),
+            Color::DarkGray => format!("{}", base + 60),
+            Color::LightRed => format!("{}", base + 61),
+            Color::LightGreen => format!("{}", base + 62),
+            Color::LightYellow => format!("{}", base + 63),
+            Color::LightBlue => format!("{}", base + 64),
+            Color::LightMagenta => format!("{}", base + 65),
+            Color::LightCyan => format!("{}", base + 66),
+            Color::White => format!("{}", base + 67),
+        })
+    };
+    let mut parts = vec!["0".to_string()];
+    let m = c.modifier;
+    for (bit, code) in [(Modifier::BOLD, "1"), (Modifier::DIM, "2"), (Modifier::ITALIC, "3"), (Modifier::UNDERLINED, "4"), (Modifier::REVERSED, "7"), (Modifier::CROSSED_OUT, "9")] {
+        if m.contains(bit) {
+            parts.push(code.into());
+        }
+    }
+    parts.extend(col(c.fg, true));
+    parts.extend(col(c.bg, false));
+    format!("\x1b[{}m", parts.join(";"))
 }
