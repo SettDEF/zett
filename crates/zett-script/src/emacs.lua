@@ -52,6 +52,7 @@ map("<C-x>u", "undo")
 map("<C-c>t", "time-travel")
 map("<C-c><C-o>", "query-open")
 map("<C-c>b", "backlinks")
+map("<C-c>s", "search-everything")
 map("<C-c><C-c>", "notebook-run")
 map("<C-c><C-v>", "notebook-insert")
 

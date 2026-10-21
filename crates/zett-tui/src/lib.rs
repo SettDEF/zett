@@ -14,6 +14,7 @@ mod agent;
 mod query;
 mod refs;
 mod notebook;
+mod everything;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -949,7 +950,9 @@ impl App {
     fn open(&mut self, p: &Path) {
         // already open: show it
         let name = p.display().to_string();
-        if let Some(i) = self.docs.iter().position(|d| d.name == name) {
+        // by the real path too: "notes/a.md" and "/home/…/notes/a.md" are one buffer
+        let real = std::fs::canonicalize(p).ok();
+        if let Some(i) = self.docs.iter().position(|d| d.name == name || (real.is_some() && std::fs::canonicalize(&d.name).ok() == real)) {
             self.show_doc(i);
             return;
         }

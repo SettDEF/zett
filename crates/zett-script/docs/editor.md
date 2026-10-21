@@ -35,3 +35,11 @@ objects, visual mode, counts, registers, undo. `gcc` / `gc` comment lines.
 `:w` `:q` `:wq` `:wa` `:e FILE` `:bn` `:bp` `:ls` `:sp` `:vs` `:only` `:42`
 `:lua CODE` `:compile CMD` `:rename NAME` `:help TOPIC` `:set NAME VALUE`, and every command
 by name. Typing after `:` lists what fits, with an example; Tab completes.
+
+## Search everything
+
+`C-c s` (`SPC s e`) searches the project's files as they are and what they once had: every file's
+saved history (kept with each save) is searched for text a change deleted or replaced. Those hits
+start with ⟲ and say when (`⟲ notes/plan.md@14 · 3 h ago: the old line`); Enter on one opens the
+file in time travel at the state that still has it, to read it or take it back (`Enter` all, `b` the
+section, `v`…`y` a copy).

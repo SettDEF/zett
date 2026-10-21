@@ -97,6 +97,8 @@ pub(crate) enum Pick {
     Docs,
     /// a query block's results (query.rs), "path:line: text"
     Query,
+    /// the files and their saved histories (everything.rs), live as Grep
+    Everything(PathBuf),
 }
 
 impl Pick {
@@ -113,12 +115,13 @@ impl Pick {
             Pick::Diagnostics => "diagnostics",
             Pick::Docs => "docs",
             Pick::Query => "query",
+            Pick::Everything(_) => "everything",
         }
     }
 
     /// The source searches by itself as you type (ripgrep): no filtering here.
     pub fn live(&self) -> bool {
-        matches!(self, Pick::Grep(_))
+        matches!(self, Pick::Grep(_) | Pick::Everything(_))
     }
 
     /// Choices worth remembering, and listed first next time (not lines of one buffer, nor buffers: they come in the order they were used).
@@ -452,6 +455,7 @@ impl App {
                 ("M-x ".into(), items)
             }
             Pick::Query => ("Query results".into(), Vec::new()),
+            Pick::Everything(root) => (format!("Search everything in {} (⟲ = its history)", home_short(&root.display().to_string())), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
                 let mut rows = Vec::new();
@@ -472,7 +476,8 @@ impl App {
     /// The project search, again for the query typed so far (ripgrep, at most 400 lines).
     pub(crate) fn grep_update(&mut self) {
         let Some(m) = self.minibuf.as_mut() else { return };
-        let Pick::Grep(root) = &m.kind else { return };
+        let (Pick::Grep(root) | Pick::Everything(root)) = &m.kind else { return };
+        let history = matches!(m.kind, Pick::Everything(_));
         if m.query().chars().count() < 2 {
             m.set_items(Vec::new());
             return;
@@ -482,7 +487,11 @@ impl App {
             .current_dir(root)
             .stderr(std::process::Stdio::null())
             .output();
-        let rows = out.map(|o| String::from_utf8_lossy(&o.stdout).lines().take(400).map(Cand::plain).collect()).unwrap_or_default();
+        let mut rows: Vec<Cand> = out.map(|o| String::from_utf8_lossy(&o.stdout).lines().take(400).map(Cand::plain).collect()).unwrap_or_default();
+        // and what the files once had
+        if history {
+            rows.extend(everything::past(root, m.query(), 200).into_iter().map(Cand::plain));
+        }
         m.set_items(rows);
     }
 
@@ -502,7 +511,8 @@ impl App {
                 self.root = p.clone();
                 self.pick(Pick::Files(p));
             }
-            Pick::Grep(root) => {
+            Pick::Everything(root) if self.open_past(&root, &item) => {}
+            Pick::Grep(root) | Pick::Everything(root) => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.parse::<usize>().ok())) {
                     self.open(&root.join(f));
@@ -609,6 +619,10 @@ impl App {
             "grep" => {
                 let root = project_of(&self.root).unwrap_or(self.root.clone());
                 self.pick(Pick::Grep(root));
+            }
+            "searchEverything" => {
+                let root = project_of(&self.root).unwrap_or(self.root.clone());
+                self.pick(Pick::Everything(root));
             }
             "grepHere" => {
                 let here = Path::new(&self.docs[self.cur].name).parent().filter(|p| p.is_dir()).map(Path::to_path_buf).unwrap_or(self.root.clone());

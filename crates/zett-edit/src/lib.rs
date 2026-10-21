@@ -1264,6 +1264,29 @@ impl Editor {
         self.undo.save(&self.text())
     }
 
+    /// Text that a saved history once removed (deleted or replaced) containing `needle` (any case
+    /// unless it has capitals): (the state it was removed by, when, its line). The state before
+    /// that one still has it.
+    pub fn history_search(bytes: &[u8], needle: &str, max: usize) -> Vec<(usize, u64, String)> {
+        let Some((t, _)) = undo::Tree::read(bytes) else { return Vec::new() };
+        let smart = needle.chars().any(char::is_uppercase);
+        let low = needle.to_lowercase();
+        let mut out = Vec::new();
+        for (i, n) in t.nodes.iter().enumerate().rev() {
+            for e in &n.change.edits {
+                let hit = e.removed.lines().find(|l| if smart { l.contains(needle) } else { l.to_lowercase().contains(&low) });
+                if let Some(l) = hit {
+                    out.push((i, n.time, l.trim().chars().take(160).collect()));
+                    break;
+                }
+            }
+            if out.len() >= max {
+                break;
+            }
+        }
+        out
+    }
+
     /// Takes back a saved history; false (and nothing changes) if it was saved for other text.
     pub fn history_load(&mut self, bytes: &[u8]) -> bool {
         match undo::Tree::load(bytes, &self.text()) {
@@ -1473,6 +1496,23 @@ mod undo_tree_tests {
         let mut other = Editor::from_str("something else\n");
         assert!(!other.history_load(&saved));
         assert_eq!(other.undo_states().len(), 1);
+    }
+
+    #[test]
+    fn deleted_text_is_found_in_the_history() {
+        let mut e = Editor::from_str("keep\nthe Secret plan\nend\n");
+        e.feed("jdd");
+        e.feed("Gonew line<Esc>");
+        let saved = e.history_save();
+        let hits = Editor::history_search(&saved, "secret", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].2, "the Secret plan");
+        // the state before the change that removed it still has it
+        let before = e.undo_states()[hits[0].0].0;
+        assert!(e.text_at(before).contains("the Secret plan"));
+        assert!(!e.text().contains("Secret"));
+        assert!(Editor::history_search(&saved, "SECRET", 10).is_empty(), "capitals match exactly");
+        assert!(Editor::history_search(b"not a history", "x", 10).is_empty());
     }
 
     #[test]

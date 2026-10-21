@@ -107,6 +107,12 @@ impl Tree {
 
     /// A saved tree, if it was saved for exactly this text.
     pub fn load(bytes: &[u8], text: &str) -> Option<Tree> {
+        let (t, fp) = Tree::read(bytes)?;
+        (fp == fingerprint(text)).then_some(t)
+    }
+
+    /// A saved tree and the fingerprint of the text it was saved for.
+    pub fn read(bytes: &[u8]) -> Option<(Tree, u64)> {
         let mut r = Reader { b: bytes, at: 0 };
         if r.line()? != "zett-undo 1" {
             return None;
@@ -116,7 +122,7 @@ impl Tree {
         let cur: usize = h.next()?.parse().ok()?;
         let fp: u64 = h.next()?.parse().ok()?;
         let count: usize = h.next()?.parse().ok()?;
-        if fp != fingerprint(text) || cur >= count {
+        if cur >= count {
             return None;
         }
         let mut nodes = Vec::with_capacity(count);
@@ -138,7 +144,7 @@ impl Tree {
             }
             nodes.push(Node { parent: parent as usize, change, time: time as u64, redo: (redo >= 0).then_some(redo as usize) });
         }
-        Some(Tree { nodes, cur })
+        Some((Tree { nodes, cur }, fp))
     }
 
     /// The text at node `to`, worked out from `text` at the current node.

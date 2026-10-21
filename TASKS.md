@@ -88,7 +88,11 @@ See PLAN.md for the vision and milestones.
   and exit under the block, tied to that code; C-c C-v / SPC m i writes it in as an ```output block
   (replacing the last one)
   - [ ] sessions (a REPL kept between blocks), variables from one block to the next, the window
-- [ ] 7 search everything incl. history · [ ] 8 git buffer + blame · [ ] 9 sync without a server
+- [x] 7 search everything (zett-tui everything.rs, zett-edit history_search): C-c s / SPC s e, the files
+  (ripgrep) and every saved history's deleted or replaced text (⟲ file@state · when), Enter on a past
+  hit opens time travel at the state that has it; histories get an index (hash → path) with each save
+  - [ ] the window's pages (Loro history), closed buffers' unsaved changes
+- [ ] 8 git buffer + blame · [ ] 9 sync without a server
 - [ ] 10 canvas
 
 ### P2 — what people come to Emacs for

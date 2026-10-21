@@ -31,7 +31,11 @@ impl Doc {
         if let Some(dir) = f.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        let _ = std::fs::write(f, self.ed.history_save());
+        let _ = std::fs::write(&f, self.ed.history_save());
+        // and which file it is, for search everything (the name is only a hash)
+        if let Some(h) = f.file_name() {
+            everything::remember(&h.to_string_lossy(), &std::fs::canonicalize(&p).unwrap_or(p));
+        }
     }
 }
 
@@ -105,6 +109,11 @@ impl App {
         let last = d.ed.buf.len_lines().saturating_sub(1);
         d.ed.set_cursor(Pos { line: line.min(last), col: 0 });
         d
+    }
+
+    /// Time travel shows state `to` (search everything opens a past hit there).
+    pub(crate) fn travel_to(&mut self, to: usize) {
+        self.travel_go(to);
     }
 
     fn travel_go(&mut self, to: usize) {
