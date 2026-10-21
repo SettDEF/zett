@@ -70,9 +70,13 @@ impl App {
                         self.after_lua(fx);
                     }
                 }
-                Event::Exited(name) => {
-                    self.lsp.clients.retain(|_, c| c.name != name);
-                    self.say(format!("{name} stopped"));
+                Event::Exited(tag) => {
+                    // only that client: a restarted server's new one has the same name
+                    let had = self.lsp.clients.len();
+                    self.lsp.clients.retain(|_, c| c.tag != tag);
+                    if self.lsp.clients.len() != had {
+                        self.say(format!("{} stopped", tag.split('#').next().unwrap_or(&tag)));
+                    }
                 }
             }
         }
@@ -507,5 +511,85 @@ impl App {
         if files > 1 {
             self.say(format!("changed {files} files (unsaved: :wa saves them)"));
         }
+    }
+}
+
+impl App {
+    /// Neovim 0.12's :lsp: enable / disable / restart / stop a server by its command name (the
+    /// current buffer's without one; :lsp enable alone, all of them), and :lsp alone the running ones.
+    pub(crate) fn lsp_command(&mut self, arg: &str) {
+        let mut w = arg.split_whitespace();
+        let sub = w.next().unwrap_or("");
+        let given = w.next().map(str::to_string);
+        let here = self.docs[self.cur].abs_path().and_then(|p| zett_lsp::Servers::name_for(&p));
+        let name = given.clone().or(here);
+        // the buffers a server serves (all with None): their diagnostics go, they connect again
+        let reopen = |app: &mut App, name: Option<&str>, connect: bool| {
+            for i in 0..app.docs.len() {
+                let theirs = app.docs[i].abs_path().and_then(|p| zett_lsp::Servers::name_for(&p));
+                if theirs.is_some() && (name.is_none() || theirs.as_deref() == name) {
+                    app.docs[i].lsp = false;
+                    app.docs[i].diags.clear();
+                    if connect {
+                        app.lsp_open(i);
+                    }
+                }
+            }
+        };
+        match sub {
+            "" | "status" => {
+                let rows: Vec<(String, String)> = self.lsp.running().into_iter().map(|(root, cmd)| (cmd, root.display().to_string())).chain(self.lsp.disabled.iter().map(|d| (d.clone(), "disabled".to_string()))).collect();
+                if rows.is_empty() {
+                    return self.say("no language servers running");
+                }
+                self.popup = Some(Popup::Help("language servers".into(), rows));
+            }
+            "enable" => {
+                match &given {
+                    Some(n) => {
+                        self.lsp.disabled.remove(n);
+                    }
+                    None => self.lsp.disabled.clear(),
+                }
+                reopen(self, given.as_deref(), true);
+                self.say(format!("enabled {}", given.as_deref().unwrap_or("every server")));
+            }
+            "disable" | "stop" | "restart" => {
+                let Some(n) = name else { return self.say("no language server for this buffer") };
+                if sub == "disable" {
+                    self.lsp.disabled.insert(n.clone());
+                }
+                let stopped = self.lsp.stop(Some(&n));
+                reopen(self, Some(&n), sub == "restart");
+                self.say(match sub {
+                    "restart" => format!("restarted {n}"),
+                    "disable" => format!("disabled {n}"),
+                    _ if stopped == 0 => format!("{n} was not running"),
+                    _ => format!("stopped {n}"),
+                });
+            }
+            other => self.say(format!("E475: Invalid argument: {other} (enable, disable, restart, stop)")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod lsp_command_tests {
+    #[test]
+    fn disable_keeps_a_server_from_starting_and_enable_lets_it() {
+        let dir = std::env::temp_dir().join(format!("zett-lspcmd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("x.rs");
+        std::fs::write(&f, "fn main() {}\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.command("lsp disable rust-analyzer");
+        assert!(app.lsp.disabled.contains("rust-analyzer"));
+        app.open(&f);
+        assert!(app.client_for(app.cur).is_none(), "disabled: not started for a Rust file");
+        assert!(app.lsp.running().is_empty());
+        app.lsp.disabled.clear();
+        app.command("lsp nonsense");
+        assert!(app.msg.as_ref().is_some_and(|m| m.0.starts_with("E475")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

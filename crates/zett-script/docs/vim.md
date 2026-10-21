@@ -100,6 +100,11 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
   line below); `:ilist :isearch :ijump :isplit`, `:dlist :dsearch :djump :dsplit` for definitions,
   `:checkpath` the included files not found (`include`, `define`, `path`, `suffixesadd`)
 
+## Language servers
+
+- `:lsp` lists the running ones; `:lsp restart`, `:lsp stop`, `:lsp disable` (not started again) for
+  the buffer's server or one by name (`:lsp restart rust-analyzer`), `:lsp enable [name]` lets it start
+
 ## Signs
 
 - `:sign define NAME text=>> texthl=Error linehl=… numhl=…`, `:sign place ID line=N name=NAME`

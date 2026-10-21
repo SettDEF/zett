@@ -285,7 +285,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lpfile` | `:lpf[ile]` | go to last location in previous file |
 | ✓ | `:lrewind` | `:lr[ewind]` | go to the specified location, default first one |
 | ✓ | `:ls` | `:ls` | list all buffers |
-| · | `:lsp` | `:lsp` | language server protocol |
+| ✓ | `:lsp` | `:lsp` | language server protocol |
 | ✓ | `:ltag` | `:lt[ag]` | jump to tag and add matching tags to the |
 | · | `:lunmap` | `:lu[nmap]` | like ":unmap!" but includes Lang-Arg mode |
 | ✓ | `:lua` | `:lua` | execute \|Lua\| command |

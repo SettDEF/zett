@@ -90,6 +90,7 @@ pub enum Event {
     Status(String),
     /// a piece of work a server reports ($/progress): server, token, title, message, percent, done
     Progress { server: String, token: String, title: String, message: String, percent: Option<u64>, done: bool },
+    /// a client's tag (Client::tag): its server is gone
     Exited(String),
 }
 
@@ -105,6 +106,9 @@ enum Pending {
 
 pub struct Client {
     pub name: String,
+    /// this client alone (the name and a number): an old one exiting after a restart must not take
+    /// the new one with it
+    pub tag: String,
     pub root: PathBuf,
     stdin: Arc<Mutex<ChildStdin>>,
     child: Child,
@@ -146,11 +150,13 @@ impl Client {
         let encoding = Arc::new(Mutex::new("utf-16".to_string()));
         let gate: Arc<Mutex<Gate>> = Arc::default();
         let name = cmd[0].clone();
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let tag = format!("{name}#{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         {
-            let (pending, stdin, encoding, name, gate) = (pending.clone(), stdin.clone(), encoding.clone(), name.clone(), gate.clone());
-            std::thread::Builder::new().name(format!("lsp {name}")).spawn(move || read_loop(stdout, pending, stdin, encoding, events, name, gate))?;
+            let (pending, stdin, encoding, name, gate, tag) = (pending.clone(), stdin.clone(), encoding.clone(), name.clone(), gate.clone(), tag.clone());
+            std::thread::Builder::new().name(format!("lsp {name}")).spawn(move || read_loop(stdout, pending, stdin, encoding, events, name, gate, tag))?;
         }
-        let c = Client { name, root: root.to_path_buf(), stdin, child, next: 2, pending, gate, encoding, versions: HashMap::new() };
+        let c = Client { name, tag, root: root.to_path_buf(), stdin, child, next: 2, pending, gate, encoding, versions: HashMap::new() };
         // initialize goes out at once; everything else waits for its answer (the gate)
         c.pending.lock().unwrap().insert(1, Pending::Init);
         send(&c.stdin, &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
@@ -292,7 +298,8 @@ pub fn from_utf16(line: &str, units: usize) -> usize {
     line.chars().count()
 }
 
-fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pending>>>, stdin: Arc<Mutex<ChildStdin>>, encoding: Arc<Mutex<String>>, events: Sender<Event>, name: String, gate: Arc<Mutex<Gate>>) {
+#[allow(clippy::too_many_arguments)]
+fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pending>>>, stdin: Arc<Mutex<ChildStdin>>, encoding: Arc<Mutex<String>>, events: Sender<Event>, name: String, gate: Arc<Mutex<Gate>>, tag: String) {
     let mut r = BufReader::new(out);
     loop {
         // headers, then the body
@@ -301,7 +308,7 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
             let mut h = String::new();
             match r.read_line(&mut h) {
                 Ok(0) | Err(_) => {
-                    let _ = events.send(Event::Exited(name));
+                    let _ = events.send(Event::Exited(tag));
                     return;
                 }
                 Ok(_) => {}
@@ -316,7 +323,7 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
         }
         let mut body = vec![0u8; len];
         if r.read_exact(&mut body).is_err() {
-            let _ = events.send(Event::Exited(name));
+            let _ = events.send(Event::Exited(tag));
             return;
         }
         let Ok(msg) = serde_json::from_slice::<Value>(&body) else { continue };
@@ -461,6 +468,8 @@ fn diag(d: &Value) -> Diag {
 #[derive(Default)]
 pub struct Servers {
     pub clients: HashMap<(PathBuf, String), Client>,
+    /// servers not to start (:lsp disable), by command name
+    pub disabled: std::collections::HashSet<String>,
     pub rx: Option<Receiver<Event>>,
     tx: Option<Sender<Event>>,
 }
@@ -468,18 +477,40 @@ pub struct Servers {
 impl Servers {
     pub fn new() -> Servers {
         let (tx, rx) = channel();
-        Servers { clients: HashMap::new(), rx: Some(rx), tx: Some(tx) }
+        Servers { clients: HashMap::new(), disabled: Default::default(), rx: Some(rx), tx: Some(tx) }
     }
 
     /// The client for a file (started when needed); None: no server for it.
     pub fn for_file(&mut self, path: &Path, root: &Path) -> Option<(&mut Client, &'static str)> {
         let (cmd, lang) = server_for(path)?;
+        if self.disabled.contains(&cmd[0]) {
+            return None;
+        }
         let key = (root.to_path_buf(), cmd[0].clone());
         if !self.clients.contains_key(&key) {
             let c = Client::start(&cmd, root, self.tx.clone()?).ok()?;
             self.clients.insert(key.clone(), c);
         }
         self.clients.get_mut(&key).map(|c| (c, lang))
+    }
+
+    /// The server a file would use (its command name), started or not.
+    pub fn name_for(path: &Path) -> Option<String> {
+        server_for(path).map(|(c, _)| c[0].clone())
+    }
+
+    /// Stops the servers by that command name (all with None): dropped, each says shutdown and exit.
+    pub fn stop(&mut self, name: Option<&str>) -> usize {
+        let n = self.clients.len();
+        self.clients.retain(|(_, cmd), _| name.is_some_and(|w| w != cmd));
+        n - self.clients.len()
+    }
+
+    /// The running servers: (project folder, command).
+    pub fn running(&self) -> Vec<(PathBuf, String)> {
+        let mut v: Vec<(PathBuf, String)> = self.clients.keys().cloned().collect();
+        v.sort();
+        v
     }
 
     pub fn events(&self) -> Vec<Event> {
