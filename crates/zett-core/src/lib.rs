@@ -25,6 +25,78 @@ impl Pos {
     }
 }
 
+/// How a file is kept on disk (Vim's fileformat, fileencoding, bomb, endofline): what opening
+/// found, and what saving writes back.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Disk {
+    /// "unix" (\n), "dos" (\r\n), "mac" (\r)
+    pub format: String,
+    /// "utf-8" or "latin1"
+    pub encoding: String,
+    pub bom: bool,
+    /// the file ended with a line break
+    pub eol: bool,
+}
+
+impl Default for Disk {
+    fn default() -> Self {
+        Disk { format: "unix".into(), encoding: "utf-8".into(), bom: false, eol: true }
+    }
+}
+
+impl Disk {
+    /// A file's bytes as text: a UTF-8 byte-order mark taken off, UTF-8 else Latin-1, DOS line ends
+    /// made plain (Vim's fileencodings ucs-bom,utf-8,latin1 and fileformats unix,dos).
+    pub fn decode(bytes: &[u8]) -> (String, Disk) {
+        let mut d = Disk::default();
+        let bytes = match bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+            Some(b) => {
+                d.bom = true;
+                b
+            }
+            None => bytes,
+        };
+        let text = match std::str::from_utf8(bytes) {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                d.encoding = "latin1".into();
+                bytes.iter().map(|&b| b as char).collect()
+            }
+        };
+        // dos when every line break has its \r
+        let lf = text.matches('\n').count();
+        let text = if lf > 0 && text.matches("\r\n").count() == lf {
+            d.format = "dos".into();
+            text.replace("\r\n", "\n")
+        } else {
+            text
+        };
+        d.eol = text.is_empty() || text.ends_with('\n');
+        (text, d)
+    }
+
+    /// The text as the file's bytes: its line ends, encoding and byte-order mark.
+    pub fn encode(&self, text: &str) -> Vec<u8> {
+        // no last line break when the file is to have none (Vim's noendofline)
+        let text = if self.eol { text } else { text.strip_suffix('\n').unwrap_or(text) };
+        let text = match self.format.as_str() {
+            "dos" => text.replace('\n', "\r\n"),
+            "mac" => text.replace('\n', "\r"),
+            _ => text.to_string(),
+        };
+        let mut out = Vec::with_capacity(text.len() + 3);
+        if self.bom && self.encoding != "latin1" {
+            out.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+        }
+        if self.encoding == "latin1" {
+            out.extend(text.chars().map(|c| if (c as u32) < 256 { c as u8 } else { b'?' }));
+        } else {
+            out.extend_from_slice(text.as_bytes());
+        }
+        out
+    }
+}
+
 /// A text buffer: a rope, and where it came from.
 #[derive(Clone, Debug, Default)]
 pub struct Buffer {
@@ -33,6 +105,8 @@ pub struct Buffer {
     dirty: bool,
     /// counts every change (language servers and caches compare it)
     rev: u64,
+    /// how its file is kept on disk
+    pub disk: Disk,
 }
 
 impl Buffer {
@@ -48,28 +122,53 @@ impl Buffer {
     /// Opens a file; a path that does not exist yet is an empty buffer for it.
     pub fn open(path: impl AsRef<Path>) -> std::io::Result<Self> {
         let path = path.as_ref();
-        let text = match std::fs::read_to_string(path) {
-            Ok(s) => Rope::from_str(&s),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Rope::new(),
+        let (text, disk) = match std::fs::read(path) {
+            Ok(b) => Disk::decode(&b),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), Disk::default()),
             Err(e) => return Err(e),
         };
-        Ok(Self { text, path: Some(path.to_path_buf()), dirty: false, rev: 0 })
+        Ok(Self { text: Rope::from_str(&text), path: Some(path.to_path_buf()), dirty: false, rev: 0, disk })
     }
 
     #[cfg(feature = "fs")]
     /// Writes to its file, through a temporary file so a crash never leaves half a file.
     pub fn save(&mut self) -> std::io::Result<()> {
+        self.save_with(false, false)
+    }
+
+    #[cfg(feature = "fs")]
+    /// Writes to its file as `disk` says: through a temporary file renamed over it (the file's
+    /// permissions kept), or with `in_place` into the file itself (Vim's backupcopy=yes: links and
+    /// the file's identity stay); `fsync` waits until it is on the disk.
+    pub fn save_with(&mut self, in_place: bool, fsync: bool) -> std::io::Result<()> {
+        use std::io::Write;
         let Some(path) = self.path.clone() else {
             return Err(std::io::Error::other("the buffer has no file"));
         };
-        let tmp = path.with_extension(format!(
-            "{}.zett-tmp",
-            path.extension().and_then(|e| e.to_str()).unwrap_or("")
-        ));
-        let mut f = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
-        self.text.write_to(&mut f)?;
-        drop(f);
-        std::fs::rename(&tmp, &path)?;
+        let bytes = self.disk.encode(&self.text.to_string());
+        if in_place {
+            let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&path)?;
+            f.write_all(&bytes)?;
+            if fsync {
+                f.sync_all()?;
+            }
+        } else {
+            let tmp = path.with_extension(format!(
+                "{}.zett-tmp",
+                path.extension().and_then(|e| e.to_str()).unwrap_or("")
+            ));
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(&bytes)?;
+            if fsync {
+                f.sync_all()?;
+            }
+            drop(f);
+            // the file keeps its permissions (a script stays executable)
+            if let Ok(m) = std::fs::metadata(&path) {
+                let _ = std::fs::set_permissions(&tmp, m.permissions());
+            }
+            std::fs::rename(&tmp, &path)?;
+        }
         self.dirty = false;
         Ok(())
     }
@@ -273,6 +372,30 @@ mod tests {
     }
 
     #[cfg(feature = "fs")]
+    #[test]
+    fn files_come_back_as_they_were() {
+        let (t, d) = Disk::decode(b"\xEF\xBB\xBFa\r\nb\r\n");
+        assert_eq!((t.as_str(), d.format.as_str(), d.bom, d.eol), ("a\nb\n", "dos", true, true));
+        assert_eq!(d.encode(&t), b"\xEF\xBB\xBFa\r\nb\r\n");
+        let (t, d) = Disk::decode(b"caf\xE9");
+        assert_eq!((t.as_str(), d.encoding.as_str(), d.eol), ("caf\u{e9}", "latin1", false));
+        assert_eq!(d.encode(&t), b"caf\xE9");
+        let (_, d) = Disk::decode(b"a\r\nb\n");
+        assert_eq!(d.format, "unix", "mixed line ends stay as they are");
+        // a script stays executable after a save
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("zett-perm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("s.sh");
+        std::fs::write(&p, "echo\n").unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut b = Buffer::open(&p).unwrap();
+        b.insert(0, "#!/bin/sh\n");
+        b.save().unwrap();
+        assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o755);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn save_and_open_roundtrip() {
         let dir = std::env::temp_dir().join(format!("zett-test-{}", std::process::id()));

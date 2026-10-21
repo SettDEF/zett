@@ -366,6 +366,10 @@ impl App {
                 self.set_lines(a, b, v);
             }
             "!" => {
+                // autowrite: a shell command sees the file as it is in zett (not for a :{range}! filter)
+                if range.is_none() {
+                    self.auto_write();
+                }
                 let cmd = self.expand_percent(&format!(" {arg}")).trim_start().to_string();
                 let dir = self.root.clone();
                 match range {
@@ -464,24 +468,14 @@ impl App {
                 self.popup = Some(Popup::Help("Messages".into(), rows));
             }
             "e" | "edit" if bang => {
-                let Some(p) = self.docs[self.cur].abs_path() else {
-                    self.say("no file to reload");
-                    return true;
-                };
                 // the file as it is on disk, changes dropped (a fresh buffer)
-                match Doc::open(&p, &self.ss) {
-                    Ok(mut nd) => {
-                        let c = self.docs[self.cur].ed.cursor();
-                        nd.name = self.docs[self.cur].name.clone();
-                        nd.ed.set_cursor(c);
-                        let i = self.cur;
-                        self.docs[i] = nd;
-                        self.lsp_open(i);
-                        self.say(format!("\"{}\" reloaded", p.display()));
-                    }
-                    Err(e) => self.say(e.to_string()),
+                let i = self.cur;
+                match self.reload_doc(i) {
+                    Ok(p) => self.say(format!("\"{}\" reloaded", p.display())),
+                    Err(e) => self.say(e),
                 }
             }
+            "checkt" | "checktime" => self.checktime(),
             "ene" | "enew" => {
                     self.doom_ui("newBuffer", "");
                 }

@@ -68,6 +68,8 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "readonly", "modified", "modeline", "modelines", "modelineexpr",
     "mouse", "mousescroll", "mousetime", "mousemodel",
     "spell", "spellcapcheck",
+    "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
+    "bomb", "endofline", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 
@@ -245,7 +247,9 @@ impl App {
 
     /// Before writing: what trim_trailing_whitespace and final_newline ask for.
     pub(crate) fn tidy_for_save(&mut self, di: usize) {
-        let (trim, eol) = (self.flag(di, "trim_trailing_whitespace"), self.flag(di, "final_newline"));
+        // fixendofline (final_newline) adds the last line break, not for binary; without it the
+        // file keeps or loses it as endofline says
+        let (trim, eol) = (self.flag(di, "trim_trailing_whitespace"), self.flag(di, "final_newline") && !self.flag(di, "binary"));
         let ed = &mut self.docs[di].ed;
         let n = ed.buf.len_lines();
         let mut edits = Vec::new();

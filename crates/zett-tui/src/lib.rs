@@ -23,6 +23,7 @@ mod nvim_options;
 mod settings;
 mod display;
 mod statusline;
+mod files;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -140,6 +141,8 @@ struct Doc {
     lsp_rev: u64,
     /// :setlocal values (settings.rs)
     local: std::collections::HashMap<String, String>,
+    /// when its file was last read or written here (autoread, :checktime compare)
+    mtime: Option<std::time::SystemTime>,
     /// its modeline and file permissions were looked at (sync_profile, once)
     seen: bool,
 }
@@ -164,7 +167,7 @@ impl Doc {
 
     fn new(ed: Editor, name: String, syntax: String) -> Doc {
         let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
-        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), seen: false }
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), mtime: None, seen: false }
     }
 
     fn dirty(&self) -> bool {
@@ -339,6 +342,8 @@ struct App {
     /// where a drag began
     click: Option<(Instant, u16, u16, u8)>,
     drag_from: Option<Pos>,
+    /// when files were last checked for changes made outside (autoread)
+    checked: Instant,
     /// windows (by id; closed ones are None), their split tree, the focused one
     wins: Vec<Option<Win>>,
     tree: WTree,
@@ -493,6 +498,7 @@ impl App {
             bang: false,
             click: None,
             drag_from: None,
+            checked: Instant::now(),
             wins: vec![Some(Win::default())],
             tree: WTree::Leaf(0),
             focus: 0,
@@ -599,6 +605,11 @@ impl App {
                 term.clear()?;
             }
             term.draw(|f| self.draw(f))?;
+            // files changed outside: every second (autoread, W11)
+            if self.checked.elapsed() >= Duration::from_secs(1) {
+                self.checked = Instant::now();
+                self.checktime();
+            }
             // title: the terminal's title, when it changed
             if self.title_want != self.title_set {
                 if let Some(t) = &self.title_want {

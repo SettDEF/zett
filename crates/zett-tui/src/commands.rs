@@ -263,18 +263,18 @@ impl App {
         }
         // trim_trailing_whitespace, final_newline (settings.rs)
         self.tidy_for_save(i);
-        let d = &mut self.docs[i];
-        let lines = d.ed.buf.len_lines();
-        match d.ed.buf.save() {
+        let lines = self.docs[i].ed.buf.len_lines();
+        match self.write_buffer(i) {
             Ok(()) => {
-                let m = format!("\"{}\" {lines} lines written", d.name);
+                let m = format!("\"{}\" {lines} lines written", self.docs[i].name);
+                self.docs[i].mtime = self.disk_time(i);
                 self.say(m);
                 let i = self.cur;
                 self.docs[i].keep_history();
                 self.lsp_saved(i);
                 self.emit("write");
             }
-            Err(e) => self.say(format!("could not save: {e}")),
+            Err(e) => self.say(e),
         }
     }
 

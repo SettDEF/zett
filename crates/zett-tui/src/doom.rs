@@ -682,11 +682,24 @@ impl App {
     }
 
     pub(crate) fn show_doc(&mut self, i: usize) {
-        if i != self.cur {
+        let i = i.min(self.docs.len() - 1);
+        if i != self.cur && self.cur < self.docs.len() {
+            // leaving a changed buffer: autowrite writes it; nohidden refuses (help pages excepted)
+            self.auto_write();
+            let cur = self.cur;
+            if self.docs[cur].dirty() && !self.flag(cur, "hidden") && !self.docs[i].name.starts_with("help:") {
+                return self.say("E37: No write since last change (add ! to override)");
+            }
             self.last_doc = Some(self.cur);
         }
-        self.cur = i.min(self.docs.len() - 1);
+        self.cur = i;
         self.dash = false;
+        // autochdir: the current folder follows the file
+        if self.flag(i, "autochdir") {
+            if let Some(dir) = self.docs[i].abs_path().and_then(|p| p.parent().map(|d| d.to_path_buf())) {
+                let _ = std::env::set_current_dir(dir);
+            }
+        }
     }
 
     // ── the editor's UI commands (z.ui from editor.lua) ──
@@ -849,6 +862,8 @@ impl App {
     /// `:compile CMD`: a zeit job in a pane below (its line in the bar, a note when done),
     /// else a zash window.
     pub(crate) fn compile(&mut self, cmd: &str) {
+        // autowrite: the buffer is written before the compiler reads it
+        self.auto_write();
         let cmd = cmd.trim();
         if cmd.is_empty() {
             return;

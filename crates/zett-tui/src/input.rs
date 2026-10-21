@@ -183,6 +183,9 @@ impl App {
                 if self.docs[i].ed.buf.path().and_then(|p| std::fs::metadata(p).ok()).is_some_and(|m| m.permissions().readonly()) {
                     self.docs[i].local.insert("readonly".into(), "true".into());
                 }
+                if self.docs[i].ed.buf.path().is_some() {
+                    self.take_disk(i);
+                }
                 self.apply_modeline(i);
             }
         }
