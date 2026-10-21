@@ -1021,7 +1021,7 @@ plugin, not the core.
 - ✓ `dired-jump` Jump to Dired buffer corresponding to current buffer.
 - ✓ `dired-jump-other-window` Like \[dired-jump] (`dired-jump') but in other window.
 - · `dired-other-frame` "Edit" directory DIRNAME.  Like `dired' but make a new frame.
-- · `dired-other-tab` "Edit" directory DIRNAME.  Like `dired' but make a new tab.
+- ✓ `dired-other-tab` "Edit" directory DIRNAME.  Like `dired' but make a new tab.
 - ✓ `dired-other-window` "Edit" directory DIRNAME.  Like `dired' but select in another window.
 
 ## dirtrack
@@ -1653,11 +1653,11 @@ plugin, not the core.
 - · `find-file-existing` Edit the existing file FILENAME.
 - · `find-file-literally` Visit file FILENAME with no conversion of any kind.
 - · `find-file-other-frame` Edit file FILENAME, in another frame.
-- · `find-file-other-tab` Edit file FILENAME, in another tab.
+- ✓ `find-file-other-tab` Edit file FILENAME, in another tab.
 - ✓ `find-file-other-window` Edit file FILENAME, in another window.
 - ✓ `find-file-read-only` Edit file FILENAME but don't allow changes.
 - · `find-file-read-only-other-frame` Edit file FILENAME in another frame but don't allow changes.
-- · `find-file-read-only-other-tab` Edit file FILENAME, in another tab, but don't allow changes.
+- ✓ `find-file-read-only-other-tab` Edit file FILENAME, in another tab, but don't allow changes.
 - ✓ `find-file-read-only-other-window` Edit file FILENAME in another window but don't allow changes.
 - · `find-function` Find the definition of the Emacs Lisp FUNCTION near point.
 - · `find-function-at-point` Find directly the function at point in the other window.
@@ -3320,7 +3320,7 @@ plugin, not the core.
 
 - · `other-frame` Select the ARGth visible frame on current display, and raise it.
 - · `other-frame-prefix` Display the buffer of the next command in a new frame.
-- · `other-tab-prefix` Display the buffer of the next command in a new tab.
+- ✓ `other-tab-prefix` Display the buffer of the next command in a new tab.
 - ✓ `other-window` Select another window in cyclic ordering of windows.
 - ✓ `other-window-backward` Select another window in the reverse cyclic ordering of windows.
 - · `other-window-prefix` Display the buffer of the next command in a new window.
@@ -3621,7 +3621,7 @@ plugin, not the core.
 - ✓ `project-or-external-find-file` Visit a file (with completion) in the current project or external roots.
 - ✓ `project-or-external-find-regexp` Find all matches for REGEXP in the project roots or external roots.
 - · `project-other-frame-command` Run project command, displaying resultant buffer in another frame.
-- · `project-other-tab-command` Run project command, displaying resultant buffer in a new tab.
+- ✓ `project-other-tab-command` Run project command, displaying resultant buffer in a new tab.
 - · `project-other-window-command` Run project command, displaying resultant buffer in another window.
 - · `project-prefix-or-any-command` Run the next command in the current project.
 - · `project-query-replace-regexp` Query-replace REGEXP in all the files of the project.
@@ -4391,7 +4391,7 @@ plugin, not the core.
 
 - ✓ `switch-to-buffer` Display buffer BUFFER-OR-NAME in the selected window.
 - · `switch-to-buffer-other-frame` Switch to buffer BUFFER-OR-NAME in another frame.
-- · `switch-to-buffer-other-tab` Switch to buffer BUFFER-OR-NAME in another tab.
+- ✓ `switch-to-buffer-other-tab` Switch to buffer BUFFER-OR-NAME in another tab.
 - ✓ `switch-to-buffer-other-window` Select the buffer specified by BUFFER-OR-NAME in another window.
 - · `switch-to-completions` Select the completion list window.
 - · `switch-to-minibuffer` Select the minibuffer window.
@@ -4442,25 +4442,25 @@ plugin, not the core.
 - · `tab-bar-switch-to-tab` Switch to the tab by NAME.
 - · `tab-bar-touchscreen-begin` Handle a touchscreen begin EVENT on the tab bar.
 - · `tab-bar-undo-close-tab` Restore the most recently closed tab.
-- · `tab-close` Close the tab specified by its absolute position TAB-NUMBER.
+- ✓ `tab-close` Close the tab specified by its absolute position TAB-NUMBER.
 - · `tab-close-group` Close all tabs that belong to GROUP-NAME on the selected frame.
-- · `tab-close-other` Close all tabs on the selected frame, except the tab TAB-NUMBER.
+- ✓ `tab-close-other` Close all tabs on the selected frame, except the tab TAB-NUMBER.
 - · `tab-detach` Move tab number FROM-NUMBER to a new frame.
-- · `tab-duplicate` Clone the current tab to ARG positions to the right.
+- ✓ `tab-duplicate` Clone the current tab to ARG positions to the right.
 - · `tab-group` Add the tab specified by its absolute position TAB-NUMBER to GROUP-NAME.
 - · `tab-last` Switch to the last tab or ARGth tab from the end of the tab bar.
 - · `tab-line-mode` Toggle display of tab line in the windows displaying the current buffer.
 - · `tab-list` Display a list of named window configurations.
-- · `tab-move` Move the current tab ARG positions to the right.
-- · `tab-move-to` Move tab from FROM-NUMBER position to new position at TO-NUMBER.
-- · `tab-new` Create a new tab ARG positions to the right.
-- · `tab-new-to` Add a new tab at the absolute position TAB-NUMBER.
-- · `tab-next` Switch to ARGth next tab.
-- · `tab-previous` Switch to ARGth previous tab.
+- ✓ `tab-move` Move the current tab ARG positions to the right.
+- ✓ `tab-move-to` Move tab from FROM-NUMBER position to new position at TO-NUMBER.
+- ✓ `tab-new` Create a new tab ARG positions to the right.
+- ✓ `tab-new-to` Add a new tab at the absolute position TAB-NUMBER.
+- ✓ `tab-next` Switch to ARGth next tab.
+- ✓ `tab-previous` Switch to ARGth previous tab.
 - · `tab-recent` Switch to ARGth most recently visited tab.
-- · `tab-rename` Give the tab specified by its absolute position TAB-NUMBER a new NAME.
+- ✓ `tab-rename` Give the tab specified by its absolute position TAB-NUMBER a new NAME.
 - · `tab-select` Switch to the tab by its absolute position TAB-NUMBER in the tab bar.
-- · `tab-switch` Switch to the tab by NAME.
+- ✓ `tab-switch` Switch to the tab by NAME.
 - · `tab-switcher` Display a list of named window configurations.
 - · `tab-switcher-backup-unmark` Move up one line and cancel operations on window configuration there.
 - · `tab-switcher-delete` Mark window configuration on this line to be deleted.
@@ -4473,7 +4473,7 @@ plugin, not the core.
 - · `tab-switcher-select` Select this line's window configuration.
 - · `tab-switcher-unmark` Cancel operations on window configuration on this line and move down.
 - ✓ `tab-to-tab-stop` Insert spaces or tabs to next defined tab-stop column.
-- · `tab-undo` Restore the most recently closed tab.
+- ✓ `tab-undo` Restore the most recently closed tab.
 - · `tab-window-detach` Move the selected window to a new tab.
 
 ## tabify

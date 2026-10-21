@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-327 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
+345 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
 
 | | key | command |
 |---|---|---|
@@ -327,26 +327,26 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-x r x` | `copy-to-register` |
 | ✓ | `C-x r y` | `yank-rectangle` |
 | ✓ | `C-x s` | `save-some-buffers` |
-| · | `C-x t 0` | `tab-close` |
-| · | `C-x t 1` | `tab-close-other` |
-| · | `C-x t 2` | `tab-new` |
-| · | `C-x t C-f` | `find-file-other-tab` |
-| · | `C-x t C-r` | `find-file-read-only-other-tab` |
+| ✓ | `C-x t 0` | `tab-close` |
+| ✓ | `C-x t 1` | `tab-close-other` |
+| ✓ | `C-x t 2` | `tab-new` |
+| ✓ | `C-x t C-f` | `find-file-other-tab` |
+| ✓ | `C-x t C-r` | `find-file-read-only-other-tab` |
 | · | `C-x t G` | `tab-group` |
-| · | `C-x t M` | `tab-move-to` |
-| · | `C-x t N` | `tab-new-to` |
-| · | `C-x t O` | `tab-previous` |
-| · | `C-x t RET` | `tab-switch` |
+| ✓ | `C-x t M` | `tab-move-to` |
+| ✓ | `C-x t N` | `tab-new-to` |
+| ✓ | `C-x t O` | `tab-previous` |
+| ✓ | `C-x t RET` | `tab-switch` |
 | · | `C-x t ^ f` | `tab-detach` |
-| · | `C-x t b` | `switch-to-buffer-other-tab` |
-| · | `C-x t d` | `dired-other-tab` |
-| · | `C-x t m` | `tab-move` |
-| · | `C-x t n` | `tab-duplicate` |
-| · | `C-x t o` | `tab-next` |
-| · | `C-x t p` | `project-other-tab-command` |
-| · | `C-x t r` | `tab-rename` |
-| · | `C-x t t` | `other-tab-prefix` |
-| · | `C-x t u` | `tab-undo` |
+| ✓ | `C-x t b` | `switch-to-buffer-other-tab` |
+| ✓ | `C-x t d` | `dired-other-tab` |
+| ✓ | `C-x t m` | `tab-move` |
+| ✓ | `C-x t n` | `tab-duplicate` |
+| ✓ | `C-x t o` | `tab-next` |
+| ✓ | `C-x t p` | `project-other-tab-command` |
+| ✓ | `C-x t r` | `tab-rename` |
+| ✓ | `C-x t t` | `other-tab-prefix` |
+| ✓ | `C-x t u` | `tab-undo` |
 | ✓ | `C-x u` | `undo` |
 | · | `C-x v !` | `vc-edit-next-command` |
 | ✓ | `C-x v +` | `vc-update` |
