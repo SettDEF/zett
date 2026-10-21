@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-210 ✓ do something in zett, 164 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+215 ✓ do something in zett, 159 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -54,7 +54,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `cmdwinheight` | cwh | number | global | `7` | height of the command-line window |
 | ✓ | `colorcolumn` | cc | string | win | `` | columns to highlight |
 | ◐ | `columns` | co | number | global | `80` | number of columns in the display |
-| ◐ | `comments` | com | string | buf | `s1:/*,mb:*,ex:*/,://,b:#,:%,:XCOMM,n:>,fb:-,fb:•` | patterns that can start a comment line |
+| ✓ | `comments` | com | string | buf | `s1:/*,mb:*,ex:*/,://,b:#,:%,:XCOMM,n:>,fb:-,fb:•` | patterns that can start a comment line |
 | ✓ | `commentstring` | cms | string | buf | `` | template for comments; used for fold marker |
 | ✓ | `compatible` | cp | boolean | global | `false` |  |
 | ◐ | `complete` | cpt | string | buf | `.,w,b,u,t` | specify how Insert mode completion works |
@@ -73,7 +73,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `cursorline` | cul | boolean | win | `false` | highlight the screen line of the cursor |
 | ✓ | `cursorlineopt` | culopt | string | win | `both` | settings for 'cursorline' |
 | ◐ | `debug` |  | string | global | `` | set to "msg" to see all error messages |
-| ◐ | `define` | def | string | buf | `` | pattern to be used to find a macro definition |
+| ✓ | `define` | def | string | buf | `` | pattern to be used to find a macro definition |
 | ◐ | `delcombine` | deco | boolean | global | `false` | delete combining characters on their own |
 | ◐ | `dictionary` | dict | string | buf | `` | list of file names used for keyword completion |
 | ◐ | `diff` |  | boolean | win | `false` | use diff mode for the current window |
@@ -151,7 +151,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `iminsert` | imi | number | buf | `0` | use :lmap or IM in Insert mode |
 | ◐ | `imsearch` | ims | number | buf | `-1` | use :lmap or IM when typing a search pattern |
 | ◐ | `inccommand` | icm | string | global | `nosplit` |  |
-| ◐ | `include` | inc | string | buf | `` | pattern to be used to find an include file |
+| ✓ | `include` | inc | string | buf | `` | pattern to be used to find an include file |
 | ◐ | `includeexpr` | inex | string | buf | `` | expression used to process an include line |
 | ✓ | `incsearch` | is | boolean | global | `true` | highlight match while typing search pattern |
 | ◐ | `indentexpr` | inde | string | buf | `` | expression used to obtain the indent of a line |
@@ -223,7 +223,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `pastetoggle` | pt | string | global | `` |  |
 | ◐ | `patchexpr` | pex | string | global | `` | expression used to patch a file |
 | ◐ | `patchmode` | pm | string | global | `` | keep the oldest version of a file |
-| ◐ | `path` | pa | string | buf | `.,,` | list of directories searched with "gf" et.al. |
+| ✓ | `path` | pa | string | buf | `.,,` | list of directories searched with "gf" et.al. |
 | ✓ | `preserveindent` | pi | boolean | buf | `false` | preserve the indent structure when reindenting |
 | ◐ | `previewheight` | pvh | number | global | `12` | height of the preview window |
 | ◐ | `previewwindow` | pvw | boolean | win | `false` | identifies the preview window |
@@ -302,7 +302,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `statuscolumn` | stc | string | win | `` | custom format for the status column |
 | ✓ | `statusline` | stl | string | win | `%<%f %h%w%m%r %{% v:lua.require('vim._core.util').term_exitcode() %}%=%{% luaeval('(package.loaded[''vim.ui''] and vim.api.nvim_get_current_win() == tonumber(vim.g.actual_curwin or -1) and vim.ui.progress_status()) or '''' ')%}%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%{% luaeval('(package.loaded[''vim.diagnostic''] and next(vim.diagnostic.count()) and vim.diagnostic.status() .. '' '') or '''' ') %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}` | custom format for the status line |
 | ✓ | `suffixes` | su | string | global | `.bak,~,.o,.h,.info,.swp,.obj` | suffixes that are ignored with multiple match |
-| ◐ | `suffixesadd` | sua | string | buf | `` | suffixes added when searching for a file |
+| ✓ | `suffixesadd` | sua | string | buf | `` | suffixes added when searching for a file |
 | ◐ | `swapfile` | swf | boolean | buf | `true` | whether to use a swapfile for a buffer |
 | ✓ | `switchbuf` | swb | string | global | `uselast` | sets behavior when switching to another buffer |
 | ✓ | `synmaxcol` | smc | number | buf | `3000` | maximum column to find syntax items |

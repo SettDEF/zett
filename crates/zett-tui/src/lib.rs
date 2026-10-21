@@ -30,6 +30,7 @@ mod tagcmd;
 mod excmds;
 mod mapcmds;
 mod dircmd;
+mod defsearch;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 

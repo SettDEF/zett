@@ -95,7 +95,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:changes` | `:changes` | print the change list |
 | ✓ | `:chdir` | `:chd[ir]` | change directory |
 | ✓ | `:checkhealth` | `:che[ckhealth]` | run healthchecks |
-| · | `:checkpath` | `:checkp[ath]` | list included files |
+| ✓ | `:checkpath` | `:checkp[ath]` | list included files |
 | ✓ | `:checktime` | `:checkt[ime]` | check timestamp of loaded buffers |
 | ✓ | `:chistory` | `:chi[story]` | list the error lists |
 | ✓ | `:clast` | `:cla[st]` | go to the specified error, default last one |
@@ -146,15 +146,15 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:diffthis` | `:difft[his]` | make current window a diff window |
 | · | `:digraphs` | `:dig[raphs]` | show or enter digraphs |
 | ✓ | `:display` | `:di[splay]` | display registers |
-| · | `:djump` | `:dj[ump]` | jump to #define |
+| ✓ | `:djump` | `:dj[ump]` | jump to #define |
 | ✓ | `:dl` | `:dl` | short for \|:delete\| with the 'l' flag |
-| · | `:dlist` | `:dli[st]` | list #defines |
+| ✓ | `:dlist` | `:dli[st]` | list #defines |
 | ✓ | `:doautocmd` | `:do[autocmd]` | apply autocommands to current buffer |
 | ✓ | `:doautoall` | `:doautoa[ll]` | apply autocommands for all loaded buffers |
 | ✓ | `:dp` | `:d[elete]p` | short for \|:delete\| with the 'p' flag |
 | ✓ | `:drop` | `:dr[op]` | jump to window editing file or edit file in |
-| · | `:dsearch` | `:ds[earch]` | list one #define |
-| · | `:dsplit` | `:dsp[lit]` | split window and jump to #define |
+| ✓ | `:dsearch` | `:ds[earch]` | list one #define |
+| ✓ | `:dsplit` | `:dsp[lit]` | split window and jump to #define |
 | ✓ | `:edit` | `:e[dit]` | edit a file |
 | ✓ | `:earlier` | `:ea[rlier]` | go to older change, undo |
 | ✓ | `:echo` | `:ec[ho]` | echoes the result of expressions |
@@ -210,8 +210,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:iabbrev` | `:ia[bbrev]` | like ":abbrev" but for Insert mode |
 | ✓ | `:iabclear` | `:iabc[lear]` | like ":abclear" but for Insert mode |
 | · | `:if` | `:if` | execute commands when condition met |
-| · | `:ijump` | `:ij[ump]` | jump to definition of identifier |
-| · | `:ilist` | `:il[ist]` | list lines where identifier matches |
+| ✓ | `:ijump` | `:ij[ump]` | jump to definition of identifier |
+| ✓ | `:ilist` | `:il[ist]` | list lines where identifier matches |
 | ✓ | `:imap` | `:im[ap]` | like ":map" but for Insert mode |
 | ✓ | `:imapclear` | `:imapc[lear]` | like ":mapclear" but for Insert mode |
 | ✓ | `:imenu` | `:ime[nu]` | add menu for Insert mode |
@@ -220,8 +220,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:inoremenu` | `:inoreme[nu]` | like ":noremenu" but for Insert mode |
 | ✓ | `:intro` | `:int[ro]` | print the introductory message |
 | ✓ | `:iput` | `:ip[ut]` | like \|:put\|, but adjust the indent to the |
-| · | `:isearch` | `:is[earch]` | list one line where identifier matches |
-| · | `:isplit` | `:isp[lit]` | split window and jump to definition of |
+| ✓ | `:isearch` | `:is[earch]` | list one line where identifier matches |
+| ✓ | `:isplit` | `:isp[lit]` | split window and jump to definition of |
 | ✓ | `:iunmap` | `:iu[nmap]` | like ":unmap" but for Insert mode |
 | ✓ | `:iunabbrev` | `:iuna[bbrev]` | like ":unabbrev" but for Insert mode |
 | ✓ | `:iunmenu` | `:iunme[nu]` | remove menu for Insert mode |
@@ -353,7 +353,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:ppop` | `:pp[op]` | ":pop" in preview window |
 | · | `:preserve` | `:pre[serve]` | write all text to swap file |
 | ✓ | `:previous` | `:prev[ious]` | go to previous file in argument list |
-| · | `:psearch` | `:ps[earch]` | like ":ijump" but shows match in preview window |
+| ✓ | `:psearch` | `:ps[earch]` | like ":ijump" but shows match in preview window |
 | ✓ | `:ptag` | `:pt[ag]` | show tag in preview window |
 | ✓ | `:ptNext` | `:ptN[ext]` | \|:tNext\| in preview window |
 | ✓ | `:ptfirst` | `:ptf[irst]` | \|:trewind\| in preview window |

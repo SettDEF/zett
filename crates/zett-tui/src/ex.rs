@@ -280,6 +280,7 @@ impl App {
             // tags (tagcmd.rs)
             n if crate::tagcmd::tag_name(n).is_some() => self.tag_command(n, arg, range.map(|(_, b)| b + 1)),
             n if crate::dircmd::dir_name(n).is_some() => self.dir_command(n, arg),
+            n if crate::defsearch::def_name(n).is_some() => self.def_command(n, arg, bang, range),
             // the quickfix and location lists (qfcmd.rs)
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);

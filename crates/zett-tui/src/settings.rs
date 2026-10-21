@@ -80,7 +80,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "breakat", "breakindentopt",
     "wildmenu", "wildmode", "wildignore", "wildignorecase", "wildoptions", "fileignorecase", "suffixes",
     "keywordprg",
-    "tags", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath",
+    "tags", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "include", "define", "path", "suffixesadd", "comments",
     "makeprg", "errorformat", "grepprg", "grepformat", "shell", "shellcmdflag", "shellquote", "shellxquote", "makeencoding",
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",
