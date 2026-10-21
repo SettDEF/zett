@@ -883,17 +883,17 @@ impl App {
 
 }
 
-/// zash draws marks by hand (OSC 7733;fx) when zett runs right in it: not inside zeit, which
-/// composes its panes and has no room for an effect on a cell (its passthrough: zeit's PLAN.md).
+/// zash draws marks by hand (OSC 7733;fx) when zett runs right in it, or in a zeit that passes them
+/// on to their cells (ZEIT_FX=1; an older zeit dropped them).
 pub(crate) fn fx_draws() -> bool {
     static OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *OK.get_or_init(|| {
         let zash = std::env::var("TERM_PROGRAM").is_ok_and(|t| t == "zash");
-        let zeit = std::env::var_os("ZEIT").is_some();
+        let zeit = std::env::var_os("ZEIT").is_some() && std::env::var_os("ZEIT_FX").is_none();
         let ok = zash && !zeit;
         if !ok {
             // said once, in the log: why help's found places pulse instead of being drawn
-            let why = if !zash { "the terminal is not zash" } else { "inside zeit (it does not pass zash's effects on yet)" };
+            let why = if !zash { "the terminal is not zash" } else { "inside a zeit that does not pass zash's effects on (no ZEIT_FX)" };
             let _ = std::fs::create_dir_all(crate::doom::state_dir());
             if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(crate::doom::state_dir().join("zett.log")) {
                 use std::io::Write;
