@@ -109,6 +109,10 @@ impl App {
         };
         // arguments of a command
         if let Some(arg) = rest {
+            // a file name: :e :w :sp :vs :r :cd … (files.rs)
+            if matches!(head, "e" | "edit" | "sp" | "split" | "vs" | "vsplit" | "new" | "vnew" | "r" | "read" | "w" | "write" | "sav" | "saveas" | "cd" | "lcd" | "tcd" | "find" | "fin" | "sf" | "sfind" | "tabe" | "tabedit" | "badd" | "source" | "so" | "diffsplit" | "wq" | "x" | "up" | "update") {
+                return self.file_suggestions(head, arg);
+            }
             let pick = |items: Vec<(String, String, String)>| -> Vec<Suggestion> {
                 items
                     .into_iter()
@@ -204,6 +208,10 @@ impl App {
     }
 
     pub(crate) fn draw_suggestions(&mut self, f: &mut Frame, cmd: Rect, boxed: bool, below: bool) {
+        // nowildmenu: Tab still completes, no list is shown
+        if !self.flag(self.cur, "wildmenu") {
+            return;
+        }
         let Some(line) = self.cmdline.clone() else { return };
         if self.prompt.is_some() {
             return;
@@ -256,6 +264,19 @@ impl App {
     /// Tab: the chosen suggestion onto the line.
     pub(crate) fn complete_cmdline(&mut self) {
         let Some(line) = self.cmdline.clone() else { return };
+        // wildmode longest: first as far as every match agrees
+        if self.setting(self.cur, "wildmode").split(',').next().is_some_and(|m| m.starts_with("longest")) {
+            let list = self.suggestions(&line);
+            if list.len() > 1 {
+                let first: Vec<char> = list[0].fill.chars().collect();
+                let n = list.iter().skip(1).map(|s| s.fill.chars().zip(&first).take_while(|(a, b)| a == *b).count()).min().unwrap_or(0);
+                let common: String = first[..n].iter().collect();
+                if common.chars().count() > line.chars().count() {
+                    self.cmdline = Some(common);
+                    return;
+                }
+            }
+        }
         if let Some(s) = self.suggestions(&line).get(self.cmd_sel) {
             self.cmdline = Some(s.fill.clone());
             self.cmd_sel = 0;

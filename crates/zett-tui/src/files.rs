@@ -205,3 +205,57 @@ mod tests {
         assert_eq!(expand_env("~/b"), format!("{home}/b"));
     }
 }
+
+impl App {
+    /// File names for the : line (:e :w :sp :cd …): what the folder typed so far holds; not what
+    /// wildignore names; wildignorecase (or fileignorecase) matches either case, wildoptions=fuzzy
+    /// takes the letters in order anywhere; names ending in one of suffixes come last; folders end in /.
+    pub(crate) fn file_suggestions(&self, head: &str, arg: &str) -> Vec<crate::cmdline::Suggestion> {
+        let cur = self.cur;
+        let (dir_part, name_part) = match arg.rfind('/') {
+            Some(i) => (&arg[..=i], &arg[i + 1..]),
+            None => ("", arg),
+        };
+        let dir = if dir_part.is_empty() { PathBuf::from(".") } else { PathBuf::from(expand_env(dir_part)) };
+        let dir = if dir.is_absolute() { dir } else { std::env::current_dir().unwrap_or_default().join(dir) };
+        let ignore: Vec<String> = self.setting(cur, "wildignore").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        let suffixes: Vec<String> = self.setting(cur, "suffixes").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        let ic = self.flag(cur, "wildignorecase") || self.flag(cur, "fileignorecase");
+        let fuzzy = self.setting(cur, "wildoptions").split(',').any(|o| o == "fuzzy");
+        let norm = |s: &str| if ic { s.to_lowercase() } else { s.to_string() };
+        let want = norm(name_part);
+        let fits = |n: &str| {
+            let n = norm(n);
+            if fuzzy {
+                let mut it = n.chars();
+                want.chars().all(|c| it.any(|x| x == c))
+            } else {
+                n.starts_with(&want)
+            }
+        };
+        let Ok(rd) = std::fs::read_dir(&dir) else { return Vec::new() };
+        let mut found: Vec<(bool, bool, String)> = rd
+            .flatten()
+            .filter_map(|e| {
+                let n = e.file_name().to_string_lossy().to_string();
+                // dot files only when asked for
+                if n.starts_with('.') && !name_part.starts_with('.') {
+                    return None;
+                }
+                let full = e.path().to_string_lossy().to_string();
+                if !fits(&n) || ignore.iter().any(|g| glob_match(g, &n) || glob_match(g, &full)) {
+                    return None;
+                }
+                let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
+                let late = suffixes.iter().any(|s| n.ends_with(s.as_str()));
+                Some((late, !is_dir, if is_dir { format!("{n}/") } else { n }))
+            })
+            .collect();
+        found.sort();
+        found
+            .into_iter()
+            .take(200)
+            .map(|(_, file, n)| crate::cmdline::Suggestion { fill: format!("{head} {dir_part}{n}"), name: n, args: String::new(), about: if file { "file".into() } else { "folder".into() }, example: String::new() })
+            .collect()
+    }
+}
