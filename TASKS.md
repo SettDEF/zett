@@ -132,6 +132,88 @@ G. the rest
   for every edit: zett-edit)
 - skip: mail, RSS, IRC (other apps do it better)
 
+### Parity with Neovim and Emacs: the plan to the end (2026-10-21)
+Measured by scripts/parity.sh against the installed Neovim and Emacs (docs/parity/). Done for an
+item means all three: it works in zett (a test, or a check in the real window), the parity page
+counts it, and `:help` finds it. Nothing counts as done by being accepted and ignored.
+
+Where it stands: normal-mode keys 477/477 ✓ · options 42/374 (the rest kept, ◐) · Ex commands
+83/557 · vim.api + vim.fn 0/840 · Emacs keys 51/500 · Emacs commands 68/3164.
+
+**P1 — documentation of what exists** (first: nothing undocumented stays behind)
+- [ ] `:help vim`: search, marks, registers, macros and the dot, operators, text objects, folds,
+  block selection, spelling, windows and scrolling, the jump list, counts and registers in front
+- [ ] every normal-mode key findable: `:help gJ`, `:help CTRL-W_x`, `:help [s` open its entry
+  (a generated key page from Neovim's index, with zett's own words where they differ)
+- [ ] `:help options` per group, as the batches below land
+
+**P2 — options, by what they act on** (each batch: behaviour + test + the option leaves ◐)
+- [ ] O2 display: cursorcolumn cursorlineopt listchars showbreak breakindent(opt) breakat
+  sidescroll sidescrolloff signcolumn numberwidth foldcolumn showmatch matchtime hlsearch
+  laststatus showmode showcmd(loc) ruler rulerformat statusline cmdheight fillchars conceallevel
+  concealcursor title titlestring titlelen display scroll scrolljump smoothscroll synmaxcol
+  termguicolors background winbar showtabline tabline colorcolumn-done
+- [ ] O3 windows: splitbelow splitright equalalways eadirection winheight winwidth winminheight
+  winminwidth winfixheight winfixwidth helpheight previewheight cmdwinheight splitkeep winfixbuf
+- [ ] O4 files: autoread autowrite autowriteall backup backupcopy backupdir backupext backupskip
+  writebackup swapfile directory undodir undolevels undoreload fileformat(s) fileencoding(s)
+  encoding bomb endofline endoffile fixendofline binary readonly modified hidden confirm modeline
+  modelines modelineexpr fsync updatecount updatetime write writeany path suffixesadd isfname
+  autochdir cdpath cdhome fileignorecase exrc shada shadafile viewdir viewoptions sessionoptions
+- [ ] O5 programs: makeprg errorformat makeef makeencoding grepprg grepformat shell shellcmdflag
+  shellpipe shellquote shellredir shellxquote shellxescape shelltemp equalprg formatprg
+  keywordprg formatexpr indentexpr includeexpr foldexpr (Lua expressions)
+- [ ] O6 completion and the : line: complete completeopt completefunc omnifunc pumheight pumwidth
+  pummaxwidth pumblend pumborder wildmenu wildmode wildoptions wildchar wildcharm wildignore
+  wildignorecase history cedit inccommand infercase dictionary thesaurus(func) autocomplete*
+- [ ] O7 spelling and folds: spell spelllang spellfile spellcapcheck spelloptions spellsuggest
+  foldenable foldlevel foldlevelstart foldmethod (manual indent marker expr syntax) foldmarker
+  foldminlines foldnestmax foldopen foldclose foldtext foldignore
+- [ ] O8 keys and input: timeout timeoutlen ttimeout ttimeoutlen mouse mousemodel mousescroll
+  mousetime mousefocus mousemoveevent keymodel selectmode langmap keymap remap maxmapdepth
+  operatorfunc paste digraph allowrevins revins
+- [ ] O9 the rest of Neovim's: cpoptions (the flags zett can honour), shortmess, belloff
+  errorbells visualbell report-done more, verbose verbosefile, debug, eventignore(win), jumpoptions,
+  switchbuf, tags tagcase tagfunc tagrelative tagstack taglength tagbsearch showfulltag, diff
+  diffopt diffexpr patchexpr patchmode, comments commentstring formatlistpat, lisp lispwords
+  lispoptions cinkeys cinoptions cinwords cinscopedecls indentkeys, define include isident
+  isprint, highlight winhighlight winblend winborder, busy, channel, scrollback, ...
+- [ ] O10 legacy and GUI options (Arabic, Hebrew, GUI fonts and tab tooltips, input methods): the
+  decision below
+
+**P3 — Ex commands** (the same parse: ranges, counts, !, registers; each a test)
+- [ ] X1 buffers, args, windows, tabs: :ls :b :bn :bp :bd :bw :ball :sball :args :argadd
+  :argdelete :next :prev :first :last :argdo :bufdo :windo :tabdo :split :vsplit :new :only
+  :close :hide :resize :vertical :leftabove :aboveleft :rightbelow :belowright :topleft :botright
+  :tab :tabnew :tabclose :tabonly :tabmove
+- [ ] X2 the quickfix and location lists: :make :grep :vimgrep :cc :cn :cp :cfirst :clast :copen
+  :cclose :cwindow :colder :cnewer :cdo :cfdo :cexpr :cgetexpr :caddexpr and the :l… twins
+- [ ] X3 editing: :d :y :pu :m :t :co :j :> :< :normal :g :v :s variants :& :&& :~ :retab
+  :sort(done?) :center :left :right :print :number :# :z :undo :redo :earlier :later :undolist
+  :changes :jumps :marks :delmarks :registers :display :mark :k
+- [ ] X4 keys and commands: :map family (n v x s o i c t l), :noremap, :unmap, :mapclear,
+  :abbreviate family, :command :delcommand :comclear, :autocmd :augroup :doautocmd
+  (onto zett.keymap, zett.command, zett.on)
+- [ ] X5 files and sessions: :w variants :sav :up :x :wa :wqa :qa :e! :ene :r :checktime
+  :mksession :mkview :loadview :oldfiles :browse :cd :lcd :tcd :pwd :find :sfind
+- [ ] X6 script: :let :unlet :if :else :endif :for :while :function :call :return :execute
+  :echo :echom :echoerr :eval :try :catch :finally :throw :source :runtime :lua :luado
+  :luafile (a small Vimscript evaluator for config files and plugins' simple use)
+- [ ] X7 diff, tags, spelling, folds, the rest: :diffthis :diffoff :diffget :diffput
+  :diffupdate :diffsplit :tag :tags :tselect :tjump :pop :spellgood :spellwrong :spellundo
+  :spellrepall :fold :foldopen :foldclose :folddoopen :folddoclosed :highlight (done) :syntax
+  :colorscheme :filetype :setfiletype :options :checkhealth :messages :history :redraw :sleep
+- [ ] X8 providers and menus: the decision below
+
+**P4 — vim.api and vim.fn** (Neovim plugins run unchanged): a `vim` table in zett-script over
+zett's own API: buffers, windows, tabs, options (vim.o vim.bo vim.wo vim.opt), keymaps, autocmds,
+user commands, extmarks and namespaces, highlights, vim.fn's everyday functions, vim.loop/uv
+basics, vim.schedule, vim.notify. Measured per function; a real plugin (e.g. mini.nvim's
+pieces, which-key, gitsigns) as the acceptance test.
+
+**P5 — Emacs**: the default keys by command name, then the commands by package, the everyday
+packages first (simple, files, window, buffer, isearch, replace, register, rect, kmacro,
+dired, comint), the rest after.
 ### Settings, as Neovim's options and Emacs's variables (2026-10-21)
 One table of core settings (name, Vim alias, type, default, what it does), `:set` / `:setlocal` /
 `zett.opt`, values per file type (`zett.ft.markdown = { wrap = true }`), shown in `:set` and the
