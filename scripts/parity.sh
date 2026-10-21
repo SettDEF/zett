@@ -25,21 +25,24 @@ awk "/\*option-list\*/{f=1} f && /^'[a-z]/" "$RT/doc/quickref.txt" | sed "s/^'\(
 
 # ── what zett has (from zett itself and its sources) ──
 "$ZETT" doc commands 2>/dev/null | grep -o '^- `[^`]*`' | sed 's/^- `//; s/`$//' | sort -u > "$tmp/zett-cmds.txt"
-grep -oh '^\s*"[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
+grep -oh '^\s*"[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs crates/zett-tui/src/commands.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
 grep -o 's("[a-z_]*", &\[[^]]*\]' crates/zett-tui/src/settings.rs | grep -o '"[a-z_]*"' | tr -d '"' > "$tmp/zett-opts.txt"
 printf 'number\nnu\nrelativenumber\nrnu\ntextwidth\ntw\nincsearch\nis\nundofile\nudf\n' >> "$tmp/zett-opts.txt"
+grep -o 'name: "[a-z]*"' crates/zett-tui/src/nvim_options.rs | cut -d'"' -f2 > "$tmp/zett-kept.txt"
 has() { grep -qxF -- "$1" "$2"; }
 stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | head -1), $("$EMACS" --version | head -1) and zett $("$ZETT" --version 2>/dev/null | awk '{print $2}')."
 
 # ── Neovim's options ──
 {
-    n=$(wc -l < "$tmp/opts.tsv"); have=0
-    while IFS=$'\t' read -r name short _ _ _; do { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; } && have=$((have + 1)); done < "$tmp/opts.tsv"
+    n=$(wc -l < "$tmp/opts.tsv"); have=0; kept=0
+    while IFS=$'\t' read -r name short _ _ _; do
+        if { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; }; then have=$((have + 1)); elif has "$name" "$tmp/zett-kept.txt"; then kept=$((kept + 1)); fi
+    done < "$tmp/opts.tsv"
     echo "# Neovim's options in zett"; echo; echo "$stamp"; echo
-    echo "$have of $n. ✓ zett has it (\`:set\`, \`zett.opt\`, \`zett.ft.<type>\`), · not yet. Settings: \`:help settings\`."; echo
+    echo "$have ✓ do something in zett, $kept ◐ are kept by :set but do nothing yet, of $n (\`:set\`, \`zett.opt\`, \`zett.ft.<type>\`; \`:help settings\`)."; echo
     echo "| | option | short | type | scope | default | what it does |"; echo "|---|---|---|---|---|---|---|"
     while IFS=$'\t' read -r name short type scope def; do
-        mark="·"; { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; } && mark="✓"
+        mark="·"; if { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; }; then mark="✓"; elif has "$name" "$tmp/zett-kept.txt"; then mark="◐"; fi
         desc=$(awk -F'\t' -v n="$name" '$1==n{print $2; exit}' "$tmp/optdesc.tsv")
         [ "$short" = - ] && short=""
         printf '| %s | `%s` | %s | %s | %s | `%s` | %s |\n' "$mark" "$name" "$short" "$type" "$scope" "${def//|/\\|}" "${desc//|/\\|}"
@@ -111,8 +114,8 @@ cut -f1,2 "$tmp/normal.tsv" | XDG_DATA_HOME="$tmp" "$ZETT" probe-keys > "$tmp/pr
 {
     echo "# Parity: Neovim and Emacs, and what zett has"; echo; echo "$stamp"; echo
     for f in nvim-options nvim-ex-commands nvim-normal-keys nvim-api emacs-keys emacs-commands; do
-        t=$(head -1 "$out/$f.md" | sed 's/^# //'); c=$(grep -c '| ✓ \|^- ✓' "$out/$f.md" || true); a=$(grep -c '^| [✓·] \|^- [✓·] \|^| `' "$out/$f.md" || true)
-        echo "- [$t]($f.md): $c ✓ of $a"
+        t=$(head -1 "$out/$f.md" | sed 's/^# //'); c=$(grep -c '| ✓ \|^- ✓' "$out/$f.md" || true); k=$(grep -c '^| ◐ ' "$out/$f.md" || true); a=$(grep -c '^| [✓·◐] \|^- [✓·] \|^| `' "$out/$f.md" || true)
+        if [ "$k" -gt 0 ]; then echo "- [$t]($f.md): $c ✓ of $a, $k more ◐ kept but doing nothing yet"; else echo "- [$t]($f.md): $c ✓ of $a"; fi
     done
 } > "$out/README.md"
 cat "$out/README.md"

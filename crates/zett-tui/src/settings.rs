@@ -44,9 +44,19 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("fill_column", &["textwidth", "tw"], Kind::Int, "80", "where M-q (fill-paragraph) wraps"),
 ];
 
-/// A setting by its name or short name.
+/// A setting by its name or short name: zett's own first, then the rest of Neovim's (nvim_options.rs).
 pub(crate) fn find(name: &str) -> Option<&'static Setting> {
-    SETTINGS.iter().find(|s| s.name == name || s.short.contains(&name))
+    let is = |s: &&Setting| s.name == name || s.short.contains(&name);
+    SETTINGS.iter().find(is).or_else(|| crate::nvim_options::NVIM.iter().find(is))
+}
+
+/// Neovim options zett acts on outside this table (the window draws numbers, history is always kept).
+const WORKS_ELSEWHERE: &[&str] = &["number", "relativenumber", "incsearch", "undofile"];
+
+/// The setting does something in zett (zett's table, or acted on elsewhere); false: accepted and kept,
+/// no effect yet.
+pub(crate) fn works(s: &Setting) -> bool {
+    SETTINGS.iter().any(|x| std::ptr::eq(x, s)) || WORKS_ELSEWHERE.contains(&s.name)
 }
 
 /// The file type as settings name it: "markdown", "plain_text", "rust".
@@ -120,7 +130,8 @@ impl App {
             self.docs[cur].local.insert(setting.name.to_string(), value.clone());
         }
         self.apply_settings();
-        self.say(format!("{}{} = {value}", if local { "local " } else { "" }, setting.name));
+        let note = if works(setting) { "" } else { " (kept; zett does not act on it yet)" };
+        self.say(format!("{}{} = {value}{note}", if local { "local " } else { "" }, setting.name));
         true
     }
 
@@ -141,7 +152,8 @@ impl App {
     /// `:set` alone: every core setting with its value here, in a list.
     pub(crate) fn settings_list(&mut self) {
         let cur = self.cur;
-        let keys: Vec<String> = SETTINGS
+        let list = all();
+        let keys: Vec<String> = list
             .iter()
             .map(|s| {
                 let v = self.setting(cur, s.name);
@@ -150,7 +162,7 @@ impl App {
             .collect();
         // one column for the names and values, as wide as the longest
         let w = keys.iter().map(|k| k.chars().count()).max().unwrap_or(0) + 2;
-        let rows = keys.into_iter().zip(SETTINGS).map(|(k, s)| (format!("{k:<w$}"), s.about.to_string())).collect();
+        let rows = keys.into_iter().zip(list).map(|(k, s)| (format!("{k:<w$}"), format!("{}{}", s.about, if works(s) { "" } else { "  ◐ kept, no effect yet" }))).collect();
         self.popup = Some(Popup::Help("Settings (:set name=value · :setlocal · zett.ft.<type>)".into(), rows));
     }
 
@@ -207,7 +219,7 @@ pub(crate) fn settings_topic() -> String {
          init.lua with `zett.opt.name = value`, for a file type with `zett.ft.markdown = { wrap = true }`.\n\
          A buffer's value comes from :setlocal, then its file type, then zett.opt, then the default.\n\n",
     );
-    for s in SETTINGS {
+    for s in all() {
         let kind = match s.kind {
             Kind::Bool => "on/off",
             Kind::Int => "number",
@@ -215,7 +227,8 @@ pub(crate) fn settings_topic() -> String {
         };
         let short = if s.short.is_empty() { String::new() } else { format!(" · `{}`", s.short.join("`, `")) };
         let d = if s.default.is_empty() { "\"\"" } else { s.default };
-        out.push_str(&format!("- `{}`{short} · {kind} · default `{d}`\n  {}\n", s.name, s.about));
+        let state = if works(s) { "" } else { " · ◐ kept, no effect yet" };
+        out.push_str(&format!("- `{}`{short} · {kind} · default `{d}`{state}\n  {}\n", s.name, s.about));
     }
     out
 }
@@ -234,4 +247,10 @@ pub(crate) fn distance(a: &str, b: &str) -> usize {
         }
     }
     row[b.len()]
+}
+
+/// Every setting :set knows: zett's own, then the rest of Neovim's (not those zett's table already has).
+pub(crate) fn all() -> Vec<&'static Setting> {
+    let mine = |n: &Setting| SETTINGS.iter().any(|s| s.name == n.name || s.short.contains(&n.name) || n.short.iter().any(|x| s.short.contains(x) || s.name == *x));
+    SETTINGS.iter().chain(crate::nvim_options::NVIM.iter().filter(|n| !mine(n))).collect()
 }

@@ -19,6 +19,7 @@ mod refs;
 mod notebook;
 mod everything;
 mod git;
+mod nvim_options;
 mod settings;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
