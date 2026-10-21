@@ -91,8 +91,12 @@ impl Editor {
                 }
             }
         }
+        let (start, plain) = (self.cursor, self.op.is_none());
         self.vim.marks.insert('\'', self.cursor);
         self.motion(Span::Chars(self.cursor.min(at), self.cursor.max(at)), Some(at));
+        if plain {
+            self.search_note(&q, fold, at, if forward { at <= start } else { at >= start }, forward);
+        }
     }
 
     pub(crate) fn whole_word_at(&self, i: usize, n: usize) -> bool {
@@ -138,4 +142,41 @@ impl Editor {
         self.vim_next(forward);
     }
 
+}
+
+impl Editor {
+    /// After n N / ?: "search hit BOTTOM, continuing at TOP" when it went round (unless shortmess
+    /// has s), and the match's place among them, [2/5] (unless shortmess has S; past
+    /// maxsearchcount it says >N).
+    fn search_note(&mut self, q: &str, fold: bool, at: usize, wrapped: bool, forward: bool) {
+        let sm = self.opt("shortmess").unwrap_or("ltToOCF").to_string();
+        let mut m = if wrapped && !sm.contains('s') {
+            if forward { "search hit BOTTOM, continuing at TOP".to_string() } else { "search hit TOP, continuing at BOTTOM".to_string() }
+        } else {
+            format!("{}{q}", if forward { '/' } else { '?' })
+        };
+        if !sm.contains('S') {
+            let max = self.opt_num("maxsearchcount", 999).max(1) as usize;
+            let (len, n) = (self.buf.len_chars(), q.chars().count());
+            let (mut total, mut index, mut from) = (0usize, 0usize, 0usize);
+            while let Some(i) = self.buf.find(q, from.min(len), true, fold) {
+                if !self.vim.search_word || self.whole_word_at(i, n) {
+                    total += 1;
+                    if i <= at {
+                        index = total;
+                    }
+                    if total > max {
+                        break;
+                    }
+                }
+                from = i + 1;
+                if from > len {
+                    break;
+                }
+            }
+            let shown = if total > max { format!("[{}/>{max}]", if index > max { format!(">{max}") } else { index.to_string() }) } else { format!("[{index}/{total}]") };
+            m = format!("{m}  {shown}");
+        }
+        self.vim.requests.push(Request::Message(m));
+    }
 }

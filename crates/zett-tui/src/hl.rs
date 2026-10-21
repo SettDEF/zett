@@ -12,12 +12,12 @@ thread_local! {
 pub(crate) fn color(c: HlColor) -> Color {
     match c {
         HlColor::Index(n) => Color::Indexed(n),
-        HlColor::Rgb(r, g, b) => Color::Rgb(r, g, b),
+        HlColor::Rgb(r, g, b) => rgb(r, g, b),
         HlColor::Default => Color::Reset,
         HlColor::Lift(p) => {
             let ((br, bg, bb), (fr, fg, fb)) = theme();
             let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * p as f32 / 100.0).round() as u8;
-            Color::Rgb(mix(br, fr), mix(bg, fg), mix(bb, fb))
+            rgb(mix(br, fr), mix(bg, fg), mix(bb, fb))
         }
     }
 }
@@ -106,5 +106,44 @@ mod tests {
     #[test]
     fn the_current_line_is_lifted() {
         assert!(matches!(super::hl("CursorLine").bg, Some(ratatui::style::Color::Rgb(..))));
+    }
+}
+
+/// termguicolors: off means the terminal has 256 colours; RGB then goes to the nearest of them.
+pub(crate) static TRUECOLOR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// An RGB colour as the terminal can show it (termguicolors).
+pub(crate) fn rgb(r: u8, g: u8, b: u8) -> Color {
+    if TRUECOLOR.load(std::sync::atomic::Ordering::Relaxed) {
+        return Color::Rgb(r, g, b);
+    }
+    // the 6×6×6 cube or the grey ramp, whichever is nearer
+    let lvl = [0u8, 95, 135, 175, 215, 255];
+    let near = |v: u8| (0..6).min_by_key(|&i| (lvl[i] as i32 - v as i32).abs()).unwrap();
+    let (ri, gi, bi) = (near(r), near(g), near(b));
+    let cube = (lvl[ri], lvl[gi], lvl[bi]);
+    let avg = (r as u32 + g as u32 + b as u32) / 3;
+    let gi2 = ((avg.saturating_sub(8)) / 10).min(23) as u8;
+    let grey = 8 + 10 * gi2;
+    let d = |(x, y, z): (u8, u8, u8)| (x as i32 - r as i32).pow(2) + (y as i32 - g as i32).pow(2) + (z as i32 - b as i32).pow(2);
+    if d((grey, grey, grey)) < d(cube) { Color::Indexed(232 + gi2) } else { Color::Indexed(16 + 36 * ri as u8 + 6 * gi as u8 + bi as u8) }
+}
+
+/// The cached styles are worked out again at the next draw (termguicolors changed).
+pub(crate) fn invalidate() {
+    CACHE.with(|c| c.borrow_mut().0 = u64::MAX);
+}
+
+#[cfg(test)]
+mod rgb_tests {
+    #[test]
+    fn rgb_to_256() {
+        use ratatui::style::Color;
+        super::TRUECOLOR.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(super::rgb(255, 0, 0), Color::Indexed(196));
+        assert_eq!(super::rgb(128, 128, 128), Color::Indexed(244));
+        assert_eq!(super::rgb(0, 0, 0), Color::Indexed(16));
+        super::TRUECOLOR.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(super::rgb(1, 2, 3), Color::Rgb(1, 2, 3));
     }
 }

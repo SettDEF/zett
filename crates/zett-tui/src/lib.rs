@@ -61,7 +61,7 @@ fn ansi(n: u8) -> syntect::highlighting::Color {
 fn to_color(c: syntect::highlighting::Color) -> Color {
     match c.a {
         0 => Color::Indexed(c.r),
-        255 => Color::Rgb(c.r, c.g, c.b),
+        255 => hl::rgb(c.r, c.g, c.b),
         _ => Color::Reset,
     }
 }
@@ -407,6 +407,8 @@ struct App {
     cursor_xy: (u16, u16),
     /// the latest edit (servers hear about it once typing pauses)
     edit_at: Instant,
+    /// the last key (showmatch lasts matchtime after it)
+    typed_at: Instant,
 }
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
@@ -543,6 +545,7 @@ impl App {
             comp_due: None,
             cursor_xy: (0, 0),
             edit_at: Instant::now(),
+            typed_at: Instant::now(),
         };
         // the options first: the startup depends on them (the key profile)
         app.take_opts();
@@ -570,9 +573,25 @@ impl App {
 
     fn say(&mut self, m: impl Into<String>) {
         let m = m.into();
+        // an error message: errorbells rings (visualbell flashes the window instead), unless belloff
+        // has all or error (Neovim's default: all off)
+        if m.starts_with('E') && m[1..].starts_with(|c: char| c.is_ascii_digit()) && self.flag(self.cur, "errorbells") {
+            let off = self.setting(self.cur, "belloff");
+            if !off.split(',').any(|o| o == "all" || o == "error") {
+                if self.flag(self.cur, "visualbell") {
+                    let lines = self.docs[self.cur].ed.buf.len_lines();
+                    self.flash = Some((self.cur, 0, lines, Instant::now()));
+                } else {
+                    use std::io::Write;
+                    let _ = std::io::stdout().write_all(b"\x07");
+                }
+            }
+        }
         if !m.is_empty() {
             self.history.push(m.clone());
-            if self.history.len() > 200 {
+            // messagesopt history:N: how many messages :messages keeps
+            let keep = self.setting(self.cur, "messagesopt").split(',').find_map(|p| p.strip_prefix("history:")?.parse::<usize>().ok()).unwrap_or(500);
+            if self.history.len() > keep {
                 self.history.remove(0);
             }
         }

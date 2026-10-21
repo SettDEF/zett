@@ -71,6 +71,9 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "spell", "spellcapcheck",
     "filetype", "syntax", "guicursor", "termsync",
     "commentstring",
+    "errorbells", "visualbell", "belloff", "matchtime", "showcmd", "showcmdloc", "operatorfunc",
+    "pumheight", "pumwidth", "pummaxwidth",
+    "cedit", "termguicolors", "messagesopt", "winfixbuf",
     "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
     "bomb", "endofline", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
@@ -229,6 +232,9 @@ impl App {
             self.docs[i].ed.set_case(ic, scs);
             let ws = self.flag(i, "wrapscan");
             self.docs[i].ed.set_wrapscan(ws);
+            if hl::TRUECOLOR.swap(self.flag(i, "termguicolors"), std::sync::atomic::Ordering::Relaxed) != self.flag(i, "termguicolors") {
+                hl::invalidate();
+            }
             // filetype and syntax: the highlighting follows them (:set ft=rust, :set syntax=off)
             let (ft, syn) = (self.setting(i, "filetype"), self.setting(i, "syntax"));
             let key = if syn.is_empty() || syn.eq_ignore_ascii_case("on") { ft } else { syn };

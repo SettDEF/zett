@@ -97,7 +97,12 @@ impl Editor {
                 self.cursor = self.first_non_blank(l1.min(self.buf.len_lines() - 1));
             }
             Op::Filter => self.vim.requests.push(Request::CmdLine(if l1 == l2 { ".!".into() } else { format!(".,.+{}!", l2 - l1) })),
-            Op::Func => self.vim.requests.push(Request::OperatorFunc(a, b)),
+            Op::Func => {
+                // g the marks [ and ] around the text, then the window calls the operatorfunc
+                self.vim.marks.insert('[', a);
+                self.vim.marks.insert(']', b.saturating_sub(1).max(a));
+                self.vim.requests.push(Request::OperatorFunc(a, b, lines.is_some()));
+            }
             Op::Fold => self.fold_create(l1, l2),
             Op::YankTrim => {
                 self.apply(Op::Yank, span);

@@ -27,7 +27,7 @@ pub enum Request {
     /// a pause of this many milliseconds (gs)
     Sleep(u64),
     /// run the operator function on these characters (g@)
-    OperatorFunc(usize, usize),
+    OperatorFunc(usize, usize, bool),
     /// a window command: what follows CTRL-W (`s`, `v`, `C-w`, `+`, `gf`…) and its count
     Window(String, Option<usize>),
     /// show the buffer from this line at the window's top (scrolling: CTRL-E, CTRL-D, zt, zz…)

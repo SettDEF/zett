@@ -319,7 +319,12 @@ impl App {
         let Some(comp) = &self.comp else { return };
         let (cx, cy) = self.cursor_xy;
         let area = f.area();
-        let rows = comp.shown.len().min(10) as u16;
+        // pumheight: at most that many rows (0: as many as fit, up to 10 here)
+        let cap = match self.num(self.cur, "pumheight") {
+            0 => 10,
+            n => n,
+        };
+        let rows = comp.shown.len().min(cap).max(1) as u16;
         let kind = |k: u8| match k {
             2 | 3 | 4 => "ƒ",
             5 | 10 => "◆",
@@ -335,7 +340,11 @@ impl App {
         let labels: Vec<(String, String)> = comp.shown.iter().map(|&i| (comp.items[i].label.clone(), comp.items[i].detail.clone())).collect();
         let lw = labels.iter().map(|l| l.0.chars().count()).max().unwrap_or(4).min(40);
         let dw = labels.iter().map(|l| l.1.chars().count()).max().unwrap_or(0).min(30);
-        let w = (lw + dw + 6).min(area.width as usize) as u16;
+        // pumwidth at least, pummaxwidth at most (0: no limit)
+        let (minw, maxw) = (self.num(self.cur, "pumwidth"), self.num(self.cur, "pummaxwidth"));
+        let w = (lw + dw + 6).max(minw);
+        let w = if maxw > 0 { w.min(maxw) } else { w };
+        let w = w.min(area.width as usize) as u16;
         let x = cx.saturating_sub((self.docs[self.cur].ed.cursor().col - comp.start) as u16 + 2).min(area.width.saturating_sub(w));
         let below = cy + 1 + rows <= area.bottom().saturating_sub(2);
         let y = if below { cy + 1 } else { cy.saturating_sub(rows) };

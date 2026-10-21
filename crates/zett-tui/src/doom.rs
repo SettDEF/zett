@@ -11,6 +11,26 @@ pub(crate) enum WTree {
     Split(bool, Box<WTree>, Box<WTree>, f32),
 }
 
+
+impl App {
+    /// The command-line window (q:, q/, and cedit from the : line): the lines so far as a buffer,
+    /// with `extra` (the line being typed) last; Enter on one runs it.
+    pub(crate) fn cmd_window(&mut self, c: char, extra: Option<String>) {
+        let mut lines: Vec<String> = if c == ':' { self.cmd_hist.clone() } else { vec![self.docs[self.cur].ed.register('/').map(|r| r.0).unwrap_or_default()] };
+        lines.extend(extra);
+        let title = "[Command Line]".to_string();
+        if let Some(i) = self.docs.iter().position(|d| d.name == title) {
+            self.docs.remove(i);
+            self.doc_removed(i);
+        }
+        let mut text = lines.join("\n");
+        text.push('\n');
+        self.docs.push(Doc::new(Editor::from_str(&text), title, "Plain Text".into()));
+        let i = self.docs.len() - 1;
+        self.show_doc(i);
+        self.goto_line(lines.len().max(1));
+    }
+}
 impl WTree {
     pub(crate) fn ids(&self) -> Vec<usize> {
         match self {
@@ -684,6 +704,10 @@ impl App {
     pub(crate) fn show_doc(&mut self, i: usize) {
         let i = i.min(self.docs.len() - 1);
         if i != self.cur && self.cur < self.docs.len() {
+            // winfixbuf: this window keeps its buffer
+            if self.flag(self.cur, "winfixbuf") {
+                return self.say("E1513: Cannot switch buffer. 'winfixbuf' is enabled");
+            }
             // leaving a changed buffer: autowrite writes it; nohidden refuses (help pages excepted)
             self.auto_write();
             let cur = self.cur;
@@ -1080,7 +1104,21 @@ impl App {
                     self.show_doc(i);
                 }
                 Request::Sleep(ms) => std::thread::sleep(Duration::from_millis(ms.min(10_000))),
-                Request::OperatorFunc(..) => self.say("g@: no operatorfunc set (zett.opt.operatorfunc)".to_string()),
+                Request::OperatorFunc(_, _, linewise) => {
+                    // operatorfunc: a Lua function by name ("v:lua.name" as Neovim writes it), called
+                    // with the motion's type as Vim does; the marks [ and ] hold the text
+                    let f = self.setting(self.cur, "operatorfunc");
+                    let f = f.trim().trim_start_matches("v:lua.").to_string();
+                    if f.is_empty() {
+                        self.say("E774: 'operatorfunc' is empty");
+                    } else {
+                        let kind = if linewise { "line" } else { "char" };
+                        match self.with_lua(|e| e.eval(&format!("{f}(\"{kind}\")"))) {
+                            Ok((_, fx)) => self.after_lua(fx),
+                            Err(e) => self.say(format!("operatorfunc {f}: {e}")),
+                        }
+                    }
+                }
                 Request::Window(c, n) => self.vim_window(&c, n),
                 Request::Top(t) => {
                     let last = self.docs[self.cur].ed.buf.len_lines().saturating_sub(1);
@@ -1157,21 +1195,7 @@ impl App {
                 }
                 Request::Redraw => self.clear = true,
                 Request::Suspend => self.suspend = true,
-                Request::CmdWindow(c) => {
-                    // the : lines (or searches) so far as a buffer; Enter on one runs it
-                    let lines: Vec<String> = if c == ':' { self.cmd_hist.clone() } else { vec![self.docs[self.cur].ed.register('/').map(|r| r.0).unwrap_or_default()] };
-                    let title = "[Command Line]".to_string();
-                    if let Some(i) = self.docs.iter().position(|d| d.name == title) {
-                        self.docs.remove(i);
-                        self.doc_removed(i);
-                    }
-                    let mut text = lines.join("\n");
-                    text.push('\n');
-                    self.docs.push(Doc::new(Editor::from_str(&text), title, "Plain Text".into()));
-                    let i = self.docs.len() - 1;
-                    self.show_doc(i);
-                    self.goto_line(lines.len().max(1));
-                }
+                Request::CmdWindow(c) => self.cmd_window(c, None),
             }
         }
     }

@@ -134,6 +134,15 @@ impl App {
         self.draw_floats(f, body);
         let (line_at, boxed, below) = self.cmd_place(body, cmd);
         self.draw_cmd(f, cmd, line_at, boxed);
+        // showcmd: the keys of a command under way, at the right of the last line (showcmdloc=last)
+        if self.flag(cur, "showcmd") && self.setting(cur, "showcmdloc") == "last" && self.cmdline.is_none() && cmd.height > 0 {
+            let keys = self.docs[cur].ed.pending_keys();
+            let ruler = !status && global == 0 && self.flag(cur, "ruler");
+            let x = cmd.right().saturating_sub(11 + if ruler { 18 } else { 0 });
+            if !keys.is_empty() && x > cmd.x {
+                f.render_widget(Paragraph::new(keys).style(hl("MsgArea")), Rect { x, y: cmd.y, width: 10, height: 1 });
+            }
+        }
         // ruler: where the cursor is, at the right of the last line, when no status line says it
         if !status && global == 0 && self.cmdline.is_none() && self.minibuf.is_none() && cmd.height > 0 && self.flag(cur, "ruler") {
             let fmt = self.setting(cur, "rulerformat");
@@ -209,7 +218,9 @@ impl App {
         let capcheck = !self.setting(di, "spellcapcheck").is_empty();
         let lc = show.list.clone().unwrap_or_default();
         // showmatch: in insert mode, right after a closing bracket, its pair stands out
-        let paren = (self.docs[di].ed.mode() == zett_edit::Mode::Insert && self.flag(di, "showmatch")).then(|| self.docs[di].ed.match_before_cursor()).flatten();
+        // for matchtime tenths of a second after the key
+        let lasting = self.typed_at.elapsed() < Duration::from_millis(self.num(di, "matchtime") as u64 * 100);
+        let paren = (lasting && self.docs[di].ed.mode() == zett_edit::Mode::Insert && self.flag(di, "showmatch")).then(|| self.docs[di].ed.match_before_cursor()).flatten();
         let (queries, embeds, nb, root) = (&mut self.queries, &mut self.embeds, &self.notebook, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();

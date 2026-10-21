@@ -64,6 +64,23 @@ impl Editor {
         self.op.is_some()
     }
 
+    /// showcmd: the keys of a command not finished yet ("2d", "\"a", "g"), empty when none waits.
+    pub fn pending_keys(&self) -> String {
+        let waiting = self.mode == Mode::Normal && (self.op.is_some() || self.prefix.is_some() || self.count.is_some() || self.vim.use_reg.is_some_and(|_| self.vim.reg_before.is_none() || self.vim.reg_armed));
+        if !waiting && !matches!(self.mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock) {
+            return String::new();
+        }
+        let keys: String = self.vim.typing.iter().map(|k| if k.ctrl || k.alt || k.char().is_none() { k.notation() } else { k.char().unwrap().to_string() }).collect();
+        // in visual mode: the selection's size, as Vim shows it, when nothing else waits
+        if !waiting {
+            if let Some((a, b)) = self.selection_range() {
+                let (l1, l2) = (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line);
+                return if l1 == l2 && self.mode == Mode::Visual { (b - a).to_string() } else { (l2 - l1 + 1).to_string() };
+            }
+        }
+        keys.chars().rev().take(10).collect::<Vec<_>>().into_iter().rev().collect()
+    }
+
     /// :nohlsearch: the matches stop showing until the next search.
     pub fn nohlsearch(&mut self) {
         self.vim.hl_off = true;

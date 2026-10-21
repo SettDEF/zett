@@ -24,6 +24,8 @@ pub(crate) struct Ctx {
     pub ch: Option<char>,
     /// 1-based byte offset of the cursor in the file
     pub offset: usize,
+    /// showcmd with showcmdloc=statusline: the keys under way (%S)
+    pub showcmd: String,
 }
 
 /// A piece of the line: its text and the highlight group it is drawn in (None: the line's own).
@@ -129,7 +131,7 @@ pub(crate) fn render(fmt: &str, c: &Ctx, width: usize, eval: &mut dyn FnMut(&str
             'R' => Some(if c.readonly { ",RO" } else { "" }.into()),
             'h' => Some(if c.help { "[Help]" } else { "" }.into()),
             'H' => Some(if c.help { ",HLP" } else { "" }.into()),
-            'w' | 'W' | 'q' | 'k' | 'a' | 'N' | 'S' => Some(String::new()),
+            'w' | 'W' | 'q' | 'k' | 'a' | 'N' => Some(String::new()),
             'y' => Some(if c.ft.is_empty() { String::new() } else { format!("[{}]", c.ft) }),
             'Y' => Some(if c.ft.is_empty() { String::new() } else { format!(",{}", c.ft.to_uppercase()) }),
             'n' => Some(c.bufnr.to_string()),
@@ -143,6 +145,7 @@ pub(crate) fn render(fmt: &str, c: &Ctx, width: usize, eval: &mut dyn FnMut(&str
             'b' => Some(c.ch.map(|x| (x as u32).to_string()).unwrap_or_else(|| "0".into())),
             'B' => Some(c.ch.map(|x| format!("{:x}", x as u32)).unwrap_or_else(|| "0".into())),
             'o' => Some(c.offset.to_string()),
+            'S' => Some(c.showcmd.clone()),
             'O' => Some(format!("{:x}", c.offset)),
             _ => None,
         };
@@ -267,6 +270,7 @@ impl crate::App {
             height,
             ch: line_text.chars().nth(c.col).filter(|&ch| ch != '\n'),
             offset: d.ed.buf.to_char(c) + 1,
+            showcmd: if self.flag(di, "showcmd") && self.setting(di, "showcmdloc") == "statusline" { d.ed.pending_keys() } else { String::new() },
         }
     }
 

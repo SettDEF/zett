@@ -485,3 +485,28 @@ mod paste_langmap_comments {
         assert_eq!(e.text(), "x\n");
     }
 }
+
+mod search_count {
+    use crate::vim::Request;
+    use crate::Editor;
+
+    #[test]
+    fn the_match_among_them_and_going_round() {
+        let mut e = Editor::from_str("a x a x a\n");
+        e.set_wrapscan(true);
+        e.feed("/a<CR>");
+        let m = e.take_requests();
+        assert!(m.contains(&Request::Message("/a  [2/3]".into())), "{m:?}");
+        e.feed("nn");
+        let m = e.take_requests();
+        assert!(m.contains(&Request::Message("search hit BOTTOM, continuing at TOP  [1/3]".into())), "{m:?}");
+        e.set_opt("shortmess", "ltToOCFS");
+        e.feed("n");
+        assert!(e.take_requests().contains(&Request::Message("/a".into())));
+        e.set_opt("maxsearchcount", "2");
+        e.set_opt("shortmess", "");
+        e.feed("n");
+        let m = e.take_requests();
+        assert!(m.iter().any(|r| matches!(r, Request::Message(s) if s.ends_with("/>2]"))), "{m:?}");
+    }
+}

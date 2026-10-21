@@ -6,6 +6,7 @@ impl App {
     // ── input ──
 
     pub(crate) fn key(&mut self, k: KeyEvent) {
+        self.typed_at = Instant::now();
         if let Some(p) = self.popup.take() {
             // any key closes help (Esc and q too)
             let _ = p;

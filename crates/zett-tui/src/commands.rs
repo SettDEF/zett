@@ -56,6 +56,7 @@ impl App {
     }
 
     pub(crate) fn cmdline_key(&mut self, k: KeyEvent) {
+        let cedit = self.setting(self.cur, "cedit");
         let Some(line) = self.cmdline.as_mut() else { return };
         // the commit message for the git buffer
         if self.committing && matches!(k.code, KeyCode::Esc | KeyCode::Enter) {
@@ -103,6 +104,12 @@ impl App {
                 if line.pop().is_none() && self.prompt.is_none() {
                     self.cmdline = None;
                 }
+            }
+            // cedit (CTRL-F): the line so far into the command-line window
+            KeyCode::Char(c) if k.modifiers.contains(KeyModifiers::CONTROL) && self.prompt.is_none() && cedit_is(&cedit, c) => {
+                let l = std::mem::take(line);
+                self.cmdline = None;
+                self.cmd_window(':', Some(l));
             }
             KeyCode::Tab if self.prompt.is_some() => {}
             KeyCode::Tab => self.complete_cmdline(),
@@ -295,4 +302,14 @@ impl App {
         self.last_doc = None;
     }
 
+}
+
+/// cedit ("\x06" or "<C-F>"): the CTRL key that opens the command-line window from the : line.
+fn cedit_is(cedit: &str, c: char) -> bool {
+    let want = match cedit {
+        "" => return false,
+        s if s.chars().count() == 1 => s.chars().next().map(|x| ((x as u8) | 0x60) as char),
+        s => s.strip_prefix("<C-").and_then(|r| r.strip_suffix('>')).and_then(|r| r.chars().next()).map(|x| x.to_ascii_lowercase()),
+    };
+    want == Some(c.to_ascii_lowercase())
 }
