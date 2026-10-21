@@ -324,3 +324,12 @@ settings page.
 - [x] window: SPC tree with which-key panel, `:` command line (lua …, page …, capture …), help for keys/commands, notices; CLI run/lua/commands/keys
 - [ ] plugin manifest (plugin.toml: permissions, version), lockfile, `zett sync`, `zett doctor`
 - [ ] more API: blocks by id, cursor/selection, async jobs, timers, UI panels from Lua
+
+### Animations and pictures in help and highlights (planned 2026-10-21, not built)
+- [ ] zett renders Lottie itself (velato + vello_cpu, as zash's anim.rs) and shows it by what the
+  terminal answers at startup: zash's OSC 7733, kitty graphics, sixel, iTerm2 images. Nothing is
+  sent that the terminal did not confirm: an unknown terminal simply gets no animation, the text
+  stays as it is, and the log says once why ("no graphics: TERM=…, no kitty/sixel reply").
+  Never a half-drawn escape sequence, never garbage on screen. `zett --gui` plays them with Qt.
+- [ ] uses: a short clip per key on `:help KEY`, pictures for windows/folds; glow on yank, a pulse
+  where a jump lands, matching brackets fading in (each off with an option)
