@@ -10,44 +10,44 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:range` | `:{range}` | go to last line in {range} |
 | ✓ | `:!` | `:!` | filter lines or execute an external command |
 | · | `:!!` | `:!!` | repeat last ":!" command |
-| · | `:#` | `:#` | same as ":number" |
+| ✓ | `:#` | `:#` | same as ":number" |
 | ✓ | `:&` | `:&` | repeat last ":substitute" |
-| · | `:star` | `:*` | use the last Visual area, like ":'<,'>" |
+| ✓ | `:star` | `:*` | use the last Visual area, like ":'<,'>" |
 | ✓ | `:<` | `:<` | shift lines one 'shiftwidth' left |
 | ✓ | `:=` | `:=` | print the last line number |
 | ✓ | `:>` | `:>` | shift lines one 'shiftwidth' right |
-| · | `:@` | `:@` | execute contents of a register |
+| ✓ | `:@` | `:@` | execute contents of a register |
 | · | `:@@` | `:@@` | repeat the previous ":@" |
 | · | `:2match` | `:2mat[ch]` | define a second match to highlight |
 | · | `:3match` | `:3mat[ch]` | define a third match to highlight |
-| · | `:Next` | `:N[ext]` | go to previous file in the argument list |
+| ✓ | `:Next` | `:N[ext]` | go to previous file in the argument list |
 | · | `:append` | `:a[ppend]` | append text |
 | · | `:abbreviate` | `:ab[breviate]` | enter abbreviation |
 | · | `:abclear` | `:abc[lear]` | remove all abbreviations |
-| · | `:aboveleft` | `:abo[veleft]` | make split window appear left or above |
-| · | `:all` | `:al[l]` | open a window for each file in the argument |
+| ✓ | `:aboveleft` | `:abo[veleft]` | make split window appear left or above |
+| ✓ | `:all` | `:al[l]` | open a window for each file in the argument |
 | · | `:amenu` | `:am[enu]` | enter new menu item for all modes |
 | · | `:anoremenu` | `:an[oremenu]` | enter a new menu for all modes that will not |
-| · | `:args` | `:ar[gs]` | print the argument list |
-| · | `:argadd` | `:arga[dd]` | add items to the argument list |
-| · | `:argdedupe` | `:argded[upe]` | remove duplicates from the argument list |
-| · | `:argdelete` | `:argd[elete]` | delete items from the argument list |
-| · | `:argedit` | `:arge[dit]` | add item to the argument list and edit it |
-| · | `:argdo` | `:argdo` | do a command on all items in the argument list |
-| · | `:argglobal` | `:argg[lobal]` | define the global argument list |
-| · | `:arglocal` | `:argl[ocal]` | define a local argument list |
-| · | `:argument` | `:argu[ment]` | go to specific file in the argument list |
-| · | `:ascii` | `:as[cii]` | print ascii value of character under the cursor |
+| ✓ | `:args` | `:ar[gs]` | print the argument list |
+| ✓ | `:argadd` | `:arga[dd]` | add items to the argument list |
+| ✓ | `:argdedupe` | `:argded[upe]` | remove duplicates from the argument list |
+| ✓ | `:argdelete` | `:argd[elete]` | delete items from the argument list |
+| ✓ | `:argedit` | `:arge[dit]` | add item to the argument list and edit it |
+| ✓ | `:argdo` | `:argdo` | do a command on all items in the argument list |
+| ✓ | `:argglobal` | `:argg[lobal]` | define the global argument list |
+| ✓ | `:arglocal` | `:argl[ocal]` | define a local argument list |
+| ✓ | `:argument` | `:argu[ment]` | go to specific file in the argument list |
+| ✓ | `:ascii` | `:as[cii]` | print ascii value of character under the cursor |
 | · | `:autocmd` | `:au[tocmd]` | enter or show autocommands |
 | · | `:augroup` | `:aug[roup]` | select the autocommand group to use |
 | · | `:aunmenu` | `:aun[menu]` | remove menu for all modes |
 | ✓ | `:buffer` | `:b[uffer]` | go to specific buffer in the buffer list |
-| · | `:bNext` | `:bN[ext]` | go to previous buffer in the buffer list |
-| · | `:ball` | `:ba[ll]` | open a window for each buffer in the buffer list |
-| · | `:badd` | `:bad[d]` | add buffer to the buffer list |
-| · | `:balt` | `:balt` | like ":badd" but also set the alternate file |
+| ✓ | `:bNext` | `:bN[ext]` | go to previous buffer in the buffer list |
+| ✓ | `:ball` | `:ba[ll]` | open a window for each buffer in the buffer list |
+| ✓ | `:badd` | `:bad[d]` | add buffer to the buffer list |
+| ✓ | `:balt` | `:balt` | like ":badd" but also set the alternate file |
 | ✓ | `:bdelete` | `:bd[elete]` | remove a buffer from the buffer list |
-| · | `:belowright` | `:bel[owright]` | make split window appear right or below |
+| ✓ | `:belowright` | `:bel[owright]` | make split window appear right or below |
 | ✓ | `:bfirst` | `:bf[irst]` | go to first buffer in the buffer list |
 | ✓ | `:blast` | `:bl[ast]` | go to last buffer in the buffer list |
 | ✓ | `:bmodified` | `:bm[odified]` | go to next buffer in the buffer list that has |
@@ -59,11 +59,11 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:breakadd` | `:breaka[dd]` | add a debugger breakpoint |
 | · | `:breakdel` | `:breakd[el]` | delete a debugger breakpoint |
 | · | `:breaklist` | `:breakl[ist]` | list debugger breakpoints |
-| · | `:browse` | `:bro[wse]` | use file selection dialog |
+| ✓ | `:browse` | `:bro[wse]` | use file selection dialog |
 | ✓ | `:bufdo` | `:bufd[o]` | execute command in each listed buffer |
 | ✓ | `:buffers` | `:buffers` | list all files in the buffer list |
-| · | `:bunload` | `:bun[load]` | unload a specific buffer |
-| · | `:bwipeout` | `:bw[ipeout]` | really delete a buffer |
+| ✓ | `:bunload` | `:bun[load]` | unload a specific buffer |
+| ✓ | `:bwipeout` | `:bw[ipeout]` | really delete a buffer |
 | ✓ | `:change` | `:c[hange]` | replace a line or series of lines |
 | ✓ | `:cNext` | `:cN[ext]` | go to previous error |
 | ✓ | `:cNfile` | `:cNf[ile]` | go to last error in previous file |
@@ -85,23 +85,23 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:cd` | `:cd` | change directory |
 | ✓ | `:cdo` | `:cdo` | execute command in each valid error list entry |
 | ✓ | `:cfdo` | `:cfd[o]` | execute command in each file in error list |
-| · | `:center` | `:ce[nter]` | format lines at the center |
+| ✓ | `:center` | `:ce[nter]` | format lines at the center |
 | ✓ | `:cexpr` | `:cex[pr]` | read errors from expr and jump to first |
 | ✓ | `:cfile` | `:cf[ile]` | read file with error messages and jump to first |
 | ✓ | `:cfirst` | `:cfir[st]` | go to the specified error, default first one |
 | ✓ | `:cgetbuffer` | `:cgetb[uffer]` | get errors from buffer |
 | ✓ | `:cgetexpr` | `:cgete[xpr]` | get errors from expr |
 | ✓ | `:cgetfile` | `:cg[etfile]` | read file with error messages |
-| · | `:changes` | `:changes` | print the change list |
+| ✓ | `:changes` | `:changes` | print the change list |
 | · | `:chdir` | `:chd[ir]` | change directory |
 | ✓ | `:checkhealth` | `:che[ckhealth]` | run healthchecks |
 | · | `:checkpath` | `:checkp[ath]` | list included files |
 | ✓ | `:checktime` | `:checkt[ime]` | check timestamp of loaded buffers |
 | ✓ | `:chistory` | `:chi[story]` | list the error lists |
 | ✓ | `:clast` | `:cla[st]` | go to the specified error, default last one |
-| · | `:clearjumps` | `:cle[arjumps]` | clear the jump list |
+| ✓ | `:clearjumps` | `:cle[arjumps]` | clear the jump list |
 | ✓ | `:clist` | `:cl[ist]` | list all errors |
-| · | `:close` | `:clo[se]` | close current window |
+| ✓ | `:close` | `:clo[se]` | close current window |
 | · | `:cmap` | `:cm[ap]` | like ":map" but for Command-line mode |
 | · | `:cmapclear` | `:cmapc[lear]` | clear all mappings for Command-line mode |
 | · | `:cmenu` | `:cme[nu]` | add menu for Command-line mode |
@@ -118,12 +118,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:comclear` | `:comc[lear]` | clear all user-defined commands |
 | · | `:compiler` | `:comp[iler]` | do settings for a specific compiler |
 | · | `:continue` | `:con[tinue]` | go back to :while |
-| · | `:confirm` | `:conf[irm]` | prompt user when confirmation required |
+| ✓ | `:confirm` | `:conf[irm]` | prompt user when confirmation required |
 | · | `:const` | `:cons[t]` | create a variable as a constant |
 | ✓ | `:copen` | `:cope[n]` | open quickfix window |
 | ✓ | `:cprevious` | `:cp[revious]` | go to previous error |
 | ✓ | `:cpfile` | `:cpf[ile]` | go to last error in previous file |
-| · | `:cquit` | `:cq[uit]` | quit Vim with an error code |
+| ✓ | `:cquit` | `:cq[uit]` | quit Vim with an error code |
 | ✓ | `:crewind` | `:cr[ewind]` | go to the specified error, default first one |
 | · | `:cunmap` | `:cu[nmap]` | like ":unmap" but for Command-line mode |
 | · | `:cunabbrev` | `:cuna[bbrev]` | like ":unabbrev" but for Command-line mode |
@@ -135,7 +135,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:defer` | `:defe[r]` | call function when current function is done |
 | · | `:delcommand` | `:delc[ommand]` | delete user-defined command |
 | · | `:delfunction` | `:delf[unction]` | delete a user function |
-| · | `:delmarks` | `:delm[arks]` | delete marks |
+| ✓ | `:delmarks` | `:delm[arks]` | delete marks |
 | · | `:detach` | `:detach` | detach the current UI |
 | · | `:diffupdate` | `:dif[fupdate]` | update 'diff' buffers |
 | · | `:diffget` | `:diffg[et]` | remove differences in current buffer |
@@ -145,23 +145,23 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:diffsplit` | `:diffs[plit]` | show differences with another file |
 | · | `:diffthis` | `:difft[his]` | make current window a diff window |
 | · | `:digraphs` | `:dig[raphs]` | show or enter digraphs |
-| · | `:display` | `:di[splay]` | display registers |
+| ✓ | `:display` | `:di[splay]` | display registers |
 | · | `:djump` | `:dj[ump]` | jump to #define |
 | · | `:dl` | `:dl` | short for \|:delete\| with the 'l' flag |
 | · | `:dlist` | `:dli[st]` | list #defines |
 | · | `:doautocmd` | `:do[autocmd]` | apply autocommands to current buffer |
 | · | `:doautoall` | `:doautoa[ll]` | apply autocommands for all loaded buffers |
 | ✓ | `:dp` | `:d[elete]p` | short for \|:delete\| with the 'p' flag |
-| · | `:drop` | `:dr[op]` | jump to window editing file or edit file in |
+| ✓ | `:drop` | `:dr[op]` | jump to window editing file or edit file in |
 | · | `:dsearch` | `:ds[earch]` | list one #define |
 | · | `:dsplit` | `:dsp[lit]` | split window and jump to #define |
 | ✓ | `:edit` | `:e[dit]` | edit a file |
 | ✓ | `:earlier` | `:ea[rlier]` | go to older change, undo |
 | ✓ | `:echo` | `:ec[ho]` | echoes the result of expressions |
-| · | `:echoerr` | `:echoe[rr]` | like :echo, show like an error and use history |
+| ✓ | `:echoerr` | `:echoe[rr]` | like :echo, show like an error and use history |
 | · | `:echohl` | `:echoh[l]` | set highlighting for echo commands |
-| · | `:echomsg` | `:echom[sg]` | same as :echo, put message in history |
-| · | `:echon` | `:echon` | same as :echo, but without <EOL> |
+| ✓ | `:echomsg` | `:echom[sg]` | same as :echo, put message in history |
+| ✓ | `:echon` | `:echon` | same as :echo, but without <EOL> |
 | · | `:else` | `:el[se]` | part of an :if command |
 | · | `:elseif` | `:elsei[f]` | part of an :if command |
 | · | `:emenu` | `:em[enu]` | execute a menu by name |
@@ -171,25 +171,25 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:endtry` | `:endt[ry]` | end previous :try |
 | · | `:endwhile` | `:endw[hile]` | end previous :while |
 | ✓ | `:enew` | `:ene[w]` | edit a new, unnamed buffer |
-| · | `:eval` | `:ev[al]` | evaluate an expression and discard the result |
-| · | `:ex` | `:ex` | same as ":edit" |
-| · | `:execute` | `:exe[cute]` | execute result of expressions |
-| · | `:exit` | `:exi[t]` | same as ":xit" |
-| · | `:exusage` | `:exu[sage]` | overview of Ex commands |
-| · | `:fclose` | `:fc[lose]` | close floating window |
+| ✓ | `:eval` | `:ev[al]` | evaluate an expression and discard the result |
+| ✓ | `:ex` | `:ex` | same as ":edit" |
+| ✓ | `:execute` | `:exe[cute]` | execute result of expressions |
+| ✓ | `:exit` | `:exi[t]` | same as ":xit" |
+| ✓ | `:exusage` | `:exu[sage]` | overview of Ex commands |
+| ✓ | `:fclose` | `:fc[lose]` | close floating window |
 | ✓ | `:file` | `:f[ile]` | show or set the current file name |
 | ✓ | `:files` | `:files` | list all files in the buffer list |
-| · | `:filetype` | `:filet[ype]` | switch file type detection on/off |
-| · | `:filter` | `:filt[er]` | filter output of following command |
+| ✓ | `:filetype` | `:filet[ype]` | switch file type detection on/off |
+| ✓ | `:filter` | `:filt[er]` | filter output of following command |
 | ✓ | `:find` | `:fin[d]` | find file in 'path' and edit it |
 | · | `:finally` | `:fina[lly]` | part of a :try command |
 | · | `:finish` | `:fini[sh]` | quit sourcing a Vim script |
-| · | `:first` | `:fir[st]` | go to the first file in the argument list |
-| · | `:fold` | `:fo[ld]` | create a fold |
-| · | `:foldclose` | `:foldc[lose]` | close folds |
-| · | `:folddoopen` | `:foldd[oopen]` | execute command on lines not in a closed fold |
-| · | `:folddoclosed` | `:folddoc[losed]` | execute command on lines in a closed fold |
-| · | `:foldopen` | `:foldo[pen]` | open folds |
+| ✓ | `:first` | `:fir[st]` | go to the first file in the argument list |
+| ✓ | `:fold` | `:fo[ld]` | create a fold |
+| ✓ | `:foldclose` | `:foldc[lose]` | close folds |
+| ✓ | `:folddoopen` | `:foldd[oopen]` | execute command on lines not in a closed fold |
+| ✓ | `:folddoclosed` | `:folddoc[losed]` | execute command on lines in a closed fold |
+| ✓ | `:foldopen` | `:foldo[pen]` | open folds |
 | · | `:for` | `:for` | for loop |
 | · | `:function` | `:fu[nction]` | define a user function |
 | ✓ | `:global` | `:g[lobal]` | execute commands for matching lines |
@@ -199,13 +199,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:gui` | `:gu[i]` | start the GUI |
 | · | `:gvim` | `:gv[im]` | start the GUI |
 | ✓ | `:help` | `:h[elp]` | open a help window |
-| · | `:helpclose` | `:helpc[lose]` | close one help window |
-| · | `:helpgrep` | `:helpg[rep]` | like ":grep" but searches help files |
-| · | `:helptags` | `:helpt[ags]` | generate help tags for a directory |
+| ✓ | `:helpclose` | `:helpc[lose]` | close one help window |
+| ✓ | `:helpgrep` | `:helpg[rep]` | like ":grep" but searches help files |
+| ✓ | `:helptags` | `:helpt[ags]` | generate help tags for a directory |
 | ✓ | `:highlight` | `:hi[ghlight]` | specify highlighting methods |
-| · | `:hide` | `:hid[e]` | hide current buffer for a command |
-| · | `:history` | `:his[tory]` | print a history list |
-| · | `:horizontal` | `:hor[izontal]` | following window command work horizontally |
+| ✓ | `:hide` | `:hid[e]` | hide current buffer for a command |
+| ✓ | `:history` | `:his[tory]` | print a history list |
+| ✓ | `:horizontal` | `:hor[izontal]` | following window command work horizontally |
 | · | `:insert` | `:i[nsert]` | insert text |
 | · | `:iabbrev` | `:ia[bbrev]` | like ":abbrev" but for Insert mode |
 | · | `:iabclear` | `:iabc[lear]` | like ":abclear" but for Insert mode |
@@ -218,7 +218,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:inoremap` | `:ino[remap]` | like ":noremap" but for Insert mode |
 | · | `:inoreabbrev` | `:inorea[bbrev]` | like ":noreabbrev" but for Insert mode |
 | · | `:inoremenu` | `:inoreme[nu]` | like ":noremenu" but for Insert mode |
-| · | `:intro` | `:int[ro]` | print the introductory message |
+| ✓ | `:intro` | `:int[ro]` | print the introductory message |
 | · | `:iput` | `:ip[ut]` | like \|:put\|, but adjust the indent to the |
 | · | `:isearch` | `:is[earch]` | list one line where identifier matches |
 | · | `:isplit` | `:isp[lit]` | split window and jump to definition of |
@@ -226,12 +226,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:iunabbrev` | `:iuna[bbrev]` | like ":unabbrev" but for Insert mode |
 | · | `:iunmenu` | `:iunme[nu]` | remove menu for Insert mode |
 | ✓ | `:join` | `:j[oin]` | join lines |
-| · | `:jumps` | `:ju[mps]` | print the jump list |
+| ✓ | `:jumps` | `:ju[mps]` | print the jump list |
 | ✓ | `:k` | `:k` | set a mark |
-| · | `:keepalt` | `:keepa[lt]` | following command keeps the alternate file |
-| · | `:keepmarks` | `:kee[pmarks]` | following command keeps marks where they are |
-| · | `:keepjumps` | `:keepj[umps]` | following command keeps jumplist and marks |
-| · | `:keeppatterns` | `:keepp[atterns]` | following command keeps search pattern history |
+| ✓ | `:keepalt` | `:keepa[lt]` | following command keeps the alternate file |
+| ✓ | `:keepmarks` | `:kee[pmarks]` | following command keeps marks where they are |
+| ✓ | `:keepjumps` | `:keepj[umps]` | following command keeps jumplist and marks |
+| ✓ | `:keeppatterns` | `:keepp[atterns]` | following command keeps search pattern history |
 | ✓ | `:lNext` | `:lN[ext]` | go to previous entry in location list |
 | ✓ | `:lNfile` | `:lNf[ile]` | go to last entry in previous file |
 | ✓ | `:list` | `:l[ist]` | print lines |
@@ -240,7 +240,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:laddbuffer` | `:laddb[uffer]` | add locations from buffer |
 | ✓ | `:laddfile` | `:laddf[ile]` | add locations to current location list |
 | ✓ | `:lafter` | `:laf[ter]` | go to location after current cursor |
-| · | `:last` | `:la[st]` | go to the last file in the argument list |
+| ✓ | `:last` | `:la[st]` | go to the last file in the argument list |
 | · | `:language` | `:lan[guage]` | set the language (locale) |
 | ✓ | `:later` | `:lat[er]` | go to newer change, redo |
 | ✓ | `:lbefore` | `:lbe[fore]` | go to location before current cursor |
@@ -252,8 +252,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lclose` | `:lcl[ose]` | close location window |
 | ✓ | `:ldo` | `:ld[o]` | execute command in valid location list entries |
 | ✓ | `:lfdo` | `:lfd[o]` | execute command in each file in location list |
-| · | `:left` | `:le[ft]` | left align lines |
-| · | `:leftabove` | `:lefta[bove]` | make split window appear left or above |
+| ✓ | `:left` | `:le[ft]` | left align lines |
+| ✓ | `:leftabove` | `:lefta[bove]` | make split window appear left or above |
 | · | `:let` | `:let` | assign a value to a variable or option |
 | ✓ | `:lexpr` | `:lex[pr]` | read locations from expr and jump to first |
 | ✓ | `:lfile` | `:lf[ile]` | read file with locations and jump to first |
@@ -263,7 +263,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lgetfile` | `:lg[etfile]` | read file with locations |
 | ✓ | `:lgrep` | `:lgr[ep]` | run 'grepprg' and jump to first match |
 | ✓ | `:lgrepadd` | `:lgrepa[dd]` | like :grep, but append to current list |
-| · | `:lhelpgrep` | `:lh[elpgrep]` | like ":helpgrep" but uses location list |
+| ✓ | `:lhelpgrep` | `:lh[elpgrep]` | like ":helpgrep" but uses location list |
 | ✓ | `:lhistory` | `:lhi[story]` | list the location lists |
 | ✓ | `:ll` | `:ll` | go to specific location |
 | ✓ | `:llast` | `:lla[st]` | go to the specified location, default last one |
@@ -277,7 +277,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:lnoremap` | `:ln[oremap]` | like ":noremap!" but includes Lang-Arg mode |
 | · | `:loadkeymap` | `:loadk[eymap]` | load the following keymaps until EOF |
 | · | `:loadview` | `:lo[adview]` | load view for current window from a file |
-| · | `:lockmarks` | `:loc[kmarks]` | following command keeps marks where they are |
+| ✓ | `:lockmarks` | `:loc[kmarks]` | following command keeps marks where they are |
 | · | `:lockvar` | `:lockv[ar]` | lock variables |
 | ✓ | `:lolder` | `:lol[der]` | go to older location list |
 | ✓ | `:lopen` | `:lop[en]` | open location window |
@@ -289,18 +289,18 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:ltag` | `:lt[ag]` | jump to tag and add matching tags to the |
 | · | `:lunmap` | `:lu[nmap]` | like ":unmap!" but includes Lang-Arg mode |
 | ✓ | `:lua` | `:lua` | execute \|Lua\| command |
-| · | `:luado` | `:luad[o]` | execute Lua command for each line |
+| ✓ | `:luado` | `:luad[o]` | execute Lua command for each line |
 | ✓ | `:luafile` | `:luaf[ile]` | execute \|Lua\| script file |
 | ✓ | `:lvimgrep` | `:lv[imgrep]` | search for pattern in files |
 | ✓ | `:lvimgrepadd` | `:lvimgrepa[dd]` | like :vimgrep, but append to current list |
 | ✓ | `:lwindow` | `:lw[indow]` | open or close location window |
 | ✓ | `:move` | `:m[ove]` | move lines |
-| · | `:mark` | `:ma[rk]` | set a mark |
+| ✓ | `:mark` | `:ma[rk]` | set a mark |
 | ✓ | `:make` | `:mak[e]` | execute external command 'makeprg' and parse |
 | ✓ | `:map` | `:map` | show or enter a mapping |
 | · | `:mapclear` | `:mapc[lear]` | clear all mappings for Normal and Visual mode |
-| · | `:marks` | `:marks` | list all marks |
-| · | `:match` | `:mat[ch]` | define a match to highlight |
+| ✓ | `:marks` | `:marks` | list all marks |
+| ✓ | `:match` | `:mat[ch]` | define a match to highlight |
 | · | `:menu` | `:me[nu]` | enter a new menu item |
 | · | `:menutranslate` | `  :menut[ranslate] add a menu translation item` |  |
 | ✓ | `:messages` | `:mes[sages]` | view previously displayed messages |
@@ -309,50 +309,50 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:mkspell` | `:mksp[ell]` | produce .spl spell file |
 | · | `:mkvimrc` | `:mkv[imrc]` | write current mappings and settings to a file |
 | · | `:mkview` | `:mkvie[w]` | write view of current window to a file |
-| · | `:mode` | `:mod[e]` | show or change the screen mode |
-| · | `:next` | `:n[ext]` | go to next file in the argument list |
+| ✓ | `:mode` | `:mod[e]` | show or change the screen mode |
+| ✓ | `:next` | `:n[ext]` | go to next file in the argument list |
 | ✓ | `:new` | `:new` | create a new empty window |
 | ✓ | `:nmap` | `:nm[ap]` | like ":map" but for Normal mode |
 | · | `:nmapclear` | `:nmapc[lear]` | clear all mappings for Normal mode |
 | · | `:nmenu` | `:nme[nu]` | add menu for Normal mode |
 | ✓ | `:nnoremap` | `:nn[oremap]` | like ":noremap" but for Normal mode |
 | · | `:nnoremenu` | `:nnoreme[nu]` | like ":noremenu" but for Normal mode |
-| · | `:noautocmd` | `:noa[utocmd]` | following commands don't trigger autocommands |
+| ✓ | `:noautocmd` | `:noa[utocmd]` | following commands don't trigger autocommands |
 | ✓ | `:noremap` | `:no[remap]` | enter a mapping that will not be remapped |
 | ✓ | `:nohlsearch` | `:noh[lsearch]` | suspend 'hlsearch' highlighting |
 | · | `:noreabbrev` | `:norea[bbrev]` | enter an abbreviation that will not be |
 | · | `:noremenu` | `:noreme[nu]` | enter a menu that will not be remapped |
 | ✓ | `:normal` | `:norm[al]` | execute Normal mode commands |
-| · | `:noswapfile` | `:nos[wapfile]` | following commands don't create a swap file |
-| · | `:number` | `:nu[mber]` | print lines with line number |
+| ✓ | `:noswapfile` | `:nos[wapfile]` | following commands don't create a swap file |
+| ✓ | `:number` | `:nu[mber]` | print lines with line number |
 | ✓ | `:nunmap` | `:nun[map]` | like ":unmap" but for Normal mode |
 | · | `:nunmenu` | `:nunme[nu]` | remove menu for Normal mode |
-| · | `:oldfiles` | `:ol[dfiles]` | list files that have marks in the \|shada\| file |
+| ✓ | `:oldfiles` | `:ol[dfiles]` | list files that have marks in the \|shada\| file |
 | · | `:omap` | `:om[ap]` | like ":map" but for Operator-pending mode |
 | · | `:omapclear` | `:omapc[lear]` | remove all mappings for Operator-pending mode |
 | · | `:omenu` | `:ome[nu]` | add menu for Operator-pending mode |
 | ✓ | `:only` | `:on[ly]` | close all windows except the current one |
 | · | `:onoremap` | `:ono[remap]` | like ":noremap" but for Operator-pending mode |
 | · | `:onoremenu` | `:onoreme[nu]` | like ":noremenu" but for Operator-pending mode |
-| · | `:options` | `:opt[ions]` | open the options-window |
+| ✓ | `:options` | `:opt[ions]` | open the options-window |
 | · | `:ounmap` | `:ou[nmap]` | like ":unmap" but for Operator-pending mode |
 | · | `:ounmenu` | `:ounme[nu]` | remove menu for Operator-pending mode |
 | · | `:packadd` | `:pa[ckadd]` | add a plugin from 'packpath' |
 | · | `:packloadall` | `:packl[oadall]` | load all packages under 'packpath' |
-| · | `:pbuffer` | `:pb[uffer]` | edit buffer in the preview window |
-| · | `:pclose` | `:pc[lose]` | close preview window |
-| · | `:pedit` | `:ped[it]` | edit file in the preview window |
+| ✓ | `:pbuffer` | `:pb[uffer]` | edit buffer in the preview window |
+| ✓ | `:pclose` | `:pc[lose]` | close preview window |
+| ✓ | `:pedit` | `:ped[it]` | edit file in the preview window |
 | · | `:perl` | `:pe[rl]` | execute perl command |
 | · | `:perldo` | `:perld[o]` | execute perl command for each line |
 | · | `:perlfile` | `:perlf[ile]` | execute perl script file |
-| · | `:print` | `:p[rint]` | print lines |
+| ✓ | `:print` | `:p[rint]` | print lines |
 | · | `:profdel` | `:profd[el]` | stop profiling a function or script |
 | · | `:profile` | `:prof[ile]` | profiling functions and scripts |
 | · | `:pop` | `:po[p]` | jump to older entry in tag stack |
 | · | `:popup` | `:popu[p]` | popup a menu by name |
 | · | `:ppop` | `:pp[op]` | ":pop" in preview window |
 | · | `:preserve` | `:pre[serve]` | write all text to swap file |
-| · | `:previous` | `:prev[ious]` | go to previous file in argument list |
+| ✓ | `:previous` | `:prev[ious]` | go to previous file in argument list |
 | · | `:psearch` | `:ps[earch]` | like ":ijump" but shows match in preview window |
 | · | `:ptag` | `:pt[ag]` | show tag in preview window |
 | · | `:ptNext` | `:ptN[ext]` | \|:tNext\| in preview window |
@@ -363,7 +363,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:ptprevious` | `:ptp[revious]` | \|:tprevious\| in preview window |
 | · | `:ptrewind` | `:ptr[ewind]` | \|:trewind\| in preview window |
 | · | `:ptselect` | `:pts[elect]` | \|:tselect\| and show tag in preview window |
-| · | `:put` | `:pu[t]` | insert contents of register in the text |
+| ✓ | `:put` | `:pu[t]` | insert contents of register in the text |
 | ✓ | `:pwd` | `:pw[d]` | print current directory |
 | · | `:py3` | `:py3` | execute Python 3 command |
 | · | `:python3` | `:python3` | same as :py3 |
@@ -377,23 +377,23 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:pyxdo` | `:pyxd[o]` | execute \|python_x\| command for each line |
 | · | `:pyxfile` | `:pyxf[ile]` | execute \|python_x\| script file |
 | ✓ | `:quit` | `:q[uit]` | quit current window (when one window quit Vim) |
-| · | `:quitall` | `:quita[ll]` | quit Vim |
+| ✓ | `:quitall` | `:quita[ll]` | quit Vim |
 | ✓ | `:qall` | `:qa[ll]` | quit Vim |
 | ✓ | `:read` | `:r[ead]` | read file into the text |
 | · | `:recover` | `:rec[over]` | recover a file from a swap file |
 | ✓ | `:redo` | `:red[o]` | redo one undone change |
-| · | `:redir` | `:redi[r]` | redirect messages to a file or register |
-| · | `:redraw` | `:redr[aw]` | force a redraw of the display |
-| · | `:redrawstatus` | `:redraws[tatus]` | force a redraw of the status line(s) and |
+| ✓ | `:redir` | `:redi[r]` | redirect messages to a file or register |
+| ✓ | `:redraw` | `:redr[aw]` | force a redraw of the display |
+| ✓ | `:redrawstatus` | `:redraws[tatus]` | force a redraw of the status line(s) and |
 | · | `:redrawtabline` | `  :redrawt[abline]  force a redraw of the tabline` |  |
-| · | `:registers` | `:reg[isters]` | display the contents of registers |
-| · | `:resize` | `:res[ize]` | change current window height |
+| ✓ | `:registers` | `:reg[isters]` | display the contents of registers |
+| ✓ | `:resize` | `:res[ize]` | change current window height |
 | · | `:restart` | `:restart` | restart the Nvim server |
 | ✓ | `:retab` | `:ret[ab]` | change tab size |
 | · | `:return` | `:retu[rn]` | return from a user function |
-| · | `:rewind` | `:rew[ind]` | go to the first file in the argument list |
+| ✓ | `:rewind` | `:rew[ind]` | go to the first file in the argument list |
 | ✓ | `:right` | `:ri[ght]` | right align text |
-| · | `:rightbelow` | `:rightb[elow]` | make split window appear right or below |
+| ✓ | `:rightbelow` | `:rightb[elow]` | make split window appear right or below |
 | · | `:rshada` | `:rsh[ada]` | read from \|shada\| file |
 | · | `:ruby` | `:rub[y]` | execute Ruby command |
 | · | `:rubydo` | `:rubyd[o]` | execute Ruby command for each line |
@@ -401,87 +401,87 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:rundo` | `:rund[o]` | read undo information from a file |
 | · | `:runtime` | `:ru[ntime]` | source vim scripts in 'runtimepath' |
 | ✓ | `:substitute` | `:s[ubstitute]` | find and replace text |
-| · | `:sNext` | `:sN[ext]` | split window and go to previous file in |
-| · | `:sandbox` | `:san[dbox]` | execute a command in the sandbox |
-| · | `:sargument` | `:sa[rgument]` | split window and go to specific file in |
-| · | `:sall` | `:sal[l]` | open a window for each file in argument list |
+| ✓ | `:sNext` | `:sN[ext]` | split window and go to previous file in |
+| ✓ | `:sandbox` | `:san[dbox]` | execute a command in the sandbox |
+| ✓ | `:sargument` | `:sa[rgument]` | split window and go to specific file in |
+| ✓ | `:sall` | `:sal[l]` | open a window for each file in argument list |
 | ✓ | `:saveas` | `:sav[eas]` | save file under another name. |
-| · | `:sbuffer` | `:sb[uffer]` | split window and go to specific file in the |
-| · | `:sbNext` | `:sbN[ext]` | split window and go to previous file in the |
-| · | `:sball` | `:sba[ll]` | open a window for each file in the buffer list |
-| · | `:sbfirst` | `:sbf[irst]` | split window and go to first file in the |
-| · | `:sblast` | `:sbl[ast]` | split window and go to last file in buffer |
-| · | `:sbmodified` | `:sbm[odified]` | split window and go to modified file in the |
-| · | `:sbnext` | `:sbn[ext]` | split window and go to next file in the buffer |
-| · | `:sbprevious` | `:sbp[revious]` | split window and go to previous file in the |
-| · | `:sbrewind` | `:sbr[ewind]` | split window and go to first file in the |
+| ✓ | `:sbuffer` | `:sb[uffer]` | split window and go to specific file in the |
+| ✓ | `:sbNext` | `:sbN[ext]` | split window and go to previous file in the |
+| ✓ | `:sball` | `:sba[ll]` | open a window for each file in the buffer list |
+| ✓ | `:sbfirst` | `:sbf[irst]` | split window and go to first file in the |
+| ✓ | `:sblast` | `:sbl[ast]` | split window and go to last file in buffer |
+| ✓ | `:sbmodified` | `:sbm[odified]` | split window and go to modified file in the |
+| ✓ | `:sbnext` | `:sbn[ext]` | split window and go to next file in the buffer |
+| ✓ | `:sbprevious` | `:sbp[revious]` | split window and go to previous file in the |
+| ✓ | `:sbrewind` | `:sbr[ewind]` | split window and go to first file in the |
 | · | `:scriptnames` | `:scr[iptnames]` | list names of all sourced Vim scripts |
 | · | `:scriptencoding` | ` :scripte[ncoding]  encoding used in sourced Vim script` |  |
 | ✓ | `:set` | `:se[t]` | show or set options |
-| · | `:setfiletype` | `:setf[iletype]` | set 'filetype', unless it was set already |
-| · | `:setglobal` | `:setg[lobal]` | show global values of options |
+| ✓ | `:setfiletype` | `:setf[iletype]` | set 'filetype', unless it was set already |
+| ✓ | `:setglobal` | `:setg[lobal]` | show global values of options |
 | ✓ | `:setlocal` | `:setl[ocal]` | show or set options locally |
-| · | `:sfind` | `:sf[ind]` | split current window and edit file in 'path' |
-| · | `:sfirst` | `:sfir[st]` | split window and go to first file in the |
+| ✓ | `:sfind` | `:sf[ind]` | split current window and edit file in 'path' |
+| ✓ | `:sfirst` | `:sfir[st]` | split window and go to first file in the |
 | · | `:sign` | `:sig[n]` | manipulate signs |
-| · | `:silent` | `:sil[ent]` | run a command silently |
-| · | `:sleep` | `:sl[eep]` | do nothing for a few seconds |
-| · | `:sleep!` | `:sl[eep]!` | do nothing for a few seconds, without the |
-| · | `:slast` | `:sla[st]` | split window and go to last file in the |
+| ✓ | `:silent` | `:sil[ent]` | run a command silently |
+| ✓ | `:sleep` | `:sl[eep]` | do nothing for a few seconds |
+| ✓ | `:sleep!` | `:sl[eep]!` | do nothing for a few seconds, without the |
+| ✓ | `:slast` | `:sla[st]` | split window and go to last file in the |
 | · | `:smagic` | `:sm[agic]` | :substitute with 'magic' |
 | · | `:smap` | `:smap` | like ":map" but for Select mode |
 | · | `:smapclear` | `:smapc[lear]` | remove all mappings for Select mode |
 | · | `:smenu` | `:sme[nu]` | add menu for Select mode |
-| · | `:snext` | `:sn[ext]` | split window and go to next file in the |
+| ✓ | `:snext` | `:sn[ext]` | split window and go to next file in the |
 | · | `:snomagic` | `:sno[magic]` | :substitute with 'nomagic' |
 | · | `:snoremap` | `:snor[emap]` | like ":noremap" but for Select mode |
 | · | `:snoremenu` | `:snoreme[nu]` | like ":noremenu" but for Select mode |
 | ✓ | `:sort` | `:sor[t]` | sort lines |
 | ✓ | `:source` | `:so[urce]` | read Vim or Ex commands from a file |
-| · | `:spelldump` | `:spelld[ump]` | split window and fill with all correct words |
-| · | `:spellgood` | `:spe[llgood]` | add good word for spelling |
-| · | `:spellinfo` | `:spelli[nfo]` | show info about loaded spell files |
-| · | `:spellrare` | `:spellra[re]` | add rare word for spelling |
+| ✓ | `:spelldump` | `:spelld[ump]` | split window and fill with all correct words |
+| ✓ | `:spellgood` | `:spe[llgood]` | add good word for spelling |
+| ✓ | `:spellinfo` | `:spelli[nfo]` | show info about loaded spell files |
+| ✓ | `:spellrare` | `:spellra[re]` | add rare word for spelling |
 | · | `:spellrepall` | `:spellr[epall]` | replace all bad words like last \|z=\| |
-| · | `:spellundo` | `:spellu[ndo]` | remove good or bad word |
-| · | `:spellwrong` | `:spellw[rong]` | add spelling mistake |
+| ✓ | `:spellundo` | `:spellu[ndo]` | remove good or bad word |
+| ✓ | `:spellwrong` | `:spellw[rong]` | add spelling mistake |
 | ✓ | `:split` | `:sp[lit]` | split current window |
-| · | `:sprevious` | `:spr[evious]` | split window and go to previous file in the |
-| · | `:srewind` | `:sre[wind]` | split window and go to first file in the |
-| · | `:stop` | `:st[op]` | suspend the editor or escape to a shell |
+| ✓ | `:sprevious` | `:spr[evious]` | split window and go to previous file in the |
+| ✓ | `:srewind` | `:sre[wind]` | split window and go to first file in the |
+| ✓ | `:stop` | `:st[op]` | suspend the editor or escape to a shell |
 | · | `:stag` | `:sta[g]` | split window and jump to a tag |
-| · | `:startinsert` | `:star[tinsert]` | start Insert mode |
+| ✓ | `:startinsert` | `:star[tinsert]` | start Insert mode |
 | · | `:startgreplace` | `  :startg[replace] start Virtual Replace mode` |  |
-| · | `:startreplace` | `:startr[eplace]` | start Replace mode |
-| · | `:stopinsert` | `:stopi[nsert]` | stop Insert mode |
+| ✓ | `:startreplace` | `:startr[eplace]` | start Replace mode |
+| ✓ | `:stopinsert` | `:stopi[nsert]` | stop Insert mode |
 | · | `:stjump` | `:stj[ump]` | do ":tjump" and split window |
 | · | `:stselect` | `:sts[elect]` | do ":tselect" and split window |
-| · | `:sunhide` | `:sun[hide]` | same as ":unhide" |
+| ✓ | `:sunhide` | `:sun[hide]` | same as ":unhide" |
 | · | `:sunmap` | `:sunm[ap]` | like ":unmap" but for Select mode |
 | · | `:sunmenu` | `:sunme[nu]` | remove menu for Select mode |
-| · | `:suspend` | `:sus[pend]` | same as ":stop" |
-| · | `:sview` | `:sv[iew]` | split window and edit file read-only |
+| ✓ | `:suspend` | `:sus[pend]` | same as ":stop" |
+| ✓ | `:sview` | `:sv[iew]` | split window and edit file read-only |
 | · | `:swapname` | `:sw[apname]` | show the name of the current swap file |
-| · | `:syntax` | `:sy[ntax]` | syntax highlighting |
+| ✓ | `:syntax` | `:sy[ntax]` | syntax highlighting |
 | · | `:syntime` | `:synti[me]` | measure syntax highlighting speed |
 | · | `:syncbind` | `:sync[bind]` | sync scroll binding |
 | ✓ | `:t` | `:t` | same as ":copy" |
 | · | `:tNext` | `:tN[ext]` | jump to previous matching tag |
-| · | `:tabNext` | `:tabN[ext]` | go to previous tabpage |
-| · | `:tabclose` | `:tabc[lose]` | close current tabpage |
-| · | `:tabdo` | `:tabd[o]` | execute command in each tabpage |
-| · | `:tabedit` | `:tabe[dit]` | edit a file in a new tabpage |
-| · | `:tabfind` | `:tabf[ind]` | find file in 'path', edit it in a new tabpage |
-| · | `:tabfirst` | `:tabfir[st]` | go to first tabpage |
-| · | `:tablast` | `:tabl[ast]` | go to last tabpage |
-| · | `:tabmove` | `:tabm[ove]` | move tabpage to other position |
-| · | `:tabnew` | `:tabnew` | edit a file in a new tabpage |
-| · | `:tabnext` | `:tabn[ext]` | go to next tabpage |
-| · | `:tabonly` | `:tabo[nly]` | close all tabpages except the current one |
-| · | `:tabprevious` | `:tabp[revious]` | go to previous tabpage |
-| · | `:tabrewind` | `:tabr[ewind]` | go to first tabpage |
-| · | `:tabs` | `:tabs` | list the tabpages and what they contain |
-| · | `:tab` | `:tab` | create new tab when opening new window |
+| ✓ | `:tabNext` | `:tabN[ext]` | go to previous tabpage |
+| ✓ | `:tabclose` | `:tabc[lose]` | close current tabpage |
+| ✓ | `:tabdo` | `:tabd[o]` | execute command in each tabpage |
+| ✓ | `:tabedit` | `:tabe[dit]` | edit a file in a new tabpage |
+| ✓ | `:tabfind` | `:tabf[ind]` | find file in 'path', edit it in a new tabpage |
+| ✓ | `:tabfirst` | `:tabfir[st]` | go to first tabpage |
+| ✓ | `:tablast` | `:tabl[ast]` | go to last tabpage |
+| ✓ | `:tabmove` | `:tabm[ove]` | move tabpage to other position |
+| ✓ | `:tabnew` | `:tabnew` | edit a file in a new tabpage |
+| ✓ | `:tabnext` | `:tabn[ext]` | go to next tabpage |
+| ✓ | `:tabonly` | `:tabo[nly]` | close all tabpages except the current one |
+| ✓ | `:tabprevious` | `:tabp[revious]` | go to previous tabpage |
+| ✓ | `:tabrewind` | `:tabr[ewind]` | go to first tabpage |
+| ✓ | `:tabs` | `:tabs` | list the tabpages and what they contain |
+| ✓ | `:tab` | `:tab` | create new tab when opening new window |
 | · | `:tag` | `:ta[g]` | jump to tag |
 | · | `:tags` | `:tags` | show the contents of the tag stack |
 | · | `:tcd` | `:tc[d]` | change directory for tabpage |
@@ -499,7 +499,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:tmenu` | `:tm[enu]` | define menu tooltip |
 | · | `:tnext` | `:tn[ext]` | jump to next matching tag |
 | · | `:tnoremap` | `:tno[remap]` | like ":noremap" but for \|Terminal-mode\| |
-| · | `:topleft` | `:to[pleft]` | make split window appear at top or far left |
+| ✓ | `:topleft` | `:to[pleft]` | make split window appear at top or far left |
 | · | `:tprevious` | `:tp[revious]` | jump to previous matching tag |
 | · | `:trewind` | `:tr[ewind]` | jump to first matching tag |
 | · | `:trust` | `:trust` | add or remove file from trust database |
@@ -511,23 +511,23 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:undojoin` | `:undoj[oin]` | join next change with previous undo block |
 | ✓ | `:undolist` | `:undol[ist]` | list leafs of the undo tree |
 | · | `:unabbreviate` | `:una[bbreviate]` | remove abbreviation |
-| · | `:unhide` | `:unh[ide]` | open a window for each loaded file in the |
-| · | `:uniq` | `:uni[q]` | uniq lines |
+| ✓ | `:unhide` | `:unh[ide]` | open a window for each loaded file in the |
+| ✓ | `:uniq` | `:uni[q]` | uniq lines |
 | · | `:unlet` | `:unl[et]` | delete variable |
 | · | `:unlockvar` | `:unlo[ckvar]` | unlock variables |
 | ✓ | `:unmap` | `:unm[ap]` | remove mapping |
 | · | `:unmenu` | `:unme[nu]` | remove menu |
-| · | `:unsilent` | `:uns[ilent]` | run a command not silently |
+| ✓ | `:unsilent` | `:uns[ilent]` | run a command not silently |
 | ✓ | `:update` | `:up[date]` | write buffer if modified |
 | ✓ | `:vglobal` | `:v[global]` | execute commands for not matching lines |
 | ✓ | `:version` | `:ve[rsion]` | print version number and other info |
-| · | `:verbose` | `:verb[ose]` | execute command with 'verbose' set |
-| · | `:vertical` | `:vert[ical]` | make following command split vertically |
+| ✓ | `:verbose` | `:verb[ose]` | execute command with 'verbose' set |
+| ✓ | `:vertical` | `:vert[ical]` | make following command split vertically |
 | ✓ | `:vimgrep` | `:vim[grep]` | search for pattern in files |
 | ✓ | `:vimgrepadd` | `:vimgrepa[dd]` | like :vimgrep, but append to current list |
-| · | `:visual` | `:vi[sual]` | same as ":edit", but turns off "Ex" mode |
-| · | `:viusage` | `:viu[sage]` | overview of Normal mode commands |
-| · | `:view` | `:vie[w]` | edit a file read-only |
+| ✓ | `:visual` | `:vi[sual]` | same as ":edit", but turns off "Ex" mode |
+| ✓ | `:viusage` | `:viu[sage]` | overview of Normal mode commands |
+| ✓ | `:view` | `:vie[w]` | edit a file read-only |
 | · | `:vmap` | `:vm[ap]` | like ":map" but for Visual+Select mode |
 | · | `:vmapclear` | `:vmapc[lear]` | remove all mappings for Visual+Select mode |
 | · | `:vmenu` | `:vme[nu]` | add menu for Visual+Select mode |
@@ -537,16 +537,16 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:vsplit` | `:vs[plit]` | split current window vertically |
 | · | `:vunmap` | `:vu[nmap]` | like ":unmap" but for Visual+Select mode |
 | · | `:vunmenu` | `:vunme[nu]` | remove menu for Visual+Select mode |
-| · | `:windo` | `:wind[o]` | execute command in each window |
+| ✓ | `:windo` | `:wind[o]` | execute command in each window |
 | ✓ | `:write` | `:w[rite]` | write to a file |
-| · | `:wNext` | `:wN[ext]` | write to a file and go to previous file in |
+| ✓ | `:wNext` | `:wN[ext]` | write to a file and go to previous file in |
 | ✓ | `:wall` | `:wa[ll]` | write all (changed) buffers |
 | · | `:while` | `:wh[ile]` | execute loop for as long as condition met |
-| · | `:winsize` | `:wi[nsize]` | get or set window size (obsolete) |
+| ✓ | `:winsize` | `:wi[nsize]` | get or set window size (obsolete) |
 | ✓ | `:wincmd` | `:winc[md]` | execute a Window (CTRL-W) command |
-| · | `:winpos` | `:winp[os]` | get or set window position |
-| · | `:wnext` | `:wn[ext]` | write to a file and go to next file in |
-| · | `:wprevious` | `:wp[revious]` | write to a file and go to previous file in |
+| ✓ | `:winpos` | `:winp[os]` | get or set window position |
+| ✓ | `:wnext` | `:wn[ext]` | write to a file and go to next file in |
+| ✓ | `:wprevious` | `:wp[revious]` | write to a file and go to previous file in |
 | ✓ | `:wq` | `:wq` | write to a file and quit window or Vim |
 | ✓ | `:wqall` | `:wqa[ll]` | write all changed buffers and quit Vim |
 | · | `:wshada` | `:wsh[ada]` | write to ShaDa file |
@@ -561,5 +561,5 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:xunmap` | `:xu[nmap]` | like ":unmap" but for Visual mode |
 | · | `:xunmenu` | `:xunme[nu]` | remove menu for Visual mode |
 | ✓ | `:yank` | `:y[ank]` | yank lines into a register |
-| · | `:z` | `:z` | print some lines |
-| · | `:~` | `:~` | repeat last ":substitute" |
+| ✓ | `:z` | `:z` | print some lines |
+| ✓ | `:~` | `:~` | repeat last ":substitute" |

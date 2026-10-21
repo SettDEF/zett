@@ -26,6 +26,7 @@ mod statusline;
 mod files;
 mod quickfix;
 mod qfcmd;
+mod excmds;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -362,6 +363,14 @@ struct App {
     qf: quickfix::QfStack,
     loclists: std::collections::HashMap<usize, quickfix::QfStack>,
     qf_job: Option<qfcmd::QfJob>,
+    /// the argument list and the one in use; the last :! command; :match per window; :redir under way
+    args: Vec<String>,
+    arg_idx: usize,
+    last_bang: Option<String>,
+    win_match: std::collections::HashMap<usize, (String, String)>,
+    redir: Option<(String, String)>,
+    /// the window being drawn (draw_text: its :match)
+    drawing_win: usize,
     cmd_hist: Vec<String>,
     clear: bool,
     suspend: bool,
@@ -426,6 +435,9 @@ struct App {
 pub fn options() -> Vec<(&'static str, &'static [&'static str], bool)> {
     settings::all().into_iter().map(|s| (s.name, s.short, settings::works(s))).collect()
 }
+
+/// The exit status zett leaves with (:cquit sets it).
+pub static EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
     // "+ and "* reach the system clipboard
@@ -521,6 +533,12 @@ impl App {
             qf: Default::default(),
             loclists: Default::default(),
             qf_job: None,
+            args: paths.iter().filter(|p| !p.is_dir()).map(|p| p.display().to_string()).collect(),
+            arg_idx: 0,
+            last_bang: None,
+            win_match: Default::default(),
+            redir: None,
+            drawing_win: 0,
             cmd_hist: Vec::new(),
             clear: false,
             suspend: false,
@@ -586,6 +604,11 @@ impl App {
 
     fn say(&mut self, m: impl Into<String>) {
         let m = m.into();
+        // :redir: what is said is kept for the file or register
+        if let Some((_, text)) = self.redir.as_mut() {
+            text.push_str(&m);
+            text.push('\n');
+        }
         // an error message: errorbells rings (visualbell flashes the window instead), unless belloff
         // has all or error (Neovim's default: all off)
         if m.starts_with('E') && m[1..].starts_with(|c: char| c.is_ascii_digit()) && self.flag(self.cur, "errorbells") {

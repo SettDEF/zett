@@ -168,6 +168,11 @@ fn main() {
         if let Err(e) = zett_tui::run(cli.paths) {
             fail(&e.to_string(), 1);
         }
+        // :cquit: the exit status it asked for
+        let code = zett_tui::EXIT_CODE.load(std::sync::atomic::Ordering::Relaxed);
+        if code != 0 {
+            std::process::exit(code);
+        }
         return;
     };
     if let Cmd::Completions { shell } = cmd {

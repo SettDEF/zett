@@ -223,7 +223,7 @@ impl App {
             return true;
         }
         // the command's name: letters, or one of the sign commands
-        let name_len = if rest.starts_with(['!', '&', '<', '>', '=']) { 1 } else { rest.chars().take_while(|c| c.is_ascii_alphabetic()).count() };
+        let name_len = if rest.starts_with(['!', '&', '<', '>', '=', '@', '*', '~', '#']) { 1 } else { rest.chars().take_while(|c| c.is_ascii_alphabetic()).count() };
         let (name, mut arg) = rest.split_at(name_len);
         let bang = arg.starts_with('!') && !name.is_empty() && name != "!";
         if bang {
@@ -237,6 +237,8 @@ impl App {
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);
             }
+            // the argument list, windows, tabs, lines, marks, modifiers … (excmds.rs)
+            n if crate::excmds::ex_name(n).is_some() => self.ex_more(n, arg, bang, range),
             "s" | "su" | "substitute" | "&" => {
                 let (a, b) = range.unwrap_or(here);
                 let spec = if name == "&" { self.last_sub.clone() } else { split_sub(arg) };
@@ -376,6 +378,11 @@ impl App {
                 self.set_lines(a, b, v);
             }
             "!" => {
+                // :!! the last :! command again (more after it is added); this one is remembered
+                let again = arg.strip_prefix('!').map(|rest| format!("{}{rest}", self.last_bang.clone().unwrap_or_default()));
+                let arg_owned = again.unwrap_or_else(|| arg.to_string());
+                self.last_bang = Some(arg_owned.clone());
+                let arg = arg_owned.as_str();
                 // autowrite: a shell command sees the file as it is in zett (not for a :{range}! filter)
                 if range.is_none() {
                     self.auto_write();

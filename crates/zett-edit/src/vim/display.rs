@@ -81,6 +81,78 @@ impl Editor {
         keys.chars().rev().take(10).collect::<Vec<_>>().into_iter().rev().collect()
     }
 
+    /// :marks: each mark set, as (name, line, column), sorted by name.
+    pub fn marks(&self) -> Vec<(char, usize, usize)> {
+        let n = self.buf.len_chars();
+        let mut v: Vec<(char, usize, usize)> = self.vim.marks.iter().map(|(&c, &p)| {
+            let p = self.buf.to_pos(p.min(n));
+            (c, p.line, p.col)
+        }).collect();
+        v.sort();
+        v
+    }
+
+    /// :mark: mark `c` at char position `at`.
+    pub fn set_vim_mark(&mut self, c: char, at: usize) {
+        self.vim.marks.insert(c, at.min(self.buf.len_chars()));
+    }
+
+    /// :delmarks: the marks named (a-d, x, ! for every lowercase one).
+    pub fn del_marks(&mut self, spec: &str) {
+        if spec.trim() == "!" {
+            self.vim.marks.retain(|c, _| !c.is_ascii_lowercase());
+            return;
+        }
+        let cs: Vec<char> = spec.chars().filter(|c| !c.is_whitespace()).collect();
+        let mut i = 0;
+        while i < cs.len() {
+            if i + 2 < cs.len() && cs[i + 1] == '-' {
+                for c in cs[i]..=cs[i + 2] {
+                    self.vim.marks.remove(&c);
+                }
+                i += 3;
+            } else {
+                self.vim.marks.remove(&cs[i]);
+                i += 1;
+            }
+        }
+    }
+
+    /// :jumps: the jump list (char positions) and where in it CTRL-O stands.
+    pub fn jump_list(&self) -> (Vec<usize>, usize) {
+        (self.vim.jumps.clone(), self.vim.jump_at)
+    }
+
+    /// :clearjumps.
+    pub fn clear_jumps(&mut self) {
+        self.vim.jumps.clear();
+        self.vim.jump_at = 0;
+    }
+
+    /// :changes: where changes happened, oldest first.
+    pub fn change_list(&self) -> Vec<usize> {
+        self.vim.changes.clone()
+    }
+
+    /// Register `r` holds `text` (:redir @r, :let @r), linewise when it ends in a line break.
+    pub fn set_register(&mut self, r: char, text: &str) {
+        let reg = Register { text: text.to_string(), linewise: text.ends_with('\n'), block: false };
+        if r == '"' {
+            self.reg = reg.clone();
+        }
+        self.vim.regs.insert(r.to_ascii_lowercase(), reg);
+    }
+
+    /// :registers: each register with text, as (name, text, linewise).
+    pub fn registers(&self) -> Vec<(char, String, bool)> {
+        let mut v: Vec<(char, String, bool)> = self.vim.regs.iter().map(|(&c, r)| (c, r.text.clone(), r.linewise)).collect();
+        if !self.reg.text.is_empty() && !self.vim.regs.contains_key(&'"') {
+            v.push(('"', self.reg.text.clone(), self.reg.linewise));
+        }
+        v.sort_by_key(|r| r.0);
+        v
+    }
+
     /// :nohlsearch: the matches stop showing until the next search.
     pub fn nohlsearch(&mut self) {
         self.vim.hl_off = true;

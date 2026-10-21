@@ -250,6 +250,11 @@ impl App {
         }
     }
 
+    /// A new list from items made here (:helpgrep), and its first item.
+    pub(crate) fn qf_from_items(&mut self, loc: bool, items: Vec<QfItem>, title: &str) {
+        self.qf_set(loc, items, title, false, true);
+    }
+
     /// To item `i` of the list in use: its file (switchbuf: useopen a window that shows it, split
     /// or vsplit one), line and column.
     pub(crate) fn qf_go(&mut self, loc: bool, i: usize) {
@@ -266,6 +271,14 @@ impl App {
             if let Some(w) = self.last_win.filter(|w| self.tree.ids().contains(w)) {
                 self.focus_win(w);
             }
+        }
+        // a help page (:helpgrep): the topic, then the line
+        if let Some(topic) = it.file.strip_prefix("help:") {
+            self.open_help(topic);
+            if it.line > 0 {
+                self.goto_line(it.line);
+            }
+            return self.say(format!("({} of {}) {}", i + 1, l.items.len(), it.text));
         }
         if !it.file.is_empty() {
             let p = PathBuf::from(&it.file);

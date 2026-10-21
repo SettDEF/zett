@@ -251,6 +251,14 @@ pub fn set_file(path: &str) {
     }
 }
 impl Spell {
+    /// :spelldump: every word known, sorted.
+    pub fn words(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.dict.iter().chain(self.good.iter()).chain(self.session_good.iter()).cloned().collect();
+        v.sort();
+        v.dedup();
+        v
+    }
+
     /// The misspelled words of a line, as character columns (start, end); with `camel`
     /// (spelloptions=camel) each part of a CamelCase word is checked alone.
     pub fn bad_in(&self, line: &str, camel: bool) -> Vec<(usize, usize)> {

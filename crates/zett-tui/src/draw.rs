@@ -172,6 +172,7 @@ impl App {
                 if travelling {
                     std::mem::swap(&mut self.docs[di], &mut self.travel.as_mut().unwrap().preview);
                 }
+                self.drawing_win = id;
                 self.draw_text(f, text, di, focused);
                 if travelling {
                     std::mem::swap(&mut self.docs[di], &mut self.travel.as_mut().unwrap().preview);
@@ -285,6 +286,8 @@ impl App {
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
         SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
         let show = self.display(di);
+        // :match: this window's pattern and its highlight group
+        let mpat = self.win_match.get(&self.drawing_win).and_then(|(g, p)| crate::ex::vim_regex(p, false).ok().map(|re| (hl::hl(g), re)));
         // breakindentopt: shift:N more, min:N columns of text kept at least
         let briopt = self.setting(di, "breakindentopt");
         let bri_num = |k: &str, d: usize| briopt.split(',').find_map(|p| p.strip_prefix(k)?.parse::<isize>().ok()).unwrap_or(d as isize);
@@ -578,6 +581,7 @@ impl App {
                 (p >= ls && p < ls + body.chars().count()).then(|| screen_col(&line_text, p - ls))
             });
             let cursorcol = show.cursorcolumn && focused && ln != c.line;
+            let mhits: Vec<(usize, usize)> = mpat.as_ref().map(|(_, re)| re.find_iter(body).flatten().map(|m| (screen_col(&line_text, body[..m.start()].chars().count()), screen_col(&line_text, body[..m.end()].chars().count()))).collect()).unwrap_or_default();
             // spell: misspelled words (SpellBad), a sentence starting with a small letter (SpellCap)
             let (bad, cap) = if spell_on { spell_marks(&line_text, camel, capcheck, ln > 0 && ends_sentence(&d.ed.buf.line(ln - 1))) } else { (Vec::new(), Vec::new()) };
             for (st, text) in d.spans(ln, ss, &hl) {
@@ -612,6 +616,9 @@ impl App {
                         }
                         if paren_col == Some(x) {
                             s = s.patch(hl::hl("MatchParen"));
+                        }
+                        if let Some((ms, _)) = mpat.as_ref().filter(|_| mhits.iter().any(|&(a, b)| x >= a && x < b)) {
+                            s = s.patch(*ms);
                         }
                         if replaced.is_some() {
                             s = s.patch(hl::hl("AgentDelete"));
