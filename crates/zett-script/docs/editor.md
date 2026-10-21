@@ -27,8 +27,8 @@ file finder in that folder, plain `zett` the dashboard.
 
 ## Editing
 
-Vim's keys, checked against Neovim case by case: motions, operators, text
-objects, visual mode, counts, registers, undo. `gcc` / `gc` comment lines.
+Vim's keys, all of Neovim's normal-mode index (`:help vim` explains them, `:help vim-keys` lists them):
+motions, operators, text objects, visual and block modes, counts, registers, macros, folds, spelling. `gcc` / `gc` comment lines.
 
 ## The command line
 

@@ -4,6 +4,8 @@
 pub const TOPICS: &[(&str, &str, &str)] = &[
     ("index", "the topics", include_str!("../docs/index.md")),
     ("editor", "buffers, windows, finding, editing", include_str!("../docs/editor.md")),
+    ("vim", "Vim mode: search, marks, registers, macros, folds, blocks, spelling, windows", include_str!("../docs/vim.md")),
+    ("vim-keys", "every normal-mode key, Neovim's index with zett's state", include_str!("../docs/vim-keys.md")),
     ("keys", "the SPC tree and changing keys", include_str!("../docs/keys.md")),
     ("lsp", "language servers: errors, completion, rename", include_str!("../docs/lsp.md")),
     ("config", "init.lua: options, keys, commands, hooks", include_str!("../docs/config.md")),

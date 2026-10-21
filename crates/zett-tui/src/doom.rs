@@ -223,6 +223,10 @@ impl App {
         if t.len() >= 3 && ("settings".starts_with(t) || "options".starts_with(t)) {
             return self.show_help("settings", crate::settings::settings_topic(), None);
         }
+        // a normal-mode key (gJ, CTRL-W_x, C-w x): its line on the key page
+        if let Some((at, text)) = help_key_line(t) {
+            return self.show_help("vim-keys", text.to_string(), Some((at, 1)));
+        }
         if let Some((n, text)) = zett_script::docs::get(t) {
             return self.show_help(n, text.to_string(), None);
         }
@@ -1307,5 +1311,34 @@ impl App {
             self.command(&line);
         }
         true
+    }
+}
+
+/// `:help KEY` for a normal-mode key (gJ, CTRL-W_x, C-w x): its line on the vim-keys page, unless a
+/// topic has that exact name.
+pub(crate) fn help_key_line(t: &str) -> Option<(usize, &'static str)> {
+    if zett_script::docs::TOPICS.iter().any(|(n, _, _)| *n == t) {
+        return None;
+    }
+    let key = t.replace('_', " ");
+    let key = match key.strip_prefix("C-").or_else(|| key.strip_prefix("c-")) {
+        Some(rest) if !rest.is_empty() => format!("CTRL-{}{}", rest[..1].to_uppercase(), &rest[1..]),
+        _ => key,
+    };
+    let (_, _, text) = zett_script::docs::TOPICS.iter().find(|(n, _, _)| *n == "vim-keys")?;
+    let at = text.lines().position(|l| l.starts_with(&format!("- `{key}`  ")))?;
+    Some((at, text))
+}
+
+#[cfg(test)]
+mod help_tests {
+    #[test]
+    fn keys_find_their_line() {
+        let line = |t| super::help_key_line(t).map(|(at, text)| text.lines().nth(at).unwrap().to_string());
+        assert!(line("gJ").unwrap().contains("join lines without inserting space"));
+        assert!(line("CTRL-W_x").unwrap().contains("exchange"));
+        assert!(line("C-w x").unwrap().contains("exchange"));
+        assert_eq!(line("vim"), None, "a topic's own name opens the topic");
+        assert_eq!(line("nosuchkey"), None);
     }
 }

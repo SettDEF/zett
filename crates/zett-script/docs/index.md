@@ -7,6 +7,8 @@ An editor you live in: Vim's editing, Emacs's programmability, Doom's keys.
 
 - `editor`    the editor in the terminal: buffers, windows, the dashboard
 - `keys`      the SPC tree and Vim's keys, how to find any key
+- `vim`       Vim mode: search, marks, registers, macros, folds, blocks, spelling, windows
+- `vim-keys`  every normal-mode key and what it does (`:help gJ` finds one)
 - `lsp`       language servers: errors, completion, definitions, rename
 - `config`    init.lua: options, keys, commands, hooks, plugins
 - `plugins`   the explorer, the undo tree, :set, writing your own
