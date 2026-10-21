@@ -288,3 +288,4 @@ pub(crate) fn cursor_style((shape, blink): (&str, bool)) -> ratatui::crossterm::
         _ => C::SteadyBlock,
     }
 }
+

@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-122 ✓ do something in zett, 252 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+153 ✓ do something in zett, 221 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -32,7 +32,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `breakat` | brk | string | global | ` 	!@*-+;:,./?` | characters that may cause a line break |
 | ✓ | `breakindent` | bri | boolean | win | `false` | wrapped line repeats indent |
 | ◐ | `breakindentopt` | briopt | string | win | `` | settings for 'breakindent' |
-| ◐ | `browsedir` | bsdir | string | global | `` | which directory to start browsing in |
+| ✓ | `browsedir` | bsdir | string | global | `` | which directory to start browsing in |
 | ◐ | `bufhidden` | bh | string | buf | `` | what to do when buffer is no longer in window |
 | ◐ | `buflisted` | bl | boolean | buf | `true` | whether the buffer shows up in the buffer list |
 | ◐ | `buftype` | bt | string | buf | `` | special type of buffer |
@@ -55,13 +55,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `colorcolumn` | cc | string | win | `` | columns to highlight |
 | ◐ | `columns` | co | number | global | `80` | number of columns in the display |
 | ◐ | `comments` | com | string | buf | `s1:/*,mb:*,ex:*/,://,b:#,:%,:XCOMM,n:>,fb:-,fb:•` | patterns that can start a comment line |
-| ◐ | `commentstring` | cms | string | buf | `` | template for comments; used for fold marker |
-| ◐ | `compatible` | cp | boolean | global | `false` |  |
+| ✓ | `commentstring` | cms | string | buf | `` | template for comments; used for fold marker |
+| ✓ | `compatible` | cp | boolean | global | `false` |  |
 | ◐ | `complete` | cpt | string | buf | `.,w,b,u,t` | specify how Insert mode completion works |
 | ◐ | `completefunc` | cfu | string | buf | `` | function to be used for Insert mode completion |
 | ◐ | `completeitemalign` | cia | string | global | `abbr,kind,menu` |  |
 | ◐ | `completeopt` | cot | string | buf | `menu,popup` | options for Insert mode completion |
-| ◐ | `completeslash` | csl | string | buf | `` | like 'shellslash' for completion |
+| ✓ | `completeslash` | csl | string | buf | `` | like 'shellslash' for completion |
 | ◐ | `completetimeout` | cto | number | global | `0` | initial decay timeout for CTRL-N and CTRL-P |
 | ◐ | `concealcursor` | cocu | string | win | `` | whether concealable text is hidden in cursor line |
 | ◐ | `conceallevel` | cole | number | win | `0` | whether concealable text is shown or hidden |
@@ -84,13 +84,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `directory` | dir | string | global | `/home/caesar/.local/state/nvim/swap//` | list of directory names for the swap file |
 | ◐ | `display` | dy | string | global | `lastline` | list of flags for how to display text |
 | ✓ | `eadirection` | ead | string | global | `both` | in which direction 'equalalways' works |
-| ◐ | `edcompatible` | ed | boolean | global | `false` |  |
+| ✓ | `edcompatible` | ed | boolean | global | `false` |  |
 | ◐ | `emoji` | emo | boolean | global | `true` |  |
-| ◐ | `encoding` | enc | string | global | `utf-8` | encoding used internally |
+| ✓ | `encoding` | enc | string | global | `utf-8` | encoding used internally |
 | ◐ | `endoffile` | eof | boolean | buf | `false` | write CTRL-Z at end of the file |
 | ✓ | `endofline` | eol | boolean | buf | `true` | write <EOL> for last line in file |
 | ✓ | `equalalways` | ea | boolean | global | `true` | windows are automatically made the same size |
-| ◐ | `equalprg` | ep | string | buf | `` | external program to use for "=" command |
+| ✓ | `equalprg` | ep | string | buf | `` | external program to use for "=" command |
 | ◐ | `errorbells` | eb | boolean | global | `false` | ring the bell for error messages |
 | ◐ | `errorfile` | ef | string | global | `errors.err` | name of the errorfile for the QuickFix mode |
 | ◐ | `errorformat` | efm | string | buf | `%*[^"]"%f"%*\D%l: %m,"%f"%*\D%l: %m,%-Gg%\?make[%*\d]: *** [%f:%l:%m,%-Gg%\?make: *** [%f:%l:%m,%-G%f:%l: (Each undeclared identifier is reported only once,%-G%f:%l: for each function it appears in.),%-GIn file included from %f:%l:%c:,%-GIn file included from %f:%l:%c\,,%-GIn file included from %f:%l:%c,%-GIn file included from %f:%l,%-G%*[ ]from %f:%l:%c,%-G%*[ ]from %f:%l:,%-G%*[ ]from %f:%l\,,%-G%*[ ]from %f:%l,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,"%f"\, line %l%*\D%c%*[^ ] %m,%D%*\a[%*\d]: Entering directory %*[`']%f',%X%*\a[%*\d]: Leaving directory %*[`']%f',%D%*\a: Entering directory %*[`']%f',%X%*\a: Leaving directory %*[`']%f',%DMaking %*\a in %f,%f\|%l\| %m` | description of the lines in the error file |
@@ -103,7 +103,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `fileformat` | ff | string | buf | `unix` | file format used for file I/O |
 | ◐ | `fileformats` | ffs | string | global | `unix,dos` | automatically detected values for 'fileformat' |
 | ◐ | `fileignorecase` | fic | boolean | global | `false` | ignore case when using file names |
-| ◐ | `filetype` | ft | string | buf | `` | type of file, used for autocommands |
+| ✓ | `filetype` | ft | string | buf | `` | type of file, used for autocommands |
 | ✓ | `fillchars` | fcs | string | win | `` | characters to use for displaying special items |
 | ◐ | `findfunc` | ffu | string | buf | `` | function to be called for the \|:find\| command |
 | ✓ | `fixendofline` | fixeol | boolean | buf | `true` | make sure last line in file has <EOL> |
@@ -123,17 +123,17 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `formatexpr` | fex | string | buf | `` | expression used with "gq" command |
 | ◐ | `formatlistpat` | flp | string | buf | `^\s*\d\+[\]:.)}\t ]\s*` | pattern used to recognize a list header |
 | ✓ | `formatoptions` | fo | string | buf | `tcqj` | how automatic formatting is to be done |
-| ◐ | `formatprg` | fp | string | buf | `` | name of external program used with "gq" command |
+| ✓ | `formatprg` | fp | string | buf | `` | name of external program used with "gq" command |
 | ✓ | `fsync` | fs | boolean | buf | `true` | whether to invoke fsync() after file write |
 | ✓ | `gdefault` | gd | boolean | global | `false` |  |
 | ◐ | `grepformat` | gfm | string | buf | `%f:%l:%m,%f:%l%m,%f  %l%m` | format of 'grepprg' output |
 | ◐ | `grepprg` | gp | string | buf | `grep -HIn $* /dev/null` | program to use for ":grep" |
-| ◐ | `guicursor` | gcr | string | global | `n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:block-blinkon500-blinkoff500-TermCursor` | GUI: settings for cursor shape and blinking |
-| ◐ | `guifont` | gfn | string | global | `Source Code Pro,DejaVu Sans Mono,Courier New,monospace` | GUI: Name(s) of font(s) to be used |
-| ◐ | `guifontwide` | gfw | string | global | `` | list of font names for double-wide characters |
-| ◐ | `guioptions` | go | string | global | `` | GUI: Which components and options are used |
-| ◐ | `guitablabel` | gtl | string | global | `` | GUI: custom label for a tabpage |
-| ◐ | `guitabtooltip` | gtt | string | global | `` | GUI: custom tooltip for a tabpage |
+| ✓ | `guicursor` | gcr | string | global | `n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:block-blinkon500-blinkoff500-TermCursor` | GUI: settings for cursor shape and blinking |
+| ✓ | `guifont` | gfn | string | global | `Source Code Pro,DejaVu Sans Mono,Courier New,monospace` | GUI: Name(s) of font(s) to be used |
+| ✓ | `guifontwide` | gfw | string | global | `` | list of font names for double-wide characters |
+| ✓ | `guioptions` | go | string | global | `` | GUI: Which components and options are used |
+| ✓ | `guitablabel` | gtl | string | global | `` | GUI: custom label for a tabpage |
+| ✓ | `guitabtooltip` | gtt | string | global | `` | GUI: custom tooltip for a tabpage |
 | ◐ | `helpfile` | hf | string | global | `/usr/share/nvim/runtime/doc/help.txt` | full path name of the main help file |
 | ◐ | `helpheight` | hh | number | global | `20` | minimum height of a new help window |
 | ◐ | `helplang` | hlg | string | global | `` | preferred help languages |
@@ -157,7 +157,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `indentexpr` | inde | string | buf | `` | expression used to obtain the indent of a line |
 | ◐ | `indentkeys` | indk | string | buf | `0{,0},0),0],:,0#,!^F,o,O,e` | keys that trigger indenting with 'indentexpr' |
 | ◐ | `infercase` | inf | boolean | buf | `false` | adjust case of match for keyword completion |
-| ◐ | `insertmode` | im | boolean | global | `false` |  |
+| ✓ | `insertmode` | im | boolean | global | `false` |  |
 | ◐ | `isfname` | isf | string | global | `@,48-57,/,.,-,_,+,,,#,$,%,~,=` | characters included in file names and pathnames |
 | ◐ | `isident` | isi | string | global | `@,48-57,_,192-255` | characters included in identifiers |
 | ✓ | `iskeyword` | isk | string | buf | `@,48-57,_,192-255` | characters included in keywords |
@@ -167,8 +167,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `keymap` | kmp | string | buf | `` | name of a keyboard mapping |
 | ◐ | `keymodel` | km | string | global | `` | enable starting/stopping selection with keys |
 | ◐ | `keywordprg` | kp | string | buf | `:Man` | program to use for the "K" command |
-| ◐ | `langmap` | lmap | string | global | `` | alphabetic characters for other language mode |
-| ◐ | `langmenu` | lm | string | global | `` | language to be used for the menus |
+| ✓ | `langmap` | lmap | string | global | `` | alphabetic characters for other language mode |
+| ✓ | `langmenu` | lm | string | global | `` | language to be used for the menus |
 | ◐ | `langnoremap` | lnr | boolean | global | `true` |  |
 | ◐ | `langremap` | lrm | boolean | global | `false` | do apply 'langmap' to mapped characters |
 | ✓ | `laststatus` | ls | number | global | `2` | tells when last window has status lines |
@@ -176,7 +176,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `lhistory` | lhi | number | win | `10` | maximum number of location lists in history |
 | ✓ | `linebreak` | lbr | boolean | win | `false` | wrap long lines at a blank |
 | ◐ | `lines` |  | number | global | `24` | number of lines in the display |
-| ◐ | `linespace` | lsp | number | global | `0` | number of pixel lines to use between characters |
+| ✓ | `linespace` | lsp | number | global | `0` | number of pixel lines to use between characters |
 | ◐ | `lisp` |  | boolean | buf | `false` | automatic indenting for Lisp |
 | ◐ | `lispoptions` | lop | string | buf | `` | changes how Lisp indenting is done |
 | ◐ | `lispwords` | lw | string | buf | `defun,define,defmacro,set!,lambda,if,case,let,flet,let*,letrec,do,do*,define-syntax,let-syntax,letrec-syntax,destructuring-bind,defpackage,defparameter,defstruct,deftype,defvar,do-all-symbols,do-external-symbols,do-symbols,dolist,dotimes,ecase,etypecase,eval-when,labels,macrolet,multiple-value-bind,multiple-value-call,multiple-value-prog1,multiple-value-setq,prog1,progv,typecase,unless,unwind-protect,when,with-input-from-string,with-open-file,with-open-stream,with-output-to-string,with-package-iterator,define-condition,handler-bind,handler-case,restart-bind,restart-case,with-simple-restart,store-value,use-value,muffle-warning,abort,continue,with-slots,with-slots*,with-accessors,with-accessors*,defclass,defmethod,print-unreadable-object` | words that change how lisp indenting works |
@@ -189,12 +189,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `makeprg` | mp | string | buf | `make` | program to use for the ":make" command |
 | ✓ | `matchpairs` | mps | string | buf | `(:),{:},[:]` | pairs of characters that "%" can match |
 | ◐ | `matchtime` | mat | number | global | `5` | tenths of a second to show matching paren |
-| ◐ | `maxcombine` | mco | number | global | `6` | maximum nr of combining characters displayed |
+| ✓ | `maxcombine` | mco | number | global | `6` | maximum nr of combining characters displayed |
 | ◐ | `maxfuncdepth` | mfd | number | global | `100` | maximum recursive depth for user functions |
 | ◐ | `maxmapdepth` | mmd | number | global | `1000` | maximum recursive depth for mapping |
 | ◐ | `maxmempattern` | mmp | number | global | `1000` | maximum memory (in Kbyte) used for pattern search |
 | ◐ | `maxsearchcount` | msc | number | global | `999` |  |
-| ◐ | `menuitems` | mis | number | global | `25` | maximum number of items in a menu |
+| ✓ | `menuitems` | mis | number | global | `25` | maximum number of items in a menu |
 | ◐ | `messagesopt` | mopt | string | global | `hit-enter,history:500,progress:c` |  |
 | ◐ | `mkspellmem` | msm | string | global | `460000,2000,500` | memory used before \|:mkspell\| compresses the tree |
 | ✓ | `modeline` | ml | boolean | buf | `true` | recognize modelines at start or end of file |
@@ -205,21 +205,21 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `more` |  | boolean | global | `true` | pause listings when the whole screen is filled |
 | ✓ | `mouse` |  | string | global | `nvi` | enable the use of mouse clicks |
 | ◐ | `mousefocus` | mousef | boolean | global | `false` | keyboard focus follows the mouse |
-| ◐ | `mousehide` | mh | boolean | global | `true` | hide mouse pointer while typing |
+| ✓ | `mousehide` | mh | boolean | global | `true` | hide mouse pointer while typing |
 | ✓ | `mousemodel` | mousem | string | global | `popup_setpos` | changes meaning of mouse buttons |
 | ◐ | `mousemoveevent` | mousemev | boolean | global | `false` | report mouse moves with <MouseMove> |
 | ✓ | `mousescroll` |  | string | global | `ver:3,hor:6` | amount to scroll by when scrolling with a mouse |
-| ◐ | `mouseshape` | mouses | string | global | `` | shape of the mouse pointer in different modes |
+| ✓ | `mouseshape` | mouses | string | global | `` | shape of the mouse pointer in different modes |
 | ✓ | `mousetime` | mouset | number | global | `500` | max time between mouse double-click |
 | ✓ | `nrformats` | nf | string | buf | `bin,hex` | number formats recognized for CTRL-A command |
 | ✓ | `number` | nu | boolean | win | `false` | print the line number in front of each line |
 | ✓ | `numberwidth` | nuw | number | win | `4` | number of columns used for the line number |
 | ◐ | `omnifunc` | ofu | string | buf | `` | function for filetype-specific completion |
-| ◐ | `opendevice` | odev | boolean | global | `false` | allow reading/writing devices on MS-Windows |
+| ✓ | `opendevice` | odev | boolean | global | `false` | allow reading/writing devices on MS-Windows |
 | ◐ | `operatorfunc` | opfunc | string | global | `` | function to be called for \|g@\| operator |
 | ◐ | `packpath` | pp | string | global | `/etc/xdg/nvim,/home/caesar/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,/home/caesar/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for packages |
 | ✓ | `paragraphs` | para | string | global | `IPLPPPQPP TPHPLIPpLpItpplpipbp` | nroff macros that separate paragraphs |
-| ◐ | `paste` |  | boolean | global | `false` |  |
+| ✓ | `paste` |  | boolean | global | `false` |  |
 | ◐ | `pastetoggle` | pt | string | global | `` |  |
 | ◐ | `patchexpr` | pex | string | global | `` | expression used to patch a file |
 | ◐ | `patchmode` | pm | string | global | `` | keep the oldest version of a file |
@@ -267,7 +267,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `shellpipe` | sp | string | global | `2>&1\| tee` | string to put output of ":make" in error file |
 | ◐ | `shellquote` | shq | string | global | `` | quote character(s) for around shell command |
 | ◐ | `shellredir` | srr | string | global | `>%s 2>&1` | string to put output of filter in a temp file |
-| ◐ | `shellslash` | ssl | boolean | global | `true` | use forward slash for shell file names |
+| ✓ | `shellslash` | ssl | boolean | global | `true` | use forward slash for shell file names |
 | ◐ | `shelltemp` | stmp | boolean | global | `false` | whether to use a temp file for shell commands |
 | ◐ | `shellxescape` | sxe | string | global | `` | characters to escape when 'shellxquote' is ( |
 | ◐ | `shellxquote` | sxq | string | global | `` | like 'shellquote', but include redirection |
@@ -306,7 +306,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `swapfile` | swf | boolean | buf | `true` | whether to use a swapfile for a buffer |
 | ◐ | `switchbuf` | swb | string | global | `uselast` | sets behavior when switching to another buffer |
 | ✓ | `synmaxcol` | smc | number | buf | `3000` | maximum column to find syntax items |
-| ◐ | `syntax` | syn | string | buf | `` | syntax to be loaded for current buffer |
+| ✓ | `syntax` | syn | string | buf | `` | syntax to be loaded for current buffer |
 | ◐ | `tabclose` | tcl | string | global | `` | which tabpage to focus when closing a tab |
 | ✓ | `tabline` | tal | string | global | `` | custom format for the console tabpages line |
 | ◐ | `tabpagemax` | tpm | number | global | `50` | maximum number of tabpages for \|-p\| and "tab all" |
@@ -319,10 +319,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `tags` | tag | string | buf | `./tags;,tags` | list of file names used by the tag command |
 | ◐ | `tagstack` | tgst | boolean | global | `true` | push tags onto the tag stack |
 | ◐ | `termbidi` | tbidi | boolean | global | `false` | terminal takes care of bi-directionality |
-| ◐ | `termencoding` | tenc | string | global | `` |  |
+| ✓ | `termencoding` | tenc | string | global | `` |  |
 | ◐ | `termguicolors` | tgc | boolean | global | `false` | enable 24-bit RGB color in the TUI |
 | ◐ | `termpastefilter` | tpf | string | global | `BS,HT,ESC,DEL` |  |
-| ◐ | `termsync` |  | boolean | global | `true` |  |
+| ✓ | `termsync` |  | boolean | global | `true` |  |
 | ◐ | `terse` |  | boolean | global | `false` |  |
 | ✓ | `textwidth` | tw | number | buf | `0` | maximum width of text that is being inserted |
 | ◐ | `thesaurus` | tsr | string | buf | `` | list of thesaurus files for keyword completion |
@@ -336,7 +336,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `titlestring` |  | string | global | `` | string to use for the Vim window title |
 | ◐ | `ttimeout` |  | boolean | global | `true` | time out on mappings |
 | ◐ | `ttimeoutlen` | ttm | number | global | `50` | time out time for key codes in milliseconds |
-| ◐ | `ttyfast` | tf | boolean | global | `true` |  |
+| ✓ | `ttyfast` | tf | boolean | global | `true` |  |
 | ◐ | `undodir` | udir | string | global | `/home/caesar/.local/state/nvim/undo//` | where to store undo files |
 | ✓ | `undofile` | udf | boolean | buf | `false` | save undo information in a file |
 | ◐ | `undolevels` | ul | number | buf | `1000` | maximum number of changes that can be undone |
@@ -360,7 +360,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `wildmenu` | wmnu | boolean | global | `true` | use menu for command line completion |
 | ◐ | `wildmode` | wim | string | global | `full` | mode for 'wildchar' command-line expansion |
 | ◐ | `wildoptions` | wop | string | global | `pum,tagfile` | specifies how command line completion is done |
-| ◐ | `winaltkeys` | wak | string | global | `menu` | when the windows system handles ALT keys |
+| ✓ | `winaltkeys` | wak | string | global | `menu` | when the windows system handles ALT keys |
 | ✓ | `winbar` | wbr | string | win | `` |  |
 | ◐ | `winblend` | winbl | number | win | `0` |  |
 | ◐ | `winborder` |  | string | global | `` |  |
