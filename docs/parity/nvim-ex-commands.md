@@ -96,7 +96,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:chdir` | `:chd[ir]` | change directory |
 | ✓ | `:checkhealth` | `:che[ckhealth]` | run healthchecks |
 | · | `:checkpath` | `:checkp[ath]` | list included files |
-| · | `:checktime` | `:checkt[ime]` | check timestamp of loaded buffers |
+| ✓ | `:checktime` | `:checkt[ime]` | check timestamp of loaded buffers |
 | · | `:chistory` | `:chi[story]` | list the error lists |
 | · | `:clast` | `:cla[st]` | go to the specified error, default last one |
 | · | `:clearjumps` | `:cle[arjumps]` | clear the jump list |
