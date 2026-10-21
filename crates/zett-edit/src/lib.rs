@@ -15,6 +15,7 @@ pub mod keys;
 pub mod killring;
 pub mod outline;
 pub mod prefix;
+pub mod probe;
 pub mod search;
 pub mod suggest;
 pub mod textops;

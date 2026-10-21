@@ -96,6 +96,10 @@ enum Cmd {
     /// Read the documentation (a topic, or the list of them)
     #[command(after_help = "Examples:\n  zett doc            the topics\n  zett doc lsp        language servers\n  zett doc keys")]
     Doc { topic: Option<String> },
+    /// For the parity pages: Neovim normal-mode entries on stdin ("tag\twritten"), each answered
+    /// "1\tkeys" when the Vim profile does something with it, "0\tkeys" when not
+    #[command(hide = true)]
+    ProbeKeys,
     /// List the key mappings of a mode (n = normal)
     Keys {
         #[arg(default_value = "n")]
@@ -164,6 +168,15 @@ fn main() {
         clap_complete::generate(shell, &mut Cli::command(), "zett", &mut std::io::stdout());
         return;
     }
+    if let Cmd::ProbeKeys = cmd {
+        use std::io::BufRead;
+        for line in std::io::stdin().lock().lines().map_while(Result::ok) {
+            let (tag, written) = line.split_once('\t').unwrap_or(("", line.as_str()));
+            let keys = zett_edit::probe::expand(written, tag);
+            println!("{}\t{keys}", u8::from(zett_edit::probe::handles(&keys)));
+        }
+        return;
+    }
     if let Cmd::Doc { topic } = &cmd {
         if topic.as_deref().is_some_and(|t| t.len() >= 3 && "commands".starts_with(t)) {
             let mut e = zett_script::Engine::new(None);
@@ -225,7 +238,7 @@ fn main() {
             f.save_page(p).unwrap_or_else(|e| fail(&e.to_string(), 1));
             print!("{}", markdown::to_markdown(&f.ws, p));
         }
-        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
+        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::ProbeKeys | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
     }
 }
 

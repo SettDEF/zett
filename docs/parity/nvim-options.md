@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-15 of 374. ✓ zett has it (`:set`, `zett.opt`, `zett.ft.<type>`), · not yet. Settings: `:help settings`.
+17 of 374. ✓ zett has it (`:set`, `zett.opt`, `zett.ft.<type>`), · not yet. Settings: `:help settings`.
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -145,7 +145,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `hlsearch` | hls | boolean | global | `true` | highlight matches with last search pattern |
 | · | `icon` |  | boolean | global | `false` | let Vim set the text of the window icon |
 | · | `iconstring` |  | string | global | `` | string to use for the Vim icon text |
-| · | `ignorecase` | ic | boolean | global | `false` | ignore case in search patterns |
+| ✓ | `ignorecase` | ic | boolean | global | `false` | ignore case in search patterns |
 | · | `imcmdline` | imc | boolean | global | `false` | use IM when starting to edit a command line |
 | · | `imdisable` | imd | boolean | global | `false` | do not use the IM in any mode |
 | · | `iminsert` | imi | number | buf | `0` | use :lmap or IM in Insert mode |
@@ -284,7 +284,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `sidescroll` | ss | number | global | `1` | minimum number of columns to scroll horizontal |
 | · | `sidescrolloff` | siso | number | win | `0` | min. nr. of columns to left and right of cursor |
 | · | `signcolumn` | scl | string | win | `auto` | when and how to display the sign column |
-| · | `smartcase` | scs | boolean | global | `false` | no ignore case when pattern has uppercase |
+| ✓ | `smartcase` | scs | boolean | global | `false` | no ignore case when pattern has uppercase |
 | · | `smartindent` | si | boolean | buf | `false` | smart autoindenting for C programs |
 | · | `smarttab` | sta | boolean | global | `true` | <Tab> in leading whitespace indents by 'shiftwidth' |
 | · | `smoothscroll` | sms | boolean | win | `false` | scroll by screen lines when 'wrap' is set |

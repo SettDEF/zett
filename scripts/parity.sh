@@ -58,13 +58,18 @@ stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | 
     done < "$tmp/ex.tsv"
 } > "$out/nvim-ex-commands.md"
 
-# ── Neovim's Normal-mode keys (not checked one by one yet) ──
+# ── Neovim's Normal-mode keys: each one fed into zett's Vim profile (zett probe-keys), or bound in its key map ──
+cut -f1,2 "$tmp/normal.tsv" | "$ZETT" probe-keys > "$tmp/probe.tsv"
+"$ZETT" keys n 2>/dev/null | awk '{print $1}' > "$tmp/zett-nkeys.txt"
 {
-    echo "# Neovim's Normal-mode keys"; echo; echo "$stamp"; echo
-    echo "zett's Vim profile has the everyday ones (motions, operators, text objects, counts, registers,"
-    echo "dot-repeat); this list is not checked against it key by key yet."; echo
-    echo "| key | what it does |"; echo "|---|---|"
-    while IFS=$'\t' read -r tag written desc; do printf '| `%s` | %s |\n' "${written//|/\\|}" "$(echo "${desc//|/\\|}" | sed 's/^[0-9]  *//')"; done < "$tmp/normal.tsv"
+    echo "# Neovim's Normal-mode keys in zett"; echo; echo "$stamp"; echo
+    echo "Each key is written out (\`d{motion}\` as \`dw\`) and fed into zett's Vim profile with text, a yank, a change and"
+    echo "a search to act on: ✓ something happened (or zett's key map binds it), · nothing yet."; echo
+    echo "| | key | fed as | what it does |"; echo "|---|---|---|---|"
+    paste "$tmp/normal.tsv" "$tmp/probe.tsv" | while IFS=$'\t' read -r tag written desc ok keys; do
+        mark="·"; { [ "$ok" = 1 ] || has "$keys" "$tmp/zett-nkeys.txt"; } && mark="✓"
+        printf '| %s | `%s` | `%s` | %s |\n' "$mark" "${written//|/\\|}" "${keys//|/\\|}" "$(echo "${desc//|/\\|}" | sed 's/^[0-9]  *//')"
+    done
 } > "$out/nvim-normal-keys.md"
 
 # ── Neovim's Lua API and functions ──
@@ -72,8 +77,12 @@ stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | 
     echo "# Neovim's API (vim.api) and functions (vim.fn)"; echo; echo "$stamp"; echo
     echo "What a plugin can call. zett's own plugin API is \`zett.*\` (\`:help config\`, \`:help plugins\`); this is what"
     echo "it is measured against."; echo
-    echo "## vim.api ($(wc -l < "$tmp/api.txt"))"; echo; sed 's/^/- `/; s/$/`/' "$tmp/api.txt"; echo
-    echo "## vim.fn ($(wc -l < "$tmp/fn.txt"))"; echo; paste -sd' ' "$tmp/fn.txt" | fold -s -w 100
+    echo "✓ zett's \`vim\` compatibility layer has it (Neovim plugins call it unchanged), · not yet."; echo
+    "$ZETT" lua 'for k in pairs((vim or {}).api or {}) do print(k) end; for k in pairs((vim or {}).fn or {}) do print("fn." .. k) end' 2>/dev/null | sort -u > "$tmp/zett-vim.txt" || true
+    echo "## vim.api ($(wc -l < "$tmp/api.txt"))"; echo
+    while read -r n; do printf -- '- %s `%s`\n' "$(has "$n" "$tmp/zett-vim.txt" && echo ✓ || echo ·)" "$n"; done < "$tmp/api.txt"; echo
+    echo "## vim.fn ($(wc -l < "$tmp/fn.txt"))"; echo
+    while read -r n; do printf -- '- %s `%s`\n' "$(has "fn.$n" "$tmp/zett-vim.txt" && echo ✓ || echo ·)" "$n"; done < "$tmp/fn.txt"
 } > "$out/nvim-api.md"
 
 # ── Emacs's keys and commands ──

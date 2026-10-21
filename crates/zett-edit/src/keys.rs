@@ -64,6 +64,23 @@ pub fn parse(s: &str) -> Vec<Key> {
     out
 }
 
+/// As `parse`, but None when a `<Name>` is not a key zett knows (F-keys, PageUp…): the parity probe
+/// must not count a key it cannot even write.
+pub fn parse_strict(s: &str) -> Option<Vec<Key>> {
+    let mut rest = s;
+    while let Some(a) = rest.find('<') {
+        let after = &rest[a + 1..];
+        match after.find('>') {
+            Some(b) if b > 0 && after[..b].chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => {
+                named(&after[..b])?;
+                rest = &after[b + 1..];
+            }
+            _ => rest = after,
+        }
+    }
+    Some(parse(s))
+}
+
 fn named(name: &str) -> Option<Key> {
     let lower = name.to_ascii_lowercase();
     let (mods, base) = match lower.rsplit_once('-') {
