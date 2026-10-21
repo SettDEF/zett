@@ -31,6 +31,7 @@ mod excmds;
 mod mapcmds;
 mod dircmd;
 mod defsearch;
+mod diff;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -401,6 +402,8 @@ struct App {
     cabbrevs: Vec<(String, String)>,
     /// CTRL-K on the : line: waiting for the digraph's first character, or its second
     cmd_digraph: Option<Option<char>>,
+    /// diff mode: the changes between two buffers, with the revisions and 'diffopt' they are for
+    diff_cache: std::collections::HashMap<(usize, usize), ((u64, u64), String, Vec<diff::Block>)>,
     user_cmds: std::collections::HashMap<String, mapcmds::UserCmd>,
     autocmds: Vec<mapcmds::AutoCmd>,
     augroup: String,
@@ -590,6 +593,7 @@ impl App {
             abbrevs: Vec::new(),
             cabbrevs: Vec::new(),
             cmd_digraph: None,
+            diff_cache: Default::default(),
             user_cmds: Default::default(),
             autocmds: Vec::new(),
             augroup: String::new(),
@@ -705,6 +709,7 @@ impl App {
             }
             self.sync_profile();
             self.sync_dir();
+            self.sync_diff();
             self.agent_poll();
             self.notebook_poll();
             self.qf_poll();

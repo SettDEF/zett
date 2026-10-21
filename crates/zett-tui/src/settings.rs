@@ -80,7 +80,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "breakat", "breakindentopt",
     "wildmenu", "wildmode", "wildignore", "wildignorecase", "wildoptions", "fileignorecase", "suffixes",
     "keywordprg",
-    "tags", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "include", "define", "path", "suffixesadd", "comments",
+    "tags", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "diff", "diffopt", "include", "define", "path", "suffixesadd", "comments",
     "makeprg", "errorformat", "grepprg", "grepformat", "shell", "shellcmdflag", "shellquote", "shellxquote", "makeencoding",
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",
@@ -121,6 +121,11 @@ impl App {
         }
         if let Some(v) = self.engine.ft_opt(&ft_key(&d.syntax), s.name) {
             return v;
+        }
+        // termguicolors: on by itself when the terminal says it has 24-bit colour (COLORTERM), as
+        // Neovim does; zash and zeit say so (before 2026-10-21 zett showed every colour rounded to 256)
+        if s.name == "termguicolors" && self.engine.opt(s.name).is_none() {
+            return std::env::var("COLORTERM").is_ok_and(|c| c == "truecolor" || c == "24bit").to_string();
         }
         self.engine.opt(s.name).unwrap_or_else(|| s.default.to_string())
     }

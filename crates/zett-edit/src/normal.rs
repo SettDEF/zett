@@ -70,6 +70,15 @@ impl Editor {
             return self.normal_key(Key::ch(mapped));
         };
 
+        // do dp: diff mode's get and put (the host's :diffget :diffput; outside diff mode it says so)
+        if self.op == Some(Op::Delete) && self.prefix.is_none() && (c == 'o' || c == 'p') {
+            self.op = None;
+            self.op_count = None;
+            self.count = None;
+            self.vim.requests.push(crate::vim::Request::Ex(if c == 'o' { "diffget" } else { "diffput" }.into()));
+            return;
+        }
+
         // second key of a two-key command
         if let Some(p) = self.prefix.take() {
             match (p, c) {

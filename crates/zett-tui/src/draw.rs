@@ -128,11 +128,21 @@ impl App {
         let mut placed = placed;
         placed.sort_by_key(|(id, _)| *id != self.focus);
         let mut follow: Option<(isize, isize, usize)> = None;
+        // diff mode: the focused window's buffer, top line and cursor line; the others follow through the diff
+        let mut follow_diff: Option<(usize, usize, usize)> = None;
         for (id, r) in placed {
             let Some(mut w) = self.wins.get(id).and_then(|w| w.clone()) else { continue };
             let focused = id == self.focus;
             let di = w.doc.min(self.docs.len() - 1);
-            if let Some((dv, dh, line)) = follow.filter(|_| !focused) {
+            let in_diff = w.diff && !focused;
+            if let Some((fdoc, ftop, fline)) = follow_diff.filter(|_| in_diff) {
+                let blocks = self.diff_blocks(fdoc, di);
+                w.top = crate::diff::map_line(&blocks, ftop);
+                let col = self.docs[di].ed.cursor().col;
+                let l = crate::diff::map_line(&blocks, fline).min(self.docs[di].ed.buf.len_lines().saturating_sub(1));
+                self.docs[di].ed.set_cursor(Pos { line: l, col });
+            }
+            if let Some((dv, dh, line)) = follow.filter(|_| !focused && !in_diff) {
                 if self.flag(di, "scrollbind") {
                     let last = self.docs[di].ed.buf.len_lines().saturating_sub(1) as isize;
                     w.top = (w.top as isize + dv).clamp(0, last) as usize;
@@ -180,6 +190,9 @@ impl App {
                 if let Some(Some(w)) = self.wins.get_mut(id) {
                     w.top = self.docs[di].top;
                     w.left = self.docs[di].left;
+                }
+                if focused && w.diff {
+                    follow_diff = Some((di, self.docs[di].top, self.docs[di].ed.cursor().line));
                 }
                 // how far the focused window moved since the last frame (scrollopt: ver, hor)
                 if focused && (self.flag(di, "scrollbind") || self.flag(di, "cursorbind")) {
@@ -276,6 +289,8 @@ impl App {
         // a section just found: drawn by zash (a hand-drawn line under it) where it can, else it pulses
         let (flash, fx) = (self.flash, fx_draws());
         let mut fx_mark: Option<(u16, u16, String, Instant)> = None;
+        // diff mode: filler lines and the changed lines' groups (diff.rs)
+        let dview = self.diff_view(self.drawing_win, di);
         let top = self.docs[di].top;
         self.docs[di].ed.set_screen(top, a.height as usize, a.width as usize);
         if focused {
@@ -386,7 +401,8 @@ impl App {
             // suggestion's lines and a block's results; the top moves down until the cursor fits
             loop {
                 let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum::<usize>()
-                    + qrows.iter().filter(|(after, _)| *after >= d.top && *after < c.line).map(|(_, r)| r.len()).sum::<usize>();
+                    + qrows.iter().filter(|(after, _)| *after >= d.top && *after < c.line).map(|(_, r)| r.len()).sum::<usize>()
+                    + dview.as_ref().map_or(0, |v| v.fill.iter().filter(|(l, _)| **l > d.top && **l <= c.line).map(|(_, n)| *n).sum::<usize>());
                 let rows: usize = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height * 2).map(|l| rows_of(d, l)).sum::<usize>() + extra + crow;
                 if rows + margin < height || d.top >= c.line {
                     break;
@@ -466,6 +482,12 @@ impl App {
             }
             if queued_for != next {
                 queued_for = next;
+                // diff mode: the lines only the other side has stand here as filler (fillchars diff)
+                if let Some(n) = dview.as_ref().and_then(|v| v.fill.get(&next)) {
+                    for _ in 0..*n {
+                        virt.push_back(Line::from(vec![Span::raw(" ".repeat(gutter as usize)), Span::styled(show.fill.diff.to_string().repeat(width), hl::hl("DiffDelete"))]));
+                    }
+                }
                 for h in hunks.iter().filter(|h| h.end() == next) {
                     for (i, t) in h.new.iter().enumerate() {
                         let shown: String = t.replace('\t', &" ".repeat(tab())).chars().skip(d.left).take(width).collect();
@@ -592,6 +614,9 @@ impl App {
             });
             let cursorcol = show.cursorcolumn && focused && ln != c.line;
             let mhits: Vec<Vec<(usize, usize)>> = mpats.iter().map(|(_, re)| re.find_iter(body).flatten().map(|m| (screen_col(&line_text, body[..m.start()].chars().count()), screen_col(&line_text, body[..m.end()].chars().count()))).collect()).collect();
+            // diff mode: this line's group, and the part of it that differs (DiffText), in screen columns
+            let dline = dview.as_ref().and_then(|v| v.lines.get(&ln)).copied();
+            let dtext = dline.and_then(|(_, r)| r).map(|(p, q)| (screen_col(&line_text, p), screen_col(&line_text, q)));
             // spell: misspelled words (SpellBad), a sentence starting with a small letter (SpellCap)
             let (bad, cap) = if spell_on { spell_marks(&line_text, camel, capcheck, ln > 0 && ends_sentence(&d.ed.buf.line(ln - 1))) } else { (Vec::new(), Vec::new()) };
             for (st, text) in d.spans(ln, ss, &hl) {
@@ -626,6 +651,9 @@ impl App {
                         }
                         if paren_col == Some(x) {
                             s = s.patch(hl::hl("MatchParen"));
+                        }
+                        if dtext.is_some_and(|(p, q)| x >= p && x < q) {
+                            s = s.patch(hl::hl("DiffText"));
                         }
                         for ((ms, _), hits) in mpats.iter().zip(&mhits) {
                             if hits.iter().any(|&(a, b)| x >= a && x < b) {
@@ -710,7 +738,17 @@ impl App {
                 2 => Some("CursorLineGlow2"),
                 _ => None,
             };
-            let style = band.map(hl::hl).filter(|s| s.bg.is_some());
+            // a diff line's colour fills the row (the band's own look on top is only its modifiers)
+            let style = match dline {
+                Some((g, _)) => {
+                    let mut s = hl::hl(g);
+                    if let Some(b) = band.map(hl::hl) {
+                        s.add_modifier |= b.add_modifier;
+                    }
+                    Some(s)
+                }
+                None => band.map(hl::hl).filter(|s| s.bg.is_some()),
+            };
             let finish = |mut spans: Vec<Span<'static>>| {
                 match style {
                     Some(s) => {

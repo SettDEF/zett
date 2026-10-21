@@ -19,6 +19,12 @@ pub(crate) fn color(c: HlColor) -> Color {
             let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * p as f32 / 100.0).round() as u8;
             rgb(mix(br, fr), mix(bg, fg), mix(bb, fb))
         }
+        HlColor::Tint(i, p) => {
+            let ((br, bg, bb), _) = theme();
+            let (fr, fg, fb) = palette(i);
+            let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * p as f32 / 100.0).round() as u8;
+            rgb(mix(br, fr), mix(bg, fg), mix(bb, fb))
+        }
     }
 }
 
@@ -146,4 +152,24 @@ mod rgb_tests {
         super::TRUECOLOR.store(true, std::sync::atomic::Ordering::Relaxed);
         assert_eq!(super::rgb(1, 2, 3), Color::Rgb(1, 2, 3));
     }
+}
+
+/// Palette colour `i` (0–15) from tinct's terminal colours (ansi, then brights); a plain one without.
+fn palette(i: u8) -> (u8, u8, u8) {
+    static P: std::sync::OnceLock<Vec<(u8, u8, u8)>> = std::sync::OnceLock::new();
+    let p = P.get_or_init(|| {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let src = std::fs::read_to_string(format!("{home}/.config/wezterm/tinct_colors.lua")).unwrap_or_default();
+        let list = |key: &str| -> Vec<(u8, u8, u8)> {
+            let Some(at) = src.find(&format!("{key} = {{")) else { return Vec::new() };
+            let body = src[at..].split('}').next().unwrap_or("");
+            body.split('"').skip(1).step_by(2).filter_map(|h| u32::from_str_radix(h.trim_start_matches('#'), 16).ok()).map(|v| ((v >> 16) as u8, (v >> 8) as u8, v as u8)).collect()
+        };
+        let mut all = list("ansi");
+        all.extend(list("brights"));
+        all
+    });
+    // the xterm colours when tinct has none
+    const PLAIN: [(u8, u8, u8); 8] = [(0, 0, 0), (205, 49, 49), (13, 188, 121), (229, 229, 16), (36, 114, 200), (188, 63, 188), (17, 168, 205), (229, 229, 229)];
+    p.get(i as usize).copied().unwrap_or(PLAIN[(i % 8) as usize])
 }

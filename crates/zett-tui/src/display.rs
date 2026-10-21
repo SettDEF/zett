@@ -50,11 +50,13 @@ pub(crate) struct Fill {
     pub foldopen: char,
     pub foldclose: char,
     pub foldsep: char,
+    /// diff mode's filler lines
+    pub diff: char,
 }
 
 /// fillchars ("eob: ,vert:|"), over Neovim's defaults.
 pub(crate) fn fillchars(v: &str) -> Fill {
-    let mut f = Fill { eob: '~', vert: '│', foldopen: '-', foldclose: '+', foldsep: '│' };
+    let mut f = Fill { eob: '~', vert: '│', foldopen: '-', foldclose: '+', foldsep: '│', diff: '-' };
     for part in v.split(',') {
         let Some((k, val)) = part.split_once(':') else { continue };
         let Some(c) = val.chars().next() else { continue };
@@ -64,6 +66,7 @@ pub(crate) fn fillchars(v: &str) -> Fill {
             "foldopen" => f.foldopen = c,
             "foldclose" => f.foldclose = c,
             "foldsep" => f.foldsep = c,
+            "diff" => f.diff = c,
             _ => {}
         }
     }

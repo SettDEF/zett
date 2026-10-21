@@ -104,6 +104,8 @@ pub(crate) struct Win {
     pub left: usize,
     /// its own folder (:lcd); a new window gets the one it was split from
     pub lcd: Option<PathBuf>,
+    /// in diff mode (:diffthis, diff.rs)
+    pub diff: bool,
 }
 
 /// What a picker lists, and what Enter does with it.
@@ -1222,6 +1224,10 @@ impl App {
                         }
                         None => self.say("No more diagnostics".to_string()),
                     }
+                }
+                // ]c [c in diff mode: the changes against the other window (diff.rs)
+                Request::Hunk(dir) if self.diff_partner(self.focus).is_some() => {
+                    self.diff_jump(dir as isize);
                 }
                 Request::Hunk(dir) => {
                     // ]c [c: the changed parts against git (git diff -U0's @@ lines)

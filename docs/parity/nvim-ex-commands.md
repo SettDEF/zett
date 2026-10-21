@@ -137,13 +137,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:delfunction` | `:delf[unction]` | delete a user function |
 | ✓ | `:delmarks` | `:delm[arks]` | delete marks |
 | · | `:detach` | `:detach` | detach the current UI |
-| · | `:diffupdate` | `:dif[fupdate]` | update 'diff' buffers |
-| · | `:diffget` | `:diffg[et]` | remove differences in current buffer |
-| · | `:diffoff` | `:diffo[ff]` | switch off diff mode |
-| · | `:diffpatch` | `:diffp[atch]` | apply a patch and show differences |
-| · | `:diffput` | `:diffpu[t]` | remove differences in other buffer |
-| · | `:diffsplit` | `:diffs[plit]` | show differences with another file |
-| · | `:diffthis` | `:difft[his]` | make current window a diff window |
+| ✓ | `:diffupdate` | `:dif[fupdate]` | update 'diff' buffers |
+| ✓ | `:diffget` | `:diffg[et]` | remove differences in current buffer |
+| ✓ | `:diffoff` | `:diffo[ff]` | switch off diff mode |
+| ✓ | `:diffpatch` | `:diffp[atch]` | apply a patch and show differences |
+| ✓ | `:diffput` | `:diffpu[t]` | remove differences in other buffer |
+| ✓ | `:diffsplit` | `:diffs[plit]` | show differences with another file |
+| ✓ | `:diffthis` | `:difft[his]` | make current window a diff window |
 | ✓ | `:digraphs` | `:dig[raphs]` | show or enter digraphs |
 | ✓ | `:display` | `:di[splay]` | display registers |
 | ✓ | `:djump` | `:dj[ump]` | jump to #define |

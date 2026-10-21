@@ -166,7 +166,7 @@ fn split_sub(s: &str) -> Option<(String, String, String)> {
 
 impl App {
     /// The last line with text (a final newline does not make another).
-    fn last_line(&self) -> usize {
+    pub(crate) fn last_line(&self) -> usize {
         let b = &self.docs[self.cur].ed.buf;
         let n = b.len_lines();
         if n > 1 && b.line(n - 1).is_empty() { n - 2 } else { n.saturating_sub(1) }
@@ -281,6 +281,7 @@ impl App {
             n if crate::tagcmd::tag_name(n).is_some() => self.tag_command(n, arg, range.map(|(_, b)| b + 1)),
             n if crate::dircmd::dir_name(n).is_some() => self.dir_command(n, arg),
             n if crate::defsearch::def_name(n).is_some() => self.def_command(n, arg, bang, range),
+            n if crate::diff::diff_name(n).is_some() => self.diff_command(n, arg, bang, range),
             // the quickfix and location lists (qfcmd.rs)
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);

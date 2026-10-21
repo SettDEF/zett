@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-216 ✓ do something in zett, 158 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+218 ✓ do something in zett, 156 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -76,10 +76,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `define` | def | string | buf | `` | pattern to be used to find a macro definition |
 | ◐ | `delcombine` | deco | boolean | global | `false` | delete combining characters on their own |
 | ◐ | `dictionary` | dict | string | buf | `` | list of file names used for keyword completion |
-| ◐ | `diff` |  | boolean | win | `false` | use diff mode for the current window |
+| ✓ | `diff` |  | boolean | win | `false` | use diff mode for the current window |
 | ◐ | `diffanchors` | dia | string | buf | `` | list of {address} to force anchoring of a diff |
 | ◐ | `diffexpr` | dex | string | global | `` | expression used to obtain a diff file |
-| ◐ | `diffopt` | dip | string | global | `internal,filler,closeoff,indent-heuristic,inline:char,linematch:40` | options for using diff mode |
+| ✓ | `diffopt` | dip | string | global | `internal,filler,closeoff,indent-heuristic,inline:char,linematch:40` | options for using diff mode |
 | ✓ | `digraph` | dg | boolean | global | `false` | enable the entering of digraphs in Insert mode |
 | ◐ | `directory` | dir | string | global | `/home/caesar/.local/state/nvim/swap//` | list of directory names for the swap file |
 | ◐ | `display` | dy | string | global | `lastline` | list of flags for how to display text |

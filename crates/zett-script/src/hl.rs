@@ -14,6 +14,8 @@ pub enum HlColor {
     Default,
     /// the theme's background lifted N% toward its foreground (`+12`): a tint that follows the theme
     Lift(u8),
+    /// the theme's background tinted N% toward palette colour I (`2~18`): diff lines, a soft green
+    Tint(u8, u8),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -112,6 +114,11 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("AgentAdd", "fg=2"),
     ("AgentDelete", "fg=8 strikethrough"),
     ("AgentTag", "fg=0 bg=6 bold"),
+    // diff mode (:diffthis): the theme's background tinted toward green, blue, red
+    ("DiffAdd", "bg=2~22"),
+    ("DiffChange", "bg=4~18"),
+    ("DiffText", "bg=4~42 bold"),
+    ("DiffDelete", "fg=1 bg=1~12"),
     ("QueryHead", "fg=8 italic"),
     ("QueryPath", "fg=4"),
     ("QueryHit", "fg=7"),
@@ -159,6 +166,9 @@ fn color(s: &str) -> Option<HlColor> {
     if let Some(p) = s.strip_prefix('+') {
         return p.trim_end_matches('%').parse::<u8>().ok().map(|p| HlColor::Lift(p.min(100)));
     }
+    if let Some((i, p)) = s.split_once('~') {
+        return Some(HlColor::Tint(i.parse::<u8>().ok()?.min(15), p.trim_end_matches('%').parse::<u8>().ok()?.min(100)));
+    }
     if let Some(h) = s.strip_prefix('#') {
         let v = u32::from_str_radix(h, 16).ok()?;
         return (h.len() == 6).then(|| HlColor::Rgb((v >> 16) as u8, (v >> 8) as u8, v as u8));
@@ -187,6 +197,7 @@ fn show_color(c: &HlColor) -> String {
         HlColor::Rgb(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
         HlColor::Default => "none".into(),
         HlColor::Lift(p) => format!("+{p}"),
+        HlColor::Tint(i, p) => format!("{i}~{p}"),
     }
 }
 

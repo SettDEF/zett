@@ -98,6 +98,16 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
   line below); `:ilist :isearch :ijump :isplit`, `:dlist :dsearch :djump :dsplit` for definitions,
   `:checkpath` the included files not found (`include`, `define`, `path`, `suffixesadd`)
 
+## Diff mode
+
+- `:diffsplit FILE` compares this buffer with FILE beside it (`diffopt` `vertical` side by side),
+  `:diffthis` in two windows does the same, `:diffoff` (`!` all) ends it; `:diffpatch PATCH` the
+  file as the patch makes it
+- changed lines `DiffChange` (the part that differs `DiffText`), added ones `DiffAdd`, and where the
+  other side has more, filler lines (`DiffDelete`, `fillchars` `diff:`); the windows scroll together
+- `]c [c` to the next / previous change, `do` (`:diffget`) takes the other side's version, `dp`
+  (`:diffput`) gives it this one; `diffopt` `icase iwhite iwhiteall filler vertical`
+
 ## Windows and scrolling
 
 - `CTRL-W` and a key: `s v n` split / new, `w W p t b` and `h j k l` go to one, `H J K L` move
