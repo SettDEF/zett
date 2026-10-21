@@ -99,11 +99,35 @@ impl App {
             return;
         }
         match k.code {
+            KeyCode::Esc if self.ex_text.is_some() => {
+                self.ex_text = None;
+                self.cmdline = None;
+            }
             KeyCode::Esc => {
                 self.cmdline = None;
                 if self.prompt.take().is_some() {
                     let fx = self.with_lua(|e| e.input_done(None));
                     self.after_lua(fx);
+                }
+            }
+            // :append :insert :change: a line of text; "." alone puts them in
+            KeyCode::Enter if self.ex_text.is_some() => {
+                let l = std::mem::take(line);
+                if l != "." {
+                    if let Some(t) = self.ex_text.as_mut() {
+                        t.2.push(l);
+                    }
+                    return;
+                }
+                self.cmdline = None;
+                let Some((at, replace, lines)) = self.ex_text.take() else { return };
+                match replace {
+                    Some((a, b)) => self.replace_lines(a, b, &lines),
+                    None if !lines.is_empty() => {
+                        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+                        self.put_lines(at, &text);
+                    }
+                    None => {}
                 }
             }
             KeyCode::Enter => {

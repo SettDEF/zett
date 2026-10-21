@@ -21,7 +21,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:2match` | `:2mat[ch]` | define a second match to highlight |
 | ✓ | `:3match` | `:3mat[ch]` | define a third match to highlight |
 | ✓ | `:Next` | `:N[ext]` | go to previous file in the argument list |
-| · | `:append` | `:a[ppend]` | append text |
+| ✓ | `:append` | `:a[ppend]` | append text |
 | ✓ | `:abbreviate` | `:ab[breviate]` | enter abbreviation |
 | ✓ | `:abclear` | `:abc[lear]` | remove all abbreviations |
 | ✓ | `:aboveleft` | `:abo[veleft]` | make split window appear left or above |
@@ -64,7 +64,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:buffers` | `:buffers` | list all files in the buffer list |
 | ✓ | `:bunload` | `:bun[load]` | unload a specific buffer |
 | ✓ | `:bwipeout` | `:bw[ipeout]` | really delete a buffer |
-| · | `:change` | `:c[hange]` | replace a line or series of lines |
+| ✓ | `:change` | `:c[hange]` | replace a line or series of lines |
 | ✓ | `:cNext` | `:cN[ext]` | go to previous error |
 | ✓ | `:cNfile` | `:cNf[ile]` | go to last error in previous file |
 | ✓ | `:cabbrev` | `:ca[bbrev]` | like ":abbreviate" but for Command-line mode |
@@ -206,7 +206,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:hide` | `:hid[e]` | hide current buffer for a command |
 | ✓ | `:history` | `:his[tory]` | print a history list |
 | ✓ | `:horizontal` | `:hor[izontal]` | following window command work horizontally |
-| · | `:insert` | `:i[nsert]` | insert text |
+| ✓ | `:insert` | `:i[nsert]` | insert text |
 | ✓ | `:iabbrev` | `:ia[bbrev]` | like ":abbrev" but for Insert mode |
 | ✓ | `:iabclear` | `:iabc[lear]` | like ":abclear" but for Insert mode |
 | · | `:if` | `:if` | execute commands when condition met |
@@ -398,7 +398,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:ruby` | `:rub[y]` | execute Ruby command |
 | ✓ | `:rubydo` | `:rubyd[o]` | execute Ruby command for each line |
 | ✓ | `:rubyfile` | `:rubyf[ile]` | execute Ruby script file |
-| · | `:rundo` | `:rund[o]` | read undo information from a file |
+| ✓ | `:rundo` | `:rund[o]` | read undo information from a file |
 | ✓ | `:runtime` | `:ru[ntime]` | source vim scripts in 'runtimepath' |
 | ✓ | `:substitute` | `:s[ubstitute]` | find and replace text |
 | ✓ | `:sNext` | `:sN[ext]` | split window and go to previous file in |
@@ -442,7 +442,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:spellgood` | `:spe[llgood]` | add good word for spelling |
 | ✓ | `:spellinfo` | `:spelli[nfo]` | show info about loaded spell files |
 | ✓ | `:spellrare` | `:spellra[re]` | add rare word for spelling |
-| · | `:spellrepall` | `:spellr[epall]` | replace all bad words like last \|z=\| |
+| ✓ | `:spellrepall` | `:spellr[epall]` | replace all bad words like last \|z=\| |
 | ✓ | `:spellundo` | `:spellu[ndo]` | remove good or bad word |
 | ✓ | `:spellwrong` | `:spellw[rong]` | add spelling mistake |
 | ✓ | `:split` | `:sp[lit]` | split current window |
@@ -464,7 +464,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:swapname` | `:sw[apname]` | show the name of the current swap file |
 | ✓ | `:syntax` | `:sy[ntax]` | syntax highlighting |
 | · | `:syntime` | `:synti[me]` | measure syntax highlighting speed |
-| · | `:syncbind` | `:sync[bind]` | sync scroll binding |
+| ✓ | `:syncbind` | `:sync[bind]` | sync scroll binding |
 | ✓ | `:t` | `:t` | same as ":copy" |
 | ✓ | `:tNext` | `:tN[ext]` | jump to previous matching tag |
 | ✓ | `:tabNext` | `:tabN[ext]` | go to previous tabpage |
@@ -550,7 +550,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:wq` | `:wq` | write to a file and quit window or Vim |
 | ✓ | `:wqall` | `:wqa[ll]` | write all changed buffers and quit Vim |
 | · | `:wshada` | `:wsh[ada]` | write to ShaDa file |
-| · | `:wundo` | `:wu[ndo]` | write undo information to a file |
+| ✓ | `:wundo` | `:wu[ndo]` | write undo information to a file |
 | ✓ | `:xit` | `:x[it]` | write if buffer changed and close window |
 | ✓ | `:xall` | `:xa[ll]` | same as ":wqall" |
 | ✓ | `:xmapclear` | `:xmapc[lear]` | remove all mappings for Visual mode |

@@ -59,6 +59,8 @@ pub static CLIPBOARD: OnceLock<(fn() -> Option<String>, fn(&str))> = OnceLock::n
 
 #[derive(Default, Debug)]
 pub(crate) struct VimState {
+    /// the last z= replacement (the word, what it became), for :spellrepall
+    pub last_spell: Option<(String, String)>,
     /// insert mode CTRL-K: waiting for the first character (Some(None)) or the second (Some(Some(a)))
     pub digraph: Option<Option<char>>,
     /// 'digraph': the character just typed, and the one a <BS> took back ({char1} <BS> {char2})

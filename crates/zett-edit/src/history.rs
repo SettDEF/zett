@@ -158,6 +158,11 @@ impl Editor {
     }
 
     /// Takes back a saved history; false (and nothing changes) if it was saved for other text.
+    /// The bytes are a saved history (:wundo writes over one without !, not over other files).
+    pub fn is_history(bytes: &[u8]) -> bool {
+        undo::Tree::read(bytes).is_some()
+    }
+
     pub fn history_load(&mut self, bytes: &[u8]) -> bool {
         match undo::Tree::load(bytes, &self.text()) {
             Some(t) => {

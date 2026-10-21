@@ -405,6 +405,8 @@ struct App {
     cabbrevs: Vec<(String, String)>,
     /// CTRL-K on the : line: waiting for the digraph's first character, or its second
     cmd_digraph: Option<Option<char>>,
+    /// :append :insert :change: where the lines go, the lines they replace, and the lines so far
+    ex_text: Option<(usize, Option<(usize, usize)>, Vec<String>)>,
     /// the files :source, :runtime and the rest ran (:scriptnames), the packages :packadd added, whether
     /// :packloadall ran, and the colour scheme's name (:colorscheme)
     sourced: Vec<PathBuf>,
@@ -603,6 +605,7 @@ impl App {
             abbrevs: Vec::new(),
             cabbrevs: Vec::new(),
             cmd_digraph: None,
+            ex_text: None,
             sourced: Vec::new(),
             packs: Vec::new(),
             packs_loaded: false,

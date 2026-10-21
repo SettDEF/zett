@@ -36,6 +36,7 @@ const NAMES: &[(&str, &str)] = &[
     ("keeppatterns", "keepp"), ("lockmarks", "loc"), ("noautocmd", "noa"), ("sandbox", "san"), ("filter", "filt"), ("browse", "bro"),
     ("confirm", "conf"), ("noswapfile", "nos"), ("match", "mat"), ("2match", "2mat"), ("3match", "3mat"), ("k", "k"), ("list", "l"), ("goto", "go"), ("iput", "ip"), ("dl", "dl"),
     ("smagic", "sm"), ("snomagic", "sno"), ("undojoin", "undoj"), ("digraphs", "dig"),
+    ("append", "a"), ("insert", "i"), ("change", "c"), ("syncbind", "sync"), ("spellrepall", "spellr"), ("wundo", "wu"), ("rundo", "rund"),
     ("spellgood", "spe"), ("spellwrong", "spellw"), ("spellrare", "spellra"), ("spellundo", "spellu"), ("spellinfo", "spelli"),
     ("spelldump", "spelld"), ("fold", "fo"), ("foldclose", "foldc"), ("foldopen", "foldo"), ("folddoopen", "foldd"),
     ("folddoclosed", "folddoc"), ("luado", "luad"), ("redir", "redi"),
@@ -472,6 +473,68 @@ impl App {
                     self.say(e);
                 }
             }
+            // :append :insert :change: the lines come on the : line one by one, ended by a line of
+            // only "." (Esc drops them)
+            "append" | "insert" | "change" => {
+                let at = if cmd == "append" { b + 1 } else { a };
+                self.ex_text = Some((at, if cmd == "change" { Some((a, b)) } else { None }, Vec::new()));
+                self.cmdline = Some(String::new());
+            }
+            // :syncbind: the scrollbind windows to where this one is (through the diff in diff mode)
+            "syncbind" => {
+                let (fdoc, ftop) = (self.cur, self.docs[self.cur].top);
+                let in_diff = self.wins.get(self.focus).and_then(|w| w.as_ref()).is_some_and(|w| w.diff);
+                for id in self.tree.ids() {
+                    let di = self.win_doc(id);
+                    if id == self.focus || !self.flag(di, "scrollbind") {
+                        continue;
+                    }
+                    let both_diff = in_diff && self.wins.get(id).and_then(|w| w.as_ref()).is_some_and(|w| w.diff);
+                    let top = if both_diff { crate::diff::map_line(&self.diff_blocks(fdoc, di), ftop) } else { ftop };
+                    let top = top.min(self.docs[di].ed.buf.len_lines().saturating_sub(1));
+                    if let Some(Some(w)) = self.wins.get_mut(id) {
+                        w.top = top;
+                    }
+                }
+            }
+            // :spellrepall: the last z= replacement again, for every whole word like it
+            "spellrepall" => {
+                let Some((old, new)) = self.docs[self.cur].ed.last_spell() else { return self.say("E752: No previous spell replacement") };
+                let esc: String = old.chars().flat_map(|c| if "\\.+*?()|[]{}^$".contains(c) { vec!['\\', c] } else { vec![c] }).collect();
+                let Ok(re) = fancy_regex::Regex::new(&format!(r"\b{esc}\b")) else { return };
+                let last = self.docs[self.cur].ed.buf.len_lines().saturating_sub(1);
+                let lines: Vec<String> = (0..=last).map(|l| self.docs[self.cur].ed.buf.line(l).trim_end_matches('\n').to_string()).collect();
+                let n: usize = lines.iter().map(|l| re.find_iter(l).flatten().count()).sum();
+                if n == 0 {
+                    return self.say(format!("E753: Not found: {old}"));
+                }
+                let new_lines: Vec<String> = lines.iter().map(|l| re.replace_all(l, fancy_regex::NoExpand(new.as_str())).to_string()).collect();
+                self.replace_lines(0, last, &new_lines);
+                self.say(format!("{n} substitution{} for \"{old}\"", if n == 1 { "" } else { "s" }));
+            }
+            // :wundo FILE / :rundo FILE: the undo history to a file and back (it must fit the text)
+            "wundo" | "rundo" => {
+                let file = arg.trim();
+                if file.is_empty() {
+                    return self.say("E471: Argument required");
+                }
+                let p = self.root.join(file);
+                if cmd == "wundo" {
+                    if p.exists() && !bang && std::fs::read(&p).map_or(true, |b| !zett_edit::Editor::is_history(&b)) {
+                        return self.say(format!("E829: \"{}\" is not an undo file (add ! to write it anyway)", p.display()));
+                    }
+                    let bytes = self.docs[self.cur].ed.history_save();
+                    if let Err(e) = std::fs::write(&p, bytes) {
+                        self.say(format!("E828: Cannot open undo file for writing: {e}"));
+                    }
+                } else {
+                    match std::fs::read(&p) {
+                        Ok(bytes) if self.docs[self.cur].ed.history_load(&bytes) => self.say(format!("undo history from {}", p.display())),
+                        Ok(_) => self.say("File contents changed, cannot use undo info"),
+                        Err(e) => self.say(format!("E822: Cannot open undo file for reading: {e}")),
+                    }
+                }
+            }
             "mark" | "k" => match arg.trim().chars().next() {
                 Some(c) if c.is_ascii_alphabetic() || "'`[]<>".contains(c) => {
                     let at = self.docs[self.cur].ed.buf.to_char(Pos { line: b, col: 0 });
@@ -747,7 +810,7 @@ impl App {
     }
 
     /// Lines `text` put in before line `at` of the current buffer.
-    fn put_lines(&mut self, at: usize, text: &str) {
+    pub(crate) fn put_lines(&mut self, at: usize, text: &str) {
         let d = &mut self.docs[self.cur];
         let lines = d.ed.buf.len_lines();
         let (pos, text) = if at >= lines {
@@ -881,6 +944,48 @@ mod tests {
     }
 
     #[test]
+    fn append_insert_change_spellrepall_and_undo_files() {
+        let keys = |app: &mut crate::App, k: &str| {
+            for k in zett_edit::keys::parse(k) {
+                app.key(crate::input::key_event(&k));
+            }
+        };
+        let mut app = app_with("a\nb\nc\n");
+        app.command("1append");
+        keys(&mut app, "x<CR>y<CR>.<CR>");
+        assert_eq!(text(&app), "a\nx\ny\nb\nc\n", ":append after line 1, ended by .");
+        app.command("1insert");
+        keys(&mut app, "top<CR>.<CR>");
+        assert_eq!(text(&app), "top\na\nx\ny\nb\nc\n");
+        app.command("3,4change");
+        keys(&mut app, "XY<CR>.<CR>");
+        assert_eq!(text(&app), "top\na\nXY\nb\nc\n", ":change: x and y became XY");
+        app.command("append");
+        keys(&mut app, "dropped<CR><Esc>");
+        assert_eq!(text(&app), "top\na\nXY\nb\nc\n", "Esc drops them");
+        // :spellrepall repeats the last z= for every whole word like it
+        let mut app = app_with("teh cat, teh hat, tehx\n");
+        app.docs[app.cur].ed.replace(0, 3, "the");
+        app.command("spellrepall");
+        assert_eq!(text(&app), "the cat, the hat, tehx\n");
+        // :wundo / :rundo: the history to a file and back; refused for another text
+        let dir = std::env::temp_dir().join(format!("zett-undo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = app_with("one\n");
+        keys(&mut app, "Atwo<Esc>");
+        let f = dir.join("u");
+        app.command(&format!("wundo {}", f.display()));
+        let mut fresh = app_with("onetwo\n");
+        fresh.command(&format!("rundo {}", f.display()));
+        keys(&mut fresh, "u");
+        assert_eq!(text(&fresh), "one\n", "u undoes what the other buffer did");
+        let mut other = app_with("something else\n");
+        other.command(&format!("rundo {}", f.display()));
+        assert!(other.msg.as_ref().is_some_and(|m| m.0.contains("cannot use undo info")), "{:?}", other.msg);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn snomagic_and_undojoin() {
         let mut app = app_with("a.c abc\n");
         app.command("snomagic/a.c/X/g");
@@ -915,7 +1020,7 @@ mod tests {
         assert_eq!(super::ex_name("N"), Some("Next"));
         assert_eq!(super::ex_name("sb"), Some("sbuffer"));
         assert_eq!(super::ex_name("clo"), Some("close"));
-        assert_eq!(super::ex_name("c"), None);
+        assert_eq!(super::ex_name("c"), Some("change"));
         assert_eq!(super::ex_name("tabe"), Some("tabedit"));
         assert_eq!(super::ex_name("vert"), Some("vertical"));
         assert_eq!(super::ex_name("sl"), Some("sleep"));

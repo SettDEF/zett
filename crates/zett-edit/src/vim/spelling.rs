@@ -75,12 +75,18 @@ impl Editor {
         match n {
             Some(k) => {
                 if let Some(w) = list.get(k.saturating_sub(1)) {
+                    self.vim.last_spell = Some((word.clone(), w.clone()));
                     self.replace_range(a, b, w);
                     self.cursor = a;
                 }
             }
             None => self.vim.requests.push(Request::Suggest(a, b, list)),
         }
+    }
+
+    /// The last z= replacement: the word and what it became (:spellrepall repeats it).
+    pub fn last_spell(&self) -> Option<(String, String)> {
+        self.vim.last_spell.clone()
     }
 
     /// zg zw zG zW (and with undo: zug zuw zuG zuW).
@@ -95,6 +101,7 @@ impl Editor {
 
     /// Replaces [a, b) with `t` as one change (the window takes a z= suggestion this way).
     pub fn replace(&mut self, a: usize, b: usize, t: &str) {
+        self.vim.last_spell = Some((self.buf.slice(a, b), t.to_string()));
         self.replace_range(a, b, t);
         self.cursor = a;
         self.clamp();
