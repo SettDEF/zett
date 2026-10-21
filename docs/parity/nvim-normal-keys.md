@@ -7,14 +7,14 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 
 | | key | fed as | what it does |
 |---|---|---|---|
-| · | `CTRL-A` | `<C-a>` | add N to number at/after cursor |
+| ✓ | `CTRL-A` | `<C-a>` | add N to number at/after cursor |
 | · | `CTRL-B` | `<C-b>` | scroll N screens Backwards |
 | · | `CTRL-C` | `<C-c>` |    interrupt current (search) command |
 | · | `CTRL-D` | `<C-d>` |    scroll Down N lines (default: half a screen) |
 | · | `CTRL-E` | `<C-e>` |    scroll N lines upwards (N lines Extra) |
 | · | `CTRL-F` | `<C-f>` | scroll N screens Forward |
 | · | `CTRL-G` | `<C-g>` |    display current file name and position |
-| · | `<BS>` | `<BS>` | same as "h" |
+| ✓ | `<BS>` | `<BS>` | same as "h" |
 | ✓ | `CTRL-H` | `<C-h>` | same as "h" |
 | · | `<Tab>` | `<Tab>` | go to N newer entry in jump list |
 | · | `CTRL-I` | `<C-i>` | same as <Tab> |
@@ -22,18 +22,18 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `<S-NL>` | `<S-NL>` | same as CTRL-F |
 | ✓ | `CTRL-J` | `<C-j>` | same as "j" |
 | ✓ | `CTRL-L` | `<C-l>` |    redraw screen |
-| · | `<CR>` | `<CR>` | cursor to the first CHAR N lines lower |
-| · | `<S-CR>` | `<S-CR>` | same as CTRL-F |
-| · | `CTRL-M` | `<C-m>` | same as <CR> |
-| · | `CTRL-N` | `<C-n>` | same as "j" |
+| ✓ | `<CR>` | `<CR>` | cursor to the first CHAR N lines lower |
+| ✓ | `<S-CR>` | `<S-CR>` | same as CTRL-F |
+| ✓ | `CTRL-M` | `<C-m>` | same as <CR> |
+| ✓ | `CTRL-N` | `<C-n>` | same as "j" |
 | · | `CTRL-O` | `<C-o>` | go to N older entry in jump list |
-| · | `CTRL-P` | `<C-p>` | same as "k" |
+| ✓ | `CTRL-P` | `<C-p>` | same as "k" |
 | ✓ | `CTRL-R` | `<C-r>` | redo changes which were undone with 'u' |
 | · | `CTRL-T` | `<C-t>` |    jump to N older Tag in tag list |
 | · | `CTRL-U` | `<C-u>` |    scroll N lines Upwards (default: half a |
 | · | `CTRL-V` | `<C-v>` |    start blockwise Visual mode |
 | · | `CTRL-W {char}` | `<C-w>a` |    window commands, see \|CTRL-W\| |
-| · | `CTRL-X` | `<C-x>` | subtract N from number at/after cursor |
+| ✓ | `CTRL-X` | `<C-x>` | subtract N from number at/after cursor |
 | · | `CTRL-Y` | `<C-y>` |    scroll N lines downwards |
 | · | `CTRL-Z` | `<C-z>` |    suspend program (or start new shell) |
 | · | `CTRL-\ CTRL-N` | `<C-\><C-n>` |    go to Normal mode (no-op) |
@@ -41,60 +41,60 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `CTRL-]` | `<C-]>` |    :ta to ident under cursor |
 | · | `CTRL-^` | `<C-^>` |    edit Nth alternate file (equivalent to |
 | · | `CTRL-<Tab>` | `<C-<>Tab>` |    same as `g<Tab>` : go to last accessed tab |
-| · | `<Space>` | `<Space>` | same as "l" |
-| · | `!{motion}{filter}` | `` | 0 |
-| · | `!!{filter}` | `!!sort<CR>` | filter N lines through the {filter} command |
-| · | `"{register}` | `"a` |    use {register} for next delete, yank or put |
-| · | `#` | `#` | search backward for the Nth occurrence of |
+| ✓ | `<Space>` | `<Space>` | same as "l" |
+| · | `!{motion}{filter}` | `` | 1 |
+| ✓ | `!!{filter}` | `!!sort<CR>` | filter N lines through the {filter} command |
+| ✓ | `"{register}` | `"a` |    use {register} for next delete, yank or put |
+| ✓ | `#` | `#` | search backward for the Nth occurrence of |
 | ✓ | `$` | `$` | cursor to the end of Nth next line |
-| · | `%` | `%` | find the next (curly/square) bracket on |
-| · | `{count}%` | `2%` | go to N percentage in the file |
-| · | `&` | `&` | repeat last :s |
-| · | `'{a-zA-Z0-9}` | `'a` | cursor to the first CHAR on the line with |
-| · | `''` | `''` | cursor to the first CHAR of the line where |
-| · | `'(` | `'(` | cursor to the first CHAR on the line of the |
-| · | `')` | `')` | cursor to the first CHAR on the line of the |
-| · | `'<` | `'<` | cursor to the first CHAR of the line where |
-| · | `'>` | `'>` | cursor to the first CHAR of the line where |
-| · | `'[` | `'[` | cursor to the first CHAR on the line of the |
-| · | `']` | `']` | cursor to the first CHAR on the line of the |
-| · | `'{` | `'{` | cursor to the first CHAR on the line of the |
-| · | `'}` | `'}` | cursor to the first CHAR on the line of the |
-| · | `(` | `(` | cursor N sentences backward |
-| · | `)` | `)` | cursor N sentences forward |
-| · | `*` | `*` | search forward for the Nth occurrence of |
-| · | `+` | `+` | same as <CR> |
-| · | `<S-+>` | `<S-+>` | same as CTRL-F |
-| · | `,` | `,` | repeat latest f, t, F or T in opposite |
-| · | `-` | `-` | cursor to the first CHAR N lines higher |
+| ✓ | `%` | `%` | find the next (curly/square) bracket on |
+| ✓ | `{count}%` | `2%` | go to N percentage in the file |
+| ✓ | `&` | `&` | repeat last :s |
+| ✓ | `'{a-zA-Z0-9}` | `'a` | cursor to the first CHAR on the line with |
+| ✓ | `''` | `''` | cursor to the first CHAR of the line where |
+| ✓ | `'(` | `'(` | cursor to the first CHAR on the line of the |
+| ✓ | `')` | `')` | cursor to the first CHAR on the line of the |
+| ✓ | `'<` | `'<` | cursor to the first CHAR of the line where |
+| ✓ | `'>` | `'>` | cursor to the first CHAR of the line where |
+| ✓ | `'[` | `'[` | cursor to the first CHAR on the line of the |
+| ✓ | `']` | `']` | cursor to the first CHAR on the line of the |
+| ✓ | `'{` | `'{` | cursor to the first CHAR on the line of the |
+| ✓ | `'}` | `'}` | cursor to the first CHAR on the line of the |
+| ✓ | `(` | `(` | cursor N sentences backward |
+| ✓ | `)` | `)` | cursor N sentences forward |
+| ✓ | `*` | `*` | search forward for the Nth occurrence of |
+| ✓ | `+` | `+` | same as <CR> |
+| ✓ | `<S-+>` | `<S-+>` | same as CTRL-F |
+| ✓ | `,` | `,` | repeat latest f, t, F or T in opposite |
+| ✓ | `-` | `-` | cursor to the first CHAR N lines higher |
 | · | `<S-->` | `<S-->` | same as CTRL-B |
-| · | `.` | `.` | repeat last change with count replaced with |
-| · | `/{pattern}<CR>` | `/beta<CR>` | search forward for the Nth occurrence of |
-| · | `/<CR>` | `/<CR>` | search forward for {pattern} of last search |
-| ✓ | `0` | `0` | cursor to the first char of the line |
-| · | `1` | `1` |    prepend to command to give a count |
-| · | `2` | `2` | " |
-| · | `3` | `3` | " |
-| · | `4` | `4` | " |
-| · | `5` | `5` | " |
-| · | `6` | `6` | " |
-| · | `7` | `7` | " |
-| · | `8` | `8` | " |
-| · | `9` | `9` | " |
+| ✓ | `.` | `.` | repeat last change with count replaced with |
+| ✓ | `/{pattern}<CR>` | `/beta<CR>` | search forward for the Nth occurrence of |
+| ✓ | `/<CR>` | `/<CR>` | search forward for {pattern} of last search |
+| · | `0` | `0` | cursor to the first char of the line |
+| ✓ | `1` | `1` |    prepend to command to give a count |
+| ✓ | `2` | `2` | " |
+| ✓ | `3` | `3` | " |
+| ✓ | `4` | `4` | " |
+| ✓ | `5` | `5` | " |
+| ✓ | `6` | `6` | " |
+| ✓ | `7` | `7` | " |
+| ✓ | `8` | `8` | " |
+| ✓ | `9` | `9` | " |
 | ✓ | `:` | `:` | start entering an Ex command |
 | · | `{count}:` | `2:` |    start entering an Ex command with range |
-| · | `;` | `;` | repeat latest f, t, F or T N times |
-| · | `<{motion}` | `<w` | shift Nmove lines one 'shiftwidth' |
-| · | `<<` | `<<` | shift N lines one 'shiftwidth' leftwards |
-| · | `={motion}` | `=w` | filter Nmove lines through "indent" |
-| · | `==` | `==` | filter N lines through "indent" |
-| · | `>{motion}` | `>w` | shift Nmove lines one 'shiftwidth' |
-| · | `>>` | `>>` | shift N lines one 'shiftwidth' rightwards |
-| · | `?{pattern}<CR>` | `?beta<CR>` | search backward for the Nth previous |
-| · | `?<CR>` | `?<CR>` | search backward for {pattern} of last search |
+| ✓ | `;` | `;` | repeat latest f, t, F or T N times |
+| ✓ | `<{motion}` | `<w` | shift Nmove lines one 'shiftwidth' |
+| ✓ | `<<` | `<<` | shift N lines one 'shiftwidth' leftwards |
+| ✓ | `={motion}` | `=w` | filter Nmove lines through "indent" |
+| ✓ | `==` | `==` | filter N lines through "indent" |
+| ✓ | `>{motion}` | `>w` | shift Nmove lines one 'shiftwidth' |
+| ✓ | `>>` | `>>` | shift N lines one 'shiftwidth' rightwards |
+| ✓ | `?{pattern}<CR>` | `?beta<CR>` | search backward for the Nth previous |
+| ✓ | `?<CR>` | `?<CR>` | search backward for {pattern} of last search |
 | · | `@{a-z}` | `@a` | execute the contents of register {a-z} |
-| · | `@:` | `@:` |    repeat the previous ":" command N times |
-| · | `@@` | `@@` | repeat the previous @{a-z} N times |
+| ✓ | `@:` | `@:` |    repeat the previous ":" command N times |
+| ✓ | `@@` | `@@` | repeat the previous @{a-z} N times |
 | ✓ | `A` | `A` | append text after the end of the line N times |
 | ✓ | `B` | `B` | cursor N WORDS backward |
 | ✓ | `["x]C` | `C` | change from the cursor position to the end |
@@ -105,36 +105,36 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | ✓ | `H` | `H` | cursor to line N from top of screen |
 | ✓ | `I` | `I` | insert text before the first CHAR on the |
 | ✓ | `J` | `J` | Join N lines; default is 2 |
-| · | `K` | `K` |    lookup Keyword under the cursor with |
+| ✓ | `K` | `K` |    lookup Keyword under the cursor with |
 | ✓ | `L` | `L` | cursor to line N from bottom of screen |
-| · | `M` | `M` | cursor to middle line of screen |
-| · | `N` | `N` | repeat the latest '/' or '?' N times in |
+| ✓ | `M` | `M` | cursor to middle line of screen |
+| ✓ | `N` | `N` | repeat the latest '/' or '?' N times in |
 | ✓ | `O` | `O` | begin a new line above the cursor and |
 | ✓ | `["x]P` | `P` | put the text [from register x] before the |
-| · | `R` | `R` | enter replace mode: overtype existing |
-| · | `["x]S` | `S` | delete N lines [into register x] and start |
+| ✓ | `R` | `R` | enter replace mode: overtype existing |
+| ✓ | `["x]S` | `S` | delete N lines [into register x] and start |
 | ✓ | `T{char}` | `Ta` | cursor till after Nth occurrence of {char} |
 | · | `U` | `U` | undo all latest changes on one line |
 | ✓ | `V` | `V` |    start linewise Visual mode |
 | ✓ | `W` | `W` | cursor N WORDS forward |
 | ✓ | `["x]X` | `X` | delete N characters before the cursor [into |
-| · | `["x]Y` | `Y` |    yank N lines [into register x]; synonym for |
-| · | `ZZ` | `ZZ` |    write if buffer changed and close window |
-| · | `ZQ` | `ZQ` |    close window without writing |
+| ✓ | `["x]Y` | `Y` |    yank N lines [into register x]; synonym for |
+| ✓ | `ZZ` | `ZZ` |    write if buffer changed and close window |
+| ✓ | `ZQ` | `ZQ` |    close window without writing |
 | · | `[{char}` | `[a` |    square bracket command (see \|[\| below) |
 | · | `]{char}` | `]a` |    square bracket command (see \|]\| below) |
 | ✓ | `^` | `^` | cursor to the first CHAR of the line |
-| · | `_` | `_` | cursor to the first CHAR N - 1 lines lower |
-| · | ``{a-zA-Z0-9}` | ``a` | cursor to the mark {a-zA-Z0-9} |
-| · | ``(` | ``(` | cursor to the start of the current sentence |
-| · | ``)` | ``)` | cursor to the end of the current sentence |
-| · | ``<` | ``<` | cursor to the start of the highlighted area |
-| · | ``>` | ``>` | cursor to the end of the highlighted area |
-| · | ``[` | ``[` | cursor to the start of last operated text |
-| · | ``]` | ``]` | cursor to the end of last operated text or |
+| ✓ | `_` | `_` | cursor to the first CHAR N - 1 lines lower |
+| ✓ | ``{a-zA-Z0-9}` | ``a` | cursor to the mark {a-zA-Z0-9} |
+| ✓ | ``(` | ``(` | cursor to the start of the current sentence |
+| ✓ | ``)` | ``)` | cursor to the end of the current sentence |
+| ✓ | ``<` | ``<` | cursor to the start of the highlighted area |
+| ✓ | ``>` | ``>` | cursor to the end of the highlighted area |
+| ✓ | ``[` | ``[` | cursor to the start of last operated text |
+| ✓ | ``]` | ``]` | cursor to the end of last operated text or |
 | · | `"``"` | `"``"` | cursor to the position before latest jump |
-| · | ``{` | ``{` | cursor to the start of the current paragraph |
-| · | ``}` | ``}` | cursor to the end of the current paragraph |
+| ✓ | ``{` | ``{` | cursor to the start of the current paragraph |
+| ✓ | ``}` | ``}` | cursor to the end of the current paragraph |
 | ✓ | `a` | `a` | append text after the cursor N times |
 | ✓ | `b` | `b` | cursor N words backward |
 | ✓ | `["x]c{motion}` | `cw` | delete Nmove text [into register x] and |
@@ -145,24 +145,24 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `dp` | `dp` | same as ":diffput" |
 | ✓ | `e` | `e` | cursor forward to the end of word N |
 | ✓ | `f{char}` | `fa` | cursor to Nth occurrence of {char} to the |
-| · | `g{char}` | `ga` |    extended commands, see \|g\| below |
+| ✓ | `g{char}` | `ga` |    extended commands, see \|g\| below |
 | ✓ | `h` | `h` | cursor N chars to the left |
 | ✓ | `i` | `i` | insert text before the cursor N times |
 | ✓ | `j` | `j` | cursor N lines downward |
 | ✓ | `k` | `k` | cursor N lines upward |
 | ✓ | `l` | `l` | cursor N chars to the right |
-| · | `m{A-Za-z}` | `ma` |    set mark {A-Za-z} at cursor position |
-| · | `n` | `n` | repeat the latest '/' or '?' N times |
+| ✓ | `m{A-Za-z}` | `ma` |    set mark {A-Za-z} at cursor position |
+| ✓ | `n` | `n` | repeat the latest '/' or '?' N times |
 | ✓ | `o` | `o` | begin a new line below the cursor and |
 | ✓ | `["x]p` | `p` | put the text [from register x] after the |
-| · | `q{0-9a-zA-Z"}` | `qa` |    record typed characters into named register |
+| ✓ | `q{0-9a-zA-Z"}` | `qa` |    record typed characters into named register |
 | · | `q` | `q` |    (while recording) stops recording |
-| · | `Q` | `Q` | replay last recorded register |
+| ✓ | `Q` | `Q` | replay last recorded register |
 | · | `q:` | `q:` |    edit : command-line in command-line window |
 | · | `q/` | `q/` |    edit / command-line in command-line window |
 | · | `q?` | `q?` |    edit ? command-line in command-line window |
 | ✓ | `r{char}` | `ra` | replace N chars with {char} |
-| · | `["x]s` | `s` | (substitute) delete N characters [into |
+| ✓ | `["x]s` | `s` | (substitute) delete N characters [into |
 | ✓ | `t{char}` | `ta` | cursor till before Nth occurrence of {char} |
 | ✓ | `u` | `u` | undo changes |
 | ✓ | `v` | `v` |    start charwise Visual mode |
@@ -171,11 +171,11 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | ✓ | `["x]y{motion}` | `yw` |    yank Nmove text [into register x] |
 | ✓ | `["x]yy` | `yy` |    yank N lines [into register x] |
 | · | `z{char}` | `za` |    commands starting with 'z', see \|z\| below |
-| · | `{` | `{` | cursor N paragraphs backward |
-| · | `\|` | `\|` | cursor to column N |
-| · | `}` | `}` | cursor N paragraphs forward |
-| · | `~` | `~` | 'tildeop' off: switch case of N characters |
-| · | `~{motion}` | `~w` |    'tildeop' on: switch case of Nmove text |
+| ✓ | `{` | `{` | cursor N paragraphs backward |
+| ✓ | `\|` | `\|` | cursor to column N |
+| ✓ | `}` | `}` | cursor N paragraphs forward |
+| ✓ | `~` | `~` | 'tildeop' off: switch case of N characters |
+| ✓ | `~{motion}` | `~w` |    'tildeop' on: switch case of Nmove text |
 | · | `<C-End>` | `<C-End>` | same as "G" |
 | · | `<C-Home>` | `<C-Home>` | same as "gg" |
 | · | `<C-Left>` | `<C-Left>` | same as "b" |
@@ -183,8 +183,8 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `<C-Right>` | `<C-Right>` | same as "w" |
 | · | ` <C-RightMouse>` | `<C-RightMouse>` |    same as "CTRL-T" |
 | · | `<C-Tab>` | `<C-Tab>` |    same as "g<Tab>" |
-| · | `["x]<Del>` | `<Del>` | same as "x" |
-| · | `{count}<Del>` | `2<Del>` |    remove the last digit from {count} |
+| ✓ | `["x]<Del>` | `<Del>` | same as "x" |
+| ✓ | `{count}<Del>` | `2<Del>` |    remove the last digit from {count} |
 | ✓ | `<Down>` | `<Down>` | same as "j" |
 | ✓ | `<End>` | `<End>` | same as "$" |
 | · | `<F1>` | `<F1>` |    same as <Help> |
@@ -368,60 +368,60 @@ a search to act on: ✓ something happened (or zett's key map binds it), · noth
 | · | `g CTRL-]` | `g<C-]>` |    \|:tjump\| to the tag under the cursor |
 | · | `g#` | `g#` | like "#", but without using "\<" and "\>" |
 | · | `g$` | `g$` | when 'wrap' off go to rightmost character of |
-| · | `g&` | `g&` | repeat last ":s" on all lines |
+| ✓ | `g&` | `g&` | repeat last ":s" on all lines |
 | · | `g'{mark}` | `g'a` | like \|'\| but without changing the jumplist |
 | · | `g`{mark}` | `g`a` | like \|`\| but without changing the jumplist |
 | · | `g*` | `g*` | like "*", but without using "\<" and "\>" |
 | ✓ | `g+` | `g+` |    go to newer text state N times |
-| · | `g,` | `g,` | go to N newer position in change list |
+| ✓ | `g,` | `g,` | go to N newer position in change list |
 | ✓ | `g-` | `g-` |    go to older text state N times |
 | · | `g0` | `g0` | when 'wrap' off go to leftmost character of |
-| · | `g8` | `g8` |    print hex value of bytes used in UTF-8 |
-| · | `g;` | `g;` | go to N older position in change list |
-| · | `g<` | `g<` |    display previous command output |
+| ✓ | `g8` | `g8` |    print hex value of bytes used in UTF-8 |
+| ✓ | `g;` | `g;` | go to N older position in change list |
+| ✓ | `g<` | `g<` |    display previous command output |
 | · | `g?` | `g?` | Rot13 encoding operator |
-| · | `g??` | `g??` | Rot13 encode current line |
-| · | `g?g?` | `g?g?` | Rot13 encode current line |
-| · | `gD` | `gD` | go to definition of word under the cursor |
-| · | `gE` | `gE` | go backwards to the end of the previous |
-| · | `gH` | `gH` |    start Select line mode |
-| · | `gI` | `gI` | like "I", but always start in column 1 |
-| · | `gJ` | `gJ` | join lines without inserting space |
-| · | `gN` | `gN` |       1,2  find the previous match with the last used |
-| · | `["x]gP` | `gP` | put the text [from register x] before the |
+| ✓ | `g??` | `g??` | Rot13 encode current line |
+| ✓ | `g?g?` | `g?g?` | Rot13 encode current line |
+| ✓ | `gD` | `gD` | go to definition of word under the cursor |
+| ✓ | `gE` | `gE` | go backwards to the end of the previous |
+| ✓ | `gH` | `gH` |    start Select line mode |
+| ✓ | `gI` | `gI` | like "I", but always start in column 1 |
+| ✓ | `gJ` | `gJ` | join lines without inserting space |
+| ✓ | `gN` | `gN` |       1,2  find the previous match with the last used |
+| ✓ | `["x]gP` | `gP` | put the text [from register x] before the |
 | · | `gQ` | `gQ` |    switch to "Ex" mode with Vim editing |
 | · | `gR` | `gR` | enter Virtual Replace mode |
-| · | `gT` | `gT` |    go to the previous tabpage |
-| · | `gU{motion}` | `gUw` | make Nmove text uppercase |
-| · | `gV` | `gV` |    don't reselect the previous Visual area |
+| ✓ | `gT` | `gT` |    go to the previous tabpage |
+| ✓ | `gU{motion}` | `gUw` | make Nmove text uppercase |
+| ✓ | `gV` | `gV` |    don't reselect the previous Visual area |
 | · | `g]` | `g]` |    :tselect on the tag under the cursor |
 | · | `g^` | `g^` | when 'wrap' off go to leftmost non-white |
-| · | `g_` | `g_` | cursor to the last CHAR N - 1 lines lower |
-| · | `ga` | `ga` |    print ascii value of character under the |
-| · | `gd` | `gd` | go to definition of word under the cursor |
-| · | `ge` | `ge` | go backwards to the end of the previous |
-| · | `gf` | `gf` |    start editing the file whose name is under |
-| · | `gF` | `gF` |    start editing the file whose name is under |
+| ✓ | `g_` | `g_` | cursor to the last CHAR N - 1 lines lower |
+| ✓ | `ga` | `ga` |    print ascii value of character under the |
+| ✓ | `gd` | `gd` | go to definition of word under the cursor |
+| ✓ | `ge` | `ge` | go backwards to the end of the previous |
+| ✓ | `gf` | `gf` |    start editing the file whose name is under |
+| ✓ | `gF` | `gF` |    start editing the file whose name is under |
 | ✓ | `gg` | `gg` | cursor to line N, default first line |
-| · | `gh` | `gh` |    start Select mode |
-| · | `gi` | `gi` | like "i", but first move to the \|'^\| mark |
+| ✓ | `gh` | `gh` |    start Select mode |
+| ✓ | `gi` | `gi` | like "i", but first move to the \|'^\| mark |
 | · | `gj` | `gj` | like "j", but when 'wrap' on go N screen |
 | · | `gk` | `gk` | like "k", but when 'wrap' on go N screen |
-| · | `gm` | `gm` | go to character at middle of the screenline |
-| · | `gM` | `gM` | go to character at middle of the text line |
-| · | `gn` | `gn` |       1,2  find the next match with the last used |
-| · | `go` | `go` | cursor to byte N in the buffer |
-| · | `["x]gp` | `gp` | put the text [from register x] after the |
-| · | `gq{motion}` | `gqw` | format Nmove text |
-| ✓ | `gr{char}` | `gra` | virtual replace N chars with {char} |
-| · | `gs` | `gs` |    go to sleep for N seconds (default 1) |
-| · | `gt` | `gt` |    go to the next tabpage |
-| ✓ | `gu{motion}` | `guw` | make Nmove text lowercase |
-| · | `gv` | `gv` |    reselect the previous Visual area |
+| ✓ | `gm` | `gm` | go to character at middle of the screenline |
+| ✓ | `gM` | `gM` | go to character at middle of the text line |
+| ✓ | `gn` | `gn` |       1,2  find the next match with the last used |
+| ✓ | `go` | `go` | cursor to byte N in the buffer |
+| ✓ | `["x]gp` | `gp` | put the text [from register x] after the |
+| ✓ | `gq{motion}` | `gqw` | format Nmove text |
+| · | `gr{char}` | `gra` | virtual replace N chars with {char} |
+| ✓ | `gs` | `gs` |    go to sleep for N seconds (default 1) |
+| ✓ | `gt` | `gt` |    go to the next tabpage |
+| · | `gu{motion}` | `guw` | make Nmove text lowercase |
+| ✓ | `gv` | `gv` |    reselect the previous Visual area |
 | ✓ | `gw{motion}` | `gww` | format Nmove text and keep cursor |
-| · | `gx` | `gx` |    execute application for filepath at cursor |
-| · | `g@{motion}` | `g@w` |    call 'operatorfunc' |
-| · | `g~{motion}` | `g~w` | swap case for Nmove text |
+| ✓ | `gx` | `gx` |    execute application for filepath at cursor |
+| ✓ | `g@{motion}` | `g@w` |    call 'operatorfunc' |
+| ✓ | `g~{motion}` | `g~w` | swap case for Nmove text |
 | · | `g<Down>` | `g<Down>` | same as "gj" |
 | · | `g<End>` | `g<End>` | same as "g$" but go to the rightmost |
 | · | `g<Home>` | `g<Home>` | same as "g0" |

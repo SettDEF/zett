@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-17 of 374. ✓ zett has it (`:set`, `zett.opt`, `zett.ft.<type>`), · not yet. Settings: `:help settings`.
+18 of 374. ✓ zett has it (`:set`, `zett.opt`, `zett.ft.<type>`), · not yet. Settings: `:help settings`.
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -375,7 +375,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `winwidth` | wiw | number | global | `20` | minimal number of columns for current window |
 | ✓ | `wrap` |  | boolean | win | `true` | long lines wrap and continue on the next line |
 | · | `wrapmargin` | wm | number | buf | `0` | chars from the right where wrapping starts |
-| · | `wrapscan` | ws | boolean | global | `true` | searches wrap around the end of the file |
+| ✓ | `wrapscan` | ws | boolean | global | `true` | searches wrap around the end of the file |
 | · | `write` |  | boolean | global | `true` | writing to a file is allowed |
 | · | `writeany` | wa | boolean | global | `false` | write to file with no need for "!" override |
 | · | `writebackup` | wb | boolean | global | `true` | make a backup before overwriting a file |

@@ -29,6 +29,8 @@ struct Step {
 #[derive(Debug, Clone)]
 pub struct Isearch {
     origin: usize,
+    /// started with `/` or `?` (the prompt reads as Vim's)
+    vim: bool,
     /// the case rule the last step ran with
     fold: bool,
     now: Step,
@@ -40,12 +42,22 @@ impl Isearch {
     /// "I-search: foo", "Failing I-search backward: foo", "Wrapped I-search: foo"
     pub fn prompt(&self) -> String {
         let s = &self.now;
+        if self.vim {
+            return format!("{}{}", if s.forward { "/" } else { "?" }, s.query);
+        }
         let state = match (s.at.is_none() && !s.query.is_empty(), s.wrapped) {
             (true, _) => "Failing ",
             (false, true) => "Wrapped ",
             _ => "",
         };
         format!("{state}I-search{}: {}", if s.forward { "" } else { " backward" }, s.query)
+    }
+
+    pub(crate) fn origin(&self) -> usize {
+        self.origin
+    }
+    pub(crate) fn forward(&self) -> bool {
+        self.now.forward
     }
 
     pub fn query(&self) -> &str {
@@ -137,11 +149,20 @@ impl Editor {
         ignore && !(smart && query.chars().any(char::is_uppercase))
     }
 
+    /// `/` and `?` in the Vim profile: the same search, Vim's prompt.
+    pub(crate) fn isearch_start_vim(&mut self, forward: bool) {
+        self.isearch_start(forward);
+        if let Some(s) = self.isearch.as_mut() {
+            s.vim = true;
+        }
+    }
+
     fn isearch_start(&mut self, forward: bool) {
         let at = self.cursor;
         self.mark_active = false;
         self.isearch = Some(Isearch {
             origin: at,
+            vim: false,
             fold: true,
             now: Step { query: String::new(), forward, at: None, cursor: at, wrapped: false },
             back: Vec::new(),

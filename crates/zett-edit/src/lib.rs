@@ -19,6 +19,7 @@ pub mod probe;
 pub mod search;
 pub mod suggest;
 pub mod textops;
+pub mod vim;
 mod undo;
 pub use keys::{Code, Key};
 pub use killring::{KillRing, SharedKillRing};
@@ -41,6 +42,17 @@ enum Op {
     Delete,
     Change,
     Yank,
+    // vim.rs: g~ gu gU g? > < = gq ! g@
+    Toggle,
+    Lower,
+    Upper,
+    Rot13,
+    ShiftRight,
+    ShiftLeft,
+    Reindent,
+    Format,
+    Filter,
+    Func,
 }
 
 /// What a motion covers: characters (exclusive end) or whole lines.
@@ -97,6 +109,8 @@ pub struct Editor {
     last_cmd: String,
     /// folds and narrowing (outline.rs)
     view: outline::View,
+    /// Vim's keys beyond the core (vim.rs): marks, registers, macros, the dot, requests
+    vim: crate::vim::VimState,
     /// an agent's suggestions, not yet taken (suggest.rs)
     pending: suggest::Pending,
     /// textops.rs: where M-q wraps, M-@ in a row, M-/ in a row
@@ -143,6 +157,7 @@ impl Editor {
             yanked: None,
             last_cmd: String::new(),
             view: outline::View::default(),
+            vim: crate::vim::VimState::default(),
             pending: suggest::Pending::default(),
         }
     }
@@ -174,11 +189,16 @@ impl Editor {
     }
 
     pub fn key(&mut self, k: Key) {
+        // the Vim search line, macros, the dot (vim.rs)
+        if self.vim_before(k) {
+            return self.vim_after();
+        }
         match self.mode {
             Mode::Insert => self.insert_key(k),
             Mode::Normal => self.normal_key(k),
             Mode::Visual | Mode::VisualLine => self.visual_key(k),
         }
+        self.vim_after();
     }
 
     // ── positions ──
@@ -299,6 +319,11 @@ impl Editor {
             return;
         }
         if k.ctrl {
+            if let Code::Char(c) = k.code.clone() {
+                if c != 'r' && self.vim_ctrl(c) {
+                    return;
+                }
+            }
             if k.code == Code::Char('r') {
                 let n = self.take_count();
                 for _ in 0..n {
@@ -316,6 +341,9 @@ impl Editor {
                 Code::Down => 'j',
                 Code::Home => '0',
                 Code::End => '$',
+                Code::Enter => return self.normal_key(Key::ch('+')),
+                Code::Backspace => return self.normal_key(Key::ctrl('h')),
+                Code::Delete => 'x',
                 _ => return,
             };
             return self.normal_key(Key::ch(mapped));
@@ -344,8 +372,18 @@ impl Editor {
                     self.last_find = Some((p, ch));
                     return self.find(p, ch);
                 }
-                _ => return,
+                _ => {
+                    if !self.vim_prefixed(p, c) {
+                        self.count = None;
+                        self.op = None;
+                    }
+                    return;
+                }
             }
+        }
+        // the same operator twice: its lines (g~~, gUU, >>, ==)
+        if self.vim_double(c) {
+            return;
         }
 
         if c.is_ascii_digit() && (c != '0' || self.count.is_some()) {
@@ -479,6 +517,7 @@ impl Editor {
             'O' => { self.begin(); let ind = self.indent_of(line); let s = self.line_start(line); self.ins(s, &format!("{ind}\n")); self.mode = Mode::Insert; self.cursor = s + ind.chars().count(); }
 
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
+            _ if self.vim_more(c) => {}
             _ => { self.count = None; self.op = None; }
         }
     }
@@ -514,6 +553,7 @@ impl Editor {
     }
 
     fn leave_visual(&mut self) {
+        self.vim.last_visual = Some((self.anchor, self.cursor, self.mode));
         self.mode = Mode::Normal;
         self.want_col = self.want_col.min(usize::MAX - 1);
         self.clamp();
@@ -521,6 +561,7 @@ impl Editor {
 
     /// An operator on the selection (`d`, `c`, `y`); `lines` forces whole lines (`D`, `Y`, `X`, `S`).
     fn visual_op(&mut self, op: Op, lines: bool) {
+        self.vim.last_visual = Some((self.anchor, self.cursor, self.mode));
         let span = match self.selection() {
             Span::Chars(a, b) if lines => Span::Lines(self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line),
             s => s,
@@ -949,6 +990,9 @@ impl Editor {
     }
 
     fn apply(&mut self, op: Op, span: Span) {
+        if self.vim_apply(op, span) {
+            return;
+        }
         self.op = None;
         self.count = None;
         match span {
@@ -997,6 +1041,8 @@ impl Editor {
                         self.mode = Mode::Insert;
                         return;
                     }
+                    // the rest are vim.rs's (vim_apply took them before)
+                    _ => {}
                 }
             }
         }
@@ -1085,6 +1131,8 @@ impl Editor {
         match k.code {
             Code::Esc => {
                 self.mode = Mode::Normal;
+                self.vim.last_insert = Some(self.cursor);
+                self.vim.replace = false;
                 // Vim steps back onto the last typed char
                 if self.cursor > self.line_start(self.cur_line()) {
                     self.cursor -= 1;
@@ -1112,6 +1160,8 @@ impl Editor {
             Code::Left => self.cursor = self.cursor.saturating_sub(1).max(self.line_start(self.cur_line())),
             Code::Right => self.cursor = (self.cursor + 1).min(self.line_end(self.cur_line())),
             Code::Char(c) if !k.ctrl && !k.alt => {
+                // R: typing replaces
+                self.vim_replace_char();
                 self.ins(self.cursor, &c.to_string());
                 self.cursor += 1;
             }
@@ -1193,6 +1243,7 @@ impl Editor {
     /// Inserts, recording the edit in the open change.
     fn ins(&mut self, at: usize, s: &str) {
         self.buf.insert(at, s);
+        self.vim.shift(at, s.chars().count() as isize);
         if let Some(c) = self.open.as_mut() {
             c.edits.push(Edit { at, removed: String::new(), inserted: s.to_string() });
         }
@@ -1200,6 +1251,7 @@ impl Editor {
     /// Removes `a..b`, recording the edit in the open change.
     fn rem(&mut self, a: usize, b: usize) -> String {
         let gone = self.buf.remove(a, b);
+        self.vim.removed(a.min(b), gone.chars().count());
         if let Some(c) = self.open.as_mut() {
             c.edits.push(Edit { at: a.min(b), removed: gone.clone(), inserted: String::new() });
         }

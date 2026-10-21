@@ -33,6 +33,30 @@ impl Key {
     pub const fn ctrl(c: char) -> Self {
         Self { code: Code::Char(c), ctrl: true, alt: false }
     }
+    /// The key in Vim notation (`x`, `<C-a>`, `<Esc>`), as macros keep it.
+    pub fn notation(&self) -> String {
+        let base = match self.code {
+            Code::Char('<') => "lt".to_string(),
+            Code::Char(c) if !self.ctrl && !self.alt => return c.to_string(),
+            Code::Char(c) => c.to_string(),
+            Code::Esc => "Esc".into(),
+            Code::Enter => "CR".into(),
+            Code::Backspace => "BS".into(),
+            Code::Delete => "Del".into(),
+            Code::Tab => "Tab".into(),
+            Code::Left => "Left".into(),
+            Code::Right => "Right".into(),
+            Code::Up => "Up".into(),
+            Code::Down => "Down".into(),
+            Code::Home => "Home".into(),
+            Code::End => "End".into(),
+            #[allow(unreachable_patterns)]
+            _ => "Nop".into(),
+        };
+        let m = format!("{}{}", if self.ctrl { "C-" } else { "" }, if self.alt { "A-" } else { "" });
+        format!("<{m}{base}>")
+    }
+
     /// The plain character this key types, if any.
     pub fn char(&self) -> Option<char> {
         match self.code {

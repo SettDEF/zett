@@ -989,3 +989,43 @@ fn mode_badge(d: &Doc) -> (&'static str, &'static str) {
         Mode::VisualLine => ("L", "ModeVisual"),
     }
 }
+
+impl App {
+    /// What the editor asked for with Vim keys (vim.rs Request): `:` lines (ZZ, &), the `:` line
+    /// open (Q), messages, files and addresses (gf, gx), help for a word (K), buffers (gt, gT).
+    pub(crate) fn editor_requests(&mut self) {
+        let reqs = self.docs[self.cur].ed.take_requests();
+        for r in reqs {
+            use zett_edit::vim::Request;
+            match r {
+                Request::Ex(l) => self.command(&l),
+                Request::CmdLine(l) => self.cmdline = Some(l),
+                Request::Message(m) => self.say(m),
+                Request::Open(p) => {
+                    let path = std::path::Path::new(&p);
+                    if p.contains("://") || p.starts_with("www.") {
+                        let _ = std::process::Command::new("xdg-open").arg(&p).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+                    } else if path.exists() {
+                        self.command(&format!("e {p}"));
+                    } else {
+                        self.say(format!("E447: Can't find file \"{p}\" in path"));
+                    }
+                }
+                Request::Keyword(w) => self.open_help(&w),
+                Request::Tab(n) if n > 1000 => {
+                    let i = (n - 1001) as usize;
+                    if i < self.docs.len() {
+                        self.show_doc(i);
+                    }
+                }
+                Request::Tab(n) => {
+                    let len = self.docs.len() as i32;
+                    let i = (self.cur as i32 + n).rem_euclid(len.max(1)) as usize;
+                    self.show_doc(i);
+                }
+                Request::Sleep(ms) => std::thread::sleep(Duration::from_millis(ms.min(10_000))),
+                Request::OperatorFunc(..) => self.say("g@: no operatorfunc set (zett.opt.operatorfunc)".to_string()),
+            }
+        }
+    }
+}

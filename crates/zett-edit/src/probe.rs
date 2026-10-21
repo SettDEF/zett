@@ -6,7 +6,7 @@
 
 use crate::Editor;
 
-const TEXT: &str = "alpha beta gamma\n  delta (epsilon) {zeta} \"eta\" 'theta' [iota]\nkappa lambda mu\nnu xi omicron\n\npi rho sigma\n";
+const TEXT: &str = "alpha Beta gamma 7\n  delta (Epsilon 42) {zeta} \"eta\" 'theta' [iota] <tag>\nkappa lambda mu\nnu xi omicron\n\npi rho sigma\n";
 
 /// Neovim's notation for a normal-mode entry → keys to feed. `tag` tells text objects (`v_ab`).
 pub fn expand(written: &str, tag: &str) -> String {
@@ -84,7 +84,7 @@ impl Editor {
             self.last_search,
             self.isearch.is_some(),
             self.view,
-        )
+        ) + &self.vim_probe()
     }
 }
 
@@ -92,8 +92,7 @@ impl Editor {
 /// operator, a count): those did nothing yet.
 fn settled(keys: &[crate::keys::Key]) -> Option<String> {
     let mut e = Editor::from_str(TEXT);
-    e.feed("jx");
-    e.feed("yiw");
+    e.prepare();
     e.last_search = "beta".into();
     e.set_cursor(crate::Pos { line: 1, col: 10 });
     for k in keys {
@@ -105,9 +104,7 @@ fn settled(keys: &[crate::keys::Key]) -> Option<String> {
 /// The state after `keys`, from the prepared start.
 fn after(keys: &[crate::keys::Key]) -> String {
     let mut e = Editor::from_str(TEXT);
-    // a change to undo, a yank to put, a search to repeat, the cursor inside "(epsilon)"
-    e.feed("jx");
-    e.feed("yiw");
+    e.prepare();
     e.last_search = "beta".into();
     e.set_cursor(crate::Pos { line: 1, col: 10 });
     for k in keys {
@@ -124,9 +121,16 @@ pub fn handles(keys: &str) -> bool {
     if ks.is_empty() {
         return false;
     }
+    // a count: only waits, so ask whether it was taken
+    if !keys.is_empty() && keys.chars().all(|c| c.is_ascii_digit()) {
+        let mut e = Editor::from_str(TEXT);
+        e.feed(keys);
+        return e.count.is_some();
+    }
     // and something must have happened at all: a key swallowed by a prefix (`gX`) changes nothing
     let Some(full) = settled(&ks) else { return false };
-    full != after(&ks[1..]) && full != after(&[])
+    // different from every shorter tail: `guw` where g only swallows the u ends as `w` alone would
+    (1..=ks.len()).all(|i| full != after(&ks[i..]))
 }
 
 #[cfg(test)]
@@ -149,7 +153,21 @@ mod tests {
         }
         assert!(!handles("<F12>"), "nothing is bound to F12");
         assert!(!handles("gX"), "an unknown g command does nothing");
-        assert!(!handles("ma"), "no marks yet: the a after it is what moves");
-        assert!(!handles("/beta<CR>"), "no / search in the Vim profile yet");
+        assert!(handles("ma"), "marks are kept");
+        assert!(!handles("guw") || handles("gUw"), "g swallowing a key and w moving is not a command");
+        assert!(handles("/beta<CR>"), "/ searches");
+    }
+}
+
+impl Editor {
+    /// Something for every key to act on: a change to undo, a yank to put, a macro to replay, a
+    /// selection to bring back, an insert to return to, an f to repeat, a search to go on with.
+    fn prepare(&mut self) {
+        self.feed("jx");
+        self.feed("qqlq");
+        self.feed("vl<Esc>");
+        self.feed("A!<Esc>");
+        self.feed("0fa");
+        self.feed("yiw");
     }
 }

@@ -369,6 +369,14 @@ struct App {
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
 pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
+    // "+ and "* reach the system clipboard
+    fn clip_get() -> Option<String> {
+        clipboard::paste()
+    }
+    fn clip_set(t: &str) {
+        clipboard::copy(t);
+    }
+    let _ = zett_edit::vim::CLIPBOARD.set((clip_get, clip_set));
     let mut app = App::new(paths);
     let mut term = ratatui::init();
     let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture);
@@ -888,6 +896,7 @@ impl App {
         let rev = self.docs[self.cur].ed.buf.rev();
         self.doc().ed.key(k);
         self.doc().touched(before);
+        self.editor_requests();
         if self.docs[self.cur].ed.buf.rev() != rev {
             self.edit_at = Instant::now();
         }
@@ -1432,6 +1441,9 @@ impl App {
     }
 
     fn draw_text(&mut self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
+        // H M L and gm need the lines and columns shown
+        let top = self.docs[di].top;
+        self.docs[di].ed.set_screen(top, a.height as usize, a.width as usize);
         if focused {
             self.area = a;
         }
