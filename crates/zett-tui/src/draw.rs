@@ -86,10 +86,34 @@ impl App {
             1 => n_wins > 1,
             _ => true,
         };
+        // the focused window first: scrollbind and cursorbind windows follow it in the same frame
+        let mut placed = placed;
+        placed.sort_by_key(|(id, _)| *id != self.focus);
+        let mut follow: Option<(isize, isize, usize)> = None;
         for (id, r) in placed {
-            let Some(w) = self.wins.get(id).and_then(|w| w.clone()) else { continue };
+            let Some(mut w) = self.wins.get(id).and_then(|w| w.clone()) else { continue };
             let focused = id == self.focus;
             let di = w.doc.min(self.docs.len() - 1);
+            if let Some((dv, dh, line)) = follow.filter(|_| !focused) {
+                if self.flag(di, "scrollbind") {
+                    let last = self.docs[di].ed.buf.len_lines().saturating_sub(1) as isize;
+                    w.top = (w.top as isize + dv).clamp(0, last) as usize;
+                    w.left = (w.left as isize + dh).max(0) as usize;
+                    // its cursor comes into view with it, as in Vim
+                    let c = self.docs[di].ed.cursor();
+                    let h = (r.height as usize).saturating_sub(2);
+                    let so = self.num(di, "scrolloff").min(h / 2);
+                    let (lo, hi) = (if w.top == 0 { 0 } else { w.top + so }, (w.top + h).saturating_sub(so).max(w.top + so));
+                    if c.line < lo || c.line > hi {
+                        self.docs[di].ed.set_cursor(Pos { line: c.line.clamp(lo, hi), col: c.col });
+                    }
+                }
+                if self.flag(di, "cursorbind") && di != self.cur {
+                    let col = self.docs[di].ed.cursor().col;
+                    let l = line.min(self.docs[di].ed.buf.len_lines().saturating_sub(1));
+                    self.docs[di].ed.set_cursor(Pos { line: l, col });
+                }
+            }
             // winbar: a format line at the window's top
             let bar_fmt = self.setting(di, "winbar");
             let wb = u16::from(!bar_fmt.is_empty() && r.height > 2);
@@ -117,6 +141,18 @@ impl App {
                 if let Some(Some(w)) = self.wins.get_mut(id) {
                     w.top = self.docs[di].top;
                     w.left = self.docs[di].left;
+                }
+                // how far the focused window moved since the last frame (scrollopt: ver, hor)
+                if focused && (self.flag(di, "scrollbind") || self.flag(di, "cursorbind")) {
+                    let (top, left) = (self.docs[di].top, self.docs[di].left);
+                    let so = self.setting(di, "scrollopt");
+                    let (dv, dh) = match self.bind_prev {
+                        Some((pid, pt, pl)) if pid == id => (top as isize - pt as isize, if so.contains("hor") { left as isize - pl as isize } else { 0 }),
+                        _ => (0, 0),
+                    };
+                    let dv = if so.contains("ver") || so.is_empty() { dv } else { 0 };
+                    follow = Some((dv, dh, self.docs[di].ed.cursor().line));
+                    self.bind_prev = Some((id, top, left));
                 }
             }
             if wb > 0 {

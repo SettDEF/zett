@@ -409,6 +409,8 @@ struct App {
     edit_at: Instant,
     /// the last key (showmatch lasts matchtime after it)
     typed_at: Instant,
+    /// the focused window and its scroll position (top, left) last frame, for scrollbind
+    bind_prev: Option<(usize, usize, usize)>,
 }
 
 /// Opens the editor in the terminal: files (or a folder) from the command line.
@@ -546,6 +548,7 @@ impl App {
             cursor_xy: (0, 0),
             edit_at: Instant::now(),
             typed_at: Instant::now(),
+            bind_prev: None,
         };
         // the options first: the startup depends on them (the key profile)
         app.take_opts();
