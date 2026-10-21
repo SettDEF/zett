@@ -607,8 +607,16 @@ impl App {
                         }
                         ed.set_cursor(p);
                     }
-                    "popup" => {}
-                    _ => ed.set_cursor(p),
+                    "popup" => {
+                        self.pick(Pick::Menu("PopUp".into()));
+                    }
+                    // popup_setpos (Neovim's default): the cursor there, then the PopUp menu
+                    _ => {
+                        ed.set_cursor(p);
+                        if !self.menu_items("PopUp").is_empty() {
+                            self.pick(Pick::Menu("PopUp".into()));
+                        }
+                    }
                 }
             }
             MouseEventKind::Down(MouseButton::Middle) => {

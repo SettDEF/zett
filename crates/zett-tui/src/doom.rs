@@ -124,6 +124,8 @@ pub(crate) enum Pick {
     Commits,
     /// spelling suggestions (z=) for the characters [start, end)
     Spell(usize, usize),
+    /// a menu's entries (:popup NAME, the right mouse button)
+    Menu(String),
 }
 
 impl Pick {
@@ -143,6 +145,7 @@ impl Pick {
             Pick::Everything(_) => "everything",
             Pick::Commits => "commits",
             Pick::Spell(..) => "spell",
+            Pick::Menu(_) => "menu",
         }
     }
 
@@ -562,6 +565,7 @@ impl App {
             Pick::Query => ("Query results".into(), Vec::new()),
             Pick::Commits => ("Commits".into(), Vec::new()),
             Pick::Spell(..) => ("Change to".into(), std::mem::take(&mut self.spell_offer).into_iter().map(Cand::plain).collect()),
+            Pick::Menu(name) => (format!("{name} "), self.menu_items(name).into_iter().map(|(label, rhs)| Cand::noted(label, rhs)).collect()),
             Pick::Everything(root) => (format!("Search everything in {} (⟲ = its history)", home_short(&root.display().to_string())), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
@@ -621,6 +625,7 @@ impl App {
             Pick::Everything(root) if self.open_past(&root, &item) => {}
             Pick::Commits => self.picked_commit(&item),
             Pick::Spell(a, b) => self.doc().ed.replace(a, b, &item),
+            Pick::Menu(name) => self.menu_run(&format!("{name}.{}", item.split('\t').next().unwrap_or(&item).trim())),
             Pick::Grep(root) | Pick::Everything(root) => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.parse::<usize>().ok())) {

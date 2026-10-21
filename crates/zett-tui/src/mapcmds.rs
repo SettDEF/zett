@@ -14,6 +14,12 @@ const NAMES: &[(&str, &str)] = &[
     ("iunabbrev", "iuna"), ("abclear", "abc"), ("iabclear", "iabc"),
     ("command", "com"), ("delcommand", "delc"), ("comclear", "comc"),
     ("autocmd", "au"), ("augroup", "aug"), ("doautocmd", "do"), ("doautoall", "doautoa"),
+    ("menu", "me"), ("amenu", "am"), ("nmenu", "nme"), ("vmenu", "vme"), ("xmenu", "xme"), ("smenu", "sme"), ("omenu", "ome"),
+    ("imenu", "ime"), ("cmenu", "cme"), ("tlmenu", "tlm"), ("noremenu", "noreme"), ("anoremenu", "an"), ("nnoremenu", "nnoreme"),
+    ("vnoremenu", "vnoreme"), ("xnoremenu", "xnoreme"), ("snoremenu", "snoreme"), ("onoremenu", "onoreme"), ("inoremenu", "inoreme"),
+    ("cnoremenu", "cnoreme"), ("tlnoremenu", "tln"), ("unmenu", "unme"), ("aunmenu", "aun"), ("nunmenu", "nunme"), ("vunmenu", "vunme"),
+    ("xunmenu", "xunme"), ("sunmenu", "sunme"), ("ounmenu", "ounme"), ("iunmenu", "iunme"), ("cunmenu", "cunme"), ("tlunmenu", "tlu"),
+    ("emenu", "em"), ("popup", "popu"), ("menutranslate", "menut"),
 ];
 
 /// A typed name as one of these commands (its full name).
@@ -152,6 +158,7 @@ impl App {
                 }
             }
             "autocmd" => self.autocmd(arg, bang),
+            c if c.contains("menu") || c == "popup" => self.menu_command(c, arg, bang),
             "doautocmd" | "doautoall" => {
                 let mut t = arg.trim();
                 if let Some(r) = t.strip_prefix("<nomodeline>") {
@@ -341,4 +348,144 @@ mod tests {
         assert_eq!(super::map_name("d"), None, ":d is :delete");
         assert_eq!(super::vim_events("write"), &["bufwritepost", "filewritepost"]);
     }
+}
+
+/// A menu entry (:menu): the modes it is for (n v i o c t, "" for all), its path ("Edit.Copy"), the
+/// keys it types and whether they skip the mappings.
+#[derive(Clone, Debug)]
+pub(crate) struct MenuEntry {
+    pub modes: String,
+    pub path: String,
+    pub rhs: String,
+    pub noremap: bool,
+}
+
+/// Neovim's own right-click menu (PopUp), as it sets it up.
+pub(crate) fn default_menus() -> Vec<MenuEntry> {
+    let e = |modes: &str, path: &str, rhs: &str| MenuEntry { modes: modes.into(), path: path.into(), rhs: rhs.into(), noremap: true };
+    vec![
+        e("n", "PopUp.Go to definition", "<C-]>"),
+        e("n", "PopUp.Open in web browser", "gx"),
+        e("v", "PopUp.Cut", "\"+x"),
+        e("v", "PopUp.Copy", "\"+y"),
+        e("n", "PopUp.Paste", "\"+gP"),
+        e("v", "PopUp.Paste", "\"+P"),
+        e("v", "PopUp.Delete", "\"_x"),
+        e("n", "PopUp.Select All", "ggVG"),
+        e("v", "PopUp.Select All", "<Esc>ggVG"),
+    ]
+}
+
+impl App {
+    /// The :menu family, :emenu, :popup, :menutranslate.
+    fn menu_command(&mut self, cmd: &str, arg: &str, bang: bool) {
+        let modes = match cmd.trim_start_matches("nore").trim_start_matches("un").chars().next() {
+            Some('a') | Some('m') => "",
+            Some('t') => "t",
+            Some(c) => match c { 'n' => "n", 'v' | 'x' | 's' => "v", 'o' => "o", 'i' => "i", 'c' => "c", _ => "" },
+            None => "",
+        };
+        let modes = if (cmd == "menu" || cmd == "noremenu") && bang { "i" } else { modes };
+        let mut rest = arg.trim();
+        while let Some(r) = ["<silent>", "<special>", "<script>"].iter().find_map(|o| rest.strip_prefix(o)) {
+            rest = r.trim_start();
+        }
+        // a priority (10.20) may come first
+        if rest.starts_with(|c: char| c.is_ascii_digit()) {
+            rest = rest.split_once(char::is_whitespace).map_or("", |(_, r)| r).trim_start();
+        }
+        // the path runs to the first blank that is not \-escaped; <Tab> starts its shown keys
+        let (path, rhs) = split_path(rest);
+        match cmd {
+            // :emenu takes the rest of the line as the path (\  escapes work too)
+            "emenu" => self.menu_run(&strip_tab(&rest.replace("\\ ", " "))),
+            "popup" => {
+                if self.menu_items(&path).is_empty() {
+                    return self.say(format!("E335: Menu not defined for this mode: {path}"));
+                }
+                self.pick(Pick::Menu(path));
+            }
+            "menutranslate" => {
+                // :menutranslate {english} {yours}
+                let (to, _) = split_path(rhs);
+                self.menu_tr.insert(path.clone(), to);
+            }
+            c if c.contains("unmenu") => {
+                self.menus.retain(|m| !(m.path == path || m.path.starts_with(&format!("{path}.")) || path == "*") || !(modes.is_empty() || m.modes == modes));
+            }
+            _ if rhs.is_empty() => {
+                let rows = self.menus.iter().filter(|m| path.is_empty() || m.path.starts_with(&path)).map(|m| (format!("{} {}", if m.modes.is_empty() { "a" } else { &m.modes }, m.path), m.rhs.clone())).collect();
+                self.popup = Some(Popup::Help("menus".into(), rows));
+            }
+            _ => {
+                let noremap = cmd.contains("nore");
+                let ms: Vec<String> = if modes.is_empty() { vec!["n".into(), "v".into(), "i".into()] } else { vec![modes.into()] };
+                for m in ms {
+                    self.menus.retain(|e| !(e.path == path && e.modes == m));
+                    self.menus.push(MenuEntry { modes: m, path: path.clone(), rhs: rhs.to_string(), noremap });
+                }
+            }
+        }
+    }
+
+    /// The entries right under menu `name` for the mode now: (label, keys).
+    pub(crate) fn menu_items(&self, name: &str) -> Vec<(String, String)> {
+        let mode = match self.docs[self.cur].ed.mode() {
+            Mode::Insert => "i",
+            Mode::Visual | Mode::VisualLine | Mode::VisualBlock => "v",
+            _ => "n",
+        };
+        let prefix = format!("{name}.");
+        let mut out: Vec<(String, String)> = Vec::new();
+        for m in self.menus.iter().filter(|m| m.modes.is_empty() || m.modes == mode) {
+            if let Some(rest) = m.path.strip_prefix(&prefix) {
+                // separators (-sep-) are not entries
+                if rest.starts_with('-') && rest.ends_with('-') {
+                    continue;
+                }
+                let label = self.menu_tr.get(rest).cloned().unwrap_or_else(|| rest.to_string());
+                if !out.iter().any(|(l, _)| *l == label) {
+                    out.push((label, m.rhs.clone()));
+                }
+            }
+        }
+        out
+    }
+
+    /// :emenu PATH: what that entry types, for the mode now.
+    pub(crate) fn menu_run(&mut self, path: &str) {
+        let items = match path.rsplit_once('.') {
+            Some((parent, _)) => self.menu_items(parent),
+            None => Vec::new(),
+        };
+        let leaf = path.rsplit_once('.').map_or(path, |(_, l)| l);
+        let leaf = self.menu_tr.iter().find(|(_, v)| *v == leaf).map(|(k, _)| k.clone()).unwrap_or_else(|| leaf.to_string());
+        let hit = items.into_iter().find(|(l, _)| *l == leaf).or_else(|| self.menus.iter().find(|m| m.path == path).map(|m| (String::new(), m.rhs.clone())));
+        let Some((_, rhs)) = hit else { return self.say(format!("E334: Menu not found: {path}")) };
+        let noremap = self.menus.iter().find(|m| m.path == path || m.path.ends_with(&format!(".{leaf}"))).is_some_and(|m| m.noremap);
+        self.replay(&rhs, !noremap);
+    }
+}
+
+/// A menu path ("Edit.Find\ and\ Replace<Tab>:s") and what follows it.
+fn split_path(s: &str) -> (String, &str) {
+    let mut path = String::new();
+    let mut it = s.char_indices().peekable();
+    while let Some((i, c)) = it.next() {
+        match c {
+            '\\' => {
+                if let Some((_, n)) = it.next() {
+                    path.push(n);
+                }
+            }
+            c if c.is_whitespace() => return (strip_tab(&path), s[i..].trim_start()),
+            c => path.push(c),
+        }
+    }
+    (strip_tab(&path), "")
+}
+
+/// A path without its shown keys (<Tab>…).
+fn strip_tab(p: &str) -> String {
+    p.split("<Tab>").next().unwrap_or(p).to_string()
 }

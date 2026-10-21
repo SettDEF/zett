@@ -384,6 +384,9 @@ struct App {
     augroups: std::collections::HashSet<String>,
     au_depth: usize,
     last_mode: Option<Mode>,
+    /// :menu entries (Neovim's PopUp first) and :menutranslate names
+    menus: Vec<mapcmds::MenuEntry>,
+    menu_tr: std::collections::HashMap<String, String>,
     cmd_hist: Vec<String>,
     clear: bool,
     suspend: bool,
@@ -561,6 +564,8 @@ impl App {
             augroups: Default::default(),
             au_depth: 0,
             last_mode: None,
+            menus: mapcmds::default_menus(),
+            menu_tr: Default::default(),
             cmd_hist: Vec::new(),
             clear: false,
             suspend: false,
