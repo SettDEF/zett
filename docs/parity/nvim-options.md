@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-201 ✓ do something in zett, 173 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+203 ✓ do something in zett, 171 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -166,7 +166,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `jumpoptions` | jop | string | global | `clean` | specifies how jumping is done |
 | ◐ | `keymap` | kmp | string | buf | `` | name of a keyboard mapping |
 | ◐ | `keymodel` | km | string | global | `` | enable starting/stopping selection with keys |
-| ◐ | `keywordprg` | kp | string | buf | `:Man` | program to use for the "K" command |
+| ✓ | `keywordprg` | kp | string | buf | `:Man` | program to use for the "K" command |
 | ✓ | `langmap` | lmap | string | global | `` | alphabetic characters for other language mode |
 | ✓ | `langmenu` | lm | string | global | `` | language to be used for the menus |
 | ◐ | `langnoremap` | lnr | boolean | global | `true` |  |
@@ -339,7 +339,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `ttyfast` | tf | boolean | global | `true` |  |
 | ◐ | `undodir` | udir | string | global | `/home/caesar/.local/state/nvim/undo//` | where to store undo files |
 | ✓ | `undofile` | udf | boolean | buf | `false` | save undo information in a file |
-| ◐ | `undolevels` | ul | number | buf | `1000` | maximum number of changes that can be undone |
+| ✓ | `undolevels` | ul | number | buf | `1000` | maximum number of changes that can be undone |
 | ◐ | `undoreload` | ur | number | global | `10000` | max nr of lines to save for undo on a buffer reload |
 | ◐ | `updatecount` | uc | number | global | `200` | after this many characters flush swap file |
 | ◐ | `updatetime` | ut | number | global | `4000` | after this many milliseconds flush swap file |
