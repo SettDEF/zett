@@ -79,6 +79,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "winheight", "winwidth", "winminheight", "winminwidth",
     "breakat", "breakindentopt",
     "wildmenu", "wildmode", "wildignore", "wildignorecase", "wildoptions", "fileignorecase", "suffixes",
+    "keywordprg",
     "makeprg", "errorformat", "grepprg", "grepformat", "shell", "shellcmdflag", "shellquote", "shellxquote", "makeencoding",
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",

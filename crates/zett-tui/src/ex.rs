@@ -171,7 +171,7 @@ impl App {
     }
 
     /// A shell command (shell, shellcmdflag, shellquote, shellxquote), with `input` on its stdin.
-    fn run_shell(&self, cmd: &str, input: Option<&str>, dir: &Path) -> Result<String, String> {
+    pub(crate) fn run_shell(&self, cmd: &str, input: Option<&str>, dir: &Path) -> Result<String, String> {
         use std::io::Write;
         let (sh, flag) = (self.setting(self.cur, "shell"), self.setting(self.cur, "shellcmdflag"));
         let sh = if sh.is_empty() { std::env::var("SHELL").unwrap_or_else(|_| "sh".into()) } else { sh };

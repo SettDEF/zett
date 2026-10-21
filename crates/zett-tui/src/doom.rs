@@ -233,6 +233,33 @@ const DASH: &[(&str, &str, &str, &str)] = &[
 
 impl App {
     /// `:help TOPIC`: the topic in a buffer of its own (Markdown, read like any other).
+    /// K: the word looked up as 'keywordprg' says: "" or ":help" zett's help; ":Man" (the
+    /// default) its man page if it has one, else the help; another ":cmd" that command with the word;
+    /// anything else a program, its output shown read-only.
+    pub(crate) fn keyword(&mut self, word: &str) {
+        let prg = self.setting(self.cur, "keywordprg");
+        let prg = prg.trim();
+        let dir = std::env::current_dir().unwrap_or_default();
+        let quoted = format!("'{}'", word.replace('\'', "'\\''"));
+        match prg {
+            "" | ":help" | ":h" => self.open_help(word),
+            ":Man" => match self.run_shell(&format!("MANWIDTH=80 MANPAGER=cat man {quoted} 2>/dev/null | col -b"), None, &dir) {
+                Ok(page) if !page.trim().is_empty() => self.show_help(&format!("man:{word}"), page, None),
+                _ => self.open_help(word),
+            },
+            p if p.starts_with(':') => {
+                if !self.ex(&format!("{} {word}", &p[1..])) {
+                    self.open_help(word);
+                }
+            }
+            p => match self.run_shell(&format!("{p} {quoted}"), None, &dir) {
+                Ok(out) if !out.trim().is_empty() => self.show_help(&format!("{p}:{word}"), out, None),
+                Ok(_) => self.say(format!("{p}: nothing for {word}")),
+                Err(e) => self.say(format!("{p}: {e}")),
+            },
+        }
+    }
+
     /// `:help X`, found as Neovim finds a tag: a topic, a setting (`wrap`, `'ic'`), a command, then a
     /// heading in any topic; nothing found names the nearest. The place found pulses for a moment.
     pub(crate) fn open_help(&mut self, topic: &str) {
@@ -290,7 +317,7 @@ impl App {
     }
 
     /// A help page as a buffer (one per topic, reused), at `at`: (line, lines to pulse).
-    fn show_help(&mut self, name: &str, text: String, at: Option<(usize, usize)>) {
+    pub(crate) fn show_help(&mut self, name: &str, text: String, at: Option<(usize, usize)>) {
         let title = format!("help: {name}");
         let i = match self.docs.iter().position(|d| d.name == title) {
             Some(i) => i,
@@ -1096,7 +1123,7 @@ impl App {
                         self.say(format!("E447: Can't find file \"{p}\" in path"));
                     }
                 }
-                Request::Keyword(w) => self.open_help(&w),
+                Request::Keyword(w) => self.keyword(&w),
                 Request::Tab(n) if n > 1000 => {
                     let i = (n - 1001) as usize;
                     if i < self.docs.len() {

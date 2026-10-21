@@ -48,6 +48,8 @@ pub(crate) struct Node {
 pub(crate) struct Tree {
     pub nodes: Vec<Node>,
     pub cur: usize,
+    /// undo stops here ('undolevels': the steps above it were let go)
+    pub floor: usize,
 }
 
 fn now() -> u64 {
@@ -59,7 +61,7 @@ fn now() -> u64 {
 
 impl Default for Tree {
     fn default() -> Self {
-        Tree { nodes: vec![Node { parent: 0, change: Change::default(), time: now(), redo: None }], cur: 0 }
+        Tree { nodes: vec![Node { parent: 0, change: Change::default(), time: now(), redo: None }], cur: 0, floor: 0 }
     }
 }
 
@@ -69,6 +71,23 @@ impl Tree {
         self.nodes.push(Node { parent: self.cur, change, time: now(), redo: None });
         self.nodes[self.cur].redo = Some(n);
         self.cur = n;
+    }
+
+    /// At most `keep` steps of undo on the way to the current change ('undolevels'): the floor moves
+    /// down that way. A current change not above the floor (gone to another branch) is left be.
+    pub fn keep(&mut self, keep: usize) {
+        let mut way = Vec::new();
+        let mut n = self.cur;
+        while n != self.floor && n != 0 {
+            way.push(n);
+            n = self.nodes[n].parent;
+        }
+        if n != self.floor {
+            return;
+        }
+        while way.len() > keep {
+            self.floor = way.pop().unwrap_or(self.floor);
+        }
     }
 
     /// The way from `from` to `to`: the nodes to revert (going up), then to apply (going down).
@@ -144,7 +163,7 @@ impl Tree {
             }
             nodes.push(Node { parent: parent as usize, change, time: time as u64, redo: (redo >= 0).then_some(redo as usize) });
         }
-        Some((Tree { nodes, cur }, fp))
+        Some((Tree { nodes, cur, floor: 0 }, fp))
     }
 
     /// The text at node `to`, worked out from `text` at the current node.

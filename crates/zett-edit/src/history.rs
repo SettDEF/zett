@@ -14,6 +14,9 @@ impl Editor {
         if let Some(c) = self.open.take() {
             if !c.edits.is_empty() {
                 self.undo.push(c);
+                // 'undolevels': -1 none, 0 one (as Vi), else that many
+                let levels = self.opt_num("undolevels", 1000);
+                self.undo.keep(if levels < 0 { 0 } else { levels.max(1) as usize });
             }
         }
     }
@@ -43,7 +46,7 @@ impl Editor {
     pub(crate) fn undo_once(&mut self) {
         self.close();
         let n = self.undo.cur;
-        if n == 0 {
+        if n == 0 || n == self.undo.floor {
             return;
         }
         self.undo.nodes[n].change.revert(&mut self.buf);
@@ -188,4 +191,40 @@ impl Editor {
         self.clamp();
     }
 
+}
+
+#[cfg(test)]
+mod undolevels {
+    use crate::Editor;
+
+    fn changes(e: &mut Editor, n: usize) {
+        for i in 0..n {
+            e.begin();
+            e.ins(e.text().chars().count(), &i.to_string());
+            e.close();
+        }
+    }
+
+    #[test]
+    fn undo_goes_back_no_further_than_undolevels() {
+        let mut e = Editor::from_str("x");
+        e.set_opt("undolevels", "2");
+        changes(&mut e, 3);
+        assert_eq!(e.text(), "x012");
+        for _ in 0..3 {
+            e.undo_once();
+        }
+        assert_eq!(e.text(), "x0", "two steps back, the first change kept");
+        e.redo_once();
+        assert_eq!(e.text(), "x01");
+    }
+
+    #[test]
+    fn undolevels_minus_one_keeps_no_undo() {
+        let mut e = Editor::from_str("x");
+        e.set_opt("undolevels", "-1");
+        changes(&mut e, 2);
+        e.undo_once();
+        assert_eq!(e.text(), "x01");
+    }
 }
