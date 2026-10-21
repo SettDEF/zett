@@ -206,23 +206,78 @@ const DASH: &[(&str, &str, &str, &str)] = &[
 
 impl App {
     /// `:help TOPIC`: the topic in a buffer of its own (Markdown, read like any other).
+    /// `:help X`, found as Neovim finds a tag: a topic, a setting (`wrap`, `'ic'`), a command, then a
+    /// heading in any topic; nothing found names the nearest. The place found pulses for a moment.
     pub(crate) fn open_help(&mut self, topic: &str) {
-        let t = topic.trim();
-        let (name, text): (&str, String) = if t.len() >= 3 && "commands".starts_with(t) {
-            ("commands", zett_script::docs::commands_topic(&self.engine))
+        let t = topic.trim().trim_matches('\'').trim_start_matches(':');
+        let t = if t.is_empty() { "index" } else { t };
+        // a topic by its name
+        if t.len() >= 3 && "commands".starts_with(t) {
+            let text = zett_script::docs::commands_topic(&self.engine);
+            return self.show_help("commands", text, None);
+        }
+        if t.len() >= 3 && ("settings".starts_with(t) || "options".starts_with(t)) {
+            return self.show_help("settings", crate::settings::settings_topic(), None);
+        }
+        if let Some((n, text)) = zett_script::docs::get(t) {
+            return self.show_help(n, text.to_string(), None);
+        }
+        // a setting (by name or short name): its entry on the settings page
+        if let Some(s) = crate::settings::find(t.trim_start_matches("no")).or_else(|| crate::settings::find(t)) {
+            let text = crate::settings::settings_topic();
+            let at = text.lines().position(|l| l.starts_with(&format!("- `{}`", s.name)));
+            return self.show_help("settings", text, at.map(|l| (l, 2)));
+        }
+        // a command: its entry on the commands page
+        if self.engine.commands().iter().any(|(n, _, _)| *n == t) {
+            let text = zett_script::docs::commands_topic(&self.engine);
+            let at = text.lines().position(|l| l.starts_with(&format!("- `{t}`")));
+            return self.show_help("commands", text, at.map(|l| (l, 1)));
+        }
+        // a heading in any topic: the whole section
+        let want = t.to_lowercase();
+        for (name, _, text) in zett_script::docs::TOPICS {
+            let lines: Vec<&str> = text.lines().collect();
+            if let Some(h) = lines.iter().position(|l| l.starts_with('#') && l.trim_start_matches('#').trim().to_lowercase().contains(&want)) {
+                let level = lines[h].chars().take_while(|c| *c == '#').count();
+                let end = lines.iter().skip(h + 1).position(|l| l.starts_with('#') && l.chars().take_while(|c| *c == '#').count() <= level).map(|e| h + 1 + e).unwrap_or(lines.len());
+                return self.show_help(name, text.to_string(), Some((h, (end - h).min(14))));
+            }
+        }
+        // nothing: the nearest names
+        let mut names: Vec<String> = zett_script::docs::TOPICS.iter().map(|(n, _, _)| n.to_string()).collect();
+        names.extend(crate::settings::SETTINGS.iter().map(|s| s.name.to_string()));
+        names.extend(self.engine.commands().iter().map(|(n, _, _)| n.to_string()));
+        let mut near: Vec<(usize, String)> = names.into_iter().map(|n| (crate::settings::distance(&want, &n.to_lowercase()), n)).filter(|(d, n)| *d <= 3 || n.contains(&want)).collect();
+        near.sort();
+        near.truncate(4);
+        if near.is_empty() {
+            self.say(format!("no help for \"{t}\": :help index lists the topics"));
         } else {
-            match zett_script::docs::get(t) {
-                Some((n, text)) => (n, text.to_string()),
-                None => return self.say(format!("no help for \"{topic}\": SPC h d lists the topics")),
+            self.say(format!("no help for \"{t}\"; maybe: {}", near.into_iter().map(|(_, n)| n).collect::<Vec<_>>().join(", ")));
+        }
+    }
+
+    /// A help page as a buffer (one per topic, reused), at `at`: (line, lines to pulse).
+    fn show_help(&mut self, name: &str, text: String, at: Option<(usize, usize)>) {
+        let title = format!("help: {name}");
+        let i = match self.docs.iter().position(|d| d.name == title) {
+            Some(i) => i,
+            None => {
+                self.docs.push(Doc::new(Editor::from_str(&text), title, "Markdown".into()));
+                self.docs.len() - 1
             }
         };
-        let title = format!("help: {name}");
-        if let Some(i) = self.docs.iter().position(|d| d.name == title) {
-            return self.show_doc(i);
-        }
-        self.docs.push(Doc::new(Editor::from_str(&text), title, "Markdown".into()));
-        let i = self.docs.len() - 1;
         self.show_doc(i);
+        if let Some((line, n)) = at {
+            self.goto_line(line + 1);
+            // the heading near the top of the window, the section under it
+            self.docs[i].top = line.saturating_sub(2);
+            if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+                w.top = line.saturating_sub(2);
+            }
+            self.flash = Some((i, line, line + n.max(1), Instant::now()));
+        }
     }
 
     /// Enter in a help buffer: a topic name opens it, a command name its entry in `commands`.

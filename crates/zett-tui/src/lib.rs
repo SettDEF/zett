@@ -285,6 +285,8 @@ struct App {
     key_at: Instant,
     cmdline: Option<String>,
     msg: Option<(String, Instant)>,
+    /// lines that pulse for a moment (a help section just found): (doc, from, to, since)
+    flash: Option<(usize, usize, usize, Instant)>,
     minibuf: Option<Minibuf>,
     /// time travel through a buffer's history, while it is open
     travel: Option<travel::Travel>,
@@ -420,6 +422,7 @@ impl App {
             key_at: Instant::now(),
             cmdline: None,
             msg,
+            flash: None,
             minibuf: None,
             travel: None,
             agent: None,
@@ -538,6 +541,11 @@ impl App {
             // servers answer on their own time: look more often while any runs
             let wait = if self.lsp.clients.is_empty() && self.agent.is_none() && !self.notebook.busy() { wait } else { wait.min(Duration::from_millis(100)) };
             // a plugin's timer (zett.defer) wakes the loop when it is due
+            // a pulse running: frames enough to see it fade
+            if self.flash.is_some_and(|f| f.3.elapsed() > Duration::from_millis(1600)) {
+                self.flash = None;
+            }
+            let wait = if self.flash.is_some() { wait.min(Duration::from_millis(60)) } else { wait };
             let wait = match self.engine.next_timer() {
                 Some(t) => wait.min(t.saturating_duration_since(Instant::now())),
                 None => wait,
@@ -1669,7 +1677,15 @@ impl App {
                 spans.push(Span::styled(" …", hl::hl("Folded")));
             }
             // the current line stands out, and fades over the lines around it (CursorLine, CursorLineGlow…)
+            // a section just found pulses: strong, softer, then the glow, over a second and a half
+            let pulse = self.flash.filter(|f| f.0 == di && ln >= f.1 && ln < f.2).map(|f| f.3.elapsed().as_millis()).and_then(|ms| match ms {
+                0..=350 => Some("IncSearch"),
+                351..=900 => Some("Visual"),
+                901..=1500 => Some("CursorLineGlow"),
+                _ => None,
+            });
             let band = match ln.abs_diff(c.line) {
+                _ if pulse.is_some() => pulse,
                 _ if !focused || !cul => None,
                 0 => Some("CursorLine"),
                 1 => Some("CursorLineGlow"),

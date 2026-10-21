@@ -117,6 +117,9 @@ C. files and sessions
 - [ ] dired: a folder as an editable buffer (rename by editing the names, mark, delete, copy)
 - [ ] ibuffer (buffers as a buffer), TRAMP-like remote files over ssh
 D. help and discovery
+- [x] `:help X` as Neovim finds a tag (2026-10-21): a topic, a setting (`:help wrap`, `'ic'`) on a generated
+  settings page, a command, a heading in any topic; the place found near the top, pulsing a moment;
+  nothing found names the nearest ("maybe: smartcase")
 - [ ] C-h k / f / v / m as buffers (key → command → its source), apropos, a preview while picking
   (consult), actions on any candidate (embark)
 E. programming

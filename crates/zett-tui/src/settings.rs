@@ -195,3 +195,40 @@ mod tests {
         assert_eq!(super::ft_key("Plain Text"), "plain_text");
     }
 }
+
+/// `:help settings`: every core setting, as Neovim's options page reads.
+pub(crate) fn settings_topic() -> String {
+    let mut out = String::from(
+        "# Settings\n\nAs Neovim's options and Emacs's variables. Set one with `:set name=value` (`:set noname` turns\n\
+         one off, `:set name?` shows it, `:set` alone lists them), for this buffer only with `:setlocal`, in\n\
+         init.lua with `zett.opt.name = value`, for a file type with `zett.ft.markdown = { wrap = true }`.\n\
+         A buffer's value comes from :setlocal, then its file type, then zett.opt, then the default.\n\n",
+    );
+    for s in SETTINGS {
+        let kind = match s.kind {
+            Kind::Bool => "on/off",
+            Kind::Int => "number",
+            Kind::Text => "text",
+        };
+        let short = if s.short.is_empty() { String::new() } else { format!(" · `{}`", s.short.join("`, `")) };
+        let d = if s.default.is_empty() { "\"\"" } else { s.default };
+        out.push_str(&format!("- `{}`{short} · {kind} · default `{d}`\n  {}\n", s.name, s.about));
+    }
+    out
+}
+
+/// Edits between two names (the help's "maybe").
+pub(crate) fn distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut prev = row[0];
+        row[0] = i;
+        for j in 1..=b.len() {
+            let cur = row[j];
+            row[j] = (row[j] + 1).min(row[j - 1] + 1).min(prev + usize::from(a[i - 1] != b[j - 1]));
+            prev = cur;
+        }
+    }
+    row[b.len()]
+}
