@@ -15,6 +15,7 @@ mod query;
 mod refs;
 mod notebook;
 mod everything;
+mod git;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -265,6 +266,9 @@ struct App {
     embeds: refs::Embeds,
     /// code blocks running and what they printed (notebook.rs)
     notebook: notebook::Notebook,
+    /// the git buffer (git.rs), and the echo area asking for a commit message
+    git: Option<git::GitView>,
+    committing: bool,
     /// where the minibuffer is drawn (zett.opt.minibuffer)
     placement: Placement,
     popup: Option<Popup>,
@@ -391,6 +395,8 @@ impl App {
             queries: Default::default(),
             embeds: Default::default(),
             notebook: Default::default(),
+            git: None,
+            committing: false,
             asking: false,
             placement: Placement::Bottom,
             popup: None,
@@ -550,6 +556,10 @@ impl App {
             return self.cmdline_key(k);
         }
         if self.panel_key(k) {
+            return;
+        }
+        // the git buffer's own keys (s u x c Tab Enter g q)
+        if self.git_key(&k) {
             return;
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
@@ -980,6 +990,17 @@ impl App {
 
     fn cmdline_key(&mut self, k: KeyEvent) {
         let Some(line) = self.cmdline.as_mut() else { return };
+        // the commit message for the git buffer
+        if self.committing && matches!(k.code, KeyCode::Esc | KeyCode::Enter) {
+            let l = std::mem::take(line);
+            self.cmdline = None;
+            self.prompt = None;
+            self.committing = false;
+            if k.code == KeyCode::Enter {
+                self.git_commit(&l);
+            }
+            return;
+        }
         // the question for the agent: its own prompt, not a Lua one
         if self.asking && matches!(k.code, KeyCode::Esc | KeyCode::Enter) {
             let l = std::mem::take(line);

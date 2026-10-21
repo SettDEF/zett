@@ -16,6 +16,8 @@ ui("query-open", "The results of the query block at the cursor, or what the refe
 ui("notebook-run", "Run the code block at the cursor; its output shows under it", "notebookRun")
 ui("notebook-insert", "Write the code block's output into the note, under it", "notebookInsert")
 ui("search-everything", "Search the project's files and what they once had (their saved histories)", "searchEverything")
+ui("git-status", "Git status in a buffer, as Magit: s stage, u unstage, c commit, Tab diff", "gitStatus")
+ui("git-block-history", "The commits that changed the section at the cursor", "gitBlockHistory")
 ui("backlinks", "What links to this note (notes and code comments)", "backlinks")
 ui("agent-ask", "Ask the agent (Haiku) about the region or the section: its answer comes as suggestions", "agentAsk")
 ui("save-file", "Save file", "save")
@@ -142,6 +144,8 @@ map("<leader>hd", "documentation-topics", "Documentation")
 
 z.group("<leader>g", "git")
 map("<leader>gg", "git", "Status (lazygit)")
+map("<leader>gs", "git-status", "Status (in zett, as Magit)")
+map("<leader>gb", "git-block-history", "Commits that changed this block")
 
 z.group("<leader>c", "code")
 map("<leader>cc", "compile", "Compile")

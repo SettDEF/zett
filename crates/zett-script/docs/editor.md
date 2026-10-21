@@ -43,3 +43,14 @@ saved history (kept with each save) is searched for text a change deleted or rep
 start with ⟲ and say when (`⟲ notes/plan.md@14 · 3 h ago: the old line`); Enter on one opens the
 file in time travel at the state that still has it, to read it or take it back (`Enter` all, `b` the
 section, `v`…`y` a copy).
+
+## Git
+
+`C-x g` (`SPC g s`) opens the project's status as Magit does: the branch, unstaged, staged and
+untracked files, the last commits. On a file `s` stages, `u` unstages, `x` (twice) throws away its
+changes, `Tab` shows its diff in place, `Enter` opens it; on a group's heading `s` / `u` take all of
+it. `c` commits with a message typed in the echo area, `g` refreshes, `q` closes. Enter on a commit
+shows it. (`SPC g g` is still lazygit.)
+
+`C-c g b` (`SPC g b`): the commits that changed the section the cursor is in (a heading, a function,
+any block the outline sees), newest first; Enter shows one.

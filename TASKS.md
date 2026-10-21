@@ -92,7 +92,11 @@ See PLAN.md for the vision and milestones.
   (ripgrep) and every saved history's deleted or replaced text (⟲ file@state · when), Enter on a past
   hit opens time travel at the state that has it; histories get an index (hash → path) with each save
   - [ ] the window's pages (Loro history), closed buffers' unsaved changes
-- [ ] 8 git buffer + blame · [ ] 9 sync without a server
+- [x] 8 git buffer (zett-tui git.rs): C-x g / SPC g s, Magit's status: s u x on files and groups, Tab
+  diff inline, Enter opens, c commits (echo area), g, q; Enter on a commit shows it; C-c g b / SPC g b:
+  the commits that changed the section at the cursor (git log -L), Enter shows one
+  - [ ] hunks (stage part of a file), push / pull / branches, a blame column
+- [ ] 9 sync without a server
 - [ ] 10 canvas
 
 ### P2 — what people come to Emacs for

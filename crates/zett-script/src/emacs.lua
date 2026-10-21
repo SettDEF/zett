@@ -53,6 +53,8 @@ map("<C-c>t", "time-travel")
 map("<C-c><C-o>", "query-open")
 map("<C-c>b", "backlinks")
 map("<C-c>s", "search-everything")
+map("<C-x>g", "git-status")
+map("<C-c>gb", "git-block-history")
 map("<C-c><C-c>", "notebook-run")
 map("<C-c><C-v>", "notebook-insert")
 

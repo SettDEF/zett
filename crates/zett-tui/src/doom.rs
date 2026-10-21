@@ -99,6 +99,8 @@ pub(crate) enum Pick {
     Query,
     /// the files and their saved histories (everything.rs), live as Grep
     Everything(PathBuf),
+    /// commits (git.rs): the history of one block
+    Commits,
 }
 
 impl Pick {
@@ -116,6 +118,7 @@ impl Pick {
             Pick::Docs => "docs",
             Pick::Query => "query",
             Pick::Everything(_) => "everything",
+            Pick::Commits => "commits",
         }
     }
 
@@ -455,6 +458,7 @@ impl App {
                 ("M-x ".into(), items)
             }
             Pick::Query => ("Query results".into(), Vec::new()),
+            Pick::Commits => ("Commits".into(), Vec::new()),
             Pick::Everything(root) => (format!("Search everything in {} (⟲ = its history)", home_short(&root.display().to_string())), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
@@ -512,6 +516,7 @@ impl App {
                 self.pick(Pick::Files(p));
             }
             Pick::Everything(root) if self.open_past(&root, &item) => {}
+            Pick::Commits => self.picked_commit(&item),
             Pick::Grep(root) | Pick::Everything(root) => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.parse::<usize>().ok())) {
@@ -634,6 +639,8 @@ impl App {
             "queryOpen" => self.query_open(),
             "backlinks" => self.backlinks(),
             "notebookRun" => self.notebook_run(),
+            "gitStatus" => self.git_status(),
+            "gitBlockHistory" => self.git_blame_section(),
             "notebookInsert" => self.notebook_insert(),
             "agentAsk" => self.agent_ask(),
             "save" => self.save(None),
