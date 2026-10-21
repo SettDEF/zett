@@ -10,6 +10,8 @@
 //! Every case in tests/nvim-cases.tsv behaves exactly as in Neovim. Still to come:
 //! registers by name, dot-repeat, macros and search.
 
+pub mod digraph;
+mod digraph_table;
 pub mod emacs;
 pub mod keys;
 pub mod killring;

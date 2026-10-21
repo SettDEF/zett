@@ -35,7 +35,7 @@ const NAMES: &[(&str, &str)] = &[
     ("silent", "sil"), ("unsilent", "uns"), ("verbose", "verb"), ("keepalt", "keepa"), ("keepmarks", "kee"), ("keepjumps", "keepj"),
     ("keeppatterns", "keepp"), ("lockmarks", "loc"), ("noautocmd", "noa"), ("sandbox", "san"), ("filter", "filt"), ("browse", "bro"),
     ("confirm", "conf"), ("noswapfile", "nos"), ("match", "mat"), ("2match", "2mat"), ("3match", "3mat"), ("k", "k"), ("list", "l"), ("goto", "go"), ("iput", "ip"), ("dl", "dl"),
-    ("smagic", "sm"), ("snomagic", "sno"), ("undojoin", "undoj"),
+    ("smagic", "sm"), ("snomagic", "sno"), ("undojoin", "undoj"), ("digraphs", "dig"),
     ("spellgood", "spe"), ("spellwrong", "spellw"), ("spellrare", "spellra"), ("spellundo", "spellu"), ("spellinfo", "spelli"),
     ("spelldump", "spelld"), ("fold", "fo"), ("foldclose", "foldc"), ("foldopen", "foldo"), ("folddoopen", "foldd"),
     ("folddoclosed", "folddoc"), ("luado", "luad"), ("redir", "redi"),
@@ -463,6 +463,15 @@ impl App {
                     self.say(e);
                 }
             }
+            // :digraphs lists them (! by block: the same here); :digraphs {char1}{char2} {number} adds
+            "digraphs" => {
+                if arg.trim().is_empty() {
+                    let rows = zett_edit::digraph::list().into_iter().map(|(p, c, n, own)| (format!("{p} {}", if c.is_control() { format!("^{}", char::from_u32((n + 64) % 128).unwrap_or('?')) } else { c.to_string() }), format!("{n}{}", if own { "  (:digraphs)" } else { "" }))).collect();
+                    self.popup = Some(Popup::Help("digraphs · CTRL-K {char1} {char2}".into(), rows));
+                } else if let Err(e) = zett_edit::digraph::define(arg) {
+                    self.say(e);
+                }
+            }
             "mark" | "k" => match arg.trim().chars().next() {
                 Some(c) if c.is_ascii_alphabetic() || "'`[]<>".contains(c) => {
                     let at = self.docs[self.cur].ed.buf.to_char(Pos { line: b, col: 0 });
@@ -844,6 +853,31 @@ mod tests {
         assert_eq!(app.win_match.len(), 2);
         app.command("2match none");
         assert_eq!(app.win_match.len(), 1);
+    }
+
+    #[test]
+    fn digraphs_in_insert_mode_and_on_the_line() {
+        let keys = |app: &mut crate::App, k: &str| {
+            for k in zett_edit::keys::parse(k) {
+                app.key(crate::input::key_event(&k));
+            }
+        };
+        let mut app = app_with("\n");
+        keys(&mut app, "ia<C-k>a:<C-k>:o<C-k>Eu<Esc>");
+        assert_eq!(text(&app), "aäö€\n", "CTRL-K, either way round");
+        // 'digraph': {char1} <BS> {char2}
+        let mut app = app_with("\n");
+        app.command("set digraph");
+        keys(&mut app, "ie<BS>'x<Esc>");
+        assert_eq!(text(&app), "éx\n");
+        let mut app = app_with("\n");
+        keys(&mut app, "ie<BS>'<Esc>");
+        assert_eq!(text(&app), "'\n", "off: a <BS> is a <BS>");
+        // the : line, and :digraphs adding one
+        let mut app = app_with("\n");
+        app.command("digraphs xy 9731");
+        keys(&mut app, ":<C-k>xy<C-k>o:");
+        assert_eq!(app.cmdline.as_deref(), Some("☃ö"));
     }
 
     #[test]

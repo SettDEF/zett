@@ -59,6 +59,11 @@ pub static CLIPBOARD: OnceLock<(fn() -> Option<String>, fn(&str))> = OnceLock::n
 
 #[derive(Default, Debug)]
 pub(crate) struct VimState {
+    /// insert mode CTRL-K: waiting for the first character (Some(None)) or the second (Some(Some(a)))
+    pub digraph: Option<Option<char>>,
+    /// 'digraph': the character just typed, and the one a <BS> took back ({char1} <BS> {char2})
+    pub dg_last: Option<char>,
+    pub dg_bs: Option<char>,
     pub marks: HashMap<char, usize>,
     pub regs: HashMap<char, Register>,
     /// `"x` given for the next command, and the unnamed register it stood in for

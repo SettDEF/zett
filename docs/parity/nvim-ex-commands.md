@@ -144,7 +144,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:diffput` | `:diffpu[t]` | remove differences in other buffer |
 | · | `:diffsplit` | `:diffs[plit]` | show differences with another file |
 | · | `:diffthis` | `:difft[his]` | make current window a diff window |
-| · | `:digraphs` | `:dig[raphs]` | show or enter digraphs |
+| ✓ | `:digraphs` | `:dig[raphs]` | show or enter digraphs |
 | ✓ | `:display` | `:di[splay]` | display registers |
 | ✓ | `:djump` | `:dj[ump]` | jump to #define |
 | ✓ | `:dl` | `:dl` | short for \|:delete\| with the 'l' flag |

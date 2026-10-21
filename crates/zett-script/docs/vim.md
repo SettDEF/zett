@@ -81,6 +81,23 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
 - the dictionary: hunspell's (`sudo pacman -S hunspell-en_us`), or a word list in
   `~/.local/share/zett/spell/`
 
+## Digraphs
+
+- `CTRL-K {char1} {char2}` in insert mode and on the `:` line: one character for two, Vim's table
+  (`a:` ä, `e'` é, `Eu` €, `->` →; either way round); `:digraphs` lists them, `:digraphs xy 9731`
+  adds one; with `digraph` on, `{char1} <BS> {char2}` makes one too
+
+## Mappings, folders, included files
+
+- `:cmap :cnoremap` and `:cabbrev` work on the `:` line, `:omap :onoremap` after an operator (`dL`
+  with `:onoremap L $`); `:map` covers Normal, Visual and operator-pending, `:map!` and `:ab` insert
+  mode and the `:` line
+- `:cd` (`-` the folder before, `cdpath` for relative ones), `:tcd` for this buffer, `:lcd` for this
+  window; `:pwd` the one that applies (`:verbose pwd` says which)
+- `[i [I [ CTRL-I` the word under the cursor through the file and the files it includes (`]` from the
+  line below); `:ilist :isearch :ijump :isplit`, `:dlist :dsearch :djump :dsplit` for definitions,
+  `:checkpath` the included files not found (`include`, `define`, `path`, `suffixesadd`)
+
 ## Windows and scrolling
 
 - `CTRL-W` and a key: `s v n` split / new, `w W p t b` and `h j k l` go to one, `H J K L` move

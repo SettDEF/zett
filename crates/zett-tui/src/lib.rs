@@ -399,6 +399,8 @@ struct App {
     abbrevs: Vec<(String, String)>,
     /// the : line's abbreviations (:cabbrev; :abbreviate sets both)
     cabbrevs: Vec<(String, String)>,
+    /// CTRL-K on the : line: waiting for the digraph's first character, or its second
+    cmd_digraph: Option<Option<char>>,
     user_cmds: std::collections::HashMap<String, mapcmds::UserCmd>,
     autocmds: Vec<mapcmds::AutoCmd>,
     augroup: String,
@@ -587,6 +589,7 @@ impl App {
             noremap: 0,
             abbrevs: Vec::new(),
             cabbrevs: Vec::new(),
+            cmd_digraph: None,
             user_cmds: Default::default(),
             autocmds: Vec::new(),
             augroup: String::new(),

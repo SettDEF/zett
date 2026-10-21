@@ -80,6 +80,24 @@ impl App {
             }
             return;
         }
+        // CTRL-K {char1} {char2}: a digraph on the line too
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        if let Some(first) = self.cmd_digraph {
+            self.cmd_digraph = None;
+            if let KeyCode::Char(c) = k.code {
+                if !ctrl {
+                    match first {
+                        None => self.cmd_digraph = Some(Some(c)),
+                        Some(a) => line.push(zett_edit::digraph::lookup(a, c)),
+                    }
+                }
+            }
+            return;
+        }
+        if ctrl && k.code == KeyCode::Char('k') {
+            self.cmd_digraph = Some(None);
+            return;
+        }
         match k.code {
             KeyCode::Esc => {
                 self.cmdline = None;

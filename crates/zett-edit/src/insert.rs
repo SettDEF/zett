@@ -14,6 +14,40 @@ impl Editor {
     }
 
     pub(crate) fn insert_key(&mut self, k: Key) {
+        // CTRL-K {char1} {char2}: a digraph (digraph.rs); anything else than a character stops it
+        if let Some(first) = self.vim.digraph {
+            let Some(c) = k.char().filter(|_| !k.ctrl && !k.alt) else {
+                self.vim.digraph = None;
+                return;
+            };
+            match first {
+                None => self.vim.digraph = Some(Some(c)),
+                Some(a) => {
+                    self.vim.digraph = None;
+                    self.insert_key(Key::ch(crate::digraph::lookup(a, c)));
+                }
+            }
+            return;
+        }
+        // 'digraph': {char1} <BS> {char2}; any other key forgets char1
+        let dg = (self.vim.dg_last.take(), self.vim.dg_bs.take());
+        match k.code {
+            Code::Char('k') if k.ctrl && !k.alt => {
+                self.vim.digraph = Some(None);
+                return;
+            }
+            Code::Backspace if self.opt_on("digraph", false) => self.vim.dg_bs = dg.0,
+            _ => {}
+        }
+        let k = match (dg.1, k.code) {
+            (Some(a), Code::Char(c)) if !k.ctrl && !k.alt => crate::digraph::known(a, c).map_or(k, Key::ch),
+            _ => k,
+        };
+        if let Code::Char(c) = k.code {
+            if !k.ctrl && !k.alt {
+                self.vim.dg_last = Some(c);
+            }
+        }
         match k.code {
             Code::Esc => {
                 // a block insert: what was typed goes on the other lines too
