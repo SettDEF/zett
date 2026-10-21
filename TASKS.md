@@ -137,6 +137,9 @@ Measured by scripts/parity.sh against the installed Neovim and Emacs (docs/parit
 item means all three: it works in zett (a test, or a check in the real window), the parity page
 counts it, and `:help` finds it. Nothing counts as done by being accepted and ignored.
 
+Tonight (decided 2026-10-21): P1 documentation, then every option group (P2), then Ex commands (P3) as far as
+the night goes, everyday groups first (X1 X3 X2). vim.api (P4) and Emacs (P5) are later nights.
+
 Where it stands: normal-mode keys 477/477 ✓ · options 42/374 (the rest kept, ◐) · Ex commands
 83/557 · vim.api + vim.fn 0/840 · Emacs keys 51/500 · Emacs commands 68/3164.
 
