@@ -166,3 +166,19 @@ fn numeric_argument_keys_and_zett_arg() {
     let (out, _) = e.eval("return tostring(zett.arg)").unwrap();
     assert_eq!(out, "nil");
 }
+
+#[test]
+fn every_emacs_key_points_at_a_command() {
+    let (d, f) = ws("emacs-keys-real");
+    let mut e = Engine::new(Some(f));
+    e.set_frontend("editor");
+    e.load_config(&d.join("no-config"));
+    assert!(e.errors.is_empty(), "{:?}", e.errors);
+    let have: std::collections::HashSet<String> = e.commands().into_iter().map(|c| c.0).collect();
+    let src = include_str!("emacs.lua");
+    let missing: Vec<&str> = src.lines().filter_map(|l| l.trim().strip_prefix("map(\"")).filter_map(|l| l.split("\", \"").nth(1)).filter_map(|r| r.split('"').next()).filter(|n| !have.contains(*n)).collect();
+    assert!(missing.is_empty(), "keys on commands that do not exist: {missing:?}");
+    // an Emacs name runs zett's command
+    assert_eq!(e.feed("e", &k("<C-x>o")), Feed::Ran(vec![Effect::Ui("focusWin".into(), "next".into())]));
+    assert_eq!(e.feed("e", &k("<C-M-f>")), Feed::Ran(vec![Effect::Edit("forward-sexp".into(), 1)]));
+}

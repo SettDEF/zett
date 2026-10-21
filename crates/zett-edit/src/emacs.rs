@@ -44,7 +44,59 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("just-one-space", "Leave exactly one space around the cursor"),
     ("undo", "Undo the last change"),
     ("redo", "Redo the last undone change"),
+    ("cycle-spacing", "One space around the cursor; again: none; again: as it was"),
+    ("tab-to-tab-stop", "Insert blanks to the next tab stop"),
+    ("split-line", "Move the rest of the line down, starting at the cursor's column"),
+    ("default-indent-new-line", "A line break continuing the comment (or the list item)"),
+    ("append-next-kill", "The next kill adds to the last one"),
+    ("indent-rigidly", "Shift the region's lines right by the argument's columns (negative: left; none: a shift width)"),
+    ("indent-rigidly-left", "Shift the region's lines one column left"),
+    ("indent-rigidly-right", "Shift the region's lines one column right"),
+    ("indent-region", "Reindent the region's lines"),
+    ("delete-trailing-whitespace", "Delete blanks at the ends of lines (the region's, or the buffer's)"),
+    ("delete-region", "Delete the region, without keeping it in the kill ring"),
+    ("zap-to-char", "Kill through the next occurrence of a character (reads it)"),
+    ("zap-up-to-char", "Kill up to the next occurrence of a character (reads it)"),
+    ("quoted-insert", "Insert the next key as it is (a tab, a control character)"),
+    // Emacs's names for commands above
+    ("left-char", "Move one character back (backward-char)"),
+    ("right-char", "Move one character forward (forward-char)"),
+    ("left-word", "Move to the start of the previous word (backward-word)"),
+    ("right-word", "Move past the end of the next word (forward-word)"),
+    ("move-beginning-of-line", "Move to the start of the line (beginning-of-line)"),
+    ("move-end-of-line", "Move to the end of the line (end-of-line)"),
+    ("kill-ring-save", "Copy the region to the kill ring (copy-region-as-kill)"),
+    ("undo-redo", "Redo the last undone change (redo)"),
+    ("undo-only", "Undo, never redo (undo)"),
+    ("delete-indentation", "Join this line to the one before (join-line)"),
+    ("backward-delete-char-untabify", "Delete the character before the cursor (delete-backward-char)"),
+    ("newline-and-indent", "A line break, keeping the indentation (newline)"),
+    ("fixup-whitespace", "One space around the cursor (just-one-space)"),
+    ("keyboard-escape-quit", "Cancel: deactivate the mark (keyboard-quit)"),
 ];
+
+/// Emacs's other names for zett's commands: (name, the command it runs).
+const ALIASES: &[(&str, &str)] = &[
+    ("left-char", "backward-char"),
+    ("right-char", "forward-char"),
+    ("left-word", "backward-word"),
+    ("right-word", "forward-word"),
+    ("move-beginning-of-line", "beginning-of-line"),
+    ("move-end-of-line", "end-of-line"),
+    ("kill-ring-save", "copy-region-as-kill"),
+    ("undo-redo", "redo"),
+    ("undo-only", "undo"),
+    ("delete-indentation", "join-line"),
+    ("backward-delete-char-untabify", "delete-backward-char"),
+    ("newline-and-indent", "newline"),
+    ("fixup-whitespace", "just-one-space"),
+    ("keyboard-escape-quit", "keyboard-quit"),
+];
+
+/// The command an Emacs name stands for (itself when it is no other name).
+pub fn resolve(name: &str) -> &str {
+    ALIASES.iter().find(|a| a.0 == name).map_or(name, |a| a.1)
+}
 
 /// Kills that follow each other add to the same kill-ring entry (Emacs's kill-append).
 const KILLS: &[&str] = &["kill-line", "kill-whole-line", "kill-word", "backward-kill-word", "kill-region"];
@@ -52,7 +104,7 @@ const KILLS: &[&str] = &["kill-line", "kill-whole-line", "kill-word", "backward-
 /// Every named editor command: the editing ones here, the search ones (search.rs) and the
 /// numeric argument (prefix.rs, which the front end runs).
 pub fn all() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
-    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter()).chain(crate::outline::COMMANDS.iter()).chain(crate::suggest::COMMANDS.iter()).chain(crate::textops::COMMANDS.iter())
+    COMMANDS.iter().chain(crate::search::COMMANDS.iter()).chain(crate::prefix::COMMANDS.iter()).chain(crate::outline::COMMANDS.iter()).chain(crate::suggest::COMMANDS.iter()).chain(crate::textops::COMMANDS.iter()).chain(crate::balanced::COMMANDS.iter()).chain(crate::rect::COMMANDS.iter()).chain(crate::rect::REGISTER_COMMANDS.iter()).chain(crate::screen::COMMANDS.iter())
 }
 
 pub fn is_command(name: &str) -> bool {
@@ -81,6 +133,23 @@ impl Editor {
     }
     pub fn is_emacs(&self) -> bool {
         self.emacs
+    }
+
+    /// Shows a..b as the region, the cursor at b (a query-replace match).
+    pub fn set_region(&mut self, a: usize, b: usize) {
+        self.mark = Some(a.min(self.buf.len_chars()));
+        self.cursor = b.min(self.buf.len_chars());
+        self.mark_active = true;
+    }
+
+    /// a..b becomes `t` (one undo step), the cursor after it.
+    pub fn replace_text(&mut self, a: usize, b: usize, t: &str) {
+        self.begin();
+        self.rem(a, b);
+        self.ins(a, t);
+        self.close();
+        self.cursor = a + t.chars().count();
+        self.mark_active = false;
     }
 
     /// The active region (start, end): set with C-SPC, gone after an edit, M-w or C-g.
@@ -121,7 +190,21 @@ impl Editor {
     /// Runs a command with a numeric argument (prefix.rs), as Emacs does: None runs it once;
     /// negative runs its opposite (M-- M-f = M-b); `C-u N C-k` kills N whole lines.
     pub fn exec_arg(&mut self, name: &str, arg: Option<i64>) -> bool {
+        let name = resolve(name);
         let n = arg.unwrap_or(1);
+        if crate::screen::is_command(name) {
+            return self.screen_exec(name, arg);
+        }
+        // these read the argument's sign themselves
+        if crate::balanced::is_command(name) {
+            return self.balanced_exec(name, n);
+        }
+        if name == "indent-rigidly" {
+            let cols = arg.unwrap_or(self.shiftwidth().max(1) as i64);
+            self.last_cmd = name.to_string();
+            self.indent_rigidly(cols);
+            return true;
+        }
         if name == "kill-line" && arg.is_some() && n > 0 {
             if !is_command(name) {
                 return false;
@@ -148,7 +231,48 @@ impl Editor {
         if !is_command(name) {
             return false;
         }
+        let name = resolve(name);
         let n = n.max(1);
+        if crate::balanced::is_command(name) {
+            return self.balanced_exec(name, n as i64);
+        }
+        if crate::rect::is_command(name) {
+            return self.rect_exec(name);
+        }
+        if crate::screen::is_command(name) {
+            return self.screen_exec(name, (n > 1).then_some(n as i64));
+        }
+        match name {
+            "indent-rigidly" | "indent-rigidly-left" | "indent-rigidly-right" => {
+                self.last_cmd = name.to_string();
+                let by = match name { "indent-rigidly-left" => -(n as i64), "indent-rigidly-right" => n as i64, _ => self.shiftwidth().max(1) as i64 };
+                self.indent_rigidly(by);
+                return true;
+            }
+            "indent-region" => {
+                self.last_cmd = name.to_string();
+                let (l1, l2) = match self.mark_span() {
+                    Some((a, b)) if self.mark_active => (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line),
+                    _ => (self.cur_line(), self.cur_line()),
+                };
+                let at = self.cursor;
+                self.vim_apply(crate::Op::Reindent, crate::Span::Lines(l1, l2));
+                self.cursor = at.min(self.buf.len_chars());
+                self.mark_active = false;
+                return true;
+            }
+            "append-next-kill" => {
+                // the next kill sees a kill before it, and adds to it
+                self.last_cmd = "kill-region".into();
+                return true;
+            }
+            // they read a key first: the front end asks for it (rect.rs char_prompt, exec_char)
+            "zap-to-char" | "zap-up-to-char" | "quoted-insert" => return true,
+            _ => {}
+        }
+        if crate::rect::REGISTER_COMMANDS.iter().any(|r| r.0 == name) {
+            return true;
+        }
         if crate::suggest::is_command(name) {
             self.last_cmd = name.to_string();
             return self.suggest_exec(name);
@@ -359,6 +483,80 @@ impl Editor {
                         self.cursor = a + 1;
                     }
                 }
+                "cycle-spacing" => {
+                    let blank = |c: Option<char>| matches!(c, Some(' ') | Some('\t'));
+                    match self.spacing.take().filter(|_| last == "cycle-spacing") {
+                        // second: no space at all
+                        Some((at, orig, left, 1)) => {
+                            self.rem(at, (at + 1).min(self.buf.len_chars()));
+                            self.cursor = at;
+                            self.spacing = Some((at, orig, left, 2));
+                        }
+                        // third: as it was
+                        Some((at, orig, left, _)) => {
+                            self.ins(at, &orig);
+                            self.cursor = at + left;
+                        }
+                        None => {
+                            let (mut a, mut b) = (self.cursor, self.cursor);
+                            while a > 0 && blank(self.char(a - 1)) {
+                                a -= 1;
+                            }
+                            while blank(self.char(b)) {
+                                b += 1;
+                            }
+                            let left = self.cursor - a;
+                            let orig = self.rem(a, b);
+                            self.ins(a, " ");
+                            self.cursor = a + 1;
+                            self.spacing = Some((a, orig, left, 1));
+                        }
+                    }
+                }
+                "tab-to-tab-stop" => self.insert_tab(),
+                "split-line" => {
+                    let col = self.cursor().col;
+                    let mut b = self.cursor;
+                    while matches!(self.char(b), Some(' ') | Some('\t')) {
+                        b += 1;
+                    }
+                    self.rem(self.cursor, b);
+                    self.ins(self.cursor, &format!("\n{}", " ".repeat(col)));
+                }
+                "default-indent-new-line" => {
+                    let (_, rest) = crate::textops::fill_prefix(self.buf.line(self.cur_line()).trim_end_matches('\n'));
+                    let mut a = self.cursor;
+                    while a > self.line_start(self.cur_line()) && matches!(self.char(a - 1), Some(' ') | Some('\t')) {
+                        a -= 1;
+                    }
+                    self.rem(a, self.cursor);
+                    self.ins(a, &format!("\n{rest}"));
+                    self.cursor = a + 1 + rest.chars().count();
+                }
+                "delete-trailing-whitespace" => {
+                    let (l1, l2) = match self.region() {
+                        Some((a, b)) => (self.buf.to_pos(a).line, self.buf.to_pos(b).line),
+                        None => (0, self.buf.len_lines() - 1),
+                    };
+                    for l in (l1..=l2).rev() {
+                        let line = self.buf.line(l);
+                        let body = line.trim_end_matches('\n');
+                        let kept = body.trim_end_matches([' ', '\t']).chars().count();
+                        let (s, e) = (self.line_start(l) + kept, self.line_start(l) + body.chars().count());
+                        if e > s {
+                            self.rem(s, e);
+                            if self.cursor > s {
+                                self.cursor = self.cursor.saturating_sub((e - s).min(self.cursor - s));
+                            }
+                        }
+                    }
+                }
+                "delete-region" => {
+                    if let Some((a, b)) = self.mark_span() {
+                        self.rem(a, b);
+                        self.cursor = a;
+                    }
+                }
                 "undo" => {
                     self.undo_once();
                     self.mode = Mode::Insert;
@@ -387,6 +585,36 @@ impl Editor {
         true
     }
 
+    /// The region's lines (or this one) shifted `by` columns: right, or left when negative.
+    fn indent_rigidly(&mut self, by: i64) {
+        let (l1, l2) = match self.mark_span() {
+            Some((a, b)) if self.mark_active => (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line),
+            _ => (self.cur_line(), self.cur_line()),
+        };
+        let (cp, mp) = (self.cursor(), self.mark.map(|m| self.buf.to_pos(m)));
+        let mut moved = std::collections::HashMap::new();
+        self.begin();
+        for l in l1..=l2 {
+            let ind = self.indent_of(l);
+            if self.buf.line_len(l) == ind.chars().count() {
+                continue;
+            }
+            let w = (self.indent_width(&ind) as i64 + by).max(0) as usize;
+            let new = self.make_indent(w);
+            let s = self.line_start(l);
+            self.rem(s, s + ind.chars().count());
+            self.ins(s, &new);
+            moved.insert(l, new.chars().count() as i64 - ind.chars().count() as i64);
+        }
+        self.close();
+        // the cursor and the mark keep their places in the text
+        let at = |e: &Self, p: zett_core::Pos| e.line_start(p.line) + ((p.col as i64 + moved.get(&p.line).copied().unwrap_or(0)).max(0) as usize).min(e.buf.line_len(p.line));
+        self.cursor = at(self, cp);
+        self.mark = mp.map(|p| at(self, p));
+        // the region stays, so the next shift moves the same lines (as Emacs's)
+        self.want_col = self.cursor().col;
+    }
+
     /// Removes a..b into the kill ring (appended to the last kill when kills follow each other).
     fn kill(&mut self, a: usize, b: usize, append: bool, before: bool) {
         if b <= a {
@@ -402,7 +630,7 @@ impl Editor {
         self.yanked = None;
     }
 
-    fn ring(&self) -> std::sync::MutexGuard<'_, crate::KillRing> {
+    pub(crate) fn ring(&self) -> std::sync::MutexGuard<'_, crate::KillRing> {
         self.kill_ring.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -643,5 +871,46 @@ mod tests {
         let mut e = ed("aa\nbb", 1);
         e.exec_arg("kill-line", None);
         assert_eq!(e.text(), "a\nbb");
+    }
+
+    #[test]
+    fn emacs_names_and_spacing() {
+        let mut e = ed("ab", 0);
+        e.exec("right-char", 1);
+        assert_eq!(e.cursor, 1, "right-char is forward-char");
+        let mut e = ed("a   b", 2);
+        e.exec("cycle-spacing", 1);
+        assert_eq!(e.text(), "a b");
+        e.exec("cycle-spacing", 1);
+        assert_eq!(e.text(), "ab");
+        e.exec("cycle-spacing", 1);
+        assert_eq!((e.text().as_str(), e.cursor), ("a   b", 2), "the third time: as it was");
+        let mut e = ed("abc  def", 3);
+        e.exec("split-line", 1);
+        assert_eq!(e.text(), "abc\n   def");
+        let mut e = ed("x  \ny\t\n", 0);
+        e.exec("delete-trailing-whitespace", 1);
+        assert_eq!(e.text(), "x\ny\n");
+        let mut e = ed("    // note", 11);
+        e.exec("default-indent-new-line", 1);
+        assert_eq!(e.text(), "    // note\n    // ");
+    }
+
+    #[test]
+    fn indent_rigidly_and_append_next_kill() {
+        let mut e = ed("a\nb", 0);
+        e.exec("set-mark-command", 1);
+        e.cursor = 3;
+        e.exec_arg("indent-rigidly", Some(2));
+        assert_eq!(e.text(), "  a\n  b");
+        assert_eq!(e.cursor, 7, "the cursor stays after b");
+        e.exec_arg("indent-rigidly", Some(-1));
+        assert_eq!(e.text(), " a\n b");
+        let mut e = ed("one two", 0);
+        e.exec("kill-word", 1);
+        e.exec("forward-char", 1);
+        e.exec("append-next-kill", 1);
+        e.exec("kill-word", 1);
+        assert_eq!(e.last_kill().as_deref(), Some("onetwo"));
     }
 }

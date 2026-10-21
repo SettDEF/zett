@@ -22,6 +22,9 @@ pub mod search;
 pub mod spell;
 pub mod suggest;
 pub mod textops;
+pub mod balanced;
+pub mod rect;
+pub mod screen;
 pub mod vim;
 mod change;
 mod history;
@@ -143,6 +146,10 @@ pub struct Editor {
     dabbrev: Option<textops::Dabbrev>,
     /// expandtab: Tab inserts spaces to the next multiple of this (None: a tab character)
     soft_tab: Option<usize>,
+    /// cycle-spacing (M-SPC): where, the blanks it took, how many were left of the cursor, which step
+    spacing: Option<(usize, String, usize, u8)>,
+    /// C-l and M-r in a row: middle, top, bottom (screen.rs)
+    cycle: u8,
 }
 
 impl Editor {
@@ -170,6 +177,8 @@ impl Editor {
             mark_word_end: 0,
             dabbrev: None,
             soft_tab: None,
+            spacing: None,
+            cycle: 0,
             kill_ring: KillRing::shared(),
             isearch: None,
             last_search: String::new(),

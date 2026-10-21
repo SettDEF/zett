@@ -6,6 +6,7 @@ pub const TOPICS: &[(&str, &str, &str)] = &[
     ("editor", "buffers, windows, finding, editing", include_str!("../docs/editor.md")),
     ("vim", "Vim mode: search, marks, registers, macros, folds, blocks, spelling, windows", include_str!("../docs/vim.md")),
     ("vim-keys", "every normal-mode key, Neovim's index with zett's state", include_str!("../docs/vim-keys.md")),
+    ("emacs", "Emacs keys: moving, killing, M-%, rectangles, registers, macros, C-h", include_str!("../docs/emacs.md")),
     ("keys", "the SPC tree and changing keys", include_str!("../docs/keys.md")),
     ("lsp", "language servers: errors, completion, rename", include_str!("../docs/lsp.md")),
     ("config", "init.lua: options, keys, commands, hooks", include_str!("../docs/config.md")),
@@ -39,13 +40,42 @@ mod tests {
 /// The `commands` topic, made from the running config (plugins and init.lua included).
 pub fn commands_topic(e: &crate::Engine) -> String {
     let keys = e.keys_of("n");
+    let emacs = e.keys_of("e");
     let mut cmds = e.commands();
     cmds.sort();
     let mut out = String::from("# Commands\n\nEvery command, with its keys. Run any by name: `SPC :` or `:NAME`.\n\n");
     for (name, desc, source) in cmds {
         let k = keys.get(&name).map(|v| v.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+        // and the Emacs profile's, as Emacs writes them (C-x o)
+        let ek = emacs.get(&name).map(|v| v.iter().map(|k| format!("`{}`", emacs_style(k))).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+        let k = [k, ek].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
         let from = if source == "zett" { String::new() } else { format!("  ({source})") };
         out.push_str(&format!("- `{name}`  {desc}{}{from}\n", if k.is_empty() { String::new() } else { format!("  {k}") }));
     }
     out
+}
+
+/// Keys as Emacs writes them: `<C-x>o` is `C-x o`, `<A-f>` is `M-f`, `<CR>` is `RET`.
+pub fn emacs_style(typed: &str) -> String {
+    crate::keys(typed)
+        .iter()
+        .map(|k| {
+            let inner = k.strip_prefix('<').and_then(|k| k.strip_suffix('>')).unwrap_or(k);
+            let (mods, key) = inner.rsplit_once('-').filter(|(_, k)| !k.is_empty()).unwrap_or(("", inner));
+            let key = match key {
+                "lt" => "<",
+                "gt" => ">",
+                "Enter" | "CR" => "RET",
+                "Space" => "SPC",
+                "BS" => "DEL",
+                "Tab" => "TAB",
+                "Esc" => "ESC",
+                k => k,
+            };
+            // the engine writes Alt as A-; Emacs says M-
+            let mods: Vec<&str> = mods.split('-').filter(|m| !m.is_empty()).map(|m| if m == "A" { "M" } else { m }).collect();
+            if mods.is_empty() { key.to_string() } else { format!("{}-{key}", mods.join("-")) }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

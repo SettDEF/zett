@@ -34,6 +34,7 @@ mod defsearch;
 mod diff;
 mod runtime;
 mod signs;
+mod emacs;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -442,6 +443,20 @@ struct App {
     emacs: bool,
     /// Emacs profile: Esc was pressed, the next key gets Meta (Esc f = M-f, as in Emacs and zsh)
     meta: bool,
+    /// a command waiting for its key (a register, zap-to-char's character, C-q): (name, argument)
+    char_for: Option<(String, Option<i64>)>,
+    /// M-%: the match shown and what replaces it (emacs.rs)
+    qr: Option<emacs::QueryReplace>,
+    /// C-h k (false) or C-h c (true) waiting for keys, and the keys so far
+    describing: Option<(bool, Vec<String>)>,
+    /// the last 300 keys, for C-h l
+    lossage: std::collections::VecDeque<String>,
+    /// how many keys the command running now took (C-x ) leaves them out of the macro)
+    ran_keys: usize,
+    /// a keyboard macro being recorded (C-x (), the last one, and C-x e waiting for e to repeat
+    kmacro: Option<Vec<String>>,
+    last_kmacro: Vec<String>,
+    kmacro_again: bool,
     /// Emacs profile: a numeric argument being typed (C-u 4, M-5), for the next command
     arg: zett_edit::prefix::PrefixArg,
     /// the key that ran the last command (digit-argument reads its digit)
@@ -635,6 +650,14 @@ impl App {
             tabs: false,
             emacs: true,
             meta: false,
+            char_for: None,
+            qr: None,
+            describing: None,
+            lossage: Default::default(),
+            ran_keys: 0,
+            kmacro: None,
+            last_kmacro: Vec::new(),
+            kmacro_again: false,
             arg: Default::default(),
             last_key: String::new(),
             kill_ring: zett_edit::KillRing::shared(),

@@ -536,6 +536,32 @@ impl Engine {
         Feed::None
     }
 
+    /// What keys would do, without doing it (C-h k): Some((command, its description)) for a
+    /// command (an empty name: a Lua function or keys), None when nothing is bound; `Err` when
+    /// longer mappings start with them (more keys to come).
+    pub fn lookup(&self, mode: &str, typed: &[String]) -> Result<Option<(String, String)>, ()> {
+        let typed: Vec<String> = typed.iter().map(|t| if t.starts_with('<') && t.len() > 2 { normalize(t) } else { t.clone() }).collect();
+        let st = self.st.borrow();
+        let leader = st.leader.clone();
+        let Some(maps) = st.maps.get(mode) else { return Ok(None) };
+        let mut exact = None;
+        for m in maps {
+            let k: Vec<String> = m.keys.iter().map(|t| if t == "<leader>" { leader.clone() } else { t.clone() }).collect();
+            if k == typed {
+                exact = Some(m);
+            } else if k.len() > typed.len() && k[..typed.len()] == *typed {
+                return Err(());
+            }
+        }
+        Ok(exact.map(|m| match &m.action {
+            Action::Command(c) => {
+                let desc = st.commands.get(c).map(|x| x.desc.clone()).or_else(|| zett_edit::emacs::describe(c).map(str::to_string)).unwrap_or_default();
+                (c.clone(), desc)
+            }
+            _ => (String::new(), m.desc.clone()),
+        }))
+    }
+
     /// The keys stopped (the host's timeout, like Neovim's `timeoutlen`): a mapping that is
     /// exactly these keys runs even though longer ones start the same way.
     pub fn timeout(&mut self, mode: &str, typed: &[String]) -> Feed {

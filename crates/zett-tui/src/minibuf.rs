@@ -349,27 +349,7 @@ fn fuzzy_hits(q: &[char], s: &str) -> Vec<usize> {
 
 /// Keys as Emacs writes them: `<C-x><C-f>` → `C-x C-f`, `<M-lt>` → `M-<`.
 pub(crate) fn emacs_keys(typed: &str) -> String {
-    zett_script::keys(typed)
-        .iter()
-        .map(|k| {
-            let inner = k.strip_prefix('<').and_then(|k| k.strip_suffix('>')).unwrap_or(k);
-            let (mods, key) = inner.rsplit_once('-').filter(|(_, k)| !k.is_empty()).unwrap_or(("", inner));
-            let key = match key {
-                "lt" => "<",
-                "gt" => ">",
-                "Enter" | "CR" => "RET",
-                "Space" => "SPC",
-                "BS" => "DEL",
-                "Tab" => "TAB",
-                "Esc" => "ESC",
-                k => k,
-            };
-            // the engine writes Alt as A-; Emacs says M-
-            let mods: Vec<&str> = mods.split('-').filter(|m| !m.is_empty()).map(|m| if m == "A" { "M" } else { m }).collect();
-            if mods.is_empty() { key.to_string() } else { format!("{}-{key}", mods.join("-")) }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    zett_script::docs::emacs_style(typed)
 }
 
 fn hist_file(kind: &Pick) -> PathBuf {

@@ -132,6 +132,8 @@ pub(crate) enum Pick {
     Menu(String),
     /// the matches of a tag (:tselect, :tjump with more than one)
     Tags(String),
+    /// an Emacs prompt (emacs.rs): the prompts still to come, what to do, the answers so far
+    Prompt(Vec<String>, String, Vec<String>),
 }
 
 impl Pick {
@@ -153,6 +155,7 @@ impl Pick {
             Pick::Spell(..) => "spell",
             Pick::Menu(_) => "menu",
             Pick::Tags(_) => "tags",
+            Pick::Prompt(..) => "prompt",
         }
     }
 
@@ -168,7 +171,7 @@ impl Pick {
 
     /// Enter with nothing matching uses what was typed: a new file, a folder.
     pub fn takes_typed(&self) -> bool {
-        matches!(self, Pick::Files(_) | Pick::Projects)
+        matches!(self, Pick::Files(_) | Pick::Projects | Pick::Prompt(..))
     }
 }
 
@@ -619,6 +622,7 @@ impl App {
             Pick::Spell(..) => ("Change to".into(), std::mem::take(&mut self.spell_offer).into_iter().map(Cand::plain).collect()),
             Pick::Menu(name) => (format!("{name} "), self.menu_items(name).into_iter().map(|(label, rhs)| Cand::noted(label, rhs)).collect()),
             Pick::Tags(name) => (format!("Tag {name}"), self.tag_items()),
+            Pick::Prompt(..) => (String::new(), Vec::new()),
             Pick::Everything(root) => (format!("Search everything in {} (⟲ = its history)", home_short(&root.display().to_string())), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
@@ -680,6 +684,7 @@ impl App {
             Pick::Spell(a, b) => self.doc().ed.replace(a, b, &item),
             Pick::Menu(name) => self.menu_run(&format!("{name}.{}", item.split('\t').next().unwrap_or(&item).trim())),
             Pick::Tags(_) => self.tag_picked(&item),
+            Pick::Prompt(rest, what, got) => self.prompt_answered(rest, what, got, item),
             Pick::Grep(root) | Pick::Everything(root) => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.parse::<usize>().ok())) {
@@ -802,6 +807,7 @@ impl App {
                 self.pick(Pick::Files(here));
             }
             "recentFiles" => self.pick(Pick::Recent),
+            "prompt" => self.prompt(arg),
             "switchBuffer" => self.pick(Pick::Buffers),
             "switchProject" => self.pick(Pick::Projects),
             "grep" => {
@@ -911,7 +917,7 @@ impl App {
             }
             "quit" => {
                 if arg != "force" && self.docs.iter().any(|d| d.dirty()) {
-                    self.say("unsaved changes: SPC q Q quits anyway, :wqa saves them");
+                    self.say(if self.emacs_keys() { "unsaved changes: C-x s saves them, M-x quit-no-save quits anyway" } else { "unsaved changes: SPC q Q quits anyway, :wqa saves them" });
                 } else {
                     self.quit = true;
                 }

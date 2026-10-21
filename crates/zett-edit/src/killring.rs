@@ -11,6 +11,8 @@ pub struct KillRing {
     items: Vec<String>,
     /// goes up with every kill or copy, so a front end can tell when to copy to the clipboard
     kills: u64,
+    /// the last killed rectangle (C-x r k, C-x r y): its lines, shared like the ring
+    pub rect: Vec<String>,
 }
 
 /// A ring several editors hold at once.

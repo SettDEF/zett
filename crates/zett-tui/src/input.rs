@@ -18,6 +18,14 @@ impl App {
         if self.travel.is_some() {
             return self.travel_key(k);
         }
+        // M-%: its keys first
+        if self.qr.is_some() && self.minibuf.is_none() {
+            return self.qr_key(k);
+        }
+        // a command waiting for its key (C-x r s, M-z, C-q), whichever the profile
+        if self.char_for.is_some() && self.cmdline.is_none() {
+            return self.emacs_key(&k);
+        }
         if self.cmdline.is_some() {
             // :cmap: the line's keys through its mappings first
             if self.noremap == 0 && self.engine.has_maps("c") {
@@ -183,6 +191,7 @@ impl App {
         match feed {
             Feed::Ran(fx) => {
                 self.menu.clear();
+                self.ran_keys = seq.len();
                 self.after_lua(fx);
             }
             Feed::Pending(menu) => {
@@ -276,6 +285,32 @@ impl App {
     /// Emacs profile: every key goes through the keymap (chords like C-x C-f wait for more);
     /// an unbound printable key types itself, anything else unbound says so.
     pub(crate) fn emacs_key(&mut self, k: &KeyEvent) {
+        // a command asked for a key (C-x r s, M-z, C-q): this one is it
+        if let Some((name, arg)) = self.char_for.take() {
+            self.msg = None;
+            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+            let c = match k.code {
+                KeyCode::Char('g') if ctrl && name != "quoted-insert" => return self.say("Quit"),
+                // C-q C-a: the control character itself
+                KeyCode::Char(c) if ctrl && c.is_ascii_alphabetic() => char::from(c.to_ascii_lowercase() as u8 - b'a' + 1),
+                KeyCode::Char(c) => c,
+                KeyCode::Tab => '\t',
+                KeyCode::Enter => '\n',
+                KeyCode::Esc => '\u{1b}',
+                _ => return self.say("not a character"),
+            };
+            let before = self.docs[self.cur].ed.cursor().line;
+            let kills = self.docs[self.cur].ed.kill_count();
+            self.doc().ed.exec_char(&name, c, arg);
+            if self.docs[self.cur].ed.kill_count() != kills {
+                if let Some(t) = self.docs[self.cur].ed.last_kill() {
+                    clipboard::copy(&t);
+                }
+            }
+            self.doc().touched(before);
+            self.edit_at = Instant::now();
+            return;
+        }
         // Esc, as in Emacs and zsh: Meta on the next key (Esc f = M-f). Esc Esc, or Esc in the
         // middle of a chord, cancels everything (Emacs' keyboard-escape-quit)
         let pending_meta = std::mem::take(&mut self.meta);
@@ -297,6 +332,22 @@ impl App {
         let tok = token(&k);
         if tok.is_empty() {
             return;
+        }
+        // C-h l: the last keys typed
+        self.lossage.push_back(tok.clone());
+        if self.lossage.len() > 300 {
+            self.lossage.pop_front();
+        }
+        if let Some(m) = self.kmacro.as_mut() {
+            m.push(tok.clone());
+        }
+        // C-x e e e: each e plays the macro again
+        if std::mem::take(&mut self.kmacro_again) && tok == "e" {
+            return self.kmacro_call(1);
+        }
+        // C-h k: these keys are described, not run
+        if self.describing.is_some() {
+            return self.describe_key_step(tok);
         }
         // C-g drops a question the agent is still answering
         if tok == "<C-g>" && self.agent.take().is_some() {
@@ -406,6 +457,7 @@ impl App {
                     self.say(m)
                 }
                 Effect::Ui(name, arg) if self.doom_ui(&name, &arg) => {}
+                Effect::Ui(name, arg) if self.emacs_ui(&name, &arg) => {}
                 Effect::Ui(name, arg) => match name.as_str() {
                     "quickOpen" | "search" => self.open_picker(),
                     "commandLine" => {
@@ -461,6 +513,13 @@ impl App {
                     }
                     self.say(self.arg.prompt());
                 }
+                // it reads a key first (the next one emacs_key sees)
+                Effect::Edit(name, n) if zett_edit::Editor::char_prompt(zett_edit::emacs::resolve(&name)).is_some() => {
+                    let arg = self.arg.take().or((n > 1).then_some(n as i64));
+                    let prompt = zett_edit::Editor::char_prompt(&name).unwrap_or_default();
+                    self.char_for = Some((name, arg));
+                    self.say(prompt);
+                }
                 Effect::Edit(name, n) => {
                     let before = self.docs[self.cur].ed.cursor().line;
                     let rev = self.docs[self.cur].ed.buf.rev();
@@ -476,7 +535,14 @@ impl App {
                     if arg.is_some() {
                         self.msg = None; // the "C-u 4-" prompt is answered
                     }
+                    // M-g g with no argument asks for the number
+                    if let (Some(p), None) = (zett_edit::screen::asks_number(zett_edit::emacs::resolve(&name)), arg) {
+                        self.prompt(&format!("{p}\tnum:{name} {{1}}"));
+                        continue;
+                    }
                     self.doc().ed.exec_arg(&name, arg);
+                    // messages and window moves the command asked for (C-x =, C-v, C-l)
+                    self.editor_requests();
                     if self.docs[self.cur].ed.kill_count() != kills {
                         if let Some(t) = self.docs[self.cur].ed.last_kill() {
                             clipboard::copy(&t);
