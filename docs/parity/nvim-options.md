@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-218 ✓ do something in zett, 156 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+220 ✓ do something in zett, 154 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -248,7 +248,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `rightleftcmd` | rlc | string | win | `search` | commands for which editing works right-to-left |
 | ✓ | `ruler` | ru | boolean | global | `true` | show cursor line and column in the status line |
 | ✓ | `rulerformat` | ruf | string | global | `` | custom format for the ruler |
-| ◐ | `runtimepath` | rtp | string | global | `/etc/xdg/nvim,$HOME/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,$HOME/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for runtime files |
+| ✓ | `runtimepath` | rtp | string | global | `/etc/xdg/nvim,$HOME/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,$HOME/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for runtime files |
 | ✓ | `scroll` | scr | number | win | `0` | lines to scroll with CTRL-U and CTRL-D |
 | ◐ | `scrollback` | scbk | number | buf | `-1` |  |
 | ✓ | `scrollbind` | scb | boolean | win | `false` | scroll in window as other windows scroll |
@@ -347,7 +347,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `vartabstop` | vts | string | buf | `` | a list of number of columns between tab stops |
 | ◐ | `verbose` | vbs | number | global | `0` | give informative messages |
 | ◐ | `verbosefile` | vfile | string | global | `` | file to write messages in |
-| ◐ | `viewdir` | vdir | string | global | `/home/caesar/.local/state/nvim/view//` | directory where to store files with :mkview |
+| ✓ | `viewdir` | vdir | string | global | `/home/caesar/.local/state/nvim/view//` | directory where to store files with :mkview |
 | ◐ | `viewoptions` | vop | string | global | `folds,cursor,curdir` | specifies what to save for :mkview |
 | ◐ | `virtualedit` | ve | string | win | `` | when to use virtual editing |
 | ✓ | `visualbell` | vb | boolean | global | `false` | use visual bell instead of beeping |
