@@ -167,11 +167,12 @@ impl App {
                 }
                 self.cur = keep;
             }
-            "sp" | "split" => {
-                self.doom_ui("split", "below");
-            }
-            "vs" | "vsplit" => {
-                self.doom_ui("split", "right");
+            "sp" | "split" | "vs" | "vsplit" => {
+                self.doom_ui("split", if cmd.starts_with('v') { "right" } else { "below" });
+                // :split FILE: that file in the new window
+                if !arg.is_empty() {
+                    self.command(&format!("e {arg}"));
+                }
             }
             "only" => {
                 self.doom_ui("onlyWin", "");
