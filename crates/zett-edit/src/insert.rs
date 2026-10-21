@@ -10,6 +10,7 @@ impl Editor {
         self.count = None;
         self.mode = Mode::Insert;
         self.cursor = at;
+        self.vim.insert_start = at;
     }
 
     pub(crate) fn insert_key(&mut self, k: Key) {
@@ -30,16 +31,14 @@ impl Editor {
             Code::Enter => {
                 // autoindent: the indent before the cursor carries over
                 let l = self.cur_line();
-                let ind: String = self.indent_of(l).chars().take(self.cursor - self.line_start(l)).collect();
+                let ind = self.next_indent(l, true, Some(self.cursor - self.line_start(l)));
                 self.ins(self.cursor, &format!("\n{ind}"));
                 self.cursor += 1 + ind.chars().count();
             }
             Code::Tab => self.insert_tab(),
             Code::Backspace => {
-                if self.cursor > 0 {
-                    self.rem(self.cursor - 1, self.cursor);
-                    self.cursor -= 1;
-                }
+                let from = self.vim.insert_start;
+                self.vim_backspace(from);
             }
             Code::Delete => {
                 self.rem(self.cursor, self.cursor + 1);
@@ -51,6 +50,10 @@ impl Editor {
                 self.vim_replace_char();
                 self.ins(self.cursor, &c.to_string());
                 self.cursor += 1;
+                // past textwidth the line breaks at its last blank (formatoptions t)
+                if c != ' ' {
+                    self.vim_autowrap();
+                }
             }
             _ => {}
         }

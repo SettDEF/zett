@@ -54,7 +54,7 @@ impl Editor {
             return None;
         }
         let i = self.cursor.min(le - 1);
-        let kind = |c: char| if c.is_whitespace() { 0 } else if big { 1 } else { class(c) };
+        let kind = |c: char| if c.is_whitespace() { 0 } else if big { 1 } else { self.kw(c) };
         let k = kind(self.char(i)?);
         let (mut s, mut e) = (i, i + 1);
         while s > ls && self.char(s - 1).is_some_and(|c| kind(c) == k) {
@@ -92,7 +92,7 @@ impl Editor {
     pub(crate) fn quote_object(&self, inner: bool, q: char) -> Option<(usize, usize, bool)> {
         let line = self.cur_line();
         let (ls, le) = (self.line_start(line), self.line_end(line));
-        let quotes: Vec<usize> = (ls..le).filter(|i| self.char(*i) == Some(q) && (*i == ls || self.char(i - 1) != Some('\\'))).collect();
+        let quotes: Vec<usize> = (ls..le).filter(|i| self.char(*i) == Some(q) && (*i == ls || !self.char(i - 1).is_some_and(|e| self.opt("quoteescape").unwrap_or("\\").contains(e)))).collect();
         let cur = self.cursor;
         // the pair around the cursor, else the first pair after it (as Vim does)
         let mut pair = None;
@@ -215,7 +215,7 @@ impl Editor {
 
     pub(crate) fn is_word_end(&self, i: usize) -> bool {
         match (self.char(i), self.char(i + 1)) {
-            (Some(a), Some(b)) => class(a) != class(b) || b.is_whitespace(),
+            (Some(a), Some(b)) => self.kw(a) != self.kw(b) || b.is_whitespace(),
             (Some(_), None) => true,
             _ => false,
         }

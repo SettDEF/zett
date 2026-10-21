@@ -257,7 +257,7 @@ mod block {
         e.feed("l<C-v>jld");
         assert_eq!(e.text(), "ad\neh\nijkl\n", "two columns over two lines go");
         e.feed("u");
-        e.feed("gg<C-v>jjIX<Esc>");
+        e.feed("gg0<C-v>jjIX<Esc>");
         assert_eq!(e.text(), "Xabcd\nXefgh\nXijkl\n", "I types on every line");
         let mut e = Editor::from_str("ab\nabcdef\nabc\n");
         e.feed("<C-v>jj$A;<Esc>");
@@ -274,5 +274,80 @@ mod block {
         let mut e = Editor::from_str("ab\ncd\n");
         e.feed("l<C-v>j>");
         assert_eq!(e.text(), "a    b\nc    d\n");
+    }
+}
+
+mod options {
+    use crate::Editor;
+
+    fn with(text: &str, opts: &[(&str, &str)]) -> Editor {
+        let mut e = Editor::from_str(text);
+        for (k, v) in opts {
+            e.set_opt(k, v);
+        }
+        e
+    }
+
+    #[test]
+    fn indenting_backspace_and_wrapping() {
+        let mut e = with("    a\n", &[("autoindent", "false")]);
+        e.feed("ob<Esc>");
+        assert_eq!(e.text(), "    a\nb\n", "noautoindent: the new line starts at column 0");
+        let mut e = with("if x {\n", &[("smartindent", "true"), ("shiftwidth", "4")]);
+        e.set_soft_tab(Some(4));
+        e.feed("oy<Esc>");
+        assert_eq!(e.text(), "if x {\n    y\n", "smartindent: one step in after {{");
+        let mut e = with("", &[("softtabstop", "4")]);
+        e.set_soft_tab(Some(4));
+        e.feed("i<Tab><Tab><BS>x<Esc>");
+        assert_eq!(e.text(), "    x", "softtabstop: Backspace takes a whole stop");
+        let mut e = with("", &[("textwidth", "10"), ("formatoptions", "tcq")]);
+        e.feed("ione two three four<Esc>");
+        assert_eq!(e.text(), "one two\nthree four", "textwidth: typing wraps at the last blank");
+        let mut e = with("Fine.\nNext\n", &[("joinspaces", "true")]);
+        e.feed("J");
+        assert_eq!(e.text(), "Fine.  Next\n");
+        let mut e = with("// one\n// two\n", &[]);
+        e.feed("J");
+        assert_eq!(e.text(), "// one two\n", "formatoptions j: the comment leader goes");
+    }
+
+    #[test]
+    fn motions_numbers_words_pairs_and_selection() {
+        let mut e = with("abc\nabc\nabc\n", &[]);
+        e.feed("llG");
+        assert_eq!(e.cursor().col, 2, "nostartofline (Neovim's default): G keeps the column");
+        let mut e = with("abc\nabc\n", &[("startofline", "true")]);
+        e.feed("llG");
+        assert_eq!(e.cursor().col, 0);
+        let mut e = with("ab\ncd\n", &[("whichwrap", "h,l")]);
+        e.feed("jlh");
+        assert_eq!(e.cursor().line, 1, "inside the line h stays on it");
+        e.feed("h");
+        assert_eq!(e.cursor().line, 0, "whichwrap h: on to the line above");
+        let mut e = with("abc", &[("tildeop", "true")]);
+        e.feed("~w");
+        assert_eq!(e.text(), "ABC");
+        let mut e = with("0b101 and a", &[("nrformats", "bin,alpha")]);
+        e.feed("<C-a>");
+        assert_eq!(e.text(), "0b110 and a");
+        e.feed("$<C-a>");
+        assert_eq!(e.text(), "0b110 and b");
+        let mut e = with("foo-bar baz", &[("iskeyword", "@,48-57,_,-")]);
+        e.feed("w");
+        assert_eq!(e.cursor, 8, "iskeyword with -: foo-bar is one word");
+        let mut e = with("<a>", &[("matchpairs", "<:>")]);
+        e.feed("%");
+        assert_eq!(e.cursor, 2);
+        let mut e = with("abcdef", &[("selection", "exclusive")]);
+        e.feed("vlld");
+        assert_eq!(e.text(), "cdef", "exclusive: the cursor's character stays");
+        let mut e = with("a\nb\nc\nd\n", &[("modifiable", "false")]);
+        e.feed("dd");
+        assert_eq!(e.text(), "a\nb\nc\nd\n");
+        assert!(e.take_requests().iter().any(|r| matches!(r, crate::vim::Request::Message(m) if m.starts_with("E21"))));
+        let mut e = with("1\n2\n3\n4\n5\n", &[("report", "2")]);
+        e.feed("3dd");
+        assert!(e.take_requests().contains(&crate::vim::Request::Message("3 fewer lines".into())));
     }
 }

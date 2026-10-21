@@ -56,7 +56,7 @@ const WORKS_ELSEWHERE: &[&str] = &["number", "relativenumber", "incsearch", "und
 /// The setting does something in zett (zett's table, or acted on elsewhere); false: accepted and kept,
 /// no effect yet.
 pub(crate) fn works(s: &Setting) -> bool {
-    SETTINGS.iter().any(|x| std::ptr::eq(x, s)) || WORKS_ELSEWHERE.contains(&s.name)
+    SETTINGS.iter().any(|x| std::ptr::eq(x, s)) || WORKS_ELSEWHERE.contains(&s.name) || zett_edit::vim::options::EDITOR_OPTIONS.contains(&s.name)
 }
 
 /// The file type as settings name it: "markdown", "plain_text", "rust".
@@ -146,6 +146,13 @@ impl App {
             self.docs[i].ed.set_case(ic, scs);
             let ws = self.flag(i, "wrapscan");
             self.docs[i].ed.set_wrapscan(ws);
+            // every option the editor acts on (zett_edit::vim::options), with this buffer's value;
+            // textwidth only once set (zett's fill_column default is for M-q, not for wrapping while typing)
+            for &name in zett_edit::vim::options::EDITOR_OPTIONS {
+                let Some(s) = find(name) else { continue };
+                let v = if name == "textwidth" && !self.docs[i].local.contains_key(s.name) && self.engine.opt(s.name).is_none() { "0".to_string() } else { self.setting(i, s.name) };
+                self.docs[i].ed.set_opt(name, &v);
+            }
         }
     }
 

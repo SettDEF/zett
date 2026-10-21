@@ -111,12 +111,28 @@ impl Editor {
                 break;
             }
             let e = self.line_end(line);
-            let next = self.first_non_blank(line + 1);
+            let mut next = self.first_non_blank(line + 1);
+            // formatoptions j: a comment leader on the joined line goes (//, #, --, ;, *)
+            if self.opt_letter("formatoptions", 'j', "tcqj") {
+                let rest: String = self.buf.slice(next, self.line_end(line + 1));
+                let this = self.buf.line(line);
+                for lead in ["///", "//", "#", "--", ";", "*"] {
+                    if rest.starts_with(lead) && this.trim_start().starts_with(lead) {
+                        next += lead.chars().count();
+                        while self.char(next) == Some(' ') {
+                            next += 1;
+                        }
+                        break;
+                    }
+                }
+            }
             let joined_at = e;
             self.rem(e, next);
             let needs_space = joined_at > self.line_start(line) && self.char(joined_at).is_some_and(|c| c != '\n' && c != ')');
             if needs_space {
-                self.ins(joined_at, " ");
+                // joinspaces: two after a sentence
+                let two = self.opt_on("joinspaces", false) && self.char(joined_at - 1).is_some_and(|c| matches!(c, '.' | '!' | '?'));
+                self.ins(joined_at, if two { "  " } else { " " });
             }
             self.cursor = joined_at;
         }

@@ -19,6 +19,9 @@ impl Editor {
     }
     /// Inserts, recording the edit in the open change.
     pub(crate) fn ins(&mut self, at: usize, s: &str) {
+        if self.refuses_change() {
+            return;
+        }
         self.buf.insert(at, s);
         self.vim.shift(at, s.chars().count() as isize);
         if let Some(c) = self.open.as_mut() {
@@ -27,6 +30,9 @@ impl Editor {
     }
     /// Removes `a..b`, recording the edit in the open change.
     pub(crate) fn rem(&mut self, a: usize, b: usize) -> String {
+        if self.refuses_change() {
+            return String::new();
+        }
         let gone = self.buf.remove(a, b);
         self.vim.removed(a.min(b), gone.chars().count());
         if let Some(c) = self.open.as_mut() {

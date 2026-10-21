@@ -16,6 +16,7 @@ impl Editor {
             if self.vim.typing.is_empty() {
                 self.vim.typing_from = self.edit_marker();
                 self.vim.typing_pos = self.cursor;
+                self.vim.lines_before = self.buf.len_lines();
                 let l = self.cur_line();
                 self.vim.typing_line = (l, self.buf.line(l));
             }
@@ -76,6 +77,8 @@ impl Editor {
         // undo, redo and the dot itself are not changes to repeat
         if changed && !matches!(first, Some('u' | '.')) && !(keys[0].ctrl && first == Some('r')) {
             let first_key = keys.first().and_then(|k| k.char());
+            let before = self.vim.lines_before;
+            self.vim_report(before);
             self.vim.dot = keys;
             let at = self.cursor;
             if self.vim.changes.last() != Some(&at) {

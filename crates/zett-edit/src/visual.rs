@@ -12,7 +12,9 @@ impl Editor {
             return Span::Lines(self.buf.to_pos(self.anchor).line, self.cur_line());
         }
         let (a, b) = (self.anchor.min(self.cursor), self.anchor.max(self.cursor));
-        Span::Chars(a, (b + 1).min(self.buf.len_chars()))
+        // selection=exclusive: the character under the cursor is not part of it
+        let end = if self.opt("selection") == Some("exclusive") && self.cursor > self.anchor { b } else { b + 1 };
+        Span::Chars(a, end.min(self.buf.len_chars()))
     }
 
     /// The selected characters (start, end exclusive), for drawing and for commands on a

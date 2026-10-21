@@ -84,7 +84,7 @@ impl Editor {
                 }
                 ('g', 'g') => {
                     let line = self.count.take().map(|n| n.saturating_sub(1)).unwrap_or(0);
-                    return self.motion(Span::Lines(self.cur_line(), line.min(self.buf.len_lines() - 1)), Some(self.first_non_blank(line.min(self.buf.len_lines() - 1))));
+                    return self.motion(Span::Lines(self.cur_line(), line.min(self.buf.len_lines() - 1)), Some(self.sol_target(line.min(self.buf.len_lines() - 1))));
                 }
                 ('r', ch) if matches!(self.mode, Mode::Visual | Mode::VisualLine) => return self.visual_replace(ch),
                 ('r', ch) => return self.replace_chars(ch),
@@ -123,12 +123,20 @@ impl Editor {
             // motions
             'h' => {
                 let n = self.take_count();
-                let to = self.cursor.saturating_sub(n).max(self.line_start(line));
+                let mut to = self.cursor.saturating_sub(n).max(self.line_start(line));
+                // whichwrap h: on to the line above
+                if self.cursor == self.line_start(line) && line > 0 && self.opt_letter("whichwrap", 'h', "b,s") {
+                    to = self.line_end(line - 1).saturating_sub(1).max(self.line_start(line - 1));
+                }
                 self.motion(Span::Chars(to, self.cursor), Some(to));
             }
             'l' => {
                 let n = self.take_count();
-                let to = (self.cursor + n).min(self.line_end(line));
+                let mut to = (self.cursor + n).min(self.line_end(line));
+                // whichwrap l: on to the next line
+                if self.cursor + 1 >= self.line_end(line) && line + 1 < self.buf.len_lines() && self.opt_letter("whichwrap", 'l', "b,s") {
+                    to = self.line_start(line + 1);
+                }
                 self.motion(Span::Chars(self.cursor, to), Some(to));
             }
             'j' | 'k' => {
@@ -197,7 +205,7 @@ impl Editor {
             'G' => {
                 let last = self.buf.len_lines() - 1;
                 let to = self.count.take().map(|n| n.saturating_sub(1).min(last)).unwrap_or(last);
-                self.motion(Span::Lines(line, to), Some(self.first_non_blank(to)));
+                self.motion(Span::Lines(line, to), Some(self.sol_target(to)));
             }
             'g' | 'r' | 'f' | 'F' | 't' | 'T' => self.prefix = Some(c),
             ';' | ',' => {
@@ -241,8 +249,8 @@ impl Editor {
             'I' => self.start_insert(self.first_non_blank(line)),
             'A' => self.start_insert(self.line_end(line)),
             // autoindent (Neovim's default): the new line starts at this one's indent
-            'o' => { self.begin(); let ind = self.indent_of(line); let e = self.line_end(line); self.ins(e, &format!("\n{ind}")); self.mode = Mode::Insert; self.cursor = e + 1 + ind.chars().count(); }
-            'O' => { self.begin(); let ind = self.indent_of(line); let s = self.line_start(line); self.ins(s, &format!("{ind}\n")); self.mode = Mode::Insert; self.cursor = s + ind.chars().count(); }
+            'o' => { self.begin(); let ind = self.next_indent(line, true, None); let e = self.line_end(line); self.ins(e, &format!("\n{ind}")); self.mode = Mode::Insert; self.cursor = e + 1 + ind.chars().count(); }
+            'O' => { self.begin(); let ind = self.next_indent(line, false, None); let s = self.line_start(line); self.ins(s, &format!("{ind}\n")); self.mode = Mode::Insert; self.cursor = s + ind.chars().count(); }
 
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
             _ if self.vim_more(c) => {}

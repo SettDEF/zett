@@ -7,7 +7,8 @@ impl Editor {
         let n = self.take_count();
         let last = self.buf.len_lines() - 1;
         let mut l = self.cur_line();
-        let blank = |e: &Self, l: usize| e.buf.line_len(l) == 0;
+        // a blank line, or an nroff paragraph or section macro (paragraphs, sections)
+        let blank = |e: &Self, l: usize| e.buf.line_len(l) == 0 || e.nroff_boundary(l, "paragraphs", "IPLPPPQPP TPHPLIPpLpItpplpipbp") || e.nroff_boundary(l, "sections", "SHNHH HUnhsh");
         for _ in 0..n {
             if forward {
                 while l < last && blank(self, l) {
@@ -69,7 +70,8 @@ impl Editor {
         }
         let line = self.cur_line();
         let e = self.line_end(line);
-        let pairs = [('(', ')'), ('[', ']'), ('{', '}')];
+        // matchpairs: which pairs % knows
+        let pairs = self.match_pairs();
         let Some((at, ch)) = (self.cursor..e).find_map(|i| self.char(i).filter(|c| pairs.iter().any(|(a, b)| a == c || b == c)).map(|c| (i, c))) else { return };
         let (open, close, fwd) = pairs.iter().find_map(|&(a, b)| if ch == a { Some((a, b, true)) } else if ch == b { Some((a, b, false)) } else { None }).unwrap();
         let mut depth = 0i32;

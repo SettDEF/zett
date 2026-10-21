@@ -35,9 +35,9 @@ impl Editor {
         if i >= n {
             return n;
         }
-        let c0 = class(self.char(i).unwrap());
+        let c0 = self.kw(self.char(i).unwrap());
         if c0 != 0 {
-            while i < n && class(self.char(i).unwrap()) == c0 {
+            while i < n && self.kw(self.char(i).unwrap()) == c0 {
                 i += 1;
             }
         }
@@ -67,8 +67,8 @@ impl Editor {
         if i >= n {
             return n - 1;
         }
-        let c0 = class(self.char(i).unwrap());
-        while i + 1 < n && class(self.char(i + 1).unwrap()) == c0 {
+        let c0 = self.kw(self.char(i).unwrap());
+        while i + 1 < n && self.kw(self.char(i + 1).unwrap()) == c0 {
             i += 1;
         }
         i
@@ -82,8 +82,8 @@ impl Editor {
         while i > 0 && self.char(i).unwrap().is_whitespace() {
             i -= 1;
         }
-        let c0 = class(self.char(i).unwrap());
-        while i > 0 && class(self.char(i - 1).unwrap()) == c0 {
+        let c0 = self.kw(self.char(i).unwrap());
+        while i > 0 && self.kw(self.char(i - 1).unwrap()) == c0 {
             i -= 1;
         }
         i

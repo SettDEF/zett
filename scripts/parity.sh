@@ -28,6 +28,8 @@ awk "/\*option-list\*/{f=1} f && /^'[a-z]/" "$RT/doc/quickref.txt" | sed "s/^'\(
 grep -oh '^\s*"[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs crates/zett-tui/src/commands.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
 grep -o 's("[a-z_]*", &\[[^]]*\]' crates/zett-tui/src/settings.rs | grep -o '"[a-z_]*"' | tr -d '"' > "$tmp/zett-opts.txt"
 printf 'number\nnu\nrelativenumber\nrnu\ntextwidth\ntw\nincsearch\nis\nundofile\nudf\n' >> "$tmp/zett-opts.txt"
+# the options the editor acts on (zett-edit vim/options.rs) work too
+awk '/EDITOR_OPTIONS/{f=1} f{print} f && /\];/{exit}' crates/zett-edit/src/vim/options.rs | grep -o '"[a-z]*"' | tr -d '"' >> "$tmp/zett-opts.txt"
 grep -o 'name: "[a-z]*"' crates/zett-tui/src/nvim_options.rs | cut -d'"' -f2 > "$tmp/zett-kept.txt"
 has() { grep -qxF -- "$1" "$2"; }
 stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | head -1), $("$EMACS" --version | head -1) and zett $("$ZETT" --version 2>/dev/null | awk '{print $2}')."

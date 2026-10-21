@@ -79,7 +79,7 @@ impl Editor {
                 let n = self.count.take().unwrap_or(height / 2).max(1);
                 let (t, to) = if c == 'd' { ((top + n).min(last.saturating_sub(height / 2).max(top)), (line + n).min(last)) } else { (top.saturating_sub(n), line.saturating_sub(n)) };
                 self.vim_top(t);
-                self.cursor = self.first_non_blank(to);
+                self.cursor = self.sol_target(to);
             }
             'f' | 'b' => {
                 let n = self.take_count();
@@ -87,7 +87,7 @@ impl Editor {
                 let t = if c == 'f' { (top + page).min(last) } else { top.saturating_sub(page) };
                 self.vim_top(t);
                 let to = if c == 'f' { t } else { (t + height - 1).min(last) };
-                self.cursor = self.first_non_blank(to);
+                self.cursor = self.sol_target(to);
             }
             'o' => self.vim_jump(-1),
             'i' => self.vim_jump(1),

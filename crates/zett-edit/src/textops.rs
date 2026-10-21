@@ -73,12 +73,13 @@ impl Editor {
 
     /// Tab: a tab character, or spaces to the next multiple of the shift width.
     pub(crate) fn insert_tab(&mut self) {
-        let s = match self.soft_tab {
-            Some(w) => {
+        // softtabstop and smarttab: blanks to the next of their stops (vim/options.rs)
+        let s = match (self.vim_tab_width(), self.soft_tab) {
+            (Some(w), _) | (None, Some(w)) => {
                 let col = self.cursor().col;
                 " ".repeat(w - col % w)
             }
-            None => "\t".to_string(),
+            (None, None) => "\t".to_string(),
         };
         self.ins(self.cursor, &s);
         self.cursor += s.chars().count();

@@ -113,6 +113,12 @@ pub(crate) struct VimState {
     /// column, where typing began, pad short lines)
     pub block_eol: bool,
     pub block_insert: Option<(usize, usize, usize, usize, bool)>,
+    /// options from :set (options.rs), and iskeyword as a table
+    pub opts: HashMap<String, String>,
+    pub kw: Option<[bool; 256]>,
+    /// where typing began in insert mode (backspace=start)
+    pub insert_start: usize,
+    pub(crate) lines_before: usize,
     /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
     pub jumps: Vec<usize>,
     jump_at: usize,
@@ -170,6 +176,7 @@ mod folds;
 mod g;
 mod keys;
 mod motions;
+pub mod options;
 mod ops;
 mod search;
 mod special;

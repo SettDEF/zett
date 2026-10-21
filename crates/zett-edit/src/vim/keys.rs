@@ -38,35 +38,66 @@ impl Editor {
         self.motion(Span::Lines(self.cur_line(), to), Some(self.first_non_blank(to)));
     }
 
-    /// CTRL-A / CTRL-X: the number at or after the cursor on this line, plus `by`.
+    /// CTRL-A / CTRL-X: the number at or after the cursor on this line, plus `by`, in the formats
+    /// nrformats allows (bin,hex by default; octal; alpha: a single letter).
     pub(crate) fn vim_add(&mut self, by: i64) {
         let line = self.cur_line();
         let (s, e) = (self.line_start(line), self.line_end(line));
         let text: Vec<char> = self.buf.slice(s, e).chars().collect();
         let col = self.cursor - s;
-        // the number: a run of digits touching or after the cursor (0x… hex, a - before it)
+        let has = |f: &str| self.opt_has("nrformats", f, "bin,hex");
+        // back to the start of a number the cursor is in
         let mut i = col.min(text.len());
         while i > 0 && text.get(i).is_some_and(|c| c.is_ascii_hexdigit()) && text[i - 1].is_ascii_hexdigit() {
             i -= 1;
         }
-        let start_digit = (i..text.len()).find(|&j| text[j].is_ascii_digit());
-        let Some(d) = start_digit else { return };
-        let hex = d + 1 < text.len() && text[d] == '0' && matches!(text[d + 1], 'x' | 'X');
-        let (num_start, mut end) = if hex { (d + 2, d + 2) } else { (d, d) };
-        while end < text.len() && (if hex { text[end].is_ascii_hexdigit() } else { text[end].is_ascii_digit() }) {
+        let Some(d) = (i..text.len()).find(|&j| text[j].is_ascii_digit()) else {
+            // alpha: the letter under or after the cursor
+            if has("alpha") {
+                if let Some(j) = (col..text.len()).find(|&j| text[j].is_ascii_alphabetic()) {
+                    let c = text[j];
+                    let base = if c.is_ascii_lowercase() { b'a' } else { b'A' };
+                    let n = ((c as u8 - base) as i64 + by).clamp(0, 25) as u8;
+                    let new = ((base + n) as char).to_string();
+                    self.replace_range(s + j, s + j + 1, &new);
+                    self.cursor = s + j;
+                }
+            }
+            return;
+        };
+        let prefixed = |p: [char; 2]| d + 2 < text.len() && text[d] == '0' && (text[d + 1] == p[0] || text[d + 1] == p[1]);
+        let radix = if has("hex") && prefixed(['x', 'X']) {
+            16
+        } else if has("bin") && prefixed(['b', 'B']) {
+            2
+        } else if has("octal") && text[d] == '0' && text.get(d + 1).is_some_and(|c| ('0'..='7').contains(c)) {
+            8
+        } else {
+            10
+        };
+        let num_start = if radix == 16 || radix == 2 { d + 2 } else { d };
+        let mut end = num_start;
+        while end < text.len() && text[end].is_digit(radix) {
             end += 1;
         }
         let digits: String = text[num_start..end].iter().collect();
-        let (from, new) = if hex {
-            let v = i64::from_str_radix(&digits, 16).unwrap_or(0).wrapping_add(by);
-            let upper = digits.chars().any(|c| c.is_ascii_uppercase());
-            let s = if upper { format!("{:0w$X}", v.max(0), w = digits.len()) } else { format!("{:0w$x}", v.max(0), w = digits.len()) };
-            (num_start, s)
-        } else {
-            let neg = d > 0 && text[d - 1] == '-';
+        let (from, new) = if radix == 10 {
+            let neg = d > 0 && text[d - 1] == '-' && !has("unsigned");
             let v: i64 = digits.parse::<i64>().unwrap_or(0) * if neg { -1 } else { 1 };
             let v = v.saturating_add(by);
+            let v = if has("unsigned") { v.max(0) } else { v };
             (if neg { d - 1 } else { d }, v.to_string())
+        } else {
+            let v = i64::from_str_radix(&digits, radix).unwrap_or(0).wrapping_add(by).max(0);
+            let w = digits.len();
+            let upper = digits.chars().any(|c| c.is_ascii_uppercase());
+            let s = match radix {
+                16 if upper => format!("{v:0w$X}"),
+                16 => format!("{v:0w$x}"),
+                2 => format!("{v:0w$b}"),
+                _ => format!("{v:0w$o}"),
+            };
+            (num_start, s)
         };
         self.begin();
         self.rem(s + from, s + end);
@@ -114,6 +145,7 @@ impl Editor {
                 }
                 self.vim.replaying -= 1;
             }
+            '~' if self.opt_on("tildeop", false) => self.vim_op(Op::Toggle),
             '~' => {
                 let n = self.take_count();
                 let e = (self.cursor + n).min(self.line_end(line));
@@ -153,7 +185,16 @@ impl Editor {
                 let to = (self.line_start(line) + n - 1).min(self.line_end(line));
                 self.motion(Span::Chars(self.cursor.min(to), self.cursor.max(to)), Some(to));
             }
-            ' ' => self.normal_key(Key::ch('l')),
+            ' ' => {
+                // whichwrap s: Space goes on to the next line
+                let line = self.cur_line();
+                if self.cursor + 1 >= self.line_end(line) && line + 1 < self.buf.len_lines() && self.opt_letter("whichwrap", 's', "b,s") && self.op.is_none() {
+                    self.count = None;
+                    self.cursor = self.line_start(line + 1);
+                } else {
+                    self.normal_key(Key::ch('l'));
+                }
+            }
             '>' | '<' | '=' | '!' => {
                 let op = match c { '>' => Op::ShiftRight, '<' => Op::ShiftLeft, '=' => Op::Reindent, _ => Op::Filter };
                 self.vim_op(op);
@@ -167,7 +208,7 @@ impl Editor {
                 let bottom = (top + height.max(1) - 1).min(last);
                 let n = self.count.take().unwrap_or(1).saturating_sub(1);
                 let to = match c { 'H' => (top + n).min(bottom), 'L' => bottom.saturating_sub(n).max(top), _ => (top + bottom) / 2 };
-                self.motion(Span::Lines(line, to), Some(self.first_non_blank(to)));
+                self.motion(Span::Lines(line, to), Some(self.sol_target(to)));
             }
             'K' => {
                 if let Some((a, b)) = self.word_here() {
