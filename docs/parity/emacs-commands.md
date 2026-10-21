@@ -27,8 +27,8 @@ plugin, not the core.
 
 - · `abbrev-edit-save-buffer` Save all the user-level abbrev definitions in current buffer.
 - · `abbrev-edit-save-to-file` Save to FILE all the user-level abbrev definitions in current buffer.
-- · `abbrev-mode` Toggle Abbrev mode in the current buffer.
-- · `abbrev-prefix-mark` Mark point as the beginning of an abbreviation.
+- ✓ `abbrev-mode` Toggle Abbrev mode in the current buffer.
+- ✓ `abbrev-prefix-mark` Mark point as the beginning of an abbreviation.
 - · `abbrev-suggest-show-report` Show a buffer with the list of abbrevs you could have used.
 
 ## abort
@@ -61,8 +61,8 @@ plugin, not the core.
 - · `add-dir-local-variable` Add directory-local VARIABLE with its VALUE and MODE to .dir-locals.el.
 - · `add-file-local-variable` Add file-local VARIABLE with its VALUE to the Local Variables list.
 - · `add-file-local-variable-prop-line` Add file-local VARIABLE with its VALUE to the -*- line.
-- · `add-global-abbrev` Define a global (all modes) abbrev whose expansion is last word before point.
-- · `add-mode-abbrev` Define a mode-specific abbrev whose expansion is the last word before point.
+- ✓ `add-global-abbrev` Define a global (all modes) abbrev whose expansion is last word before point.
+- ✓ `add-mode-abbrev` Define a mode-specific abbrev whose expansion is the last word before point.
 - · `add-name-to-file` Give FILE additional name NEWNAME.  Both args must be strings.
 
 ## advice
@@ -1567,7 +1567,7 @@ plugin, not the core.
 
 ## expand
 
-- · `expand-abbrev` Expand the abbrev before point, if there is an abbrev there.
+- ✓ `expand-abbrev` Expand the abbrev before point, if there is an abbrev there.
 - · `expand-jump-to-next-slot` Move the cursor to the next slot in the last abbrev expansion.
 - · `expand-jump-to-previous-slot` Move the cursor to the previous slot in the last abbrev expansion.
 - · `expand-mail-aliases` Expand all mail aliases in suitable header fields found between BEG and END.
@@ -2336,8 +2336,8 @@ plugin, not the core.
 
 ## inverse
 
-- · `inverse-add-global-abbrev` Define the word before point as a global (mode-independent) abbreviation.
-- · `inverse-add-mode-abbrev` Define the word before point as a mode-specific abbreviation.
+- ✓ `inverse-add-global-abbrev` Define the word before point as a global (mode-independent) abbreviation.
+- ✓ `inverse-add-mode-abbrev` Define the word before point as a mode-specific abbreviation.
 
 ## invert
 
@@ -2351,7 +2351,7 @@ plugin, not the core.
 
 - ✓ `isearch-abort` Abort incremental search mode if searching is successful, signaling quit.
 - ✓ `isearch-backward` Do incremental search backward.
-- · `isearch-backward-regexp` Do incremental search backward for regular expression.
+- ✓ `isearch-backward-regexp` Do incremental search backward for regular expression.
 - · `isearch-beginning-of-buffer` Go to the first occurrence of the current search string.
 - · `isearch-cancel` Terminate the search and go back to the starting point.
 - · `isearch-char-by-name` Read a character by its Unicode name and add it to the search string.
@@ -2369,11 +2369,11 @@ plugin, not the core.
 - · `isearch-fold-quotes-mode` Minor mode to aid searching for \=` characters in help modes.
 - ✓ `isearch-forward` Do incremental search forward.
 - · `isearch-forward-exit-minibuffer` Resume isearching forward from the minibuffer that edits the search string.
-- · `isearch-forward-regexp` Do incremental search forward for regular expression.
-- · `isearch-forward-symbol` Do incremental search forward for a symbol.
+- ✓ `isearch-forward-regexp` Do incremental search forward for regular expression.
+- ✓ `isearch-forward-symbol` Do incremental search forward for a symbol.
 - ✓ `isearch-forward-symbol-at-point` Do incremental search forward for a symbol found near point.
-- · `isearch-forward-thing-at-point` Do incremental search forward for the "thing" found near point.
-- · `isearch-forward-word` Do incremental search forward for a sequence of words.
+- ✓ `isearch-forward-thing-at-point` Do incremental search forward for the "thing" found near point.
+- ✓ `isearch-forward-word` Do incremental search forward for a sequence of words.
 - · `isearch-help-for-help` Display Isearch help menu.
 - · `isearch-help-for-help-internal` Help command.
 - · `isearch-highlight-lines-matching-regexp` Exit Isearch mode and call `highlight-lines-matching-regexp'.
@@ -2398,10 +2398,10 @@ plugin, not the core.
 - · `isearch-toggle-input-method` Toggle input method in interactive search.
 - · `isearch-toggle-invisible` Toggle invisible searching on or off.
 - · `isearch-toggle-lax-whitespace` Toggle lax-whitespace searching on or off.
-- · `isearch-toggle-regexp` Toggle regexp searching on or off.
+- ✓ `isearch-toggle-regexp` Toggle regexp searching on or off.
 - · `isearch-toggle-specified-input-method` Select an input method and turn it on in interactive search.
-- · `isearch-toggle-symbol` Toggle symbol searching on or off.
-- · `isearch-toggle-word` Toggle word searching on or off.
+- ✓ `isearch-toggle-symbol` Toggle symbol searching on or off.
+- ✓ `isearch-toggle-word` Toggle word searching on or off.
 - · `isearch-transient-input-method` Activate transient input method in interactive search.
 - · `isearch-xterm-paste` Pull terminal paste into search string.
 - · `isearch-yank-char` Pull next character from buffer into search string.
@@ -2649,7 +2649,7 @@ plugin, not the core.
 
 ## list
 
-- · `list-abbrevs` Display a list of the defined abbrevs.
+- ✓ `list-abbrevs` Display a list of the defined abbrevs.
 - · `list-bookmarks` Display a list of existing bookmarks.
 - ✓ `list-buffers` Display a list of existing buffers.
 - · `list-character-sets` Display a list of all character sets.
@@ -3763,7 +3763,7 @@ plugin, not the core.
 
 ## rectangle
 
-- · `rectangle-mark-mode` Toggle the region as rectangular.
+- ✓ `rectangle-mark-mode` Toggle the region as rectangular.
 - ✓ `rectangle-number-lines` Insert numbers in front of the region-rectangle.
 
 ## recursive

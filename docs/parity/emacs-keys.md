@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-360 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
+372 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
 
 | | key | command |
 |---|---|---|
@@ -81,8 +81,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-M-o` | `split-line` |
 | ✓ | `C-M-p` | `backward-list` |
 | · | `C-M-q` | `indent-pp-sexp` |
-| · | `C-M-r` | `isearch-backward-regexp` |
-| · | `C-M-s` | `isearch-forward-regexp` |
+| ✓ | `C-M-r` | `isearch-backward-regexp` |
+| ✓ | `C-M-s` | `isearch-forward-regexp` |
 | ✓ | `C-M-t` | `transpose-sexps` |
 | ✓ | `C-M-u` | `backward-up-list` |
 | ✓ | `C-M-v` | `scroll-other-window` |
@@ -161,7 +161,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-v` | `scroll-up-command` |
 | ✓ | `C-w` | `kill-region` |
 | · | `C-x $` | `set-selective-display` |
-| · | `C-x '` | `expand-abbrev` |
+| ✓ | `C-x '` | `expand-abbrev` |
 | ✓ | `C-x (` | `kmacro-start-macro` |
 | ✓ | `C-x )` | `kmacro-end-macro` |
 | · | `C-x *` | `calc-dispatch` |
@@ -254,17 +254,17 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `C-x RET r` | `revert-buffer-with-coding-system` |
 | · | `C-x RET t` | `set-terminal-coding-system` |
 | · | `C-x RET x` | `set-selection-coding-system` |
-| · | `C-x SPC` | `rectangle-mark-mode` |
+| ✓ | `C-x SPC` | `rectangle-mark-mode` |
 | ✓ | `C-x TAB` | `indent-rigidly` |
 | ✓ | `C-x [` | `backward-page` |
 | · | `C-x \` | `activate-transient-input-method` |
 | ✓ | `C-x ]` | `forward-page` |
 | ✓ | `C-x ^` | `enlarge-window` |
 | ✓ | `C-x `` | `next-error` |
-| · | `C-x a +` | `add-mode-abbrev` |
-| · | `C-x a -` | `inverse-add-global-abbrev` |
-| · | `C-x a g` | `add-global-abbrev` |
-| · | `C-x a i l` | `inverse-add-mode-abbrev` |
+| ✓ | `C-x a +` | `add-mode-abbrev` |
+| ✓ | `C-x a -` | `inverse-add-global-abbrev` |
+| ✓ | `C-x a g` | `add-global-abbrev` |
+| ✓ | `C-x a i l` | `inverse-add-mode-abbrev` |
 | · | `C-x a n` | `expand-jump-to-next-slot` |
 | · | `C-x a p` | `expand-jump-to-previous-slot` |
 | ✓ | `C-x b` | `switch-to-buffer` |
@@ -429,7 +429,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-$` | `ispell-word` |
 | ✓ | `M-%` | `query-replace` |
 | ✓ | `M-&` | `async-shell-command` |
-| · | `M-'` | `abbrev-prefix-mark` |
+| ✓ | `M-'` | `abbrev-prefix-mark` |
 | ✓ | `M-(` | `insert-parentheses` |
 | ✓ | `M-)` | `move-past-close-and-reindent` |
 | ✓ | `M-,` | `xref-go-back` |
@@ -479,9 +479,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-q` | `prog-fill-reindent-defun` |
 | ✓ | `M-r` | `move-to-window-line-top-bottom` |
 | ✓ | `M-s .` | `isearch-forward-symbol-at-point` |
-| · | `M-s M-.` | `isearch-forward-thing-at-point` |
+| ✓ | `M-s M-.` | `isearch-forward-thing-at-point` |
 | ✓ | `M-s M-w` | `eww-search-words` |
-| · | `M-s _` | `isearch-forward-symbol` |
+| ✓ | `M-s _` | `isearch-forward-symbol` |
 | ✓ | `M-s h .` | `highlight-symbol-at-point` |
 | · | `M-s h f` | `hi-lock-find-patterns` |
 | ✓ | `M-s h l` | `highlight-lines-matching-regexp` |
@@ -490,7 +490,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-s h u` | `unhighlight-regexp` |
 | · | `M-s h w` | `hi-lock-write-interactive-patterns` |
 | ✓ | `M-s o` | `occur` |
-| · | `M-s w` | `isearch-forward-word` |
+| ✓ | `M-s w` | `isearch-forward-word` |
 | ✓ | `M-t` | `transpose-words` |
 | ✓ | `M-u` | `upcase-word` |
 | ✓ | `M-v` | `scroll-down-command` |
