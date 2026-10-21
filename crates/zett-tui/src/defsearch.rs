@@ -251,6 +251,26 @@ mod tests {
     }
 
     #[test]
+    fn the_bracket_keys_use_them() {
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str("foo\nbar\nx foo\n");
+        let typed = |app: &mut crate::App, keys: &str| {
+            for k in zett_edit::keys::parse(keys) {
+                app.key(crate::input::key_event(&k));
+            }
+        };
+        typed(&mut app, "[I");
+        let rows = |app: &crate::App| match &app.popup { Some(crate::Popup::Help(_, r)) => r.len(), _ => 0 };
+        assert_eq!(rows(&app), 2, "[I: every line with the word");
+        app.popup = None;
+        typed(&mut app, "]I");
+        assert_eq!(rows(&app), 1, "]I: from the line below");
+        app.popup = None;
+        typed(&mut app, "]<C-i>");
+        assert_eq!(app.docs[app.cur].ed.cursor().line, 2, "] CTRL-I jumps to it");
+    }
+
+    #[test]
     fn through_the_included_files() {
         let dir = std::env::temp_dir().join(format!("zett-defs-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

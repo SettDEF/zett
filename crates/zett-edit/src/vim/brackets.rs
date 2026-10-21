@@ -110,39 +110,16 @@ impl Editor {
                     self.put(fwd && c == 'p', n);
                 }
             }
-            'i' | 'I' | BR_TAB | BR_DEF => {
-                // the word under the cursor through the file: the first line with it ([i), all of them
-                // ([I), go to the first ([ CTRL-I, ] CTRL-I after the cursor), to its definition (CTRL-D)
+            'i' | 'I' | BR_TAB => {
+                // the word under the cursor through the file and the files it includes (the host's
+                // :isearch :ilist :ijump): from the top ([), or from the line below the cursor (])
                 let Some((a, b)) = self.word_here() else { return true };
                 let w = self.buf.slice(a, b);
-                let lines: Vec<usize> = (0..self.buf.len_lines()).filter(|&l| {
-                    let t = self.buf.line(l);
-                    t.match_indices(&w).any(|(i, _)| {
-                        let before = t[..i].chars().last().is_none_or(|ch| !super::is_word(ch));
-                        let after = t[i + w.len()..].chars().next().is_none_or(|ch| !super::is_word(ch));
-                        before && after
-                    })
-                }).filter(|&l| !fwd || l > self.cur_line()).collect();
-                match c {
-                    'i' => {
-                        if let Some(&l) = lines.first() {
-                            self.vim.requests.push(Request::Message(format!("{}: {}", l + 1, self.buf.line(l).trim_end())));
-                        }
-                    }
-                    'I' => {
-                        let m = lines.iter().take(30).map(|&l| format!("{:>4}: {}", l + 1, self.buf.line(l).trim_end())).collect::<Vec<_>>().join("\n");
-                        self.vim.requests.push(Request::Message(m));
-                    }
-                    BR_TAB => {
-                        if let Some(&l) = lines.first() {
-                            let at = self.buf.to_char(crate::Pos { line: l, col: 0 });
-                            let col = self.buf.line(l).find(&w).map(|i| self.buf.line(l)[..i].chars().count()).unwrap_or(0);
-                            self.jump_motion(at + col, fwd);
-                        }
-                    }
-                    _ => self.vim.requests.push(Request::Definition),
-                }
+                let cmd = match c { 'i' => "isearch", 'I' => "ilist", _ => "ijump" };
+                let from = if fwd { ".+1,$" } else { "" };
+                self.vim.requests.push(Request::Ex(format!("{from}{cmd} {w}")));
             }
+            BR_DEF => self.vim.requests.push(Request::Definition),
             'd' | 'D' => self.vim.requests.push(Request::Diagnostic(match (c, fwd) { ('d', true) => 1, ('d', false) => -1, ('D', true) => 2, _ => -2 })),
             'c' => self.vim.requests.push(Request::Hunk(if fwd { 1 } else { -1 })),
             's' | 'S' => self.spell_jump(fwd),
