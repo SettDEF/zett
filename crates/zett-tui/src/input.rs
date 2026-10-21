@@ -43,7 +43,7 @@ impl App {
         let Some(ek) = to_key(&k) else { return };
         let mode = self.docs[self.cur].ed.mode();
         // gc in visual mode comments the selection (the engine only sees normal-mode keys)
-        if matches!(mode, Mode::Visual | Mode::VisualLine) && !ctrl {
+        if matches!(mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && !ctrl {
             if self.vis_g {
                 self.vis_g = false;
                 if k.code == KeyCode::Char('c') {
@@ -56,7 +56,7 @@ impl App {
             }
         }
         // : in visual mode: the selected lines as the range ('<,'>), as Vim does
-        if matches!(mode, Mode::Visual | Mode::VisualLine) && k.code == KeyCode::Char(':') {
+        if matches!(mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && k.code == KeyCode::Char(':') {
             let d = &self.docs[self.cur];
             if let Some((a, b)) = d.ed.selection_range() {
                 let (la, lb) = (d.ed.buf.to_pos(a).line, d.ed.buf.to_pos(b.saturating_sub(1).max(a)).line);

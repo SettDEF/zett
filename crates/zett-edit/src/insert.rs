@@ -15,6 +15,8 @@ impl Editor {
     pub(crate) fn insert_key(&mut self, k: Key) {
         match k.code {
             Code::Esc => {
+                // a block insert: what was typed goes on the other lines too
+                self.block_insert_done();
                 self.mode = Mode::Normal;
                 self.vim.last_insert = Some(self.cursor);
                 self.vim.replace = false;

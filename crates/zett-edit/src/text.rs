@@ -20,7 +20,7 @@ impl Editor {
         let line = self.cur_line().min(self.buf.len_lines() - 1);
         let (s, len) = (self.line_start(line), self.buf.line_len(line));
         // normal and visual stay on a character; visual after `$` may sit on the line break
-        let on_char = self.mode == Mode::Normal || (matches!(self.mode, Mode::Visual | Mode::VisualLine) && self.want_col != usize::MAX);
+        let on_char = self.mode == Mode::Normal || (matches!(self.mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && self.want_col != usize::MAX);
         let max = if on_char && len > 0 { s + len - 1 } else { s + len };
         self.cursor = self.cursor.clamp(s, max);
     }

@@ -5,7 +5,7 @@ use super::*;
 impl Editor {
     /// The new operators on what a motion covers.
     pub(crate) fn vim_apply(&mut self, op: Op, span: Span) -> bool {
-        if !matches!(op, Op::Toggle | Op::Lower | Op::Upper | Op::Rot13 | Op::ShiftRight | Op::ShiftLeft | Op::Reindent | Op::Format | Op::Filter | Op::Func | Op::Fold) {
+        if !matches!(op, Op::Toggle | Op::Lower | Op::Upper | Op::Rot13 | Op::ShiftRight | Op::ShiftLeft | Op::Reindent | Op::Format | Op::Filter | Op::Func | Op::Fold | Op::YankTrim) {
             return false;
         }
         self.op = None;
@@ -63,6 +63,11 @@ impl Editor {
             Op::Filter => self.vim.requests.push(Request::CmdLine(if l1 == l2 { ".!".into() } else { format!(".,.+{}!", l2 - l1) })),
             Op::Func => self.vim.requests.push(Request::OperatorFunc(a, b)),
             Op::Fold => self.fold_create(l1, l2),
+            Op::YankTrim => {
+                self.apply(Op::Yank, span);
+                self.reg.text = self.reg.text.split('\n').map(str::trim_end).collect::<Vec<_>>().join("\n");
+                return true;
+            }
             _ => {}
         }
         self.clamp();

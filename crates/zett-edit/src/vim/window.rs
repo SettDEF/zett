@@ -59,6 +59,7 @@ impl Editor {
         let line = self.cur_line();
         match c {
             'w' => self.prefix = Some(CW),
+            'v' | 'q' => self.enter_block(),
             '\\' => self.prefix = Some(CBS),
             'c' => {
                 self.count = None;
@@ -115,6 +116,16 @@ impl Editor {
 
     /// `z` and a key: where the window stands (zt zz zb z<CR> z. z- z+ z^), sideways (zh zl zs ze zH zL).
     pub(crate) fn vim_z(&mut self, c: char) -> bool {
+        // z{height}<CR>: digits wait for the Enter
+        if let Some(d) = c.to_digit(10) {
+            self.vim.z_height = self.vim.z_height * 10 + d as usize;
+            self.prefix = Some('z');
+            return true;
+        }
+        if c == '\r' && self.vim.z_height > 0 {
+            let h = std::mem::take(&mut self.vim.z_height);
+            self.vim.requests.push(Request::Window("_".into(), Some(h)));
+        }
         // fold keys keep their count (3zF)
         if !matches!(c, 't' | '\r' | 'z' | '.' | 'b' | '-' | '+' | '^' | 'h' | 'l' | 'H' | 'L' | 's' | 'e') {
             return self.vim_fold(c);

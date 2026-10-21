@@ -988,6 +988,7 @@ fn mode_badge(d: &Doc) -> (&'static str, &'static str) {
         Mode::Insert => ("I", "ModeInsert"),
         Mode::Visual => ("V", "ModeVisual"),
         Mode::VisualLine => ("L", "ModeVisual"),
+        Mode::VisualBlock => ("B", "ModeVisual"),
     }
 }
 

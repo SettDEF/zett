@@ -53,6 +53,19 @@ impl Editor {
         let around = self.folds_at(line);
         let none = || Request::Message("E490: No fold found".into());
         match c {
+            'y' => {
+                self.op = Some(Op::YankTrim);
+                self.op_count = self.count.take();
+                return true;
+            }
+            'p' | 'P' => {
+                // put without the blanks at line ends
+                let n = self.take_count();
+                let saved = self.reg.clone();
+                self.reg.text = saved.text.split('\n').map(str::trim_end).collect::<Vec<_>>().join("\n");
+                self.put(c == 'p', n);
+                self.reg = saved;
+            }
             'f' => {
                 // zf{motion}: an operator
                 self.op = Some(Op::Fold);

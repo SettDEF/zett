@@ -410,6 +410,7 @@ fn vim_state(e: &zett_edit::Editor) -> QString {
         zett_edit::Mode::Insert => "insert",
         zett_edit::Mode::Visual => "visual",
         zett_edit::Mode::VisualLine => "visual-line",
+        zett_edit::Mode::VisualBlock => "visual-block",
     };
     let sel = e.selection_range().map(|(a, b)| serde_json::json!([a, b])).unwrap_or(serde_json::Value::Null);
     QString::from(&serde_json::json!({ "text": e.text(), "cursor": cursor, "mode": mode, "sel": sel }).to_string())

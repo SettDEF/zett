@@ -104,7 +104,7 @@ impl Editor {
             if let Some((get, _)) = CLIPBOARD.get() {
                 if let Some(t) = get() {
                     let linewise = t.ends_with('\n');
-                    self.vim.regs.insert(lower, Register { text: t, linewise });
+                    self.vim.regs.insert(lower, Register { text: t, linewise, block: false });
                 }
             }
         }

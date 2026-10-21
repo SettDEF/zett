@@ -163,7 +163,7 @@ impl Editor {
             let (l1, l2) = (l1.min(l2), l1.max(l2));
             let at_end = l2 + 1 >= self.buf.len_lines();
             self.visual_op(Op::Delete, true);
-            let removed = std::mem::replace(&mut self.reg, Register { text: saved.text.clone(), linewise: true });
+            let removed = std::mem::replace(&mut self.reg, Register { text: saved.text.clone(), linewise: true, block: false });
             if !self.reg.text.ends_with('\n') {
                 self.reg.text.push('\n');
             }
@@ -191,7 +191,7 @@ impl Editor {
             self.ins(a, &saved.text);
             self.cursor = a + saved.text.chars().count().saturating_sub(1);
         }
-        self.reg = Register { text: removed, linewise: false };
+        self.reg = Register { text: removed, linewise: false, block: false };
         self.clamp();
         self.want_col = self.cursor().col;
     }

@@ -304,6 +304,16 @@ impl App {
                 let (a, b) = (s.max(ls), e.min(le + 1));
                 (a < b).then(|| (screen_col(&line_text, a - ls), screen_col(&line_text, b.min(le) - ls) + usize::from(b > le)))
             });
+            // a block (CTRL-V): its columns on each of its lines
+            let sel_cols = match d.ed.block() {
+                Some((l1, l2, c1, c2)) if ln >= l1 && ln <= l2 => {
+                    let n = line_text.chars().count();
+                    let (a, b) = (c1.min(n), c2.saturating_add(1).min(n.max(c1 + 1)));
+                    (b > a || c2 == usize::MAX).then(|| (screen_col(&line_text, a), screen_col(&line_text, b.min(n)) + usize::from(b > n)))
+                }
+                Some(_) => None,
+                None => sel_cols,
+            };
             // search matches on this line, in screen columns (true: the current one)
             let hits: Vec<(usize, usize, bool)> = if found.is_empty() {
                 Vec::new()

@@ -10,7 +10,12 @@ const TEXT: &str = "alpha Beta gamma 7\n  delta (Epsilon 42) {zeta} \"eta\" 'the
 
 /// Neovim's notation for a normal-mode entry → keys to feed. `tag` tells text objects (`v_ab`).
 pub fn expand(written: &str, tag: &str) -> String {
-    let mut w = written.trim().to_string();
+    // the key column sometimes runs into the description (two spaces), and `"``"` quotes a key
+    let written = written.split("  ").next().unwrap_or(written).trim();
+    let written = if written.len() > 2 && written.starts_with('"') && written.ends_with('"') { &written[1..written.len() - 1] } else { written };
+    // the header rows "[{char}" and "z{char}" stand for their families: one of each
+    let written = match written { "[{char}" => "[(", "]{char}" => "])", "z{char}" => "zz", w => w };
+    let mut w = written.to_string();
     // optional register and count prefixes
     for p in ["[\"x]", "[count]"] {
         w = w.replace(p, "");
@@ -48,7 +53,10 @@ pub fn expand(written: &str, tag: &str) -> String {
     // CTRL-X → <C-x>, words apart are keys apart
     let mut out = String::new();
     for part in w.split(' ').filter(|p| !p.is_empty()) {
-        if let Some(k) = part.strip_prefix("CTRL-") {
+        if let Some(name) = part.strip_prefix("CTRL-<").and_then(|p| p.strip_suffix('>')) {
+            // CTRL-<Tab> → <C-Tab>
+            out.push_str(&format!("<C-{name}>"));
+        } else if let Some(k) = part.strip_prefix("CTRL-") {
             let (key, rest) = k.split_at(k.chars().next().map(|c| c.len_utf8()).unwrap_or(0));
             out.push_str(&format!("<C-{}>{rest}", key.to_lowercase()));
         } else if part == "<NL>" {
@@ -139,5 +147,7 @@ impl Editor {
         self.feed("A!<Esc>");
         self.feed("0fa");
         self.feed("yiw");
+        // and a recording under way, for q alone (it stops it)
+        self.feed("qz");
     }
 }

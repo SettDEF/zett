@@ -95,7 +95,7 @@ impl Editor {
                     let (r, mut keys) = self.vim.recording.take().unwrap();
                     keys.pop();
                     let text = keys.iter().map(|k| k.notation()).collect::<String>();
-                    self.vim.regs.insert(r, Register { text, linewise: false });
+                    self.vim.regs.insert(r, Register { text, linewise: false, block: false });
                     self.vim.macros.insert(r, keys);
                     self.vim.last_recorded = Some(r);
                     return true;

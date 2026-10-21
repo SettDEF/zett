@@ -105,6 +105,12 @@ pub(crate) struct VimState {
     /// and folding on or off (zn zN zi)
     pub folds: Vec<(usize, usize, bool)>,
     pub folds_off: bool,
+    /// z{height}<CR>: the height typed so far
+    pub z_height: usize,
+    /// a block reaching every line's end ($), and a block insert waiting for Esc: (first line, last line,
+    /// column, where typing began, pad short lines)
+    pub block_eol: bool,
+    pub block_insert: Option<(usize, usize, usize, usize, bool)>,
     /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
     pub jumps: Vec<usize>,
     jump_at: usize,
@@ -156,6 +162,7 @@ fn is_word(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+mod block;
 mod brackets;
 mod folds;
 mod g;

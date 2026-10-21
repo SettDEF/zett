@@ -45,6 +45,8 @@ pub enum Mode {
     Visual,
     /// `V`: whole lines from the anchor's to the cursor's
     VisualLine,
+    /// CTRL-V: a block, the anchor and the cursor its corners
+    VisualBlock,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,6 +67,8 @@ enum Op {
     Func,
     // zf: a manual fold over what the motion covers
     Fold,
+    // zy: a yank without the blanks at line ends
+    YankTrim,
 }
 
 /// What a motion covers: characters (exclusive end) or whole lines.
@@ -78,6 +82,8 @@ enum Span {
 struct Register {
     text: String,
     linewise: bool,
+    /// a block (CTRL-V): its lines go in one under another
+    block: bool,
 }
 
 use undo::{Change, Edit};
@@ -209,6 +215,7 @@ impl Editor {
             Mode::Insert => self.insert_key(k),
             Mode::Normal => self.normal_key(k),
             Mode::Visual | Mode::VisualLine => self.visual_key(k),
+            Mode::VisualBlock => self.block_key(k),
         }
         self.vim_after();
     }

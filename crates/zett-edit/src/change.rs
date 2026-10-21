@@ -12,7 +12,7 @@ impl Editor {
         match span {
             Span::Chars(a, b) => {
                 let (a, b) = (a.min(b), a.max(b));
-                self.reg = Register { text: self.buf.slice(a, b), linewise: false };
+                self.reg = Register { text: self.buf.slice(a, b), linewise: false, block: false };
                 if op == Op::Yank {
                     self.cursor = a;
                 } else {
@@ -33,7 +33,7 @@ impl Editor {
                 if !text.ends_with('\n') {
                     text.push('\n');
                 }
-                self.reg = Register { text, linewise: true };
+                self.reg = Register { text, linewise: true, block: false };
                 match op {
                     Op::Yank => self.cursor = s.min(self.cursor),
                     Op::Delete => {
@@ -65,6 +65,9 @@ impl Editor {
     }
 
     pub(crate) fn put(&mut self, after: bool, n: usize) {
+        if self.reg.block {
+            return self.put_block(after);
+        }
         if self.reg.text.is_empty() {
             return;
         }

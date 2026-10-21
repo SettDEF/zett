@@ -247,3 +247,32 @@ mod folds {
         assert_eq!(e.cursor().line, 3);
     }
 }
+
+mod block {
+    use crate::Editor;
+
+    #[test]
+    fn a_block_yanks_deletes_inserts_and_puts() {
+        let mut e = Editor::from_str("abcd\nefgh\nijkl\n");
+        e.feed("l<C-v>jld");
+        assert_eq!(e.text(), "ad\neh\nijkl\n", "two columns over two lines go");
+        e.feed("u");
+        e.feed("gg<C-v>jjIX<Esc>");
+        assert_eq!(e.text(), "Xabcd\nXefgh\nXijkl\n", "I types on every line");
+        let mut e = Editor::from_str("ab\nabcdef\nabc\n");
+        e.feed("<C-v>jj$A;<Esc>");
+        assert_eq!(e.text(), "ab;\nabcdef;\nabc;\n", "$A appends at each line's end");
+        let mut e = Editor::from_str("1234\n5678\n");
+        e.feed("l<C-v>jly");
+        e.feed("$p");
+        assert_eq!(e.text(), "123423\n567867\n", "a block register puts its lines one under another");
+        let mut e = Editor::from_str("aaaa\nbbbb\n");
+        e.feed("<C-v>jlrx");
+        assert_eq!(e.text(), "xxaa\nxxbb\n");
+        e.feed("<C-v>jlU");
+        assert_eq!(e.text(), "XXaa\nXXbb\n");
+        let mut e = Editor::from_str("ab\ncd\n");
+        e.feed("l<C-v>j>");
+        assert_eq!(e.text(), "a    b\nc    d\n");
+    }
+}
