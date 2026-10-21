@@ -24,6 +24,8 @@ mod settings;
 mod display;
 mod statusline;
 mod files;
+mod quickfix;
+mod qfcmd;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -356,6 +358,10 @@ struct App {
     last_doc: Option<usize>,
     /// the window focused before (CTRL-W p), the : lines run (q:), a full redraw asked for (CTRL-L)
     last_win: Option<usize>,
+    /// the quickfix lists, each window's location lists, and a :make or :grep under way (qfcmd.rs)
+    qf: quickfix::QfStack,
+    loclists: std::collections::HashMap<usize, quickfix::QfStack>,
+    qf_job: Option<qfcmd::QfJob>,
     cmd_hist: Vec<String>,
     clear: bool,
     suspend: bool,
@@ -512,6 +518,9 @@ impl App {
             dash_sel: 0,
             last_doc: None,
             last_win: None,
+            qf: Default::default(),
+            loclists: Default::default(),
+            qf_job: None,
             cmd_hist: Vec::new(),
             clear: false,
             suspend: false,
@@ -615,6 +624,7 @@ impl App {
             self.sync_profile();
             self.agent_poll();
             self.notebook_poll();
+            self.qf_poll();
             // CTRL-L: everything drawn again; CTRL-Z: back to the shell until `fg`
             if std::mem::take(&mut self.clear) {
                 term.clear()?;

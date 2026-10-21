@@ -92,7 +92,7 @@ impl App {
             if tok.is_empty() {
                 return;
             }
-            if tok == "<CR>" && self.keyseq.is_empty() && (self.follow_help() || self.follow_cmdwin()) {
+            if tok == "<CR>" && self.keyseq.is_empty() && (self.follow_help() || self.follow_cmdwin() || self.follow_qf()) {
                 return;
             }
             if tok == "<Esc>" && !self.keyseq.is_empty() {

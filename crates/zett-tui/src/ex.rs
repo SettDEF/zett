@@ -56,7 +56,7 @@ pub(crate) fn parse_range(s: &str, cur: usize, last: usize, vis: Option<(usize, 
 }
 
 /// Vim's pattern habits into the regex syntax: \( \) \| \+ \? \< \> and \v.
-fn vim_regex(p: &str, icase: bool) -> Result<Regex, String> {
+pub(crate) fn vim_regex(p: &str, icase: bool) -> Result<Regex, String> {
     let mut out = String::new();
     let mut it = p.chars().peekable();
     while let Some(c) = it.next() {
@@ -170,10 +170,16 @@ impl App {
         self.edit_at = Instant::now();
     }
 
-    fn run_shell(cmd: &str, input: Option<&str>, dir: &Path) -> Result<String, String> {
+    /// A shell command (shell, shellcmdflag, shellquote, shellxquote), with `input` on its stdin.
+    fn run_shell(&self, cmd: &str, input: Option<&str>, dir: &Path) -> Result<String, String> {
         use std::io::Write;
-        let mut c = std::process::Command::new("sh");
-        c.args(["-c", cmd]).current_dir(dir).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+        let (sh, flag) = (self.setting(self.cur, "shell"), self.setting(self.cur, "shellcmdflag"));
+        let sh = if sh.is_empty() { std::env::var("SHELL").unwrap_or_else(|_| "sh".into()) } else { sh };
+        let flag = if flag.is_empty() { "-c".to_string() } else { flag };
+        let (xq, q) = (self.setting(self.cur, "shellxquote"), self.setting(self.cur, "shellquote"));
+        let cmd = format!("{xq}{q}{cmd}{q}{xq}");
+        let mut c = std::process::Command::new(&sh);
+        c.args(flag.split_whitespace()).arg(&cmd).current_dir(dir).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
         c.stdin(if input.is_some() { std::process::Stdio::piped() } else { std::process::Stdio::null() });
         let mut child = c.spawn().map_err(|e| e.to_string())?;
         if let (Some(t), Some(mut si)) = (input, child.stdin.take()) {
@@ -195,7 +201,7 @@ impl App {
     }
 
     /// `%` in a command: the current file.
-    fn expand_percent(&self, s: &str) -> String {
+    pub(crate) fn expand_percent(&self, s: &str) -> String {
         let name = self.docs[self.cur].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
         s.replace(" %", &format!(" {name}")).replace("%:p", &name)
     }
@@ -227,6 +233,10 @@ impl App {
         let here = (cur, cur);
         let all = (0, last);
         match name {
+            // the quickfix and location lists (qfcmd.rs)
+            n if crate::qfcmd::qf_name(n).is_some() => {
+                self.qf_command(n, arg, bang);
+            }
             "s" | "su" | "substitute" | "&" => {
                 let (a, b) = range.unwrap_or(here);
                 let spec = if name == "&" { self.last_sub.clone() } else { split_sub(arg) };
@@ -376,7 +386,7 @@ impl App {
                     // :{range}!cmd: the lines through cmd (:%!jq . , :'<,'>!sort)
                     Some((a, b)) => {
                         let input = self.lines_of(a, b).join("\n") + "\n";
-                        match Self::run_shell(&cmd, Some(&input), &dir) {
+                        match self.run_shell(&cmd, Some(&input), &dir) {
                             Ok(out) => {
                                 let v: Vec<String> = out.trim_end_matches('\n').lines().map(String::from).collect();
                                 self.set_lines(a, b, v);
@@ -384,7 +394,7 @@ impl App {
                             Err(e) => self.say(e),
                         }
                     }
-                    None => match Self::run_shell(&cmd, None, &dir) {
+                    None => match self.run_shell(&cmd, None, &dir) {
                         Ok(out) => {
                             let rows: Vec<(String, String)> = out.lines().map(|l| (String::new(), l.to_string())).collect();
                             if rows.is_empty() {
@@ -401,7 +411,7 @@ impl App {
                 let at = range.map_or(cur, |r| r.1);
                 let dir = self.root.clone();
                 let text = if let Some(c) = arg.strip_prefix('!') {
-                    Self::run_shell(c, None, &dir)
+                    self.run_shell(c, None, &dir)
                 } else {
                     let p = if Path::new(arg).is_absolute() { PathBuf::from(arg) } else { self.root.join(arg) };
                     std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))
