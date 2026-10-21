@@ -115,6 +115,10 @@ impl Editor {
 
     /// `z` and a key: where the window stands (zt zz zb z<CR> z. z- z+ z^), sideways (zh zl zs ze zH zL).
     pub(crate) fn vim_z(&mut self, c: char) -> bool {
+        // fold keys keep their count (3zF)
+        if !matches!(c, 't' | '\r' | 'z' | '.' | 'b' | '-' | '+' | '^' | 'h' | 'l' | 'H' | 'L' | 's' | 'e') {
+            return self.vim_fold(c);
+        }
         let (top, height, width) = self.vim.screen;
         let height = height.max(1);
         let last = self.buf.len_lines() - 1;
@@ -142,7 +146,7 @@ impl Editor {
             }
             's' => self.vim.requests.push(Request::LeftAt(self.cursor().col)),
             'e' => self.vim.requests.push(Request::LeftAt((self.cursor().col + 1).saturating_sub(width.max(1)))),
-            _ => return false,
+            _ => return self.vim_fold(c),
         }
         if line != self.cur_line() || fnb {
             self.cursor = if fnb { self.first_non_blank(line) } else { self.line_start(line) + self.cursor().col.min(self.buf.line_len(line).saturating_sub(1)) };

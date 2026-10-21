@@ -149,6 +149,7 @@ impl Editor {
             'f' => {
                 self.vim_g('f');
             }
+            'z' => return self.fold_edge(fwd),
             _ => return false,
         };
         true

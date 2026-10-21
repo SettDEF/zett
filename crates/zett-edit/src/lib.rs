@@ -63,6 +63,8 @@ enum Op {
     Format,
     Filter,
     Func,
+    // zf: a manual fold over what the motion covers
+    Fold,
 }
 
 /// What a motion covers: characters (exclusive end) or whole lines.

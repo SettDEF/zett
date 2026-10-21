@@ -135,8 +135,10 @@ impl Editor {
                 let n = self.take_count();
                 let last = self.buf.len_lines() - 1;
                 let to = if c == 'j' { (line + n).min(last) } else { line.saturating_sub(n) };
+                // with an operator the cursor stays (yj, zfj); alone it moves
+                let had_op = self.op.is_some();
                 self.motion(Span::Lines(line, to), None);
-                if self.op.is_none() {
+                if !had_op {
                     self.vertical_to(to);
                 }
             }

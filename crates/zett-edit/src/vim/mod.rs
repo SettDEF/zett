@@ -101,6 +101,10 @@ pub(crate) struct VimState {
     pub no_jump: bool,
     /// long lines wrap on screen (gj gk g0 g$ go by screen lines then)
     pub wrap: bool,
+    /// manual folds (zf): from the start of their first line to the end of their last, closed or open;
+    /// and folding on or off (zn zN zi)
+    pub folds: Vec<(usize, usize, bool)>,
+    pub folds_off: bool,
     /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
     pub jumps: Vec<usize>,
     jump_at: usize,
@@ -119,6 +123,10 @@ impl VimState {
         self.marks.values_mut().for_each(mv);
         self.changes.iter_mut().for_each(mv);
         self.jumps.iter_mut().for_each(mv);
+        for f in self.folds.iter_mut() {
+            mv(&mut f.0);
+            mv(&mut f.1);
+        }
         if let Some(p) = self.last_insert.as_mut() {
             mv(p);
         }
@@ -134,6 +142,10 @@ impl VimState {
         self.marks.values_mut().for_each(mv);
         self.changes.iter_mut().for_each(mv);
         self.jumps.iter_mut().for_each(mv);
+        for f in self.folds.iter_mut() {
+            mv(&mut f.0);
+            mv(&mut f.1);
+        }
         if let Some(p) = self.last_insert.as_mut() {
             mv(p);
         }
@@ -145,6 +157,7 @@ fn is_word(c: char) -> bool {
 }
 
 mod brackets;
+mod folds;
 mod g;
 mod keys;
 mod motions;

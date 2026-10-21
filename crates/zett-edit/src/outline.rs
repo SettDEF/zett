@@ -216,7 +216,7 @@ impl Editor {
             return;
         }
         self.view.rev = Some(self.buf.rev());
-        if self.view.is_empty() {
+        if self.view.is_empty() && self.vim.folds.is_empty() {
             self.view.hidden.clear();
             self.view.range = None;
             return;
@@ -234,6 +234,8 @@ impl Editor {
             }
         }
         self.view.folds = kept;
+        // Vim's manual folds (vim/folds.rs) hide lines too
+        hidden.extend(self.manual_hidden());
         hidden.sort();
         self.view.hidden = hidden;
         self.view.range = match self.view.narrow.take() {
@@ -256,6 +258,12 @@ impl Editor {
                 }
             }
         };
+    }
+
+    /// Folds changed outside the outline (Vim's zf zo zc …): the hidden lines are worked out again.
+    pub(crate) fn view_touch(&mut self) {
+        self.view.rev = None;
+        self.refresh_view();
     }
 
     /// Lines folded away or outside the narrowing are not shown and not moved through.

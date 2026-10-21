@@ -213,3 +213,37 @@ mod line_undo_and_screen_lines {
         assert_eq!(e.cursor, 9, "the end of the first screen row");
     }
 }
+
+mod folds {
+    use crate::Editor;
+
+    #[test]
+    fn manual_folds_close_open_nest_and_move_with_the_text() {
+        let mut e = Editor::from_str("a\nb\nc\nd\ne\nf\n");
+        e.feed("jzfj");
+        assert!(e.is_hidden(2) && !e.is_hidden(1) && !e.is_hidden(3), "zfj folds lines 2-3, shown as its first");
+        e.feed("zo");
+        assert!(!e.is_hidden(2));
+        e.feed("zc");
+        assert!(e.is_hidden(2));
+        e.feed("za");
+        assert!(!e.is_hidden(2));
+        // a line added above moves the fold with its text
+        e.feed("ggOnew<Esc>");
+        e.feed("jjzc");
+        assert!(e.is_hidden(3) && !e.is_hidden(2));
+        e.feed("zR");
+        assert!(!e.is_hidden(3));
+        e.feed("zM");
+        assert!(e.is_hidden(3));
+        e.feed("zE");
+        assert!(!e.is_hidden(3));
+        // zF with a count, zd removes it, zj moves to the next one
+        e.feed("gg3zF");
+        assert!(e.is_hidden(1) && e.is_hidden(2) && !e.is_hidden(3));
+        e.feed("zd");
+        assert!(!e.is_hidden(1));
+        e.feed("4GzfjggzRzj");
+        assert_eq!(e.cursor().line, 3);
+    }
+}
