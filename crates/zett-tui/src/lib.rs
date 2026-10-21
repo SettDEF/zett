@@ -326,6 +326,8 @@ struct App {
     cmd_hist: Vec<String>,
     clear: bool,
     suspend: bool,
+    /// z= suggestions waiting for the picker
+    spell_offer: Vec<String>,
     last_compile: Option<String>,
     numbers: bool,
     relative: bool,
@@ -464,6 +466,7 @@ impl App {
             cmd_hist: Vec::new(),
             clear: false,
             suspend: false,
+            spell_offer: Vec::new(),
             last_compile: None,
             numbers: true,
             relative: false,

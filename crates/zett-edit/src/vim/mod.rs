@@ -49,6 +49,8 @@ pub enum Request {
     Diagnostic(i32),
     /// the next (+1) or previous (-1) changed part (a git hunk): ]c [c
     Hunk(i32),
+    /// suggestions for the word at [start, end) to pick from (z=)
+    Suggest(usize, usize, Vec<String>),
 }
 
 /// The system clipboard, for `"+` and `"*`: the window sets it (the editor itself reads no
@@ -171,6 +173,7 @@ mod motions;
 mod ops;
 mod search;
 mod special;
+mod spelling;
 mod track;
 mod window;
 #[cfg(test)]

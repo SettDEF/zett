@@ -273,6 +273,7 @@ impl Editor {
             ('[' | ']', c) => return self.vim_bracket(p, c),
             ('q', w @ (':' | '/' | '?')) => self.vim.requests.push(Request::CmdWindow(w)),
             (CW | CWG | CBS, c) => return self.vim_window_prefixed(p, c),
+            (super::spelling::ZU, c) if matches!(c, 'g' | 'G' | 'w' | 'W') => self.spell_mark(c, true),
             ('Z', 'Z') => self.vim.requests.push(Request::Ex("x".into())),
             ('Z', 'Q') => self.vim.requests.push(Request::Ex("q!".into())),
             ('g', _) => return self.vim_g(c),

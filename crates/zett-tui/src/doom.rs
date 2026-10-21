@@ -102,6 +102,8 @@ pub(crate) enum Pick {
     Everything(PathBuf),
     /// commits (git.rs): the history of one block
     Commits,
+    /// spelling suggestions (z=) for the characters [start, end)
+    Spell(usize, usize),
 }
 
 impl Pick {
@@ -120,6 +122,7 @@ impl Pick {
             Pick::Query => "query",
             Pick::Everything(_) => "everything",
             Pick::Commits => "commits",
+            Pick::Spell(..) => "spell",
         }
     }
 
@@ -515,6 +518,7 @@ impl App {
             }
             Pick::Query => ("Query results".into(), Vec::new()),
             Pick::Commits => ("Commits".into(), Vec::new()),
+            Pick::Spell(..) => ("Change to".into(), std::mem::take(&mut self.spell_offer).into_iter().map(Cand::plain).collect()),
             Pick::Everything(root) => (format!("Search everything in {} (⟲ = its history)", home_short(&root.display().to_string())), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
@@ -573,6 +577,7 @@ impl App {
             }
             Pick::Everything(root) if self.open_past(&root, &item) => {}
             Pick::Commits => self.picked_commit(&item),
+            Pick::Spell(a, b) => self.doc().ed.replace(a, b, &item),
             Pick::Grep(root) | Pick::Everything(root) => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.parse::<usize>().ok())) {
@@ -1096,6 +1101,10 @@ impl App {
                         Some(&l) => self.goto_line(l + 1),
                         None => self.say(if starts.is_empty() { "No changes against git here".to_string() } else { "No more changes that way".to_string() }),
                     }
+                }
+                Request::Suggest(a, b, list) => {
+                    self.spell_offer = list;
+                    self.pick(Pick::Spell(a, b));
                 }
                 Request::Redraw => self.clear = true,
                 Request::Suspend => self.suspend = true,

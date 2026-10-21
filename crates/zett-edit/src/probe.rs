@@ -92,6 +92,10 @@ pub fn handles(keys: &str) -> bool {
 fn run(keys: &[crate::keys::Key]) -> Editor {
     let mut e = Editor::from_str(TEXT);
     e.prepare();
+    // q alone stops a recording: one is under way for it
+    if keys.len() == 1 && keys[0].char() == Some('q') {
+        e.feed("qz");
+    }
     e.last_search = "beta".into();
     e.set_cursor(crate::Pos { line: 1, col: 10 });
     e.vim.unknown = 0;
@@ -147,7 +151,5 @@ impl Editor {
         self.feed("A!<Esc>");
         self.feed("0fa");
         self.feed("yiw");
-        // and a recording under way, for q alone (it stops it)
-        self.feed("qz");
     }
 }

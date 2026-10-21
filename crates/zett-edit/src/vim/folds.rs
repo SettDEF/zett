@@ -66,6 +66,12 @@ impl Editor {
                 self.put(c == 'p', n);
                 self.reg = saved;
             }
+            '=' => self.spell_suggest(),
+            'g' | 'G' | 'w' | 'W' => self.spell_mark(c, false),
+            'u' => {
+                self.prefix = Some(super::spelling::ZU);
+                return true;
+            }
             'f' => {
                 // zf{motion}: an operator
                 self.op = Some(Op::Fold);

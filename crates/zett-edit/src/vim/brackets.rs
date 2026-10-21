@@ -145,7 +145,7 @@ impl Editor {
             }
             'd' | 'D' => self.vim.requests.push(Request::Diagnostic(match (c, fwd) { ('d', true) => 1, ('d', false) => -1, ('D', true) => 2, _ => -2 })),
             'c' => self.vim.requests.push(Request::Hunk(if fwd { 1 } else { -1 })),
-            's' | 'S' => self.vim.requests.push(Request::Message("E756: Spell checking is not possible (zett has no spell checker yet)".into())),
+            's' | 'S' => self.spell_jump(fwd),
             'f' => {
                 self.vim_g('f');
             }

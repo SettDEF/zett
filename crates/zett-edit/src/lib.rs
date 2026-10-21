@@ -17,6 +17,7 @@ pub mod outline;
 pub mod prefix;
 pub mod probe;
 pub mod search;
+pub mod spell;
 pub mod suggest;
 pub mod textops;
 pub mod vim;

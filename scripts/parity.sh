@@ -59,14 +59,15 @@ stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | 
 } > "$out/nvim-ex-commands.md"
 
 # ── Neovim's Normal-mode keys: each one fed into zett's Vim profile (zett probe-keys), or bound in its key map ──
-cut -f1,2 "$tmp/normal.tsv" | "$ZETT" probe-keys > "$tmp/probe.tsv"
+# its own data folder: zg / zw in the probe must not touch the real word lists
+cut -f1,2 "$tmp/normal.tsv" | XDG_DATA_HOME="$tmp" "$ZETT" probe-keys > "$tmp/probe.tsv"
 "$ZETT" keys n 2>/dev/null | awk '{print $1}' > "$tmp/zett-nkeys.txt"
 {
     echo "# Neovim's Normal-mode keys in zett"; echo; echo "$stamp"; echo
     echo "Each key is written out (\`d{motion}\` as \`dw\`) and fed into zett's Vim profile with text, a yank, a change and"
     echo "a search to act on: ✓ something happened (or zett's key map binds it), · nothing yet."; echo
     echo "| | key | fed as | what it does |"; echo "|---|---|---|---|"
-    paste "$tmp/normal.tsv" "$tmp/probe.tsv" | while IFS=$'\t' read -r tag written desc ok keys; do
+    paste "$tmp/normal.tsv" "$tmp/probe.tsv" | tr '\t' '\037' | while IFS=$'\037' read -r tag written desc ok keys; do
         mark="·"; { [ "$ok" = 1 ] || has "$keys" "$tmp/zett-nkeys.txt"; } && mark="✓"
         printf '| %s | `%s` | `%s` | %s |\n' "$mark" "${written//|/\\|}" "${keys//|/\\|}" "$(echo "${desc//|/\\|}" | sed 's/^[0-9]  *//')"
     done
