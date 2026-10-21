@@ -18,6 +18,7 @@ impl Editor {
                     return;
                 }
                 self.last_search = q;
+                self.vim.hl_off = false;
                 self.vim.search_back = !forward;
                 self.vim.search_word = false;
                 self.vim_next(forward);
@@ -49,6 +50,7 @@ impl Editor {
     /// The next match of the last search (`n`; `forward` false: `N`), as a motion.
     pub(crate) fn vim_next(&mut self, forward: bool) {
         let q = self.last_search.clone();
+        self.vim.hl_off = false;
         if q.is_empty() {
             self.count = None;
             self.op = None;
@@ -128,6 +130,7 @@ impl Editor {
             return self.vim.requests.push(Request::Message("E348: No string under cursor".into()));
         };
         self.last_search = self.buf.slice(a, b);
+        self.vim.hl_off = false;
         self.vim.search_word = whole;
         self.vim.search_back = !forward;
         // from the word's start, so `#` skips this one

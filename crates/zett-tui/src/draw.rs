@@ -1,6 +1,7 @@
 //! Drawing: the buffers, their text and line numbers, the tab line, the : line, the which-key menu.
 
 use super::*;
+use crate::display::{fold_cells, gut, Signs, TAB_FILL, TAB_FIRST, TAB_LAST};
 
 impl App {
     // ── drawing ──
@@ -134,6 +135,10 @@ impl App {
         let (wrap, words, cul, scrolloff, list) = (self.flag(di, "wrap"), self.flag(di, "linebreak"), self.flag(di, "cursorline"), self.num(di, "scrolloff"), self.flag(di, "list"));
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
         SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
+        let show = self.display(di);
+        let lc = show.list.clone().unwrap_or_default();
+        // showmatch: in insert mode, right after a closing bracket, its pair stands out
+        let paren = (self.docs[di].ed.mode() == zett_edit::Mode::Insert && self.flag(di, "showmatch")).then(|| self.docs[di].ed.match_before_cursor()).flatten();
         let (queries, embeds, nb, root) = (&mut self.queries, &mut self.embeds, &self.notebook, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
@@ -151,7 +156,20 @@ impl App {
         } else {
             Vec::new()
         };
-        let gutter = if numbers { (lines.to_string().len() + 2).max(4) as u16 } else { 1 };
+        // the gutter: fold column, sign column, line numbers (signs in the numbers by default, zett's)
+        let digits = lines.to_string().len();
+        let sign_w = match show.signs {
+            Signs::Yes => 2,
+            Signs::Auto if !d.diags.is_empty() => 2,
+            _ => 0,
+        };
+        let num_w = match (numbers, show.signs) {
+            (true, Signs::Number) => (digits + 2).max(show.numberwidth),
+            (true, _) => (digits + 1).max(show.numberwidth),
+            (false, Signs::Number) => 1,
+            (false, _) => 0,
+        };
+        let gutter = (show.foldcolumn + sign_w + num_w) as u16;
         if focused {
             self.gutter = gutter;
         }
@@ -170,11 +188,23 @@ impl App {
             d.top += 1;
         }
         // the rows a line takes: one, or its wrapped rows
-        let rows_of = |d: &Doc, l: usize| if wrap { wrap_starts(&d.ed.buf.line(l), width, words).len() } else { 1 };
+        // a wrapped line's later rows start with showbreak, and with breakindent at the line's indent
+        let sbr: String = show.showbreak.clone();
+        let sbr_w = sbr.chars().count();
+        let cont_of = |t: &str| (sbr_w + if show.breakindent { screen_col(t, t.chars().take_while(|c| *c == ' ' || *c == '\t').count()) } else { 0 }).min(width / 2);
+        let rows_of = |d: &Doc, l: usize| {
+            if wrap {
+                let t = d.ed.buf.line(l);
+                wrap_starts(&t, width, words, cont_of(&t)).len()
+            } else {
+                1
+            }
+        };
         let cur_line_text = d.ed.buf.line(c.line);
         let ccol = screen_col(&cur_line_text, c.col);
         // which wrapped row of its line the cursor is on, and its column there
-        let starts = if wrap { wrap_starts(&cur_line_text, width, words) } else { vec![0] };
+        let cur_cont = cont_of(&cur_line_text);
+        let starts = if wrap { wrap_starts(&cur_line_text, width, words, cur_cont) } else { vec![0] };
         let crow = starts.iter().rposition(|&s| s <= ccol).unwrap_or(0);
         let above = d.ed.step_shown(c.line, margin, true);
         if above < d.top {
@@ -198,10 +228,22 @@ impl App {
         }
         if wrap {
             d.left = 0;
-        } else if ccol < d.left {
-            d.left = ccol;
-        } else if ccol >= d.left + width.max(1) {
-            d.left = ccol + 1 - width.max(1);
+        } else {
+            // sidescrolloff: columns kept beside the cursor; sidescroll: at least that many at a time
+            // (0: the cursor goes to the middle)
+            let w = width.max(1);
+            let off = show.sidescrolloff.min((w - 1) / 2);
+            if ccol < d.left + off {
+                d.left = match show.sidescroll {
+                    0 => ccol.saturating_sub(w / 2),
+                    s => ccol.saturating_sub(off).min(d.left.saturating_sub(s)),
+                };
+            } else if ccol + off >= d.left + w {
+                d.left = match show.sidescroll {
+                    0 => ccol.saturating_sub(w / 2),
+                    s => (ccol + off + 1 - w).max(d.left + s),
+                };
+            }
         }
         let sel = d.ed.selection_range();
         let mut out: Vec<Line> = Vec::with_capacity(height);
@@ -214,6 +256,13 @@ impl App {
                 let end = if d.ed.view_is_empty() { (d.top + height).min(lines) } else { lines };
                 let to = if end >= lines { d.ed.buf.len_chars() } else { d.ed.buf.to_char(Pos { line: end, col: 0 }) };
                 (d.ed.isearch_matches(from, to), current)
+            }
+            // hlsearch: the last search's matches stay marked (until :nohlsearch)
+            _ if show.hlsearch => {
+                let from = d.ed.buf.to_char(Pos { line: d.top.min(lines), col: 0 });
+                let end = (d.top + height * 2).min(lines);
+                let to = if end >= lines { d.ed.buf.len_chars() } else { d.ed.buf.to_char(Pos { line: end, col: 0 }) };
+                (d.ed.hl_matches(from, to), None)
             }
             _ => (Vec::new(), None),
         };
@@ -236,7 +285,7 @@ impl App {
                 for h in hunks.iter().filter(|h| h.end() == next) {
                     for (i, t) in h.new.iter().enumerate() {
                         let shown: String = t.replace('\t', &" ".repeat(tab())).chars().skip(d.left).take(width).collect();
-                        let mut spans = vec![Span::styled(format!("{:>w$} ", "+", w = gutter as usize - 1), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
+                        let mut spans = vec![Span::styled(gut("+ ", gutter as usize), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
                         if i == 0 {
                             spans.push(Span::styled(format!(" {} ", h.author), hl::hl("AgentTag")));
                         }
@@ -268,10 +317,11 @@ impl App {
                 cursor_row = row + crow;
             }
             if ln >= lines {
-                out.push(Line::from(Span::styled(format!("{:>w$} ", "~", w = gutter as usize - 1), hl::hl("NonText"))));
+                out.push(Line::from(if gutter > 0 { Span::styled(gut(&format!("{} ", show.fill.eob), gutter as usize), hl::hl("EndOfBuffer")) } else { Span::styled(show.fill.eob.to_string(), hl::hl("EndOfBuffer")) }));
                 continue;
             }
-            let num_style = if ln == c.line { hl::hl("CursorLineNr") } else { hl::hl("LineNr") };
+            // the cursor line's number stands out with cursorline (cursorlineopt number or both)
+            let num_style = if ln == c.line && cul && show.cul_number { hl::hl("CursorLineNr") } else { hl::hl("LineNr") };
             let shown = if relative && ln != c.line { ln.abs_diff(c.line) } else { ln + 1 };
             let line_text = d.ed.buf.line(ln);
             // diagnostics: a sign in the gutter, the ranges underlined (in screen columns)
@@ -286,17 +336,31 @@ impl App {
                     (s, e.max(s + 1), x.severity)
                 })
                 .collect();
-            let mut spans = vec![if numbers {
-                let num = format!("{:>w$} ", shown, w = gutter as usize - 1);
-                match sign {
+            // the gutter: fold column, sign column, number (gn spans before the text)
+            let mut spans: Vec<Span<'static>> = Vec::new();
+            if show.foldcolumn > 0 {
+                let (depth, start) = d.ed.fold_mark(ln);
+                spans.push(Span::styled(fold_cells(show.foldcolumn, depth, start, &show.fill), hl::hl("FoldColumn")));
+            }
+            if sign_w > 0 {
+                spans.push(match sign {
+                    Some(s) => Span::styled("● ", Style::default().fg(lsp::severity_color(s))),
+                    None => Span::styled("  ", hl::hl("SignColumn")),
+                });
+            }
+            if numbers {
+                let num = gut(&format!("{shown} "), num_w);
+                spans.push(match sign.filter(|_| show.signs == Signs::Number) {
                     Some(s) => Span::styled(format!("●{}", &num[num.char_indices().nth(1).map(|(i, _)| i).unwrap_or(num.len())..]), num_style.fg(lsp::severity_color(s))),
                     None => Span::styled(num, num_style),
-                }
-            } else if let Some(s) = sign {
-                Span::styled("●", Style::default().fg(lsp::severity_color(s)))
-            } else {
-                Span::raw(" ")
-            }];
+                });
+            } else if num_w > 0 {
+                spans.push(match sign {
+                    Some(s) => Span::styled("●", Style::default().fg(lsp::severity_color(s))),
+                    None => Span::raw(" "),
+                });
+            }
+            let gn = spans.len();
             // the selection on this line, in screen columns
             let sel_cols = sel.and_then(|(s, e)| {
                 let ls = d.ed.buf.to_char(Pos { line: ln, col: 0 });
@@ -329,18 +393,43 @@ impl App {
             let mut x = 0usize;
             // a line a suggestion would replace
             let replaced = hunks.iter().find(|h| h.at <= ln && ln < h.end());
-            // list: where the spaces at the line's end begin (shown as ·)
-            let trail = if list { screen_col(&line_text, line_text.trim_end_matches('\n').trim_end_matches([' ', '\t']).chars().count()) } else { usize::MAX };
+            // list: where leading blanks end and trailing ones begin (screen columns)
+            let body = line_text.trim_end_matches('\n');
+            let trail = if list { screen_col(&line_text, body.trim_end_matches([' ', '\t']).chars().count()) } else { usize::MAX };
+            let lead = if list { screen_col(&line_text, body.chars().take_while(|c| *c == ' ' || *c == '\t').count()) } else { 0 };
+            // showmatch: the bracket on this line that the one just typed pairs with
+            let paren_col = paren.and_then(|p| {
+                let ls = d.ed.buf.to_char(Pos { line: ln, col: 0 });
+                (p >= ls && p < ls + body.chars().count()).then(|| screen_col(&line_text, p - ls))
+            });
+            let cursorcol = show.cursorcolumn && focused && ln != c.line;
             for (st, text) in d.spans(ln, ss, &hl) {
                 for ch in text.chars() {
                     if wrap || (x >= d.left && x < d.left + width) {
-                        let mut s = st;
-                        let ch = if ch == ' ' && x >= trail { '·' } else { ch };
-                        if x >= trail || ch == '→' {
-                            s = s.patch(hl::hl("NonText"));
+                        // synmaxcol: no syntax colours past it
+                        let mut s = if x >= show.synmaxcol { Style::default() } else { st };
+                        // listchars: tabs, trailing / leading / all spaces, non-breaking ones
+                        let (ch, blank) = match ch {
+                            TAB_FIRST => (lc.tab.map_or(' ', |t| t.0), true),
+                            TAB_FILL => (lc.tab.map_or(' ', |t| t.1), true),
+                            TAB_LAST => (lc.tab.map_or(' ', |t| t.2.unwrap_or(t.1)), true),
+                            ' ' if x >= trail && lc.trail.is_some() => (lc.trail.unwrap(), true),
+                            ' ' if x < lead && lc.lead.is_some() => (lc.lead.unwrap(), true),
+                            ' ' if list && lc.space.is_some() => (lc.space.unwrap(), true),
+                            '\u{a0}' | '\u{202f}' if list && lc.nbsp.is_some() => (lc.nbsp.unwrap(), true),
+                            c => (c, false),
+                        };
+                        if blank {
+                            s = s.patch(hl::hl("Whitespace"));
                         }
                         if colorcols.contains(&(x + 1)) {
                             s = s.patch(hl::hl("ColorColumn"));
+                        }
+                        if cursorcol && x == ccol {
+                            s = s.patch(hl::hl("CursorColumn"));
+                        }
+                        if paren_col == Some(x) {
+                            s = s.patch(hl::hl("MatchParen"));
                         }
                         if replaced.is_some() {
                             s = s.patch(hl::hl("AgentDelete"));
@@ -359,18 +448,41 @@ impl App {
                     x += 1;
                 }
             }
-            // a selection over the line end shows one cell for the line break
-            if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && (wrap || (x >= d.left && x < d.left + width)) {
+            // listchars precedes / extends: text off the window's left / right edge (nowrap)
+            if !wrap && spans.len() > gn {
+                if let Some(p) = lc.precedes.filter(|_| d.left > 0) {
+                    spans[gn] = Span::styled(p.to_string(), hl::hl("NonText"));
+                }
+                if let Some(e) = lc.extends.filter(|_| x > d.left + width) {
+                    let last = spans.len() - 1;
+                    spans[last] = Span::styled(e.to_string(), hl::hl("NonText"));
+                }
+            }
+            // the line end: listchars eol, or one cell for a selection over the line break
+            let at_end = sel_cols.is_some_and(|(a, b)| x >= a && x < b);
+            let end_shown = wrap || (x >= d.left && x < d.left + width);
+            if let Some(e) = lc.eol.filter(|_| end_shown) {
+                let s = if at_end { hl::hl("NonText").add_modifier(Modifier::REVERSED) } else { hl::hl("NonText") };
+                spans.push(Span::styled(e.to_string(), s));
+                x += 1;
+            } else if at_end && end_shown {
                 spans.push(Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
             }
-            let cells = spans.len() - 1;
-            // colorcolumn past the line's end: the marked columns still show
+            let cells = spans.len() - gn;
+            // colorcolumn and cursorcolumn past the line's end: the marked columns still show
             if !wrap {
-                let mut at = x.max(d.left);
-                for &cc in colorcols.iter().filter(|&&cc| cc > x && cc - 1 < d.left + width) {
-                    spans.push(Span::raw(" ".repeat(cc - 1 - at)));
-                    spans.push(Span::styled(" ", hl::hl("ColorColumn")));
-                    at = cc;
+                let mut cols: Vec<(usize, &str)> = colorcols.iter().map(|&cc| (cc - 1, "ColorColumn")).collect();
+                if cursorcol {
+                    cols.push((ccol, "CursorColumn"));
+                }
+                cols.sort();
+                cols.dedup_by_key(|c| c.0);
+                let start = x.max(d.left);
+                let mut at = start;
+                for (col, g) in cols.into_iter().filter(|&(col, _)| col >= start && col < d.left + width) {
+                    spans.push(Span::raw(" ".repeat(col - at)));
+                    spans.push(Span::styled(" ", hl::hl(g)));
+                    at = col + 1;
                 }
             }
             // a suggestion that only deletes: its tag on the first line it would delete
@@ -391,7 +503,7 @@ impl App {
             });
             let band = match ln.abs_diff(c.line) {
                 _ if pulse.is_some() => pulse,
-                _ if !focused || !cul => None,
+                _ if !focused || !cul || !show.cul_line => None,
                 0 => Some("CursorLine"),
                 1 => Some("CursorLineGlow"),
                 2 => Some("CursorLineGlow2"),
@@ -409,9 +521,10 @@ impl App {
                 }
             };
             // wrap: the line's cells cut into rows; the first goes here, the rest are drawn next
-            let wstarts = if wrap { wrap_starts(&line_text, width, words) } else { vec![0] };
+            let cont = cont_of(&line_text);
+            let wstarts = if wrap { wrap_starts(&line_text, width, words, cont) } else { vec![0] };
             if wstarts.len() > 1 {
-                let mut rest = spans.split_off(1);
+                let mut rest = spans.split_off(gn);
                 let extras = rest.split_off(cells.min(rest.len()));
                 let mut chunks: Vec<Vec<Span<'static>>> = Vec::new();
                 for (k, &s0) in wstarts.iter().enumerate().rev() {
@@ -432,6 +545,11 @@ impl App {
                         out.push(finish(std::mem::take(&mut spans)));
                     } else {
                         let mut row = vec![Span::raw(" ".repeat(gutter as usize))];
+                        // showbreak, then the breakindent
+                        let mark: String = sbr.chars().take(cont).collect();
+                        let n = mark.chars().count();
+                        row.push(Span::styled(mark, hl::hl("NonText")));
+                        row.push(Span::raw(" ".repeat(cont - n)));
                         row.extend(part);
                         virt.push_back(finish(row));
                     }
@@ -442,7 +560,7 @@ impl App {
         }
         f.render_widget(Paragraph::new(out), a);
         if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
-            let x = a.x + gutter + ccol.saturating_sub(d.left + starts[crow]) as u16;
+            let x = a.x + gutter + (ccol.saturating_sub(d.left + starts[crow]) + if crow > 0 { cur_cont } else { 0 }) as u16;
             let y = a.y + cursor_row as u16;
             self.cursor_xy = (x, y);
             f.set_cursor_position(Position { x: x.min(a.right().saturating_sub(1)), y });
@@ -494,6 +612,23 @@ impl App {
                 return;
             }
             self.msg = None;
+        }
+        // showmode: -- INSERT -- and the like, and the macro being recorded (Vim's last line)
+        if let Some(d) = self.docs.get(self.cur).filter(|d| !d.ed.is_emacs() && self.flag(self.cur, "showmode")) {
+            let mode = match d.ed.mode() {
+                Mode::Insert if d.ed.replacing() => "-- REPLACE --",
+                Mode::Insert => "-- INSERT --",
+                Mode::Visual => "-- VISUAL --",
+                Mode::VisualLine => "-- VISUAL LINE --",
+                Mode::VisualBlock => "-- VISUAL BLOCK --",
+                Mode::Normal => "",
+            };
+            let rec = d.ed.recording().map(|r| format!("recording @{r}")).unwrap_or_default();
+            if !mode.is_empty() || !rec.is_empty() {
+                let gap = if mode.is_empty() || rec.is_empty() { "" } else { " " };
+                f.render_widget(Paragraph::new(format!("{mode}{gap}{rec}")).style(hl("ModeMsg")), a);
+                return;
+            }
         }
         if !self.keyseq.is_empty() {
             let shown: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();

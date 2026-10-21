@@ -539,7 +539,11 @@ impl App {
                 let n = range.map_or(last + 1, |r| r.1 + 1);
                 self.say(n.to_string());
             }
-            "noh" | "nohlsearch" => {}
+            "noh" | "nohlsearch" => {
+                for d in self.docs.iter_mut() {
+                    d.ed.nohlsearch();
+                }
+            }
             "ec" | "echo" => match self.with_lua(|e| e.eval(arg)) {
                 Ok((out, fx)) => {
                     self.after_lua(fx);

@@ -21,6 +21,7 @@ mod everything;
 mod git;
 mod nvim_options;
 mod settings;
+mod display;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -216,18 +217,31 @@ impl Doc {
 
 fn expand(s: &str) -> String {
     let (t, list) = SHOW.with(|s| s.get());
-    s.replace('\t', &if list { format!("→{}", " ".repeat(t.saturating_sub(1))) } else { " ".repeat(t) })
+    // list: placeholder cells the window draws as listchars' tab (display.rs)
+    let shown = if list {
+        let mut s = display::TAB_FIRST.to_string();
+        if t > 1 {
+            s.extend(std::iter::repeat_n(display::TAB_FILL, t - 2));
+            s.push(display::TAB_LAST);
+        }
+        s
+    } else {
+        " ".repeat(t)
+    };
+    s.replace('\t', &shown)
 }
 
 /// Where a wrapped line's rows start, in screen columns (wrap): every `width` columns, or with
 /// `words` (linebreak) after the last space that fits, so a word moves to the next row whole.
-fn wrap_starts(line: &str, width: usize, words: bool) -> Vec<usize> {
+fn wrap_starts(line: &str, width: usize, words: bool, cont: usize) -> Vec<usize> {
     let cells: Vec<char> = expand(line.trim_end_matches('\n')).chars().collect();
     let width = width.max(1);
     let mut starts = vec![0];
     let mut s = 0;
-    while cells.len() - s > width {
-        let mut e = s + width;
+    // the rows after the first are `cont` narrower (showbreak, breakindent)
+    let row_w = |s: usize| if s == 0 { width } else { (width - cont.min(width - 1)).max(1) };
+    while cells.len() - s > row_w(s) {
+        let mut e = s + row_w(s);
         if words {
             if let Some(sp) = (s + 1..e).rev().find(|&i| cells[i - 1] == ' ' && cells[i] != ' ') {
                 e = sp;

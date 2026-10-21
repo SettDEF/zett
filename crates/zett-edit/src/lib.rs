@@ -141,10 +141,6 @@ pub struct Editor {
     soft_tab: Option<usize>,
 }
 
-fn class(c: char) -> u8 {
-    if c.is_whitespace() { 0 } else if c.is_alphanumeric() || c == '_' { 2 } else { 1 }
-}
-
 impl Editor {
     pub fn new(buf: Buffer) -> Self {
         Self {

@@ -120,6 +120,8 @@ impl Editor {
                 if let Some(s) = self.isearch.take() {
                     if !s.now.query.is_empty() {
                         self.last_search = s.now.query.clone();
+                        // Emacs keeps no highlight once the search ends (hlsearch is a Vim thing)
+                        self.vim.hl_off = true;
                     }
                     // the mark where the search began, not active (Emacs: "Mark saved where search started")
                     if self.cursor != s.origin {

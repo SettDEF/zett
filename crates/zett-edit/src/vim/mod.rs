@@ -107,6 +107,8 @@ pub(crate) struct VimState {
     /// and folding on or off (zn zN zi)
     pub folds: Vec<(usize, usize, bool)>,
     pub folds_off: bool,
+    /// :nohlsearch was given since the last search
+    pub hl_off: bool,
     /// z{height}<CR>: the height typed so far
     pub z_height: usize,
     /// a block reaching every line's end ($), and a block insert waiting for Esc: (first line, last line,
@@ -177,6 +179,7 @@ mod g;
 mod keys;
 mod motions;
 pub mod options;
+mod display;
 mod ops;
 mod search;
 mod special;
@@ -219,6 +222,10 @@ impl Editor {
             return Some((self.reg.text.clone(), self.reg.linewise));
         }
         self.vim.regs.get(&r).map(|x| (x.text.clone(), x.linewise))
+    }
+    /// R mode: typing replaces (showmode says -- REPLACE --).
+    pub fn replacing(&self) -> bool {
+        self.vim.replace
     }
     /// The macro being recorded, for the mode line ("recording @q").
     pub fn recording(&self) -> Option<char> {

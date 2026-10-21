@@ -126,8 +126,10 @@ impl App {
             "h" | "help" => self.open_help(arg),
             "set" | "se" => self.set_command(arg),
             "setlocal" | "setl" => {
-                if !self.set_core(arg, true) {
-                    self.say(format!("{arg}: :setlocal takes a core setting (:set lists them)"));
+                for a in crate::settings::set_args(arg) {
+                    if !self.set_core(&a, true) {
+                        self.say(format!("{a}: :setlocal takes a core setting (:set lists them)"));
+                    }
                 }
             }
             "hi" | "highlight" => self.hi_command(arg),

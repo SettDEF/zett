@@ -84,7 +84,7 @@ impl App {
         let Some(g) = self.git.as_mut() else { return };
         let root = g.root.clone();
         let (mut text, mut rows) = (Vec::<String>::new(), Vec::<Row>::new());
-        let mut line = |t: String, r: Row, text: &mut Vec<String>, rows: &mut Vec<Row>| {
+        let line = |t: String, r: Row, text: &mut Vec<String>, rows: &mut Vec<Row>| {
             text.push(t);
             rows.push(r);
         };

@@ -28,7 +28,10 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("linebreak", &["lbr"], Kind::Bool, "true", "wrap between words, not inside one"),
     s("cursorline", &["cul"], Kind::Bool, "true", "the line with the cursor stands out"),
     s("colorcolumn", &["cc"], Kind::Text, "", "columns to mark, e.g. 80 or 80,120"),
-    s("list", &[], Kind::Bool, "false", "show tabs (→) and spaces at line ends (·)"),
+    s("list", &[], Kind::Bool, "false", "show tabs, spaces at line ends and more as listchars says"),
+    s("listchars", &["lcs"], Kind::Text, "tab:→ ,trail:·,nbsp:+", "what list shows: tab:XY[Z] trail: lead: space: nbsp: eol: extends: precedes:"),
+    s("signcolumn", &["scl"], Kind::Text, "number", "where error signs go: number (in the line numbers), yes, auto, no"),
+    s("showmode", &["smd"], Kind::Bool, "false", "-- INSERT -- and the like on the last line (the status line shows the mode already)"),
     s("scrolloff", &["so"], Kind::Int, "3", "lines kept above and below the cursor"),
     s("tabstop", &["ts"], Kind::Int, "4", "columns a tab character takes"),
     s("shiftwidth", &["sw"], Kind::Int, "4", "columns one indent step takes"),
@@ -51,7 +54,12 @@ pub(crate) fn find(name: &str) -> Option<&'static Setting> {
 }
 
 /// Neovim options zett acts on outside this table (the window draws numbers, history is always kept).
-const WORKS_ELSEWHERE: &[&str] = &["number", "relativenumber", "incsearch", "undofile"];
+const WORKS_ELSEWHERE: &[&str] = &[
+    "number", "relativenumber", "incsearch", "undofile",
+    // the window's display options (display.rs, draw.rs)
+    "cursorcolumn", "cursorlineopt", "showbreak", "breakindent", "numberwidth", "foldcolumn", "hlsearch", "synmaxcol",
+    "sidescroll", "sidescrolloff", "fillchars", "showmatch",
+];
 
 /// The setting does something in zett (zett's table, or acted on elsewhere); false: accepted and kept,
 /// no effect yet.
@@ -88,21 +96,39 @@ impl App {
     /// when it is not one (a plugin's setting then).
     pub(crate) fn set_core(&mut self, arg: &str, local: bool) -> bool {
         let arg = arg.trim();
-        let (name, value) = match arg.split_once(['=', ' ']) {
-            Some((n, v)) => (n.trim(), Some(v.trim())),
+        let (name, value) = match arg.find(['=', ':', ' ']) {
+            Some(i) => (arg[..i].trim(), Some(arg[i + 1..].trim_start())),
             None => (arg, None),
         };
+        // name+= -= ^=: add, remove, prepend (set_op)
+        let (name, op) = match name.chars().last() {
+            Some(c @ ('+' | '-' | '^')) if value.is_some() => (&name[..name.len() - 1], Some(c)),
+            _ => (name, None),
+        };
         let ask = name.ends_with('?');
-        let name = name.trim_end_matches('?');
-        let (setting, negated) = match find(name) {
-            Some(s) => (s, false),
+        // name& (or name&vim): back to the default; name! and invname: switched
+        let reset = name.contains('&');
+        let name = name.split('&').next().unwrap_or("").trim_end_matches('?');
+        let toggle = name.ends_with('!');
+        let name = name.trim_end_matches('!');
+        let (setting, negated, toggle) = match find(name) {
+            Some(s) => (s, false, toggle),
             None => match name.strip_prefix("no").and_then(find) {
-                Some(s) if s.kind == Kind::Bool => (s, true),
-                _ => return false,
+                Some(s) if s.kind == Kind::Bool => (s, true, false),
+                _ => match name.strip_prefix("inv").and_then(find) {
+                    Some(s) if s.kind == Kind::Bool => (s, false, true),
+                    _ => return false,
+                },
             },
         };
         let cur = self.cur;
-        let value = if ask || (value.is_none() && setting.kind != Kind::Bool) {
+        let value = if reset {
+            setting.default.to_string()
+        } else if toggle && setting.kind == Kind::Bool {
+            (!self.flag(cur, setting.name)).to_string()
+        } else if let (Some(op), Some(v)) = (op, value) {
+            set_op(&self.setting(cur, setting.name), op, v, setting.kind)
+        } else if ask || (value.is_none() && setting.kind != Kind::Bool) {
             let v = self.setting(cur, setting.name);
             self.say(format!("{} = {v} (default {}) · {}", setting.name, setting.default, setting.about));
             return true;
@@ -260,4 +286,87 @@ pub(crate) fn distance(a: &str, b: &str) -> usize {
 pub(crate) fn all() -> Vec<&'static Setting> {
     let mine = |n: &Setting| SETTINGS.iter().any(|s| s.name == n.name || s.short.contains(&n.name) || n.short.iter().any(|x| s.short.contains(x) || s.name == *x));
     SETTINGS.iter().chain(crate::nvim_options::NVIM.iter().filter(|n| !mine(n))).collect()
+}
+
+/// `:set`'s arguments one by one: Vim's `:set a b=c d+=e` (a backslash keeps a space in a value), or
+/// zett's `:set NAME VALUE` (two words, the second not an option).
+pub(crate) fn set_args(arg: &str) -> Vec<String> {
+    let (mut out, mut cur, mut esc) = (Vec::new(), String::new(), false);
+    for c in arg.trim_start().chars() {
+        if esc {
+            cur.push(c);
+            esc = false;
+        } else if c == '\\' {
+            esc = true;
+        } else if c.is_whitespace() {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+        } else {
+            cur.push(c);
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    let names = |w: &str| {
+        let n = w.split(['=', ':', '+', '-', '^', '?', '!', '&']).next().unwrap_or("");
+        find(n).is_some() || n.strip_prefix("no").or_else(|| n.strip_prefix("inv")).and_then(find).is_some()
+    };
+    if out.len() == 2 && !out[0].contains(['=', ':']) && !out[1].contains(['=', '?', '!', '&']) && !names(&out[1]) {
+        return vec![format!("{}={}", out[0], out[1])];
+    }
+    out
+}
+
+/// `+=` `-=` `^=` on a value: numbers add, subtract, multiply; comma lists add, remove, prepend an
+/// item; other text (flag letters) appends, removes, prepends.
+pub(crate) fn set_op(cur: &str, op: char, v: &str, kind: Kind) -> String {
+    if kind == Kind::Int {
+        let (a, b) = (cur.parse::<i64>().unwrap_or(0), v.parse::<i64>().unwrap_or(0));
+        return match op {
+            '+' => a + b,
+            '-' => a - b,
+            _ => a * b,
+        }
+        .to_string();
+    }
+    if cur.contains(',') || v.contains(',') || cur.contains(':') {
+        let mut items: Vec<&str> = cur.split(',').filter(|s| !s.is_empty()).collect();
+        let new: Vec<&str> = v.split(',').filter(|s| !s.is_empty()).collect();
+        match op {
+            '-' => items.retain(|i| !new.contains(i)),
+            '+' => items.extend(new.iter().filter(|n| !cur.split(',').any(|c| c == **n))),
+            _ => {
+                items.retain(|i| !new.contains(i));
+                items.splice(0..0, new);
+            }
+        }
+        return items.join(",");
+    }
+    match op {
+        '-' => cur.replace(v, ""),
+        '+' if !cur.contains(v) => format!("{cur}{v}"),
+        '+' => cur.to_string(),
+        _ => format!("{v}{}", cur.replace(v, "")),
+    }
+}
+
+#[cfg(test)]
+mod set_tests {
+    use super::*;
+
+    #[test]
+    fn arguments_and_operators() {
+        assert_eq!(set_args("list number tw=80"), vec!["list", "number", "tw=80"]);
+        assert_eq!(set_args("textwidth 80"), vec!["textwidth=80"], "zett's NAME VALUE");
+        assert_eq!(set_args("showbreak=>\\ \\ "), vec!["showbreak=>  "]);
+        assert_eq!(set_args("wrap nolist"), vec!["wrap", "nolist"]);
+        assert_eq!(set_op("80", '+', "8", Kind::Int), "88");
+        assert_eq!(set_op("tab:> ,trail:-", '+', "eol:$", Kind::Text), "tab:> ,trail:-,eol:$");
+        assert_eq!(set_op("indent,eol,start", '-', "eol", Kind::Text), "indent,start");
+        assert_eq!(set_op("bin,hex", '^', "alpha", Kind::Text), "alpha,bin,hex");
+        assert_eq!(set_op("tcqj", '-', "t", Kind::Text), "cqj");
+        assert_eq!(set_op("cqj", '+', "t", Kind::Text), "cqjt");
+    }
 }

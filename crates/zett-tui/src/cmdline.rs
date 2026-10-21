@@ -262,8 +262,19 @@ impl App {
         }
     }
 
-    /// `:set NAME VALUE` (also `:set number`, `:set nonumber`, Vim's way).
+    /// `:set a b=c d+=e`: each argument in turn (settings::set_args).
     pub(crate) fn set_command(&mut self, arg: &str) {
+        let args = crate::settings::set_args(arg);
+        if args.is_empty() {
+            return self.set_one("");
+        }
+        for a in args {
+            self.set_one(&a);
+        }
+    }
+
+    /// One `:set` argument: `NAME=VALUE` (also `number`, `nonumber`, Vim's way), a plugin's option too.
+    fn set_one(&mut self, arg: &str) {
         let (name, value) = arg.split_once([' ', '=']).map(|(a, b)| (a.trim(), b.trim())).unwrap_or((arg.trim(), ""));
         let flag = |s: &str| -> Option<(&'static str, bool)> {
             let (on, n) = match s.strip_prefix("no") {
