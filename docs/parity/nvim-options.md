@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-186 ✓ do something in zett, 188 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+199 ✓ do something in zett, 175 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -43,7 +43,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `cedit` |  | string | global | `` | key used to open the command-line window |
 | ◐ | `channel` |  | number | buf | `0` |  |
 | ◐ | `charconvert` | ccv | string | global | `` | expression for character encoding conversion |
-| ◐ | `chistory` | chi | number | global | `10` | maximum number of quickfix lists in history |
+| ✓ | `chistory` | chi | number | global | `10` | maximum number of quickfix lists in history |
 | ✓ | `cindent` | cin | boolean | buf | `false` | do C program indenting |
 | ◐ | `cinkeys` | cink | string | buf | `0{,0},0),0],:,0#,!^F,o,O,e` | keys that trigger indent when 'cindent' is set |
 | ◐ | `cinoptions` | cino | string | buf | `` | how to do indenting when 'cindent' is set |
@@ -92,8 +92,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `equalalways` | ea | boolean | global | `true` | windows are automatically made the same size |
 | ✓ | `equalprg` | ep | string | buf | `` | external program to use for "=" command |
 | ✓ | `errorbells` | eb | boolean | global | `false` | ring the bell for error messages |
-| ◐ | `errorfile` | ef | string | global | `errors.err` | name of the errorfile for the QuickFix mode |
-| ◐ | `errorformat` | efm | string | buf | `%*[^"]"%f"%*\D%l: %m,"%f"%*\D%l: %m,%-Gg%\?make[%*\d]: *** [%f:%l:%m,%-Gg%\?make: *** [%f:%l:%m,%-G%f:%l: (Each undeclared identifier is reported only once,%-G%f:%l: for each function it appears in.),%-GIn file included from %f:%l:%c:,%-GIn file included from %f:%l:%c\,,%-GIn file included from %f:%l:%c,%-GIn file included from %f:%l,%-G%*[ ]from %f:%l:%c,%-G%*[ ]from %f:%l:,%-G%*[ ]from %f:%l\,,%-G%*[ ]from %f:%l,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,"%f"\, line %l%*\D%c%*[^ ] %m,%D%*\a[%*\d]: Entering directory %*[`']%f',%X%*\a[%*\d]: Leaving directory %*[`']%f',%D%*\a: Entering directory %*[`']%f',%X%*\a: Leaving directory %*[`']%f',%DMaking %*\a in %f,%f\|%l\| %m` | description of the lines in the error file |
+| ✓ | `errorfile` | ef | string | global | `errors.err` | name of the errorfile for the QuickFix mode |
+| ✓ | `errorformat` | efm | string | buf | `%*[^"]"%f"%*\D%l: %m,"%f"%*\D%l: %m,%-Gg%\?make[%*\d]: *** [%f:%l:%m,%-Gg%\?make: *** [%f:%l:%m,%-G%f:%l: (Each undeclared identifier is reported only once,%-G%f:%l: for each function it appears in.),%-GIn file included from %f:%l:%c:,%-GIn file included from %f:%l:%c\,,%-GIn file included from %f:%l:%c,%-GIn file included from %f:%l,%-G%*[ ]from %f:%l:%c,%-G%*[ ]from %f:%l:,%-G%*[ ]from %f:%l\,,%-G%*[ ]from %f:%l,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,"%f"\, line %l%*\D%c%*[^ ] %m,%D%*\a[%*\d]: Entering directory %*[`']%f',%X%*\a[%*\d]: Leaving directory %*[`']%f',%D%*\a: Entering directory %*[`']%f',%X%*\a: Leaving directory %*[`']%f',%DMaking %*\a in %f,%f\|%l\| %m` | description of the lines in the error file |
 | ◐ | `eventignore` | ei | string | global | `` | autocommand events that are ignored |
 | ◐ | `eventignorewin` | eiw | string | win | `` | autocommand events that are ignored in a window |
 | ✓ | `expandtab` | et | boolean | buf | `false` | use spaces when <Tab> is inserted |
@@ -126,8 +126,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `formatprg` | fp | string | buf | `` | name of external program used with "gq" command |
 | ✓ | `fsync` | fs | boolean | buf | `true` | whether to invoke fsync() after file write |
 | ✓ | `gdefault` | gd | boolean | global | `false` |  |
-| ◐ | `grepformat` | gfm | string | buf | `%f:%l:%m,%f:%l%m,%f  %l%m` | format of 'grepprg' output |
-| ◐ | `grepprg` | gp | string | buf | `grep -HIn $* /dev/null` | program to use for ":grep" |
+| ✓ | `grepformat` | gfm | string | buf | `%f:%l:%m,%f:%l%m,%f  %l%m` | format of 'grepprg' output |
+| ✓ | `grepprg` | gp | string | buf | `grep -HIn $* /dev/null` | program to use for ":grep" |
 | ✓ | `guicursor` | gcr | string | global | `n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:block-blinkon500-blinkoff500-TermCursor` | GUI: settings for cursor shape and blinking |
 | ✓ | `guifont` | gfn | string | global | `Source Code Pro,DejaVu Sans Mono,Courier New,monospace` | GUI: Name(s) of font(s) to be used |
 | ✓ | `guifontwide` | gfw | string | global | `` | list of font names for double-wide characters |
@@ -173,7 +173,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `langremap` | lrm | boolean | global | `false` | do apply 'langmap' to mapped characters |
 | ✓ | `laststatus` | ls | number | global | `2` | tells when last window has status lines |
 | ◐ | `lazyredraw` | lz | boolean | global | `false` | don't redraw while executing macros |
-| ◐ | `lhistory` | lhi | number | win | `10` | maximum number of location lists in history |
+| ✓ | `lhistory` | lhi | number | win | `10` | maximum number of location lists in history |
 | ✓ | `linebreak` | lbr | boolean | win | `false` | wrap long lines at a blank |
 | ◐ | `lines` |  | number | global | `24` | number of lines in the display |
 | ✓ | `linespace` | lsp | number | global | `0` | number of pixel lines to use between characters |
@@ -185,8 +185,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `loadplugins` | lpl | boolean | global | `true` | load plugin scripts when starting up |
 | ◐ | `magic` |  | boolean | global | `true` |  |
 | ◐ | `makeef` | mef | string | global | `` | name of the errorfile for ":make" |
-| ◐ | `makeencoding` | menc | string | buf | `` | encoding of external make/grep commands |
-| ◐ | `makeprg` | mp | string | buf | `make` | program to use for the ":make" command |
+| ✓ | `makeencoding` | menc | string | buf | `` | encoding of external make/grep commands |
+| ✓ | `makeprg` | mp | string | buf | `make` | program to use for the ":make" command |
 | ✓ | `matchpairs` | mps | string | buf | `(:),{:},[:]` | pairs of characters that "%" can match |
 | ✓ | `matchtime` | mat | number | global | `5` | tenths of a second to show matching paren |
 | ✓ | `maxcombine` | mco | number | global | `6` | maximum nr of combining characters displayed |
@@ -262,15 +262,15 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `sessionoptions` | ssop | string | global | `blank,buffers,curdir,folds,help,tabpages,winsize,terminal` | options for \|:mksession\| |
 | ◐ | `shada` | sd | string | global | `!,'100,<50,s10,h,r/tmp/,r/private/` | use \|shada\| file upon startup and exiting |
 | ◐ | `shadafile` | sdf | string | global | `` |  |
-| ◐ | `shell` | sh | string | global | `/bin/zsh` | name of shell to use for external commands |
-| ◐ | `shellcmdflag` | shcf | string | global | `-c` | flag to shell to execute one command |
+| ✓ | `shell` | sh | string | global | `/bin/zsh` | name of shell to use for external commands |
+| ✓ | `shellcmdflag` | shcf | string | global | `-c` | flag to shell to execute one command |
 | ◐ | `shellpipe` | sp | string | global | `2>&1\| tee` | string to put output of ":make" in error file |
-| ◐ | `shellquote` | shq | string | global | `` | quote character(s) for around shell command |
+| ✓ | `shellquote` | shq | string | global | `` | quote character(s) for around shell command |
 | ◐ | `shellredir` | srr | string | global | `>%s 2>&1` | string to put output of filter in a temp file |
 | ✓ | `shellslash` | ssl | boolean | global | `true` | use forward slash for shell file names |
 | ◐ | `shelltemp` | stmp | boolean | global | `false` | whether to use a temp file for shell commands |
 | ◐ | `shellxescape` | sxe | string | global | `` | characters to escape when 'shellxquote' is ( |
-| ◐ | `shellxquote` | sxq | string | global | `` | like 'shellquote', but include redirection |
+| ✓ | `shellxquote` | sxq | string | global | `` | like 'shellquote', but include redirection |
 | ✓ | `shiftround` | sr | boolean | global | `false` | round indent to multiple of shiftwidth |
 | ✓ | `shiftwidth` | sw | number | buf | `8` | number of spaces to use for (auto)indent step |
 | ✓ | `shortmess` | shm | string | global | `ltToOCF` | list of flags, reduce length of messages |
@@ -304,7 +304,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `suffixes` | su | string | global | `.bak,~,.o,.h,.info,.swp,.obj` | suffixes that are ignored with multiple match |
 | ◐ | `suffixesadd` | sua | string | buf | `` | suffixes added when searching for a file |
 | ◐ | `swapfile` | swf | boolean | buf | `true` | whether to use a swapfile for a buffer |
-| ◐ | `switchbuf` | swb | string | global | `uselast` | sets behavior when switching to another buffer |
+| ✓ | `switchbuf` | swb | string | global | `uselast` | sets behavior when switching to another buffer |
 | ✓ | `synmaxcol` | smc | number | buf | `3000` | maximum column to find syntax items |
 | ✓ | `syntax` | syn | string | buf | `` | syntax to be loaded for current buffer |
 | ◐ | `tabclose` | tcl | string | global | `` | which tabpage to focus when closing a tab |
