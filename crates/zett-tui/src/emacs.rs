@@ -135,6 +135,7 @@ impl App {
         let first = parts.remove(0);
         // "… @commands" or "… @settings": those to choose from
         let (title, items) = self.prompt_items(&first);
+        let title = title.trim_end().trim_end_matches(':').to_string();
         self.pick_list(Pick::Prompt(parts, what, Vec::new()), &title, items);
     }
 
@@ -144,6 +145,11 @@ impl App {
         }
         if let Some(t) = title.strip_suffix(" @settings") {
             return (t.to_string(), crate::settings::all().into_iter().map(|s| Cand::noted(s.name, s.about)).collect());
+        }
+        for src in ["chars", "emoji", "emoji-recent"] {
+            if let Some(t) = title.strip_suffix(&format!(" @{src}")) {
+                return (t.to_string(), self.char_items(src));
+            }
         }
         if let Some(t) = title.strip_suffix(" @tabs") {
             return (t.to_string(), self.tab_items());
@@ -169,6 +175,7 @@ impl App {
             return self.prompt_done(&what, &got);
         }
         let title = fill(&rest.remove(0), &got);
+        let title = title.trim_end().trim_end_matches(':').to_string();
         self.pick_list(Pick::Prompt(rest, what, got), &title, Vec::new());
     }
 
@@ -189,6 +196,11 @@ impl App {
             }
             "hl" => self.highlight(body),
             "tab" => self.emacs_tab(body),
+            "char" => self.insert_char(body),
+            "emoji" => self.insert_emoji(body),
+            "delwins" => {
+                self.emacs_ui("deleteWindowsOn", body);
+            }
             "bookmark-set" => {
                 self.bookmark_set(body);
             }
@@ -376,6 +388,34 @@ impl App {
             "repeat" => self.repeat_last(),
             "mouse" => self.mouse_command(arg),
             "tab" => self.emacs_tab(arg),
+            "emojiList" => self.emoji_list(),
+            "describeChar" => self.describe_char(),
+            "layout" => {
+                self.tree.relayout(arg);
+                self.win_rects.clear();
+            }
+            "fitWindow" => {
+                // as tall as the buffer (C-x w -); "shrink": only when it is taller (C-x -)
+                let lines = self.docs[self.cur].ed.buf.len_lines() + 1;
+                let h = self.win_rects.iter().find(|(i, _)| *i == self.focus).map_or(0, |(_, r)| r.height as usize);
+                if arg != "shrink" || h > lines {
+                    self.vim_window("_", Some(lines));
+                }
+            }
+            "deleteWindowsOn" => {
+                let Some(d) = self.docs.iter().position(|d| self.buffer_label(d) == arg) else {
+                    self.say(format!("No buffer {arg}"));
+                    return true;
+                };
+                let on: Vec<usize> = self.tree.ids().into_iter().filter(|&w| self.wins.get(w).and_then(|w| w.as_ref()).is_some_and(|w| w.doc == d) || (w == self.focus && self.cur == d)).collect();
+                for w in on {
+                    if self.tree.ids().len() < 2 {
+                        break;
+                    }
+                    self.focus_win(w);
+                    self.doom_ui("closeWin", "");
+                }
+            }
             "frame" => self.frame_toggle(arg),
             "vc" => {
                 let (w, a) = arg.split_once(' ').unwrap_or((arg, ""));
@@ -811,7 +851,7 @@ mod tests {
         let m = a.minibuf.take().unwrap();
         a.picked(m.kind, "t".into());
         let m = a.minibuf.take().unwrap();
-        assert_eq!(m.title, "Replace t with: ");
+        assert_eq!(m.title, "Replace t with", "the minibuffer adds its own colon");
         a.docs[a.cur].ed.exec("beginning-of-buffer", 1);
         a.picked(m.kind, "T".into());
         assert_eq!(a.docs[a.cur].ed.text(), "one\nTwo\nThree\n");
@@ -867,5 +907,21 @@ mod tests {
         assert_eq!(a.tab_count(), 1);
         a.emacs_tab("undo");
         assert_eq!((a.tab_count(), a.tab_label(a.tab)), (2, "notes".to_string()), "C-x t u brings it back, name and all");
+    }
+
+    #[test]
+    fn layouts_turn() {
+        use crate::doom::WTree;
+        let leaf = |i| Box::new(WTree::Leaf(i));
+        // A above B
+        let mut t = WTree::Split(false, leaf(0), leaf(1), 0.3);
+        t.relayout("clockwise");
+        assert!(matches!(&t, WTree::Split(true, a, b, r) if matches!(**a, WTree::Leaf(1)) && matches!(**b, WTree::Leaf(0)) && (*r - 0.7).abs() < 1e-6), "the top goes right: B | A");
+        t.relayout("anticlockwise");
+        assert!(matches!(&t, WTree::Split(false, a, _, _) if matches!(**a, WTree::Leaf(0))), "and back");
+        t.relayout("transpose");
+        assert!(matches!(&t, WTree::Split(true, a, _, _) if matches!(**a, WTree::Leaf(0))), "A | B");
+        t.relayout("flip-leftright");
+        assert!(matches!(&t, WTree::Split(true, a, _, _) if matches!(**a, WTree::Leaf(1))), "B | A");
     }
 }

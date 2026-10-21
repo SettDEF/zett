@@ -37,6 +37,7 @@ mod signs;
 mod emacs;
 mod vc;
 mod tabs;
+mod chars;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 

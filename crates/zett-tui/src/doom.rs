@@ -32,6 +32,31 @@ impl App {
     }
 }
 impl WTree {
+    /// The layout turned (Emacs's C-x w): "transpose" swaps rows and columns, "flip-leftright" and
+    /// "flip-topdown" mirror it, "clockwise" and "anticlockwise" turn it a quarter.
+    pub(crate) fn relayout(&mut self, how: &str) {
+        if let WTree::Split(side, a, b, ratio) = self {
+            a.relayout(how);
+            b.relayout(how);
+            let was_side = *side;
+            let swap = match how {
+                "flip-leftright" => was_side,
+                "flip-topdown" => !was_side,
+                // a quarter clockwise: the top goes right, the left goes up
+                "clockwise" => !was_side,
+                "anticlockwise" => was_side,
+                _ => false,
+            };
+            if matches!(how, "transpose" | "clockwise" | "anticlockwise") {
+                *side = !was_side;
+            }
+            if swap {
+                std::mem::swap(a, b);
+                *ratio = 1.0 - *ratio;
+            }
+        }
+    }
+
     pub(crate) fn ids(&self) -> Vec<usize> {
         match self {
             WTree::Leaf(i) => vec![*i],
