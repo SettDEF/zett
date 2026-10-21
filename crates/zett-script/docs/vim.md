@@ -108,6 +108,16 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
 - `]c [c` to the next / previous change, `do` (`:diffget`) takes the other side's version, `dp`
   (`:diffput`) gives it this one; `diffopt` `icase iwhite iwhiteall filler vertical`
 
+## Sessions, views, runtime files
+
+- `:mksession` (`Session.vim`; `!` over an old one) writes the folder, the buffers and the windows as
+  split; `:source Session.vim` brings them back. `:mkview` `:loadview` keep a file's cursor and local
+  options (`viewdir`, or zett's state folder)
+- `:source` runs Lua, and a `.vim` file's lines as `:` commands (`"` comments, `\` continuation lines)
+- `:runtime FILE` `:colorscheme NAME` (`colors/NAME.lua` or `.vim`) `:compiler NAME` (`compiler/`,
+  then Neovim's own compiler files: makeprg and errorformat) `:packadd NAME` (`pack/*/opt/NAME`)
+  `:packloadall` `:scriptnames`; the folders are `runtimepath`, zett's config folder by default
+
 ## Windows and scrolling
 
 - `CTRL-W` and a key: `s v n` split / new, `w W p t b` and `h j k l` go to one, `H J K L` move

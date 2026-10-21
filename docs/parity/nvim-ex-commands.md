@@ -113,10 +113,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:cnoremenu` | `:cnoreme[nu]` | like ":noremenu" but for Command-line mode |
 | ✓ | `:copy` | `:co[py]` | copy lines |
 | ✓ | `:colder` | `:col[der]` | go to older error list |
-| · | `:colorscheme` | `:colo[rscheme]` | load a specific color scheme |
+| ✓ | `:colorscheme` | `:colo[rscheme]` | load a specific color scheme |
 | ✓ | `:command` | `:com[mand]` | create user-defined command |
 | ✓ | `:comclear` | `:comc[lear]` | clear all user-defined commands |
-| · | `:compiler` | `:comp[iler]` | do settings for a specific compiler |
+| ✓ | `:compiler` | `:comp[iler]` | do settings for a specific compiler |
 | · | `:continue` | `:con[tinue]` | go back to :while |
 | ✓ | `:confirm` | `:conf[irm]` | prompt user when confirmation required |
 | · | `:const` | `:cons[t]` | create a variable as a constant |
@@ -276,7 +276,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lnfile` | `:lnf[ile]` | go to first location in next file |
 | · | `:lnoremap` | `:ln[oremap]` | like ":noremap!" but includes Lang-Arg mode |
 | · | `:loadkeymap` | `:loadk[eymap]` | load the following keymaps until EOF |
-| · | `:loadview` | `:lo[adview]` | load view for current window from a file |
+| ✓ | `:loadview` | `:lo[adview]` | load view for current window from a file |
 | ✓ | `:lockmarks` | `:loc[kmarks]` | following command keeps marks where they are |
 | · | `:lockvar` | `:lockv[ar]` | lock variables |
 | ✓ | `:lolder` | `:lol[der]` | go to older location list |
@@ -305,10 +305,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:menutranslate` | `  :menut[ranslate] add a menu translation item` |  |
 | ✓ | `:messages` | `:mes[sages]` | view previously displayed messages |
 | · | `:mkexrc` | `:mk[exrc]` | write current mappings and settings to a file |
-| · | `:mksession` | `:mks[ession]` | write session info to a file |
+| ✓ | `:mksession` | `:mks[ession]` | write session info to a file |
 | · | `:mkspell` | `:mksp[ell]` | produce .spl spell file |
 | · | `:mkvimrc` | `:mkv[imrc]` | write current mappings and settings to a file |
-| · | `:mkview` | `:mkvie[w]` | write view of current window to a file |
+| ✓ | `:mkview` | `:mkvie[w]` | write view of current window to a file |
 | ✓ | `:mode` | `:mod[e]` | show or change the screen mode |
 | ✓ | `:next` | `:n[ext]` | go to next file in the argument list |
 | ✓ | `:new` | `:new` | create a new empty window |
@@ -337,8 +337,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:options` | `:opt[ions]` | open the options-window |
 | ✓ | `:ounmap` | `:ou[nmap]` | like ":unmap" but for Operator-pending mode |
 | ✓ | `:ounmenu` | `:ounme[nu]` | remove menu for Operator-pending mode |
-| · | `:packadd` | `:pa[ckadd]` | add a plugin from 'packpath' |
-| · | `:packloadall` | `:packl[oadall]` | load all packages under 'packpath' |
+| ✓ | `:packadd` | `:pa[ckadd]` | add a plugin from 'packpath' |
+| ✓ | `:packloadall` | `:packl[oadall]` | load all packages under 'packpath' |
 | ✓ | `:pbuffer` | `:pb[uffer]` | edit buffer in the preview window |
 | ✓ | `:pclose` | `:pc[lose]` | close preview window |
 | ✓ | `:pedit` | `:ped[it]` | edit file in the preview window |
@@ -399,7 +399,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:rubydo` | `:rubyd[o]` | execute Ruby command for each line |
 | ✓ | `:rubyfile` | `:rubyf[ile]` | execute Ruby script file |
 | · | `:rundo` | `:rund[o]` | read undo information from a file |
-| · | `:runtime` | `:ru[ntime]` | source vim scripts in 'runtimepath' |
+| ✓ | `:runtime` | `:ru[ntime]` | source vim scripts in 'runtimepath' |
 | ✓ | `:substitute` | `:s[ubstitute]` | find and replace text |
 | ✓ | `:sNext` | `:sN[ext]` | split window and go to previous file in |
 | ✓ | `:sandbox` | `:san[dbox]` | execute a command in the sandbox |
@@ -415,7 +415,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:sbnext` | `:sbn[ext]` | split window and go to next file in the buffer |
 | ✓ | `:sbprevious` | `:sbp[revious]` | split window and go to previous file in the |
 | ✓ | `:sbrewind` | `:sbr[ewind]` | split window and go to first file in the |
-| · | `:scriptnames` | `:scr[iptnames]` | list names of all sourced Vim scripts |
+| ✓ | `:scriptnames` | `:scr[iptnames]` | list names of all sourced Vim scripts |
 | ✓ | `:scriptencoding` | ` :scripte[ncoding]  encoding used in sourced Vim script` |  |
 | ✓ | `:set` | `:se[t]` | show or set options |
 | ✓ | `:setfiletype` | `:setf[iletype]` | set 'filetype', unless it was set already |

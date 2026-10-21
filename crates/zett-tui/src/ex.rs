@@ -282,6 +282,7 @@ impl App {
             n if crate::dircmd::dir_name(n).is_some() => self.dir_command(n, arg),
             n if crate::defsearch::def_name(n).is_some() => self.def_command(n, arg, bang, range),
             n if crate::diff::diff_name(n).is_some() => self.diff_command(n, arg, bang, range),
+            n if crate::runtime::runtime_name(n).is_some() => self.runtime_command(n, arg, bang),
             // the quickfix and location lists (qfcmd.rs)
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);
@@ -617,15 +618,10 @@ impl App {
             "so" | "source" | "luafile" => {
                 let p = if arg.is_empty() || arg == "%" { self.docs[self.cur].abs_path() } else { Some(PathBuf::from(arg)) };
                 let Some(p) = p else { return true };
-                match std::fs::read_to_string(&p) {
-                    Ok(code) => match self.with_lua(|e| e.eval(&code)) {
-                        Ok((_, fx)) => {
-                            self.after_lua(fx);
-                            self.say(format!("sourced {}", p.display()));
-                        }
-                        Err(e) => self.say(e),
-                    },
-                    Err(e) => self.say(format!("{}: {e}", p.display())),
+                // Lua, or a .vim file's Ex lines (runtime.rs)
+                match self.source_file(&p) {
+                    Ok(()) => self.say(format!("sourced {}", p.display())),
+                    Err(e) => self.say(e),
                 }
             }
             "map" | "nmap" | "nm" | "noremap" | "nnoremap" | "nn" => {

@@ -32,6 +32,7 @@ mod mapcmds;
 mod dircmd;
 mod defsearch;
 mod diff;
+mod runtime;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -402,6 +403,12 @@ struct App {
     cabbrevs: Vec<(String, String)>,
     /// CTRL-K on the : line: waiting for the digraph's first character, or its second
     cmd_digraph: Option<Option<char>>,
+    /// the files :source, :runtime and the rest ran (:scriptnames), the packages :packadd added, whether
+    /// :packloadall ran, and the colour scheme's name (:colorscheme)
+    sourced: Vec<PathBuf>,
+    packs: Vec<PathBuf>,
+    packs_loaded: bool,
+    colors_name: String,
     /// diff mode: the changes between two buffers, with the revisions and 'diffopt' they are for
     diff_cache: std::collections::HashMap<(usize, usize), ((u64, u64), String, Vec<diff::Block>)>,
     user_cmds: std::collections::HashMap<String, mapcmds::UserCmd>,
@@ -593,6 +600,10 @@ impl App {
             abbrevs: Vec::new(),
             cabbrevs: Vec::new(),
             cmd_digraph: None,
+            sourced: Vec::new(),
+            packs: Vec::new(),
+            packs_loaded: false,
+            colors_name: "default".into(),
             diff_cache: Default::default(),
             user_cmds: Default::default(),
             autocmds: Vec::new(),

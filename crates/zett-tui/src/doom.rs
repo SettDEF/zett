@@ -383,6 +383,12 @@ impl App {
     // ── windows ──
 
     pub(crate) fn focus_win(&mut self, id: usize) {
+        // the window being left keeps the buffer it shows now (it learns it only when drawn otherwise:
+        // `:e b | wincmd h` in a session or a mapping lost b)
+        let cur = self.cur;
+        if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+            w.doc = cur;
+        }
         if let Some(w) = self.wins.get(id).and_then(|w| w.as_ref()) {
             self.focus = id;
             self.cur = w.doc.min(self.docs.len() - 1);
@@ -439,9 +445,21 @@ impl App {
 
     /// The window beside the focused one (left, right, up, down), nearest centre first.
     fn neighbour(&self, dir: &str) -> Option<usize> {
-        let &(_, r) = self.win_rects.iter().find(|(i, _)| *i == self.focus)?;
+        // where the windows are: as last drawn, or laid out now when one is newer than the last frame
+        // (a session or a mapping splits and moves before anything is drawn)
+        let ids = self.tree.ids();
+        let fresh: Vec<(usize, Rect)>;
+        let rects: &[(usize, Rect)] = if ids.iter().all(|id| self.win_rects.iter().any(|(i, _)| i == id)) {
+            &self.win_rects
+        } else {
+            let mut out = Vec::new();
+            self.tree.place(Rect::new(0, 0, 200, 60), &mut out, &mut Vec::new());
+            fresh = out;
+            &fresh
+        };
+        let &(_, r) = rects.iter().find(|(i, _)| *i == self.focus)?;
         let (cx, cy) = (r.x as i32 + r.width as i32 / 2, r.y as i32 + r.height as i32 / 2);
-        self.win_rects
+        rects
             .iter()
             .filter(|(i, o)| {
                 *i != self.focus
@@ -758,6 +776,9 @@ impl App {
             self.last_doc = Some(self.cur);
         }
         self.cur = i;
+        if let Some(Some(w)) = self.wins.get_mut(self.focus) {
+            w.doc = i;
+        }
         self.dash = false;
         // autochdir: the current folder follows the file
         if self.flag(i, "autochdir") {
