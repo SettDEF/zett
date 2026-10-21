@@ -95,6 +95,8 @@ pub(crate) enum Pick {
     Commands,
     Diagnostics,
     Docs,
+    /// a query block's results (query.rs), "path:line: text"
+    Query,
 }
 
 impl Pick {
@@ -110,6 +112,7 @@ impl Pick {
             Pick::Commands => "commands",
             Pick::Diagnostics => "diagnostics",
             Pick::Docs => "docs",
+            Pick::Query => "query",
         }
     }
 
@@ -448,6 +451,7 @@ impl App {
                     .collect();
                 ("M-x ".into(), items)
             }
+            Pick::Query => ("Query results".into(), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
                 let mut rows = Vec::new();
@@ -510,7 +514,7 @@ impl App {
                     self.goto_line(l);
                 }
             }
-            Pick::Diagnostics => {
+            Pick::Diagnostics | Pick::Query => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.trim().parse::<usize>().ok())) {
                     let p = if Path::new(f).is_absolute() { PathBuf::from(f) } else { self.root.join(f) };
@@ -613,6 +617,7 @@ impl App {
             "searchLines" => self.pick(Pick::Lines),
             "commands" => self.pick(Pick::Commands),
             "timeTravel" => self.travel_start(),
+            "queryOpen" => self.query_open(),
             "agentAsk" => self.agent_ask(),
             "save" => self.save(None),
             "yankPath" => {

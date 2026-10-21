@@ -75,7 +75,11 @@ See PLAN.md for the vision and milestones.
   and the new ones drawn under them with the agent's tag; C-c y / n take or drop one, C-c ] [ move,
   C-c Y / N all; each taken one is its own undo step; they follow their lines through edits
   - [ ] streaming (the API), several questions at once, the window (pages)
-- [ ] 2 live query blocks · [ ] 4 block references everywhere · [ ] 6 notebook blocks
+- [x] 2 live query blocks (zett-tui query.rs): a ```query block in a Markdown note (tasks [done|all], todo,
+  grep TEXT, files GLOB, recent 7d, links NAME; in DIR, limit N) draws its results under the closing
+  fence, looked up again every 10 s; C-c C-o / SPC s q lists them all to jump to one; `:help query`
+  - [ ] the window (pages): the same blocks through Loro; a query over block properties once blocks have them
+- [ ] 4 block references everywhere · [ ] 6 notebook blocks
 - [ ] 7 search everything incl. history · [ ] 8 git buffer + blame · [ ] 9 sync without a server
 - [ ] 10 canvas
 

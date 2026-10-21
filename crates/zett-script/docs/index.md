@@ -12,6 +12,7 @@ An editor you live in: Vim's editing, Emacs's programmability, Doom's keys.
 - `plugins`   the explorer, the undo tree, :set, writing your own
 - `terminal`  zett with zeit and zash: terminals, compiling, web pages
 - `cli`       zett on the command line and in scripts
+- `query`     live query blocks in notes: tasks, TODOs, backlinks, recent files
 - `commands`  every command and its keys (made from your config)
 
 Open one: `:help TOPIC` in the editor (Enter on a name here opens it), `SPC h d` for the list, or

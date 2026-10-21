@@ -11,6 +11,7 @@ mod ex;
 mod minibuf;
 mod travel;
 mod agent;
+mod query;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -255,6 +256,8 @@ struct App {
     /// a question to the agent on its way, and the echo area asking one
     agent: Option<agent::Job>,
     asking: bool,
+    /// the live query blocks' results (query.rs)
+    queries: query::Cache,
     /// where the minibuffer is drawn (zett.opt.minibuffer)
     placement: Placement,
     popup: Option<Popup>,
@@ -378,6 +381,7 @@ impl App {
             minibuf: None,
             travel: None,
             agent: None,
+            queries: Default::default(),
             asking: false,
             placement: Placement::Bottom,
             popup: None,
@@ -1342,8 +1346,17 @@ impl App {
         let (ss, theme) = (&self.ss, &self.theme);
         let hl = Highlighter::new(theme);
         let (numbers, relative) = (self.numbers, self.relative);
+        let (queries, root) = (&mut self.queries, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
+        // live query blocks: their results under the closing fence (Markdown only)
+        let qrows = if d.syntax == "Markdown" && lines < 20_000 {
+            let text: Vec<String> = (0..lines).map(|i| d.ed.buf.line(i).trim_end_matches('\n').to_string()).collect();
+            let root = std::fs::canonicalize(&d.name).ok().and_then(|p| doom::project_of(&p)).unwrap_or(root);
+            query::rows(queries, &root, &text)
+        } else {
+            Vec::new()
+        };
         let gutter = if numbers { (lines.to_string().len() + 2).max(4) as u16 } else { 1 };
         if focused {
             self.gutter = gutter;
@@ -1364,7 +1377,8 @@ impl App {
             d.top = above;
         } else {
             // a suggestion's lines take rows too
-            let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum();
+            let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum::<usize>()
+                + qrows.iter().filter(|(after, _)| *after >= d.top && *after < c.line).map(|(_, r)| r.len()).sum::<usize>();
             let rows = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height).count() + extra;
             if rows + margin >= height {
                 d.top = d.ed.step_shown(c.line, height.saturating_sub(margin + 1), true);
@@ -1413,6 +1427,19 @@ impl App {
                         let mut spans = vec![Span::styled(format!("{:>w$} ", "+", w = gutter as usize - 1), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
                         if i == 0 {
                             spans.push(Span::styled(format!(" {} ", h.author), hl::hl("AgentTag")));
+                        }
+                        virt.push_back(Line::from(spans));
+                    }
+                }
+                // a query block's results, after its closing fence
+                for (_, rows) in qrows.iter().filter(|(after, _)| after + 1 == next && !d.ed.is_hidden(*after)) {
+                    for r in rows {
+                        let mut spans = vec![Span::raw(" ".repeat(gutter as usize))];
+                        let mut room = width;
+                        for (t, g) in r {
+                            let t: String = t.chars().take(room).collect();
+                            room = room.saturating_sub(t.chars().count());
+                            spans.push(Span::styled(t, hl::hl(g)));
                         }
                         virt.push_back(Line::from(spans));
                     }
