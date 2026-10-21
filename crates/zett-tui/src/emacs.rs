@@ -370,6 +370,8 @@ impl App {
             // an editor command from Lua (a step of a command that does several)
             "edit" => self.after_lua(vec![Effect::Edit(arg.to_string(), 1)]),
             "repeat" => self.repeat_last(),
+            "mouse" => self.mouse_command(arg),
+            "frame" => self.frame_toggle(arg),
             "vc" => {
                 let (w, a) = arg.split_once(' ').unwrap_or((arg, ""));
                 self.vc(w, a);
@@ -575,6 +577,127 @@ impl App {
     }
 }
 
+impl App {
+    /// The window whose status line is at (col, row), or whose right edge (the line between it and
+    /// the next) is column `col`: (window, on the divider).
+    fn border_at(&self, col: u16, row: u16) -> Option<(usize, bool)> {
+        let status = self.win_rects.iter().find(|(_, r)| row + 1 == r.bottom() && col >= r.x && col < r.right()).map(|(i, _)| (*i, false));
+        let divider = || self.win_rects.iter().find(|(_, r)| col == r.right() && row >= r.y && row < r.bottom()).map(|(i, _)| (*i, true));
+        // a single window's status line has nothing to resize against, but splits and selects
+        status.or_else(divider)
+    }
+
+    /// Emacs's mode-line and divider mouse (the same in the Vim profile): drag a status line or the
+    /// line between windows to resize (mouse-drag-mode-line, mouse-drag-vertical-line), click it to
+    /// select the window, C-middle-click to split there. True when the event was this.
+    pub(crate) fn window_mouse(&mut self, m: &ratatui::crossterm::event::MouseEvent) -> bool {
+        use ratatui::crossterm::event::{MouseButton, MouseEventKind};
+        match m.kind {
+            MouseEventKind::Drag(MouseButton::Left) => {
+                let Some((w, vertical, last)) = self.border_drag else { return false };
+                let now = if vertical { m.column } else { m.row };
+                let d = now as i32 - last as i32;
+                if d != 0 {
+                    if self.focus != w {
+                        self.focus_win(w);
+                    }
+                    let key = match (vertical, d > 0) {
+                        (true, true) => ">",
+                        (true, false) => "<",
+                        (false, true) => "+",
+                        (false, false) => "-",
+                    };
+                    self.vim_window(key, Some(d.unsigned_abs() as usize));
+                    self.border_drag = Some((w, vertical, now));
+                }
+                true
+            }
+            MouseEventKind::Up(MouseButton::Left) => self.border_drag.take().is_some(),
+            MouseEventKind::Down(MouseButton::Left) => {
+                let Some((w, vertical)) = self.border_at(m.column, m.row) else { return false };
+                if self.focus != w {
+                    self.focus_win(w);
+                }
+                self.border_drag = Some((w, vertical, if vertical { m.column } else { m.row }));
+                true
+            }
+            MouseEventKind::Down(MouseButton::Middle) if m.modifiers.contains(ratatui::crossterm::event::KeyModifiers::CONTROL) => {
+                let Some((w, vertical)) = self.border_at(m.column, m.row) else { return false };
+                let Some(r) = self.win_rects.iter().find(|(i, _)| *i == w).map(|(_, r)| *r) else { return false };
+                self.focus_win(w);
+                if vertical {
+                    // on the divider: a window below, from this row
+                    self.command("split");
+                    self.command(&format!("resize {}", m.row.saturating_sub(r.y).max(1)));
+                } else {
+                    // on the status line: a window beside, from this column
+                    self.command("vsplit");
+                    self.command(&format!("vertical resize {}", m.column.saturating_sub(r.x).max(1)));
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Emacs's named mouse commands, for keys bound to them: what the mouse does at the last
+    /// mouse event, or (from M-x) what it would.
+    pub(crate) fn mouse_command(&mut self, name: &str) {
+        use ratatui::crossterm::event::{MouseButton, MouseEventKind};
+        let at = self.last_mouse;
+        let redo = |app: &mut App, kind: MouseEventKind| {
+            if let Some(mut ev) = at {
+                ev.kind = kind;
+                ev.modifiers = ratatui::crossterm::event::KeyModifiers::NONE;
+                app.noremap += 1;
+                app.mouse(ev);
+                app.noremap -= 1;
+            }
+        };
+        match name {
+            "mouse-set-point" | "mouse-drag-region" | "mouse-select-window" | "mouse-drag-mode-line" | "mouse-drag-vertical-line" => redo(self, MouseEventKind::Down(MouseButton::Left)),
+            "mouse-set-region" | "mouse-drag-region-rectangle" => redo(self, MouseEventKind::Drag(MouseButton::Left)),
+            "mouse-yank-primary" => redo(self, MouseEventKind::Down(MouseButton::Middle)),
+            "mwheel-scroll" => redo(self, at.map_or(MouseEventKind::ScrollDown, |e| e.kind)),
+            "mouse-save-then-kill" => {
+                // the region to the click (copied); the same click again kills it
+                let again = self.last_key_cmd.as_deref() == Some("mouse-save-then-kill");
+                if again {
+                    self.after_lua(vec![Effect::Edit("kill-region".into(), 1)]);
+                } else {
+                    if self.docs[self.cur].ed.region().is_none() {
+                        self.doc().ed.exec("set-mark-command", 1);
+                    }
+                    redo(self, MouseEventKind::Down(MouseButton::Left));
+                    self.after_lua(vec![Effect::Edit("kill-ring-save".into(), 1)]);
+                }
+            }
+            "mouse-split-window-horizontally" | "mouse-split-window-vertically" => {
+                if let Some(mut ev) = at {
+                    ev.kind = MouseEventKind::Down(MouseButton::Middle);
+                    ev.modifiers = ratatui::crossterm::event::KeyModifiers::CONTROL;
+                    if !self.window_mouse(&ev) {
+                        self.command(if name.ends_with("horizontally") { "vsplit" } else { "split" });
+                    }
+                } else {
+                    self.command(if name.ends_with("horizontally") { "vsplit" } else { "split" });
+                }
+            }
+            _ => self.say(format!("{name}: a mouse command")),
+        }
+        self.last_key_cmd = Some(name.to_string());
+    }
+
+    /// F11 and M-F10: the terminal window full screen or maximized (Hyprland's, when it runs).
+    pub(crate) fn frame_toggle(&mut self, how: &str) {
+        if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none() {
+            return self.say("full screen is the terminal's (no Hyprland here)");
+        }
+        let mode = if how == "maximized" { "1" } else { "0" };
+        let _ = std::process::Command::new("hyprctl").args(["dispatch", "fullscreen", mode]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -650,5 +773,24 @@ mod tests {
         a.highlight("foo");
         a.highlight("bar");
         assert_eq!(a.hl_slot, 2, "the second goes in :2match");
+    }
+
+    #[test]
+    fn status_lines_and_dividers_resize_and_split() {
+        use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let ev = |kind, column, row, modifiers| MouseEvent { kind, column, row, modifiers };
+        let mut a = app("text");
+        a.command("vsplit");
+        let ids = a.tree.ids();
+        a.win_rects = vec![(ids[0], ratatui::layout::Rect::new(0, 0, 40, 20)), (ids[1], ratatui::layout::Rect::new(41, 0, 39, 20))];
+        assert!(a.window_mouse(&ev(MouseEventKind::Down(MouseButton::Left), 40, 5, KeyModifiers::NONE)), "the divider");
+        assert_eq!((a.focus, a.border_drag.map(|b| b.1)), (ids[0], Some(true)));
+        assert!(a.window_mouse(&ev(MouseEventKind::Drag(MouseButton::Left), 44, 5, KeyModifiers::NONE)));
+        assert_eq!(a.border_drag.map(|b| b.2), Some(44), "dragged 4 columns");
+        assert!(a.window_mouse(&ev(MouseEventKind::Up(MouseButton::Left), 44, 5, KeyModifiers::NONE)));
+        assert!(!a.window_mouse(&ev(MouseEventKind::Down(MouseButton::Left), 10, 5, KeyModifiers::NONE)), "inside the text: not this");
+        let before = a.tree.ids().len();
+        assert!(a.window_mouse(&ev(MouseEventKind::Down(MouseButton::Middle), 50, 19, KeyModifiers::CONTROL)), "C-middle on a status line");
+        assert_eq!(a.tree.ids().len(), before + 1, "split there");
     }
 }

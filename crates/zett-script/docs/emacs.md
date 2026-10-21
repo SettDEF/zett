@@ -110,6 +110,14 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
   `C-x v +` pull and `C-x v P` push in a terminal pane; `C-x v w c w x R` working trees
 - `C-x v d` (and `C-x g`) the git buffer, as Magit; `C-x v h` the commits of the section at the cursor
 
+## The mouse
+
+- a click places the cursor, a drag selects, the middle button yanks there, the right button takes
+  the region to the click (copied; again: killed); `C-click` the buffer list
+- drag a status line or the line between windows to resize, `C-middle-click` on one to split there
+  (in the Vim profile too); `F10` `S-F10` the menu, `F11` `M-F10` the terminal window full screen or
+  maximized (Hyprland)
+
 ## Help
 
 - `C-h k` what a key runs (`C-h c` in one line), `C-h f` a command, `C-h v` a setting, `C-h w` a

@@ -591,6 +591,10 @@ impl App {
         if let MouseEventKind::Down(_) = m.kind {
             self.engine.focus_panel(None);
         }
+        // status lines and the lines between windows: drag to resize, C-middle-click to split
+        if self.window_mouse(&m) {
+            return;
+        }
         // a mapping for this mouse action, as Neovim has them: :map <C-LeftMouse> …, <M-LeftDrag>,
         // <S-ScrollWheelUp>, <2-LeftMouse> (a double click); it replaces what the mouse does here
         if self.noremap == 0 {
@@ -601,6 +605,8 @@ impl App {
             };
             if let Some(tok) = mouse_token(&m, clicks) {
                 let km = match mode {
+                    // the Emacs profile's keymap has its mouse keys too (<C-LeftMouse> …)
+                    _ if self.emacs_keys() && mode != 'c' => "e",
                     'c' => "c",
                     'i' => "i",
                     'v' => "v",

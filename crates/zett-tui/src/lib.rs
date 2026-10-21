@@ -467,6 +467,10 @@ struct App {
     repeat_again: bool,
     /// the :match slot M-s h used last (1-3)
     hl_slot: u8,
+    /// a status line (false) or a line between windows (true) being dragged: the window, where it was
+    border_drag: Option<(usize, bool, u16)>,
+    /// the mouse command that ran last (mouse-3 twice kills)
+    last_key_cmd: Option<String>,
     /// Emacs profile: a numeric argument being typed (C-u 4, M-5), for the next command
     arg: zett_edit::prefix::PrefixArg,
     /// the key that ran the last command (digit-argument reads its digit)
@@ -671,6 +675,8 @@ impl App {
             last_fx: Vec::new(),
             repeat_again: false,
             hl_slot: 0,
+            border_drag: None,
+            last_key_cmd: None,
             arg: Default::default(),
             last_key: String::new(),
             kill_ring: zett_edit::KillRing::shared(),
