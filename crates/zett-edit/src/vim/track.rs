@@ -12,6 +12,15 @@ impl Editor {
         if let Some((_, keys)) = self.vim.recording.as_mut() {
             keys.push(k);
         }
+        // clipboard=unnamedplus (unnamed): a yank, delete or put with no register given goes through +
+        // (*), the system's clipboard; only these commands ask it, moving about never does
+        if self.vim.use_reg.is_none() && self.op.is_none() && self.prefix.is_none() && self.mode != Mode::Insert && !k.ctrl && k.char().is_some_and(|c| "ydcxspPDCXSY".contains(c)) {
+            let r = if self.opt_has("clipboard", "unnamedplus", "") { Some('+') } else if self.opt_has("clipboard", "unnamed", "") { Some('*') } else { None };
+            if let Some(r) = r {
+                self.vim_use_reg(r);
+                self.vim.reg_armed = false;
+            }
+        }
         if self.vim.replaying == 0 {
             if self.vim.typing.is_empty() {
                 self.vim.typing_from = self.edit_marker();

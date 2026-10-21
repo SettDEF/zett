@@ -10,7 +10,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "autoindent", "smartindent", "cindent", "copyindent", "preserveindent", "backspace", "softtabstop", "smarttab",
     "shiftround", "joinspaces", "startofline", "whichwrap", "tildeop", "nrformats", "iskeyword", "matchpairs",
     "selection", "report", "modifiable", "textwidth", "wrapmargin", "formatoptions", "quoteescape", "paragraphs",
-    "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll",
+    "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
 ];
 
 impl Editor {

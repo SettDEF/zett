@@ -432,6 +432,22 @@ impl App {
         if self.panel_mouse(&m) {
             return;
         }
+        // mouse: the modes it works in (n v i c h, a for all; empty: off)
+        let mo = self.setting(self.cur, "mouse");
+        let mode = if self.cmdline.is_some() {
+            'c'
+        } else if self.docs[self.cur].name.starts_with("help:") {
+            'h'
+        } else {
+            match self.docs[self.cur].ed.mode() {
+                Mode::Insert => 'i',
+                Mode::Normal => 'n',
+                _ => 'v',
+            }
+        };
+        if !mo.contains('a') && !mo.contains(mode) && !(mode == 'h' && mo.contains('n')) {
+            return;
+        }
         if let MouseEventKind::Down(_) = m.kind {
             self.engine.focus_panel(None);
         }
@@ -449,11 +465,36 @@ impl App {
             }
         }
         let a = self.area;
+        // where the mouse is in the text: line and character column (tabs are wide)
+        let pos_at = |app: &App, col: u16, row: u16| -> Option<Pos> {
+            if row < a.y || row >= a.y + a.height || col < a.x + app.gutter {
+                return None;
+            }
+            let d = &app.docs[app.cur];
+            let line = (d.top + (row - a.y) as usize).min(d.ed.buf.len_lines().saturating_sub(1));
+            let want = d.left + (col - a.x - app.gutter) as usize;
+            let (mut sc, mut c) = (0, 0);
+            for ch in d.ed.buf.line(line).chars().filter(|&ch| ch != '\n') {
+                let w = if ch == '\t' { tab() } else { 1 };
+                if sc + w > want {
+                    break;
+                }
+                sc += w;
+                c += 1;
+            }
+            Some(Pos { line, col: c })
+        };
+        // mousescroll: lines (ver) and columns (hor) a wheel step moves
+        let ms = self.setting(self.cur, "mousescroll");
+        let step = |k: &str, def: usize| ms.split(',').find_map(|p| p.strip_prefix(k)?.strip_prefix(':')?.parse().ok()).unwrap_or(def);
+        let vim = !self.docs[self.cur].ed.is_emacs();
+        let visual = matches!(self.docs[self.cur].ed.mode(), Mode::Visual | Mode::VisualLine | Mode::VisualBlock);
         match m.kind {
             MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                let n = step("ver", 3);
                 let d = &mut self.docs[self.cur];
                 let last = d.ed.buf.len_lines().saturating_sub(1);
-                if m.kind == MouseEventKind::ScrollDown { d.top = (d.top + 3).min(last) } else { d.top = d.top.saturating_sub(3) }
+                if m.kind == MouseEventKind::ScrollDown { d.top = (d.top + n).min(last) } else { d.top = d.top.saturating_sub(n) }
                 // the cursor stays on screen, as in Vim
                 let c = d.ed.cursor();
                 let bottom = d.top + a.height.saturating_sub(1) as usize;
@@ -462,23 +503,79 @@ impl App {
                     d.ed.set_cursor(Pos { line, col: c.col });
                 }
             }
-            MouseEventKind::Down(_) if m.row >= a.y && m.row < a.y + a.height && m.column >= a.x + self.gutter => {
+            MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => {
+                let n = step("hor", 6);
                 let d = &mut self.docs[self.cur];
-                let line = (d.top + (m.row - a.y) as usize).min(d.ed.buf.len_lines().saturating_sub(1));
-                let want = d.left + (m.column - a.x - self.gutter) as usize;
-                // screen column back to a character column (tabs are wide)
-                let text = d.ed.buf.line(line);
-                let mut sc = 0;
-                let mut col = 0;
-                for ch in text.chars() {
-                    let w = if ch == '\t' { tab() } else { 1 };
-                    if sc + w > want {
-                        break;
-                    }
-                    sc += w;
-                    col += 1;
+                d.left = if m.kind == MouseEventKind::ScrollRight { d.left + n } else { d.left.saturating_sub(n) };
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                let Some(p) = pos_at(self, m.column, m.row) else { return };
+                // mousetime: clicks this close together on one place count as a double or triple click
+                let within = Duration::from_millis(self.num(self.cur, "mousetime") as u64);
+                let n = match self.click {
+                    Some((t, c, r, n)) if t.elapsed() <= within && c == m.column && r == m.row => n % 3 + 1,
+                    _ => 1,
+                };
+                self.click = Some((Instant::now(), m.column, m.row, n));
+                self.drag_from = Some(p);
+                let ed = &mut self.docs[self.cur].ed;
+                if vim && visual {
+                    ed.feed("<Esc>");
                 }
-                d.ed.set_cursor(Pos { line, col });
+                ed.set_cursor(p);
+                // a double click selects the word, a triple click the line
+                match (vim, n) {
+                    (true, 2) => ed.feed("viw"),
+                    (true, 3) => ed.feed("V"),
+                    _ => {}
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                let (Some(p), Some(from)) = (pos_at(self, m.column, m.row), self.drag_from) else { return };
+                let ed = &mut self.docs[self.cur].ed;
+                // dragging selects from where the button went down
+                if vim && !visual {
+                    ed.set_cursor(from);
+                    ed.feed("v");
+                } else if !vim && ed.region().is_none() {
+                    ed.set_cursor(from);
+                    ed.exec("set-mark-command", 1);
+                }
+                ed.set_cursor(p);
+            }
+            MouseEventKind::Down(MouseButton::Right) => {
+                let Some(p) = pos_at(self, m.column, m.row) else { return };
+                // mousemodel: extend makes or grows the selection to the click; popup_setpos moves
+                // the cursor (zett has no pop-up menu), popup leaves it
+                let model = self.setting(self.cur, "mousemodel");
+                let ed = &mut self.docs[self.cur].ed;
+                match model.as_str() {
+                    "extend" if vim => {
+                        if !visual {
+                            ed.feed("v");
+                        }
+                        ed.set_cursor(p);
+                    }
+                    "extend" => {
+                        if ed.region().is_none() {
+                            ed.exec("set-mark-command", 1);
+                        }
+                        ed.set_cursor(p);
+                    }
+                    "popup" => {}
+                    _ => ed.set_cursor(p),
+                }
+            }
+            MouseEventKind::Down(MouseButton::Middle) => {
+                let Some(p) = pos_at(self, m.column, m.row) else { return };
+                // the selection (the * register, the system's) put where the click was
+                let ed = &mut self.docs[self.cur].ed;
+                ed.set_cursor(p);
+                if vim {
+                    ed.feed("\"*P");
+                } else {
+                    ed.exec("yank", 1);
+                }
             }
             _ => {}
         }

@@ -98,5 +98,7 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
 - `CTRL-G` `g CTRL-G` where you are; `ga g8` the character's codes; `CTRL-L` redraw; `CTRL-Z`
   back to the shell (`fg` returns)
 - `gx gf` open the address / file under the cursor; `gs` sleep; `&` `g&` repeat `:s`
-- the mouse: click places the cursor, right click extends a selection, middle click puts the
-  selection; with Ctrl or `g`, to a definition and back
+- the mouse (`mouse`: the modes it works in): a click places the cursor, a drag selects, a double
+  click the word, a triple click the line (`mousetime`); the right button moves the cursor, or with
+  `mousemodel=extend` grows the selection to it; the middle button puts the selection there; the
+  wheel scrolls `mousescroll` lines

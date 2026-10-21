@@ -351,3 +351,28 @@ mod options {
         assert!(e.take_requests().contains(&crate::vim::Request::Message("3 fewer lines".into())));
     }
 }
+
+mod clipboard {
+    use crate::Editor;
+    use std::sync::Mutex;
+
+    static FAKE: Mutex<String> = Mutex::new(String::new());
+
+    #[test]
+    fn unnamedplus_yanks_and_puts_through_the_system_clipboard() {
+        let _ = crate::vim::CLIPBOARD.set((|| Some(FAKE.lock().unwrap().clone()), |t| *FAKE.lock().unwrap() = t.to_string()));
+        let mut e = Editor::from_str("one\ntwo\n");
+        e.set_opt("clipboard", "unnamedplus");
+        e.feed("yy");
+        assert_eq!(*FAKE.lock().unwrap(), "one\n", "the yank reached the clipboard");
+        *FAKE.lock().unwrap() = "from outside\n".into();
+        e.feed("jp");
+        assert_eq!(e.text(), "one\ntwo\nfrom outside\n", "the put came from it");
+        e.feed("ggjll");
+        let before = FAKE.lock().unwrap().clone();
+        assert_eq!(before, "from outside\n", "moving about leaves it alone");
+        let mut e = Editor::from_str("abc\n");
+        e.feed("x");
+        assert_eq!(*FAKE.lock().unwrap(), "from outside\n", "without the option it stays out of it");
+    }
+}

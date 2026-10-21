@@ -26,7 +26,7 @@ mod statusline;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind};
 use ratatui::crossterm::{cursor::SetCursorStyle, execute};
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -335,6 +335,10 @@ struct App {
     title_set: Option<String>,
     /// the command being run had a ! (:w!)
     bang: bool,
+    /// the last mouse click (when, column, row, how many in a row: double and triple clicks), and
+    /// where a drag began
+    click: Option<(Instant, u16, u16, u8)>,
+    drag_from: Option<Pos>,
     /// windows (by id; closed ones are None), their split tree, the focused one
     wins: Vec<Option<Win>>,
     tree: WTree,
@@ -487,6 +491,8 @@ impl App {
             title_want: None,
             title_set: None,
             bang: false,
+            click: None,
+            drag_from: None,
             wins: vec![Some(Win::default())],
             tree: WTree::Leaf(0),
             focus: 0,
