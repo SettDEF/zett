@@ -286,7 +286,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lrewind` | `:lr[ewind]` | go to the specified location, default first one |
 | ✓ | `:ls` | `:ls` | list all buffers |
 | · | `:lsp` | `:lsp` | language server protocol |
-| · | `:ltag` | `:lt[ag]` | jump to tag and add matching tags to the |
+| ✓ | `:ltag` | `:lt[ag]` | jump to tag and add matching tags to the |
 | · | `:lunmap` | `:lu[nmap]` | like ":unmap!" but includes Lang-Arg mode |
 | ✓ | `:lua` | `:lua` | execute \|Lua\| command |
 | ✓ | `:luado` | `:luad[o]` | execute Lua command for each line |
@@ -348,21 +348,21 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:print` | `:p[rint]` | print lines |
 | · | `:profdel` | `:profd[el]` | stop profiling a function or script |
 | · | `:profile` | `:prof[ile]` | profiling functions and scripts |
-| · | `:pop` | `:po[p]` | jump to older entry in tag stack |
+| ✓ | `:pop` | `:po[p]` | jump to older entry in tag stack |
 | ✓ | `:popup` | `:popu[p]` | popup a menu by name |
 | · | `:ppop` | `:pp[op]` | ":pop" in preview window |
 | · | `:preserve` | `:pre[serve]` | write all text to swap file |
 | ✓ | `:previous` | `:prev[ious]` | go to previous file in argument list |
 | · | `:psearch` | `:ps[earch]` | like ":ijump" but shows match in preview window |
-| · | `:ptag` | `:pt[ag]` | show tag in preview window |
-| · | `:ptNext` | `:ptN[ext]` | \|:tNext\| in preview window |
-| · | `:ptfirst` | `:ptf[irst]` | \|:trewind\| in preview window |
-| · | `:ptjump` | `:ptj[ump]` | \|:tjump\| and show tag in preview window |
-| · | `:ptlast` | `:ptl[ast]` | \|:tlast\| in preview window |
-| · | `:ptnext` | `:ptn[ext]` | \|:tnext\| in preview window |
-| · | `:ptprevious` | `:ptp[revious]` | \|:tprevious\| in preview window |
-| · | `:ptrewind` | `:ptr[ewind]` | \|:trewind\| in preview window |
-| · | `:ptselect` | `:pts[elect]` | \|:tselect\| and show tag in preview window |
+| ✓ | `:ptag` | `:pt[ag]` | show tag in preview window |
+| ✓ | `:ptNext` | `:ptN[ext]` | \|:tNext\| in preview window |
+| ✓ | `:ptfirst` | `:ptf[irst]` | \|:trewind\| in preview window |
+| ✓ | `:ptjump` | `:ptj[ump]` | \|:tjump\| and show tag in preview window |
+| ✓ | `:ptlast` | `:ptl[ast]` | \|:tlast\| in preview window |
+| ✓ | `:ptnext` | `:ptn[ext]` | \|:tnext\| in preview window |
+| ✓ | `:ptprevious` | `:ptp[revious]` | \|:tprevious\| in preview window |
+| ✓ | `:ptrewind` | `:ptr[ewind]` | \|:trewind\| in preview window |
+| ✓ | `:ptselect` | `:pts[elect]` | \|:tselect\| and show tag in preview window |
 | ✓ | `:put` | `:pu[t]` | insert contents of register in the text |
 | ✓ | `:pwd` | `:pw[d]` | print current directory |
 | ✓ | `:py3` | `:py3` | execute Python 3 command |
@@ -449,13 +449,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:sprevious` | `:spr[evious]` | split window and go to previous file in the |
 | ✓ | `:srewind` | `:sre[wind]` | split window and go to first file in the |
 | ✓ | `:stop` | `:st[op]` | suspend the editor or escape to a shell |
-| · | `:stag` | `:sta[g]` | split window and jump to a tag |
+| ✓ | `:stag` | `:sta[g]` | split window and jump to a tag |
 | ✓ | `:startinsert` | `:star[tinsert]` | start Insert mode |
 | ✓ | `:startgreplace` | `  :startg[replace] start Virtual Replace mode` |  |
 | ✓ | `:startreplace` | `:startr[eplace]` | start Replace mode |
 | ✓ | `:stopinsert` | `:stopi[nsert]` | stop Insert mode |
-| · | `:stjump` | `:stj[ump]` | do ":tjump" and split window |
-| · | `:stselect` | `:sts[elect]` | do ":tselect" and split window |
+| ✓ | `:stjump` | `:stj[ump]` | do ":tjump" and split window |
+| ✓ | `:stselect` | `:sts[elect]` | do ":tselect" and split window |
 | ✓ | `:sunhide` | `:sun[hide]` | same as ":unhide" |
 | · | `:sunmap` | `:sunm[ap]` | like ":unmap" but for Select mode |
 | ✓ | `:sunmenu` | `:sunme[nu]` | remove menu for Select mode |
@@ -466,7 +466,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:syntime` | `:synti[me]` | measure syntax highlighting speed |
 | · | `:syncbind` | `:sync[bind]` | sync scroll binding |
 | ✓ | `:t` | `:t` | same as ":copy" |
-| · | `:tNext` | `:tN[ext]` | jump to previous matching tag |
+| ✓ | `:tNext` | `:tN[ext]` | jump to previous matching tag |
 | ✓ | `:tabNext` | `:tabN[ext]` | go to previous tabpage |
 | ✓ | `:tabclose` | `:tabc[lose]` | close current tabpage |
 | ✓ | `:tabdo` | `:tabd[o]` | execute command in each tabpage |
@@ -482,29 +482,29 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:tabrewind` | `:tabr[ewind]` | go to first tabpage |
 | ✓ | `:tabs` | `:tabs` | list the tabpages and what they contain |
 | ✓ | `:tab` | `:tab` | create new tab when opening new window |
-| · | `:tag` | `:ta[g]` | jump to tag |
-| · | `:tags` | `:tags` | show the contents of the tag stack |
+| ✓ | `:tag` | `:ta[g]` | jump to tag |
+| ✓ | `:tags` | `:tags` | show the contents of the tag stack |
 | · | `:tcd` | `:tc[d]` | change directory for tabpage |
 | · | `:tchdir` | `:tch[dir]` | change directory for tabpage |
 | ✓ | `:terminal` | `:te[rminal]` | open a terminal buffer |
-| · | `:tfirst` | `:tf[irst]` | jump to first matching tag |
+| ✓ | `:tfirst` | `:tf[irst]` | jump to first matching tag |
 | · | `:throw` | `:th[row]` | throw an exception |
-| · | `:tjump` | `:tj[ump]` | like ":tselect", but jump directly when there |
-| · | `:tlast` | `:tl[ast]` | jump to last matching tag |
+| ✓ | `:tjump` | `:tj[ump]` | like ":tselect", but jump directly when there |
+| ✓ | `:tlast` | `:tl[ast]` | jump to last matching tag |
 | ✓ | `:tlmenu` | `:tlm[enu]` | add menu for \|Terminal-mode\| |
 | ✓ | `:tlnoremenu` | `:tln[oremenu]` | like ":noremenu" but for \|Terminal-mode\| |
 | ✓ | `:tlunmenu` | `:tlu[nmenu]` | remove menu for \|Terminal-mode\| |
 | · | `:tmapclear` | `:tmapc[lear]` | remove all mappings for \|Terminal-mode\| |
 | · | `:tmap` | `:tma[p]` | like ":map" but for \|Terminal-mode\| |
 | · | `:tmenu` | `:tm[enu]` | define menu tooltip |
-| · | `:tnext` | `:tn[ext]` | jump to next matching tag |
+| ✓ | `:tnext` | `:tn[ext]` | jump to next matching tag |
 | · | `:tnoremap` | `:tno[remap]` | like ":noremap" but for \|Terminal-mode\| |
 | ✓ | `:topleft` | `:to[pleft]` | make split window appear at top or far left |
-| · | `:tprevious` | `:tp[revious]` | jump to previous matching tag |
-| · | `:trewind` | `:tr[ewind]` | jump to first matching tag |
+| ✓ | `:tprevious` | `:tp[revious]` | jump to previous matching tag |
+| ✓ | `:trewind` | `:tr[ewind]` | jump to first matching tag |
 | · | `:trust` | `:trust` | add or remove file from trust database |
 | · | `:try` | `:try` | execute commands, abort on error or exception |
-| · | `:tselect` | `:ts[elect]` | list matching tags and select one |
+| ✓ | `:tselect` | `:ts[elect]` | list matching tags and select one |
 | · | `:tunmap` | `:tunma[p]` | like ":unmap" but for \|Terminal-mode\| |
 | · | `:tunmenu` | `:tu[nmenu]` | remove menu tooltip |
 | ✓ | `:undo` | `:u[ndo]` | undo last change(s) |

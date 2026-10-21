@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-203 ✓ do something in zett, 171 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+208 ✓ do something in zett, 166 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -312,12 +312,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `tabpagemax` | tpm | number | global | `50` | maximum number of tabpages for \|-p\| and "tab all" |
 | ✓ | `tabstop` | ts | number | buf | `8` | number of columns between two tab stops |
 | ◐ | `tagbsearch` | tbs | boolean | global | `true` | use binary searching in tags files |
-| ◐ | `tagcase` | tc | string | buf | `followic` | how to handle case when searching in tags files |
+| ✓ | `tagcase` | tc | string | buf | `followic` | how to handle case when searching in tags files |
 | ◐ | `tagfunc` | tfu | string | buf | `` | function to get list of tag matches |
-| ◐ | `taglength` | tl | number | global | `0` | number of significant characters for a tag |
-| ◐ | `tagrelative` | tr | boolean | global | `true` | file names in tag file are relative |
-| ◐ | `tags` | tag | string | buf | `./tags;,tags` | list of file names used by the tag command |
-| ◐ | `tagstack` | tgst | boolean | global | `true` | push tags onto the tag stack |
+| ✓ | `taglength` | tl | number | global | `0` | number of significant characters for a tag |
+| ✓ | `tagrelative` | tr | boolean | global | `true` | file names in tag file are relative |
+| ✓ | `tags` | tag | string | buf | `./tags;,tags` | list of file names used by the tag command |
+| ✓ | `tagstack` | tgst | boolean | global | `true` | push tags onto the tag stack |
 | ◐ | `termbidi` | tbidi | boolean | global | `false` | terminal takes care of bi-directionality |
 | ✓ | `termencoding` | tenc | string | global | `` |  |
 | ✓ | `termguicolors` | tgc | boolean | global | `false` | enable 24-bit RGB color in the TUI |

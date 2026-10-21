@@ -126,6 +126,8 @@ pub(crate) enum Pick {
     Spell(usize, usize),
     /// a menu's entries (:popup NAME, the right mouse button)
     Menu(String),
+    /// the matches of a tag (:tselect, :tjump with more than one)
+    Tags(String),
 }
 
 impl Pick {
@@ -146,6 +148,7 @@ impl Pick {
             Pick::Commits => "commits",
             Pick::Spell(..) => "spell",
             Pick::Menu(_) => "menu",
+            Pick::Tags(_) => "tags",
         }
     }
 
@@ -593,6 +596,7 @@ impl App {
             Pick::Commits => ("Commits".into(), Vec::new()),
             Pick::Spell(..) => ("Change to".into(), std::mem::take(&mut self.spell_offer).into_iter().map(Cand::plain).collect()),
             Pick::Menu(name) => (format!("{name} "), self.menu_items(name).into_iter().map(|(label, rhs)| Cand::noted(label, rhs)).collect()),
+            Pick::Tags(name) => (format!("Tag {name}"), self.tag_items()),
             Pick::Everything(root) => (format!("Search everything in {} (⟲ = its history)", home_short(&root.display().to_string())), Vec::new()),
             Pick::Docs => ("Documentation".into(), zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect()),
             Pick::Diagnostics => {
@@ -653,6 +657,7 @@ impl App {
             Pick::Commits => self.picked_commit(&item),
             Pick::Spell(a, b) => self.doc().ed.replace(a, b, &item),
             Pick::Menu(name) => self.menu_run(&format!("{name}.{}", item.split('\t').next().unwrap_or(&item).trim())),
+            Pick::Tags(_) => self.tag_picked(&item),
             Pick::Grep(root) | Pick::Everything(root) => {
                 let mut parts = item.splitn(3, ':');
                 if let (Some(f), Some(l)) = (parts.next(), parts.next().and_then(|l| l.parse::<usize>().ok())) {
@@ -1177,9 +1182,17 @@ impl App {
                     Some(d) if d < self.docs.len() => self.show_doc(d),
                     _ => self.say("E23: No alternate file".to_string()),
                 },
-                Request::Definition => self.lsp_definition(),
+                // CTRL-]: the language server's definition (Neovim's tagfunc does the same), else the tags
+                Request::Definition => {
+                    if self.docs[self.cur].lsp { self.lsp_definition() } else { self.tag_at_cursor() }
+                }
+                // CTRL-T: back along the tag stack, else (a definition from the language server) the jump list
                 Request::Back => {
-                    self.doc().ed.feed("<C-o>");
+                    if self.tag_stack.is_empty() {
+                        self.doc().ed.feed("<C-o>");
+                    } else {
+                        self.tag_pop(1);
+                    }
                 }
                 Request::FileInfo => {
                     let d = &self.docs[self.cur];

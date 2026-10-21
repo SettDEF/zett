@@ -26,6 +26,7 @@ mod statusline;
 mod files;
 mod quickfix;
 mod qfcmd;
+mod tagcmd;
 mod excmds;
 mod mapcmds;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
@@ -364,6 +365,8 @@ struct App {
     qf: quickfix::QfStack,
     loclists: std::collections::HashMap<usize, quickfix::QfStack>,
     qf_job: Option<qfcmd::QfJob>,
+    /// the tag stack: each jump a tag made, newest last (tagcmd.rs)
+    tag_stack: Vec<tagcmd::TagEntry>,
     /// the argument list and the one in use; the last :! command; :match per window; :redir under way
     args: Vec<String>,
     arg_idx: usize,
@@ -551,6 +554,7 @@ impl App {
             qf: Default::default(),
             loclists: Default::default(),
             qf_job: None,
+            tag_stack: Vec::new(),
             args: paths.iter().filter(|p| !p.is_dir()).map(|p| p.display().to_string()).collect(),
             arg_idx: 0,
             last_bang: None,

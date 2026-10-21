@@ -234,6 +234,8 @@ impl App {
         let here = (cur, cur);
         let all = (0, last);
         match name {
+            // tags (tagcmd.rs)
+            n if crate::tagcmd::tag_name(n).is_some() => self.tag_command(n, arg, range.map(|(_, b)| b + 1)),
             // the quickfix and location lists (qfcmd.rs)
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);

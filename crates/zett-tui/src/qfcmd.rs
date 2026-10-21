@@ -230,7 +230,7 @@ impl App {
 
     /// A new list (or more on the one in use), the quickfix window shown again, and the first
     /// valid item when `jump`.
-    fn qf_set(&mut self, loc: bool, items: Vec<QfItem>, title: &str, add: bool, jump: bool) {
+    pub(crate) fn qf_set(&mut self, loc: bool, items: Vec<QfItem>, title: &str, add: bool, jump: bool) {
         let max = self.num(self.cur, if loc { "lhistory" } else { "chistory" }).max(1);
         let s = self.qf_stack(loc);
         match s.current_mut().filter(|_| add) {
