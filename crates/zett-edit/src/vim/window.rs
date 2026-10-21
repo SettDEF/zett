@@ -76,7 +76,15 @@ impl Editor {
                 }
             }
             'd' | 'u' => {
-                let n = self.count.take().unwrap_or(height / 2).max(1);
+                // scroll: the lines CTRL-D and CTRL-U move (0: half the window); a count sets it, as in Vim
+                if let Some(n) = self.count.take() {
+                    self.vim.opts.insert("scroll".into(), n.to_string());
+                }
+                let n = match self.opt_num("scroll", 0) {
+                    s if s > 0 => s as usize,
+                    _ => height / 2,
+                }
+                .max(1);
                 let (t, to) = if c == 'd' { ((top + n).min(last.saturating_sub(height / 2).max(top)), (line + n).min(last)) } else { (top.saturating_sub(n), line.saturating_sub(n)) };
                 self.vim_top(t);
                 self.cursor = self.sol_target(to);

@@ -31,6 +31,8 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("list", &[], Kind::Bool, "false", "show tabs, spaces at line ends and more as listchars says"),
     s("listchars", &["lcs"], Kind::Text, "tab:→ ,trail:·,nbsp:+", "what list shows: tab:XY[Z] trail: lead: space: nbsp: eol: extends: precedes:"),
     s("signcolumn", &["scl"], Kind::Text, "number", "where error signs go: number (in the line numbers), yes, auto, no"),
+    s("splitbelow", &["sb"], Kind::Bool, "true", ":split puts the new window below (zett's default, Doom's; off: above, Vim's)"),
+    s("splitright", &["spr"], Kind::Bool, "true", ":vsplit puts the new window on the right (zett's default; off: left, Vim's)"),
     s("statusline", &["stl"], Kind::Text, "", "the status line's format (%f %m %l %c %P %= %#Group# …; empty: zett's mode line)"),
     s("showmode", &["smd"], Kind::Bool, "false", "-- INSERT -- and the like on the last line (the status line shows the mode already)"),
     s("scrolloff", &["so"], Kind::Int, "3", "lines kept above and below the cursor"),
@@ -38,7 +40,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("shiftwidth", &["sw"], Kind::Int, "4", "columns one indent step takes"),
     s("expandtab", &["et"], Kind::Bool, "true", "Tab inserts spaces, to the next indent step"),
     s("trim_trailing_whitespace", &["trim"], Kind::Bool, "false", "saving removes spaces at line ends"),
-    s("final_newline", &["eol"], Kind::Bool, "true", "saving ends the file with a line break"),
+    s("final_newline", &["eol", "fixendofline", "fixeol"], Kind::Bool, "true", "saving ends the file with a line break (Vim's fixendofline)"),
     s("autosave", &[], Kind::Int, "0", "save changed files after this many seconds (0: never)"),
     s("ignorecase", &["ic"], Kind::Bool, "true", "searches match either case"),
     s("smartcase", &["scs"], Kind::Bool, "true", "… unless the search has a capital (with ignorecase; Emacs's way)"),
@@ -60,6 +62,10 @@ const WORKS_ELSEWHERE: &[&str] = &[
     // the window's display options (display.rs, draw.rs)
     "cursorcolumn", "cursorlineopt", "showbreak", "breakindent", "numberwidth", "foldcolumn", "hlsearch", "synmaxcol",
     "sidescroll", "sidescrolloff", "fillchars", "showmatch",
+    "timeout", "timeoutlen", "scrolljump",
+    "gdefault", "history",
+    "equalalways", "eadirection",
+    "readonly", "modified", "modeline", "modelines", "modelineexpr",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 
@@ -79,6 +85,9 @@ impl App {
     pub(crate) fn setting(&self, di: usize, name: &str) -> String {
         let Some(s) = find(name) else { return String::new() };
         let d = &self.docs[di];
+        if s.name == "modified" {
+            return d.dirty().to_string();
+        }
         if let Some(v) = d.local.get(s.name) {
             return v.clone();
         }
@@ -146,6 +155,12 @@ impl App {
             self.say(format!("{} wants a number, not {value}", setting.name));
             return true;
         }
+        // modified: the buffer's changed mark itself, not a kept value
+        if setting.name == "modified" {
+            self.docs[cur].ed.buf.set_dirty(value == "true");
+            self.say(format!("modified = {value}"));
+            return true;
+        }
         if local {
             self.docs[cur].local.insert(setting.name.to_string(), value.clone());
         } else {
@@ -161,6 +176,31 @@ impl App {
         let note = if works(setting) { "" } else { " (kept; zett does not act on it yet)" };
         self.say(format!("{}{} = {value}{note}", if local { "local " } else { "" }, setting.name));
         true
+    }
+
+    /// modeline: options from a `vim: set …:` line among the first and last `modelines` lines of
+    /// buffer `di`, set for it alone; what could run code only with modelineexpr.
+    pub(crate) fn apply_modeline(&mut self, di: usize) {
+        if !self.flag(di, "modeline") {
+            return;
+        }
+        let (n, lines) = (self.num(di, "modelines"), self.docs[di].ed.buf.len_lines());
+        let mut at: Vec<usize> = (0..n.min(lines)).collect();
+        at.extend((lines.saturating_sub(n)..lines).filter(|l| *l >= n));
+        let expr = self.flag(di, "modelineexpr");
+        let (keep_cur, keep_msg) = (self.cur, self.msg.take());
+        self.cur = di;
+        for l in at {
+            let Some(opts) = modeline_opts(&self.docs[di].ed.buf.line(l)) else { continue };
+            for a in set_args(&opts) {
+                let name = a.split(['=', ':', '+', '-', '^', '!', '&']).next().unwrap_or("");
+                if expr || !modeline_unsafe(name) {
+                    self.set_core(&a, true);
+                }
+            }
+        }
+        self.cur = keep_cur;
+        self.msg = keep_msg;
     }
 
     /// Hands the settings the editor itself acts on to each buffer's editor.
@@ -370,5 +410,49 @@ mod set_tests {
         assert_eq!(set_op("bin,hex", '^', "alpha", Kind::Text), "alpha,bin,hex");
         assert_eq!(set_op("tcqj", '-', "t", Kind::Text), "cqj");
         assert_eq!(set_op("cqj", '+', "t", Kind::Text), "cqjt");
+    }
+}
+
+/// A modeline's options (`vim: set ts=4 sw=4 :`, `vi: ts=4`, `ex: …`), or None when the line has none.
+pub(crate) fn modeline_opts(line: &str) -> Option<String> {
+    let at = ["vim:", "Vim:", "vi:", "ex:"].iter().filter_map(|m| {
+        line.match_indices(m).find(|(i, _)| *i == 0 || line[..*i].ends_with(char::is_whitespace)).map(|(i, _)| (i, m.len()))
+    }).min()?;
+    let rest = line[at.0 + at.1..].trim_start();
+    // second form: set … : (the options end at a colon not escaped)
+    if let Some(r) = rest.strip_prefix("set ").or_else(|| rest.strip_prefix("se ")) {
+        let mut out = String::new();
+        let mut cs = r.chars().peekable();
+        while let Some(c) = cs.next() {
+            match c {
+                '\\' if cs.peek() == Some(&':') => out.push(cs.next().unwrap()),
+                ':' => return Some(out.trim().to_string()),
+                c => out.push(c),
+            }
+        }
+        return None;
+    }
+    // first form: options split by blanks or colons, to the line's end
+    Some(rest.split([':', ' ', '\t']).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" "))
+}
+
+/// An option a modeline may not set without modelineexpr: what runs code or programs.
+pub(crate) fn modeline_unsafe(name: &str) -> bool {
+    let n = find(name.trim_start_matches("no")).map_or(name, |s| s.name);
+    n.ends_with("expr") || n.ends_with("func") || n.ends_with("prg") || n.starts_with("shell") || matches!(n, "statusline" | "tabline" | "winbar" | "titlestring" | "rulerformat" | "iconstring" | "foldtext" | "makeef" | "keywordprg" | "operatorfunc" | "patchmode" | "spellfile" | "backupdir" | "directory" | "undodir" | "viewdir")
+}
+
+#[cfg(test)]
+mod modeline_tests {
+    use super::*;
+
+    #[test]
+    fn both_forms_and_the_unsafe_ones() {
+        assert_eq!(modeline_opts("// vim: set ts=4 sw=4 et :").as_deref(), Some("ts=4 sw=4 et"));
+        assert_eq!(modeline_opts("# vim: ts=8:sw=8").as_deref(), Some("ts=8 sw=8"));
+        assert_eq!(modeline_opts("/* vi: set tw=72: */").as_deref(), Some("tw=72"));
+        assert_eq!(modeline_opts("no modeline here"), None);
+        assert!(modeline_unsafe("statusline") && modeline_unsafe("foldexpr") && modeline_unsafe("makeprg") && modeline_unsafe("shell"));
+        assert!(!modeline_unsafe("ts") && !modeline_unsafe("list"));
     }
 }

@@ -85,6 +85,10 @@ impl Buffer {
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
+    /// :set modified / nomodified.
+    pub fn set_dirty(&mut self, dirty: bool) {
+        self.dirty = dirty;
+    }
     pub fn text(&self) -> String {
         self.text.to_string()
     }

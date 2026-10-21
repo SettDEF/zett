@@ -3,6 +3,17 @@
 use super::*;
 
 impl App {
+    /// A `:` line into the history: once (an older copy goes), at most `history` lines kept.
+    pub(crate) fn remember_cmd(&mut self, l: String) {
+        self.cmd_hist.retain(|h| *h != l);
+        self.cmd_hist.push(l);
+        let max = self.num(self.cur, "history").max(1);
+        if self.cmd_hist.len() > max {
+            let cut = self.cmd_hist.len() - max;
+            self.cmd_hist.drain(..cut);
+        }
+    }
+
     pub(crate) fn help(&mut self, what: &str) {
         let rows: Vec<(String, String)> = if what == "commands" {
             self.engine.commands().into_iter().map(|(n, d, _)| (n, d)).collect()
@@ -84,7 +95,7 @@ impl App {
                     return self.after_lua(fx);
                 }
                 if !l.trim().is_empty() && self.prompt.is_none() {
-                    self.cmd_hist.push(l.trim().to_string());
+                    self.remember_cmd(l.trim().to_string());
                 }
                 self.command(l.trim());
             }
@@ -116,7 +127,12 @@ impl App {
         let (cmd, arg) = l.split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((l, ""));
         match cmd {
             "" => {}
-            "w" => self.save((!arg.is_empty()).then(|| PathBuf::from(arg))),
+            "w" | "w!" => {
+                // w!: also over readonly
+                self.bang = cmd.ends_with('!');
+                self.save((!arg.is_empty()).then(|| PathBuf::from(arg)));
+                self.bang = false;
+            }
             "q" | "quit" => {
                 if !self.close_win() {
                     self.close(false);
@@ -241,8 +257,11 @@ impl App {
         if d.ed.buf.path().is_none() {
             return self.say("no file name: :w name");
         }
-        // trim_trailing_whitespace, final_newline (settings.rs)
         let i = self.cur;
+        if self.flag(i, "readonly") && !self.bang {
+            return self.say("E45: 'readonly' option is set (add ! to override)");
+        }
+        // trim_trailing_whitespace, final_newline (settings.rs)
         self.tidy_for_save(i);
         let d = &mut self.docs[i];
         let lines = d.ed.buf.len_lines();

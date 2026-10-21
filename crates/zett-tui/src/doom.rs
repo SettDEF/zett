@@ -336,8 +336,26 @@ impl App {
         let w = self.wins[self.focus].clone().unwrap_or_default();
         self.wins.push(Some(w));
         let new = self.wins.len() - 1;
-        self.tree.split(self.focus, new, side);
+        // splitright, splitbelow: the new window after the old one (zett's default, Doom's), else before
+        if self.flag(self.cur, if side { "splitright" } else { "splitbelow" }) {
+            self.tree.split(self.focus, new, side);
+        } else {
+            self.tree.split_before(self.focus, new, side);
+        }
         self.focus_win(new);
+        self.equal_always();
+    }
+
+    /// equalalways: after a split or a close every window the same size again (eadirection: which way).
+    fn equal_always(&mut self) {
+        if self.flag(self.cur, "equalalways") {
+            let only = match self.setting(self.cur, "eadirection").as_str() {
+                "hor" => Some(true),
+                "ver" => Some(false),
+                _ => None,
+            };
+            self.tree.equalize_dir(only);
+        }
     }
 
     pub(crate) fn close_win(&mut self) -> bool {
@@ -349,6 +367,7 @@ impl App {
         self.wins[self.focus] = None;
         let next = self.tree.ids()[0];
         self.focus_win(next);
+        self.equal_always();
         true
     }
 
@@ -1164,12 +1183,29 @@ impl WTree {
         true
     }
 
-    /// Every split back to halves (CTRL-W =).
+    /// Every window the same size (CTRL-W =).
     pub(crate) fn equalize(&mut self) {
-        if let WTree::Split(_, a, b, ratio) = self {
-            *ratio = 0.5;
-            a.equalize();
-            b.equalize();
+        self.equalize_dir(None);
+    }
+
+    /// As equalize, only the splits of one kind (Some(true): widths, Some(false): heights; eadirection).
+    pub(crate) fn equalize_dir(&mut self, only: Option<bool>) {
+        if let WTree::Split(s, a, b, ratio) = self {
+            if only.is_none_or(|o| o == *s) {
+                let (ua, ub) = (a.units(*s), b.units(*s));
+                *ratio = ua as f32 / (ua + ub) as f32;
+            }
+            a.equalize_dir(only);
+            b.equalize_dir(only);
+        }
+    }
+
+    /// How many windows side by side (`side`: across) the tree holds, for equal sizes.
+    fn units(&self, side: bool) -> usize {
+        match self {
+            WTree::Leaf(_) => 1,
+            WTree::Split(s, a, b, _) if *s == side => a.units(side) + b.units(side),
+            WTree::Split(_, a, b, _) => a.units(side).max(b.units(side)),
         }
     }
 
@@ -1313,7 +1349,7 @@ impl App {
         self.docs.remove(i);
         self.doc_removed(i);
         if !line.is_empty() {
-            self.cmd_hist.push(line.clone());
+            self.remember_cmd(line.clone());
             self.command(&line);
         }
         true
@@ -1346,5 +1382,26 @@ mod help_tests {
         assert!(line("C-w x").unwrap().contains("exchange"));
         assert_eq!(line("vim"), None, "a topic's own name opens the topic");
         assert_eq!(line("nosuchkey"), None);
+    }
+}
+
+#[cfg(test)]
+mod win_tests {
+    use super::WTree;
+
+    #[test]
+    fn equal_windows_across_nested_splits() {
+        // a | (b | c): three windows side by side, a third each
+        let mut t = WTree::Split(true, Box::new(WTree::Leaf(0)), Box::new(WTree::Split(true, Box::new(WTree::Leaf(1)), Box::new(WTree::Leaf(2)), 0.5)), 0.5);
+        t.equalize();
+        let WTree::Split(_, _, b, r) = &t else { panic!() };
+        assert!((r - 1.0 / 3.0).abs() < 1e-6, "{r}");
+        let WTree::Split(_, _, _, r2) = b.as_ref() else { panic!() };
+        assert!((r2 - 0.5).abs() < 1e-6);
+        // eadirection=ver leaves widths alone
+        let mut t = WTree::Split(true, Box::new(WTree::Leaf(0)), Box::new(WTree::Leaf(1)), 0.3);
+        t.equalize_dir(Some(false));
+        let WTree::Split(_, _, _, r) = &t else { panic!() };
+        assert!((r - 0.3).abs() < 1e-6);
     }
 }

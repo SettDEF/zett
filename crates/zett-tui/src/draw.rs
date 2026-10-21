@@ -272,6 +272,7 @@ impl App {
         let cur_cont = cont_of(&cur_line_text);
         let starts = if wrap { wrap_starts(&cur_line_text, width, words, cur_cont) } else { vec![0] };
         let crow = starts.iter().rposition(|&s| s <= ccol).unwrap_or(0);
+        let was = d.top;
         let above = d.ed.step_shown(c.line, margin, true);
         if above < d.top {
             d.top = above;
@@ -290,6 +291,16 @@ impl App {
                     break;
                 }
                 d.top = next;
+            }
+        }
+        // scrolljump: once the cursor has left the window, at least this many lines at a time
+        // (negative: a percentage of the height)
+        let sj = if show.scrolljump < 0 { height * show.scrolljump.unsigned_abs() as usize / 100 } else { show.scrolljump as usize };
+        if sj > 1 {
+            if d.top > was && d.top - was < sj {
+                d.top = (was + sj).min(c.line.saturating_sub(margin)).max(d.top);
+            } else if d.top < was && was - d.top < sj {
+                d.top = was.saturating_sub(sj).max((c.line + margin + 1).saturating_sub(height)).min(d.top);
             }
         }
         if wrap {

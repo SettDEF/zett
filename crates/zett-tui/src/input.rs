@@ -177,6 +177,15 @@ impl App {
     /// Every buffer in step with the app: the key profile, and the one kill ring they share.
     /// Runs before each draw, so no place that opens a buffer has to.
     pub(crate) fn sync_profile(&mut self) {
+        // a buffer seen for the first time: readonly when its file cannot be written, and its modeline
+        for i in 0..self.docs.len() {
+            if !std::mem::replace(&mut self.docs[i].seen, true) {
+                if self.docs[i].ed.buf.path().and_then(|p| std::fs::metadata(p).ok()).is_some_and(|m| m.permissions().readonly()) {
+                    self.docs[i].local.insert("readonly".into(), "true".into());
+                }
+                self.apply_modeline(i);
+            }
+        }
         let emacs = self.emacs;
         // the settings the editor acts on itself: expandtab, shiftwidth, fill_column (settings.rs)
         self.apply_settings();

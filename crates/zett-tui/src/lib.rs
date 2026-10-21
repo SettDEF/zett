@@ -140,6 +140,8 @@ struct Doc {
     lsp_rev: u64,
     /// :setlocal values (settings.rs)
     local: std::collections::HashMap<String, String>,
+    /// its modeline and file permissions were looked at (sync_profile, once)
+    seen: bool,
 }
 
 impl Doc {
@@ -162,7 +164,7 @@ impl Doc {
 
     fn new(ed: Editor, name: String, syntax: String) -> Doc {
         let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
-        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default() }
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), seen: false }
     }
 
     fn dirty(&self) -> bool {
@@ -331,6 +333,8 @@ struct App {
     /// the terminal title (title, titlestring) as drawn, and as last set
     title_want: Option<String>,
     title_set: Option<String>,
+    /// the command being run had a ! (:w!)
+    bang: bool,
     /// windows (by id; closed ones are None), their split tree, the focused one
     wins: Vec<Option<Win>>,
     tree: WTree,
@@ -482,6 +486,7 @@ impl App {
             gutter: 4,
             title_want: None,
             title_set: None,
+            bang: false,
             wins: vec![Some(Win::default())],
             tree: WTree::Leaf(0),
             focus: 0,
@@ -605,8 +610,9 @@ impl App {
                 let _ = execute!(std::io::stdout(), if bar { SetCursorStyle::SteadyBar } else { SetCursorStyle::SteadyBlock });
                 shape = Some(bar);
             }
-            // a pending key sequence ends after a moment (Neovim's timeoutlen)
-            let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { Duration::from_millis(900).saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
+            // a pending key sequence ends after timeoutlen (never with notimeout)
+            let timeoutlen = if self.flag(self.cur, "timeout") { Duration::from_millis(self.num(self.cur, "timeoutlen") as u64) } else { Duration::from_secs(86_400) };
+            let wait = if self.keyseq.is_empty() { Duration::from_millis(500) } else { timeoutlen.saturating_sub(self.key_at.elapsed()).max(Duration::from_millis(50)) };
             // servers answer on their own time: look more often while any runs
             let wait = if self.lsp.clients.is_empty() && self.agent.is_none() && !self.notebook.busy() { wait } else { wait.min(Duration::from_millis(100)) };
             // a plugin's timer (zett.defer) wakes the loop when it is due
@@ -620,7 +626,7 @@ impl App {
                 None => wait,
             };
             if !event::poll(wait)? {
-                if !self.keyseq.is_empty() && self.key_at.elapsed() >= Duration::from_millis(900) {
+                if !self.keyseq.is_empty() && self.key_at.elapsed() >= timeoutlen {
                     // keys that are exactly a mapping run now; a prefix alone keeps its menu open
                     // until the next key (as which-key does)
                     let seq = self.keyseq.clone();

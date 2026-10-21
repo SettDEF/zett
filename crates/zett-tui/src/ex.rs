@@ -664,7 +664,12 @@ impl App {
     }
 
     fn substitute(&mut self, a: usize, b: usize, pat: &str, rep: &str, flags: &str) {
-        let re = match vim_regex(pat, flags.contains('i')) {
+        // the case: i and I decide, else ignorecase and smartcase
+        let cur = self.cur;
+        let fold = flags.contains('i') || (!flags.contains('I') && self.flag(cur, "ignorecase") && !(self.flag(cur, "smartcase") && pat.chars().any(char::is_uppercase)));
+        // gdefault: every match unless g is given (g then means the first only)
+        let all = (flags.matches('g').count() % 2 == 1) ^ self.flag(cur, "gdefault");
+        let re = match vim_regex(pat, fold) {
             Ok(r) => r,
             Err(e) => return self.say(e),
         };
@@ -679,7 +684,7 @@ impl App {
                     return l;
                 }
                 lines += 1;
-                if flags.contains('g') {
+                if all {
                     n += count;
                     re.replace_all(&l, rep.as_str()).to_string()
                 } else {

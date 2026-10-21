@@ -94,6 +94,7 @@ pub(crate) struct Display {
     pub synmaxcol: usize,
     pub sidescroll: usize,
     pub sidescrolloff: usize,
+    pub scrolljump: i64,
     pub fill: Fill,
 }
 
@@ -132,6 +133,7 @@ impl App {
             },
             sidescroll: self.num(di, "sidescroll"),
             sidescrolloff: self.num(di, "sidescrolloff"),
+            scrolljump: self.setting(di, "scrolljump").parse().unwrap_or(1),
             fill: fillchars(&self.setting(di, "fillchars")),
         }
     }
