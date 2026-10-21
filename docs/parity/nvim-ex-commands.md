@@ -7,9 +7,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | | command | written | what it does |
 |---|---|---|---|
 | ✓ | `:` | `:` | nothing |
-| · | `:range` | `:{range}` | go to last line in {range} |
+| ✓ | `:range` | `:{range}` | go to last line in {range} |
 | ✓ | `:!` | `:!` | filter lines or execute an external command |
-| · | `:!!` | `:!!` | repeat last ":!" command |
+| ✓ | `:!!` | `:!!` | repeat last ":!" command |
 | ✓ | `:#` | `:#` | same as ":number" |
 | ✓ | `:&` | `:&` | repeat last ":substitute" |
 | ✓ | `:star` | `:*` | use the last Visual area, like ":'<,'>" |
@@ -17,7 +17,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:=` | `:=` | print the last line number |
 | ✓ | `:>` | `:>` | shift lines one 'shiftwidth' right |
 | ✓ | `:@` | `:@` | execute contents of a register |
-| · | `:@@` | `:@@` | repeat the previous ":@" |
+| ✓ | `:@@` | `:@@` | repeat the previous ":@" |
 | · | `:2match` | `:2mat[ch]` | define a second match to highlight |
 | · | `:3match` | `:3mat[ch]` | define a third match to highlight |
 | ✓ | `:Next` | `:N[ext]` | go to previous file in the argument list |
@@ -302,7 +302,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:marks` | `:marks` | list all marks |
 | ✓ | `:match` | `:mat[ch]` | define a match to highlight |
 | ✓ | `:menu` | `:me[nu]` | enter a new menu item |
-| · | `:menutranslate` | `  :menut[ranslate] add a menu translation item` |  |
+| ✓ | `:menutranslate` | `  :menut[ranslate] add a menu translation item` |  |
 | ✓ | `:messages` | `:mes[sages]` | view previously displayed messages |
 | · | `:mkexrc` | `:mk[exrc]` | write current mappings and settings to a file |
 | · | `:mksession` | `:mks[ession]` | write session info to a file |
@@ -365,10 +365,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:ptselect` | `:pts[elect]` | \|:tselect\| and show tag in preview window |
 | ✓ | `:put` | `:pu[t]` | insert contents of register in the text |
 | ✓ | `:pwd` | `:pw[d]` | print current directory |
-| · | `:py3` | `:py3` | execute Python 3 command |
-| · | `:python3` | `:python3` | same as :py3 |
-| · | `:py3do` | `:py3d[o]` | execute Python 3 command for each line |
-| · | `:py3file` | `:py3f[ile]` | execute Python 3 script file |
+| ✓ | `:py3` | `:py3` | execute Python 3 command |
+| ✓ | `:python3` | `:python3` | same as :py3 |
+| ✓ | `:py3do` | `:py3d[o]` | execute Python 3 command for each line |
+| ✓ | `:py3file` | `:py3f[ile]` | execute Python 3 script file |
 | ✓ | `:python` | `:py[thon]` | execute Python command |
 | ✓ | `:pydo` | `:pyd[o]` | execute Python command for each line |
 | ✓ | `:pyfile` | `:pyf[ile]` | execute Python script file |
@@ -385,7 +385,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:redir` | `:redi[r]` | redirect messages to a file or register |
 | ✓ | `:redraw` | `:redr[aw]` | force a redraw of the display |
 | ✓ | `:redrawstatus` | `:redraws[tatus]` | force a redraw of the status line(s) and |
-| · | `:redrawtabline` | `  :redrawt[abline]  force a redraw of the tabline` |  |
+| ✓ | `:redrawtabline` | `  :redrawt[abline]  force a redraw of the tabline` |  |
 | ✓ | `:registers` | `:reg[isters]` | display the contents of registers |
 | ✓ | `:resize` | `:res[ize]` | change current window height |
 | · | `:restart` | `:restart` | restart the Nvim server |
@@ -416,7 +416,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:sbprevious` | `:sbp[revious]` | split window and go to previous file in the |
 | ✓ | `:sbrewind` | `:sbr[ewind]` | split window and go to first file in the |
 | · | `:scriptnames` | `:scr[iptnames]` | list names of all sourced Vim scripts |
-| · | `:scriptencoding` | ` :scripte[ncoding]  encoding used in sourced Vim script` |  |
+| ✓ | `:scriptencoding` | ` :scripte[ncoding]  encoding used in sourced Vim script` |  |
 | ✓ | `:set` | `:se[t]` | show or set options |
 | ✓ | `:setfiletype` | `:setf[iletype]` | set 'filetype', unless it was set already |
 | ✓ | `:setglobal` | `:setg[lobal]` | show global values of options |
@@ -451,7 +451,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:stop` | `:st[op]` | suspend the editor or escape to a shell |
 | · | `:stag` | `:sta[g]` | split window and jump to a tag |
 | ✓ | `:startinsert` | `:star[tinsert]` | start Insert mode |
-| · | `:startgreplace` | `  :startg[replace] start Virtual Replace mode` |  |
+| ✓ | `:startgreplace` | `  :startg[replace] start Virtual Replace mode` |  |
 | ✓ | `:startreplace` | `:startr[eplace]` | start Replace mode |
 | ✓ | `:stopinsert` | `:stopi[nsert]` | stop Insert mode |
 | · | `:stjump` | `:stj[ump]` | do ":tjump" and split window |

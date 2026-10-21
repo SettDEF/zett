@@ -368,6 +368,8 @@ struct App {
     args: Vec<String>,
     arg_idx: usize,
     last_bang: Option<String>,
+    /// the register the last :@ ran (:@@)
+    last_at: Option<char>,
     win_match: std::collections::HashMap<usize, (String, String)>,
     redir: Option<(String, String)>,
     /// the window being drawn (draw_text: its :match)
@@ -552,6 +554,7 @@ impl App {
             args: paths.iter().filter(|p| !p.is_dir()).map(|p| p.display().to_string()).collect(),
             arg_idx: 0,
             last_bang: None,
+            last_at: None,
             win_match: Default::default(),
             redir: None,
             drawing_win: 0,

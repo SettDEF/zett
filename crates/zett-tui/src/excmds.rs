@@ -400,7 +400,9 @@ impl App {
                     }
                     return;
                 }
-                let r = if r == '@' { self.docs[self.cur].ed.recording().unwrap_or('"') } else { r };
+                // @ the register the last :@ ran
+                let r = if r == '@' { self.last_at.unwrap_or('"') } else { r };
+                self.last_at = Some(r);
                 let Some((text, _)) = self.docs[self.cur].ed.register(r) else { return self.say(format!("E748: No previously used register {r}")) };
                 for l in text.lines().filter(|l| !l.trim().is_empty()) {
                     self.command(l.trim_start_matches(':'));

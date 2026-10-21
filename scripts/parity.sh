@@ -27,7 +27,9 @@ awk "/\*option-list\*/{f=1} f && /^'[a-z]/" "$RT/doc/quickref.txt" | sed "s/^'\(
 "$ZETT" doc commands 2>/dev/null | grep -o '^- `[^`]*`' | sed 's/^- `//; s/`$//' | sort -u > "$tmp/zett-cmds.txt"
 grep -oh '^\s*"[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs crates/zett-tui/src/commands.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
 # the quickfix, location and other Ex commands kept as tables (qfcmd.rs, excmds.rs NAMES): full names and shortest forms
-grep -oh '("[A-Za-z~@*#]*", "[A-Za-z~@*#]*")' crates/zett-tui/src/qfcmd.rs crates/zett-tui/src/excmds.rs crates/zett-tui/src/mapcmds.rs | grep -o '"[A-Za-z~@*#]*"' | tr -d '"' >> "$tmp/zett-ex.txt"
+grep -oh '("[A-Za-z0-9~@*#]*", "[A-Za-z0-9~@*#]*")' crates/zett-tui/src/qfcmd.rs crates/zett-tui/src/excmds.rs crates/zett-tui/src/mapcmds.rs | grep -o '"[A-Za-z0-9~@*#!]*"' | tr -d '"' >> "$tmp/zett-ex.txt"
+# a range alone goes to its line (:42); :!! and :@@ are the ! and @ commands again
+printf '{range}\n!!\n@@\n' >> "$tmp/zett-ex.txt"
 "$ZETT" options --working > "$tmp/zett-opts.txt"
 grep -o 'name: "[a-z]*"' crates/zett-tui/src/nvim_options.rs | cut -d'"' -f2 > "$tmp/zett-kept.txt"
 has() { grep -qxF -- "$1" "$2"; }
@@ -56,7 +58,9 @@ stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | 
     echo "✓ zett's \`:\` line has it (by its full or short name), · not yet."; echo
     echo "| | command | written | what it does |"; echo "|---|---|---|---|"
     while IFS=$'\t' read -r tag written desc; do
-        full=${written#:}; full=${full//[\[\]]/}; short=${written#:}; short=${short%%\[*}
+        # the name alone (some index lines carry their description in the same field)
+        name=${written%% *}
+        full=${name#:}; full=${full//[\[\]]/}; short=${name#:}; short=${short%%\[*}
         mark="·"; { has "$full" "$tmp/zett-ex.txt" || has "$short" "$tmp/zett-ex.txt"; } && mark="✓"
         printf '| %s | `%s` | `%s` | %s |\n' "$mark" "${tag//|/\\|}" "${written//|/\\|}" "${desc//|/\\|}"
     done < "$tmp/ex.tsv"
