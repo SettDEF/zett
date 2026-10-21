@@ -27,6 +27,12 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("mark-paragraph", "Select the paragraph"),
     ("insert-parentheses", "Insert () (around the region, or around the next N expressions)"),
     ("move-past-close-and-reindent", "Move past the next closing bracket and start an indented line"),
+    ("forward-page", "Move past the next page break (a form feed, ^L)"),
+    ("backward-page", "Move to the start of the page"),
+    ("mark-page", "Select the page"),
+    ("narrow-to-page", "Show only the page"),
+    ("prog-fill-reindent-defun", "Fill the comment or paragraph at the cursor; in code, reindent the definition"),
+    ("isearch-forward-symbol-at-point", "Search for the symbol at the cursor (C-s goes on)"),
 ];
 
 pub fn is_command(name: &str) -> bool {
@@ -263,6 +269,29 @@ impl Editor {
             .collect()
     }
     /// The innermost definition around the cursor.
+    /// The symbol at (or just before) the cursor: M-s M-w, C-h f's default.
+    pub fn word_at_cursor(&self) -> Option<String> {
+        let mut a = self.cursor;
+        while a > 0 && self.symbolish(a - 1) {
+            a -= 1;
+        }
+        let mut b = a;
+        while self.symbolish(b) {
+            b += 1;
+        }
+        (b > a).then(|| self.buf.slice(a, b))
+    }
+    /// The definition around the cursor as a char range (C-M-x evaluates it).
+    pub fn defun_range(&self) -> Option<(usize, usize)> {
+        self.defun_here()
+    }
+    /// The page around the cursor: after the form feed before it, through the one after it.
+    pub(crate) fn page_here(&self) -> (usize, usize) {
+        let n = self.buf.len_chars();
+        let a = (0..self.cursor).rev().find(|&i| self.char(i) == Some('\x0c')).map_or(0, |i| i + 1);
+        let b = (self.cursor..n).find(|&i| self.char(i) == Some('\x0c')).unwrap_or(n);
+        (a, b)
+    }
     fn defun_here(&self) -> Option<(usize, usize)> {
         self.defuns().into_iter().filter(|&(a, b)| a <= self.cursor && self.cursor < b).min_by_key(|&(a, b)| b - a)
     }
@@ -506,6 +535,58 @@ impl Editor {
                 self.cursor = at + 2 + ind.chars().count();
                 self.close();
             }
+            "forward-page" | "backward-page" => {
+                let fwd = (name == "forward-page") != back;
+                let n = self.buf.len_chars();
+                for _ in 0..times {
+                    self.cursor = if fwd {
+                        (self.cursor..n).find(|&i| self.char(i) == Some('\x0c')).map_or(n, |i| i + 1)
+                    } else {
+                        // at a page's start: the one before
+                        let from = self.cursor.saturating_sub(1);
+                        (0..from).rev().find(|&i| self.char(i) == Some('\x0c')).map_or(0, |i| i + 1)
+                    };
+                }
+            }
+            "mark-page" | "narrow-to-page" => {
+                let (a, b) = self.page_here();
+                self.mark = Some(b);
+                self.cursor = a;
+                self.mark_active = true;
+                if name == "narrow-to-page" {
+                    self.outline_exec("narrow-to-region", 1);
+                    self.mark_active = false;
+                }
+            }
+            "prog-fill-reindent-defun" => {
+                // text, a comment or a list item: fill it; code: reindent the definition around it
+                let line = self.buf.line(self.cur_line()).trim_end_matches('\n').to_string();
+                let lead = crate::textops::fill_prefix(&line).0;
+                let code = self.view_kind() == crate::outline::OutlineKind::Code && lead.trim().is_empty() && self.defun_here().is_some();
+                if !code {
+                    return self.textops_exec("fill-paragraph", 1);
+                }
+                let (a, b) = self.defun_here().unwrap_or((self.cursor, self.cursor));
+                let (l1, l2) = (self.buf.to_pos(a).line, self.buf.to_pos(b.saturating_sub(1).max(a)).line);
+                let at = self.cursor();
+                self.vim_apply(crate::Op::Reindent, crate::Span::Lines(l1, l2));
+                self.cursor = self.line_start(at.line) + at.col.min(self.buf.line_len(at.line));
+            }
+            "isearch-forward-symbol-at-point" => {
+                let mut a = self.cursor;
+                while a > 0 && self.symbolish(a - 1) {
+                    a -= 1;
+                }
+                let Some(b) = self.sexp_end(a).filter(|_| self.symbolish(a)) else { return true };
+                let word = self.buf.slice(a, b);
+                self.cursor = a;
+                self.search_command("isearch-forward");
+                for c in word.chars() {
+                    self.isearch_char(c);
+                }
+                self.last_cmd = name.into();
+                return true;
+            }
             _ => return false,
         }
         if self.buf.rev() != rev {
@@ -619,5 +700,34 @@ mod tests {
         let mut e = ed("f(a,\n  b\n  )", 7);
         e.exec("move-past-close-and-reindent", 1);
         assert_eq!(e.text(), "f(a,\n  b)\n  ");
+    }
+
+    #[test]
+    fn pages_and_m_q_in_code() {
+        let mut e = ed("one\n\x0ctwo\nthree\n\x0cfour", 6);
+        e.exec("forward-page", 1);
+        assert_eq!(e.cursor, 16, "past the next form feed");
+        e.exec("backward-page", 1);
+        assert_eq!(e.cursor, 5, "the page before");
+        e.cursor = 7;
+        e.exec("mark-page", 1);
+        assert_eq!(e.region().map(|(a, b)| e.buf.slice(a, b)), Some("two\nthree\n".to_string()));
+        let src = "fn a() {\nx();\n        y();\n}\n";
+        let mut e = ed(src, src.find("y()").unwrap());
+        e.exec("prog-fill-reindent-defun", 1);
+        assert_eq!(e.text(), "fn a() {\nx();\nx();\n}\n".replace("x();\nx();", "x();\ny();"), "reindented as the line above");
+        let mut e = ed("// a long comment\n// more", 3);
+        e.set_fill_column(80);
+        e.exec("prog-fill-reindent-defun", 1);
+        assert_eq!(e.text(), "// a long comment more", "a comment is filled");
+    }
+
+    #[test]
+    fn symbol_at_point_starts_a_search() {
+        let mut e = ed("let foo = 1; foo + foo", 5);
+        e.exec("isearch-forward-symbol-at-point", 1);
+        assert_eq!(e.isearch().map(|s| s.query().to_string()).as_deref(), Some("foo"));
+        e.exec("isearch-repeat-forward", 1);
+        assert_eq!(e.cursor, 16);
     }
 }

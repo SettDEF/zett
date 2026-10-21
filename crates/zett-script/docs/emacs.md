@@ -17,6 +17,9 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
   cursor to the window's middle, top, bottom; `C-x < C-x >` sideways
 - `M-g g` a line, `M-g c` a character, `M-g TAB` a column (the argument's, or it asks); `M-g n M-g p`
   the next / previous error
+- `C-x [ C-x ]` pages (form feeds, `^L`), `C-x C-p` marks one, `C-x n p` narrows to it, `C-x l` counts its lines
+- `C-x C-n` keeps a goal column for `C-n C-p` (`C-u C-x C-n` drops it); `C-u C-SPC` back to the
+  marks before, newest first (the mark ring)
 - `C-u 4`, `M-5`, `M--` give the next command an argument (`C-u 3 C-n`, `M-- M-f` backwards)
 
 ## Killing and yanking
@@ -40,10 +43,15 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
 - `C-x TAB` shifts the region (`C-u -2 C-x TAB` two left), `C-M-\` reindents it; `C-q TAB` inserts a
   key as it is
 - `C-/ C-_ C-x u` undo, `C-? C-M-_` redo
+- `Insert` overwrite mode; `C-x .` a fill prefix for `M-q` and `M-j`; `M-q` in code reindents the
+  definition (a comment is filled); `M-$` spelling suggestions for the word
 
 ## Searching and replacing
 
 - `C-s C-r` search as you type (again: the next match), `M-s o` the matching lines to pick from
+- `M-s .` searches for the symbol at the cursor; `M-s h r` `M-s h p` `M-s h l` `M-s h .` highlight a
+  regexp, a phrase, matching lines, the symbol (three at a time), `M-s h u` removes them; `M-s M-w`
+  searches the web for the region
 - `M-%` replaces, asking at each match: `y` or `SPC` replace, `n` or `DEL` skip, `!` all the rest,
   `.` this one and stop, `q` or `RET` stop; `C-M-%` with an Emacs regexp (`\(…\)` groups, `\1` in
   the replacement); in a region, only there. An all-lower-case text matches any case and the
@@ -62,6 +70,17 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
 
 - `C-x (` starts recording, `C-x )` stops, `C-x e` plays it (then each `e` again; `C-u 5 C-x e`
   five times); `F3` `F4` the same
+- `C-x z` the last command again, then each `z` again
+
+## Lua, zett's Emacs Lisp
+
+- `C-x C-e` evaluates the Lua before the cursor on the line, `C-j` writes the value in below,
+  `C-M-x` the definition around the cursor, `C-c C-e` the region (or the buffer); `M-:` asks for one
+
+## Bookmarks
+
+- `C-x r m` a bookmark here (a name, or the file's), `C-x r b` jumps to one, `C-x r l` lists them;
+  they stay between sessions (zett's state folder)
 
 ## Files, buffers, windows
 
@@ -69,6 +88,8 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
   insert one, `C-x C-v` another in its place, `C-x x g` read it again, `C-x C-q` read-only
 - `C-x b` switch buffer, `C-x C-b` list them, `C-x k` kill one, `C-x x r` rename it, `C-x ← →` the
   previous / next
+- `C-x d` `C-x C-j` the folder (zett's explorer), `C-x x i` inserts another buffer, `C-M-v` and
+  `M-PageUp` scroll the other window
 - `C-x 2 C-x 3` split, `C-x o C-x O` the next / previous window, `C-x 0 C-x 1` close / keep only
   this one, `C-x +` balance, `C-x ^ C-x { C-x }` sizes; `C-x 4 C-f`, `C-x 4 b`, `C-x 4 .` in another
   window

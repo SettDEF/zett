@@ -457,6 +457,11 @@ struct App {
     kmacro: Option<Vec<String>>,
     last_kmacro: Vec<String>,
     kmacro_again: bool,
+    /// what the last keys did, for C-x z (and z again)
+    last_fx: Vec<Effect>,
+    repeat_again: bool,
+    /// the :match slot M-s h used last (1-3)
+    hl_slot: u8,
     /// Emacs profile: a numeric argument being typed (C-u 4, M-5), for the next command
     arg: zett_edit::prefix::PrefixArg,
     /// the key that ran the last command (digit-argument reads its digit)
@@ -658,6 +663,9 @@ impl App {
             kmacro: None,
             last_kmacro: Vec::new(),
             kmacro_again: false,
+            last_fx: Vec::new(),
+            repeat_again: false,
+            hl_slot: 0,
             arg: Default::default(),
             last_key: String::new(),
             kill_ring: zett_edit::KillRing::shared(),

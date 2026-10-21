@@ -137,14 +137,22 @@ impl Editor {
                 if self.line_text(a).trim().is_empty() {
                     return true;
                 }
-                let (first, rest) = fill_prefix(&self.line_text(a));
+                // C-x . set a prefix: every line starts with it
+                let set = self.fill_prefix_set.clone();
+                let (first, rest) = match &set {
+                    Some(p) => (p.clone(), p.clone()),
+                    None => fill_prefix(&self.line_text(a)),
+                };
                 let strip = |l: &str| {
+                    if let Some(p) = &set {
+                        return l.strip_prefix(p.as_str()).unwrap_or(l).trim_start().to_string();
+                    }
                     let t = l.trim_start();
                     let (p, _) = fill_prefix(l);
                     let p = p.trim_start();
                     t.strip_prefix(p).unwrap_or(t).to_string()
                 };
-                let body: Vec<String> = (a..=b).map(|l| if l == a { self.line_text(l)[first.len().min(self.line_text(l).len())..].to_string() } else { strip(&self.line_text(l)) }).collect();
+                let body: Vec<String> = (a..=b).map(|l| if l == a && set.is_none() { self.line_text(l)[first.len().min(self.line_text(l).len())..].to_string() } else { strip(&self.line_text(l)) }).collect();
                 let joined = body.join(" ");
                 let words: Vec<&str> = joined.split_whitespace().collect();
                 let new = fill(&words, &first, &rest, self.fill_column);

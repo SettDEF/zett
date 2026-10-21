@@ -150,6 +150,12 @@ pub struct Editor {
     spacing: Option<(usize, String, usize, u8)>,
     /// C-l and M-r in a row: middle, top, bottom (screen.rs)
     cycle: u8,
+    /// the marks before this one, newest last (C-u C-SPC pops them)
+    mark_ring: Vec<usize>,
+    /// overwrite-mode, C-x C-n's column, C-x .'s prefix
+    overwrite: bool,
+    goal: Option<usize>,
+    fill_prefix_set: Option<String>,
 }
 
 impl Editor {
@@ -179,6 +185,10 @@ impl Editor {
             soft_tab: None,
             spacing: None,
             cycle: 0,
+            mark_ring: Vec::new(),
+            overwrite: false,
+            goal: None,
+            fill_prefix_set: None,
             kill_ring: KillRing::shared(),
             isearch: None,
             last_search: String::new(),

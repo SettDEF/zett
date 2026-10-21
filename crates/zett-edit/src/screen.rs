@@ -118,8 +118,11 @@ impl Editor {
                 self.vim.requests.push(Request::Message(m));
             }
             "count-lines-page" => {
-                let total = self.buf.len_lines();
-                self.vim.requests.push(Request::Message(format!("Page has {total} lines ({} + {})", line, total - line)));
+                // the page between form feeds (the buffer, when it has none)
+                let (a, b) = self.page_here();
+                let (la, lb) = (self.buf.to_pos(a).line, self.buf.to_pos(b).line);
+                let total = lb - la + usize::from(b == self.buf.len_chars());
+                self.vim.requests.push(Request::Message(format!("Page has {total} lines ({} + {})", line - la, total - (line - la))));
             }
             "goto-line" | "goto-char" | "move-to-column" => {
                 let Some(n) = arg else { return true };

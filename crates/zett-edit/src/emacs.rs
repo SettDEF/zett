@@ -73,6 +73,15 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("newline-and-indent", "A line break, keeping the indentation (newline)"),
     ("fixup-whitespace", "One space around the cursor (just-one-space)"),
     ("keyboard-escape-quit", "Cancel: deactivate the mark (keyboard-quit)"),
+    ("overwrite-mode", "Typing replaces the character under the cursor, or inserts again"),
+    ("set-goal-column", "C-n and C-p keep this column (with an argument: no longer)"),
+    ("set-fill-prefix", "M-q and M-j start lines with the text before the cursor (at the line start: none)"),
+    ("ispell-word", "Spelling suggestions for the word at the cursor"),
+    ("delete-forward-char", "Delete the character after the cursor (delete-char)"),
+    ("dabbrev-completion", "Complete the word before the cursor from the buffer (dabbrev-expand)"),
+    ("abort-recursive-edit", "Cancel (keyboard-quit)"),
+    ("exit-recursive-edit", "Cancel (keyboard-quit)"),
+    ("goto-line-relative", "Go to a line (goto-line)"),
 ];
 
 /// Emacs's other names for zett's commands: (name, the command it runs).
@@ -91,6 +100,11 @@ const ALIASES: &[(&str, &str)] = &[
     ("newline-and-indent", "newline"),
     ("fixup-whitespace", "just-one-space"),
     ("keyboard-escape-quit", "keyboard-quit"),
+    ("delete-forward-char", "delete-char"),
+    ("dabbrev-completion", "dabbrev-expand"),
+    ("abort-recursive-edit", "keyboard-quit"),
+    ("exit-recursive-edit", "keyboard-quit"),
+    ("goto-line-relative", "goto-line"),
 ];
 
 /// The command an Emacs name stands for (itself when it is no other name).
@@ -171,6 +185,13 @@ impl Editor {
 
     /// Sets the mark where the cursor is; `active` shows it as the region.
     pub(crate) fn set_mark(&mut self, active: bool) {
+        // the mark before goes on the mark ring (C-u C-SPC comes back to it)
+        if let Some(m) = self.mark.filter(|&m| m != self.cursor) {
+            self.mark_ring.push(m);
+            if self.mark_ring.len() > 16 {
+                self.mark_ring.remove(0);
+            }
+        }
         self.mark = Some(self.cursor);
         self.mark_active = active;
     }
@@ -181,6 +202,10 @@ impl Editor {
             self.begin();
         }
         self.mark_active = false;
+        // overwrite-mode: the character under the cursor goes (not a line break)
+        if self.overwrite && self.char(self.cursor).is_some_and(|x| x != '\n') {
+            self.rem(self.cursor, self.cursor + 1);
+        }
         self.ins(self.cursor, &c.to_string());
         self.cursor += 1;
         self.want_col = self.cursor().col;
@@ -198,6 +223,23 @@ impl Editor {
         // these read the argument's sign themselves
         if crate::balanced::is_command(name) {
             return self.balanced_exec(name, n);
+        }
+        // C-u C-x C-n: no goal column; C-u C-SPC: back to the mark before (the mark ring)
+        if name == "set-goal-column" && arg.is_some() {
+            self.goal = None;
+            self.last_cmd = name.to_string();
+            self.vim.requests.push(crate::vim::Request::Message("No goal column".into()));
+            return true;
+        }
+        if name == "set-mark-command" && arg.is_some() {
+            self.last_cmd = name.to_string();
+            if let Some(m) = self.mark {
+                self.cursor = m.min(self.buf.len_chars());
+                self.mark = self.mark_ring.pop().or(Some(m));
+                self.mark_active = false;
+                self.want_col = self.cursor().col;
+            }
+            return true;
         }
         if name == "indent-rigidly" {
             let cols = arg.unwrap_or(self.shiftwidth().max(1) as i64);
@@ -259,6 +301,34 @@ impl Editor {
                 self.vim_apply(crate::Op::Reindent, crate::Span::Lines(l1, l2));
                 self.cursor = at.min(self.buf.len_chars());
                 self.mark_active = false;
+                return true;
+            }
+            "overwrite-mode" => {
+                self.last_cmd = name.to_string();
+                self.overwrite = !self.overwrite;
+                let m = if self.overwrite { "Overwrite mode enabled" } else { "Overwrite mode disabled" };
+                self.vim.requests.push(crate::vim::Request::Message(m.into()));
+                return true;
+            }
+            "set-goal-column" | "set-fill-prefix" | "ispell-word" => {
+                self.last_cmd = name.to_string();
+                let m = match name {
+                    "set-goal-column" => {
+                        self.goal = Some(self.cursor().col);
+                        format!("Goal column {} (use C-u C-x C-n to unset it)", self.cursor().col)
+                    }
+                    "set-fill-prefix" => {
+                        let s = self.line_start(self.cur_line());
+                        let p = self.buf.slice(s, self.cursor);
+                        self.fill_prefix_set = (!p.is_empty()).then(|| p.clone());
+                        if p.is_empty() { "fill-prefix canceled".into() } else { format!("fill-prefix: \"{p}\"") }
+                    }
+                    _ => {
+                        self.spell_suggest();
+                        return true;
+                    }
+                };
+                self.vim.requests.push(crate::vim::Request::Message(m));
                 return true;
             }
             "append-next-kill" => {
@@ -324,7 +394,7 @@ impl Editor {
                     // folded and narrowed-away lines are stepped over
                     self.refresh_view();
                     let target = self.step_shown(line, 1, name == "previous-line");
-                    let col = self.want_col.min(self.buf.line_len(target));
+                    let col = self.goal.unwrap_or(self.want_col).min(self.buf.line_len(target));
                     self.cursor = self.line_start(target) + col;
                 }
                 "beginning-of-line" => self.cursor = self.line_start(self.cur_line()),
@@ -525,6 +595,7 @@ impl Editor {
                 }
                 "default-indent-new-line" => {
                     let (_, rest) = crate::textops::fill_prefix(self.buf.line(self.cur_line()).trim_end_matches('\n'));
+                    let rest = self.fill_prefix_set.clone().unwrap_or(rest);
                     let mut a = self.cursor;
                     while a > self.line_start(self.cur_line()) && matches!(self.char(a - 1), Some(' ') | Some('\t')) {
                         a -= 1;
@@ -912,5 +983,31 @@ mod tests {
         e.exec("append-next-kill", 1);
         e.exec("kill-word", 1);
         assert_eq!(e.last_kill().as_deref(), Some("onetwo"));
+    }
+
+    #[test]
+    fn mark_ring_goal_column_overwrite_fill_prefix() {
+        let mut e = ed("abcdef\nxy\nabcdef", 0);
+        e.exec("set-mark-command", 1);
+        e.cursor = 3;
+        e.exec("set-mark-command", 1);
+        e.cursor = 5;
+        e.exec_arg("set-mark-command", Some(4));
+        assert_eq!(e.cursor, 3, "C-u C-SPC: to the mark");
+        e.exec_arg("set-mark-command", Some(4));
+        assert_eq!(e.cursor, 0, "again: the one before it");
+        e.cursor = 4;
+        e.exec("set-goal-column", 1);
+        e.exec("next-line", 1);
+        e.exec("next-line", 1);
+        assert_eq!(e.cursor().col, 4, "the goal column, not the short line's end");
+        let mut e = ed("abc", 0);
+        e.exec("overwrite-mode", 1);
+        e.self_insert('X');
+        assert_eq!(e.text(), "Xbc");
+        let mut e = ed(";; one\n;; two", 3);
+        e.exec("set-fill-prefix", 1);
+        e.exec("fill-paragraph", 1);
+        assert_eq!(e.text(), ";; one two");
     }
 }

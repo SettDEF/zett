@@ -192,6 +192,10 @@ impl App {
             Feed::Ran(fx) => {
                 self.menu.clear();
                 self.ran_keys = seq.len();
+                // C-x z repeats it (not itself)
+                if !fx.iter().any(|e| matches!(e, Effect::Ui(n, _) if n == "repeat")) && !fx.is_empty() {
+                    self.last_fx = fx.clone();
+                }
                 self.after_lua(fx);
             }
             Feed::Pending(menu) => {
@@ -340,6 +344,9 @@ impl App {
         }
         if let Some(m) = self.kmacro.as_mut() {
             m.push(tok.clone());
+        }
+        if std::mem::take(&mut self.repeat_again) && tok == "z" {
+            return self.repeat_last();
         }
         // C-x e e e: each e plays the macro again
         if std::mem::take(&mut self.kmacro_again) && tok == "e" {

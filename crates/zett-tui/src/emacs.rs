@@ -145,6 +145,12 @@ impl App {
         if let Some(t) = title.strip_suffix(" @settings") {
             return (t.to_string(), crate::settings::all().into_iter().map(|s| Cand::noted(s.name, s.about)).collect());
         }
+        if let Some(t) = title.strip_suffix(" @buffers") {
+            return (t.to_string(), self.docs.iter().map(|d| Cand::plain(self.buffer_label(d))).collect());
+        }
+        if let Some(t) = title.strip_suffix(" @bookmarks") {
+            return (t.to_string(), bookmarks().into_iter().map(|(n, p, l)| Cand::noted(n, format!("{p}:{}", l + 1))).collect());
+        }
         (title.to_string(), Vec::new())
     }
 
@@ -172,6 +178,16 @@ impl App {
                     }
                     Err(_) => self.say(format!("not a number: {n}")),
                 }
+            }
+            "hl" => self.highlight(body),
+            "bookmark-set" => {
+                self.bookmark_set(body);
+            }
+            "bookmark-jump" => {
+                self.bookmark_jump(body);
+            }
+            "insbuf" => {
+                self.emacs_ui("insertBuffer", body);
             }
             "whereis" => {
                 self.emacs_ui("whereIs", body);
@@ -342,6 +358,54 @@ impl App {
                 let rows: Vec<(String, String)> = self.lossage.iter().map(|t| (minibuf::emacs_keys(t), String::new())).collect();
                 self.popup = Some(Popup::Help("Recent keys".into(), rows));
             }
+            // an editor command from Lua (a step of a command that does several)
+            "edit" => self.after_lua(vec![Effect::Edit(arg.to_string(), 1)]),
+            "repeat" => self.repeat_last(),
+            "evalLua" => self.eval_lua(arg),
+            "webSearch" => {
+                let ed = &self.docs[self.cur].ed;
+                let text = match ed.region() {
+                    Some((a, b)) => ed.buf.slice(a, b),
+                    None => ed.word_at_cursor().unwrap_or_default(),
+                };
+                if text.trim().is_empty() {
+                    self.say("Nothing to search for");
+                    return true;
+                }
+                let q: String = text.split_whitespace().collect::<Vec<_>>().join(" ").chars().map(|c| if c.is_ascii_alphanumeric() { c.to_string() } else { c.to_string().bytes().map(|b| format!("%{b:02X}")).collect() }).collect();
+                let _ = std::process::Command::new("xdg-open").arg(format!("https://duckduckgo.com/?q={q}")).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+            }
+            "highlightSymbol" => match self.docs[self.cur].ed.word_at_cursor() {
+                Some(w) => self.highlight(&format!("\\<{w}\\>")),
+                None => self.say("No symbol here"),
+            },
+            "unhighlight" => {
+                self.hl_slot = 0;
+                for m in ["match none", "2match none", "3match none"] {
+                    self.command(m);
+                }
+            }
+            "bookmarkSet" => self.bookmark_set(arg),
+            "bookmarkJump" => self.bookmark_jump(arg),
+            "bookmarkList" => {
+                let rows: Vec<(String, String)> = bookmarks().into_iter().map(|(n, p, l)| (n, format!("{p}:{}", l + 1))).collect();
+                if rows.is_empty() {
+                    self.say("No bookmarks (C-x r m sets one)");
+                } else {
+                    self.popup = Some(Popup::Help("Bookmarks".into(), rows));
+                }
+            }
+            "insertBuffer" => {
+                let Some(i) = self.docs.iter().position(|d| self.buffer_label(d) == arg) else {
+                    self.say(format!("No buffer {arg}"));
+                    return true;
+                };
+                let text = self.docs[i].ed.text();
+                let at = self.docs[self.cur].ed.buf.to_char(self.docs[self.cur].ed.cursor());
+                let before = self.docs[self.cur].ed.cursor().line;
+                self.doc().ed.replace_text(at, at, &text);
+                self.doc().touched(before);
+            }
             "kmacroStart" => {
                 if self.kmacro.is_some() {
                     self.say("Already defining a keyboard macro");
@@ -414,6 +478,90 @@ impl App {
     }
 }
 
+/// Bookmarks (C-x r m): name, file, line; kept in zett's state folder, one per line.
+fn bookmarks_file() -> std::path::PathBuf {
+    doom::state_dir().join("bookmarks")
+}
+pub(crate) fn bookmarks() -> Vec<(String, String, usize)> {
+    std::fs::read_to_string(bookmarks_file())
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| {
+            let mut p = l.splitn(3, '\t');
+            Some((p.next()?.to_string(), p.next()?.to_string(), p.next()?.parse().ok()?))
+        })
+        .collect()
+}
+
+impl App {
+    /// C-x z: the last command again (z again: once more).
+    pub(crate) fn repeat_last(&mut self) {
+        let fx = self.last_fx.clone();
+        if fx.is_empty() {
+            return self.say("No command to repeat");
+        }
+        self.after_lua(fx);
+        self.repeat_again = true;
+    }
+
+    /// Lua as Emacs Lisp: C-x C-e the line up to the cursor, C-M-x the definition, C-c C-e the
+    /// region or the buffer; C-j (`print`) writes the value in after the line.
+    pub(crate) fn eval_lua(&mut self, what: &str) {
+        let ed = &self.docs[self.cur].ed;
+        let at = ed.buf.to_char(ed.cursor());
+        let line_start = ed.buf.to_char(zett_core::Pos::new(ed.cursor().line, 0));
+        let code = match what {
+            "defun" => ed.defun_range().map(|(a, b)| ed.buf.slice(a, b)),
+            "region" => Some(ed.region().map_or_else(|| ed.text(), |(a, b)| ed.buf.slice(a, b))),
+            _ => Some(ed.buf.slice(line_start, at)),
+        };
+        let Some(code) = code.filter(|c| !c.trim().is_empty()) else { return self.say("Nothing to evaluate here") };
+        match self.with_lua(|e| e.eval(&code)) {
+            Ok((out, fx)) => {
+                self.after_lua(fx);
+                if what == "print" {
+                    let ed = &self.docs[self.cur].ed;
+                    let at = ed.buf.to_char(ed.cursor());
+                    self.doc().ed.replace_text(at, at, &format!("\n{out}\n"));
+                } else {
+                    self.say(if out.is_empty() { "nil".to_string() } else { out });
+                }
+            }
+            Err(e) => self.say(e),
+        }
+    }
+
+    /// M-s h: the pattern highlighted in the next of :match, :2match, :3match (the oldest goes).
+    pub(crate) fn highlight(&mut self, pat: &str) {
+        self.hl_slot = self.hl_slot % 3 + 1;
+        let (cmd, group) = [("match", "Search"), ("2match", "IncSearch"), ("3match", "Visual")][self.hl_slot as usize - 1];
+        self.command(&format!("{cmd} {group} /{}/", pat.replace('/', "\\/")));
+    }
+
+    /// C-x r m: a bookmark here (by the file's name when none is given).
+    pub(crate) fn bookmark_set(&mut self, name: &str) {
+        let d = &self.docs[self.cur];
+        let Some(path) = d.abs_path() else { return self.say("Only a file can have a bookmark") };
+        let name = if name.trim().is_empty() { path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default() } else { name.trim().to_string() };
+        let line = d.ed.cursor().line;
+        let mut all: Vec<(String, String, usize)> = bookmarks().into_iter().filter(|b| b.0 != name).collect();
+        all.push((name.clone(), path.display().to_string(), line));
+        let text: String = all.iter().map(|(n, p, l)| format!("{n}\t{p}\t{l}\n")).collect();
+        let _ = std::fs::create_dir_all(doom::state_dir());
+        match std::fs::write(bookmarks_file(), text) {
+            Ok(()) => self.say(format!("Bookmark \"{name}\" set")),
+            Err(e) => self.say(format!("could not keep the bookmark: {e}")),
+        }
+    }
+
+    /// C-x r b: to a bookmark's file and line.
+    pub(crate) fn bookmark_jump(&mut self, name: &str) {
+        let Some((_, path, line)) = bookmarks().into_iter().find(|b| b.0 == name.trim()) else { return self.say(format!("No bookmark \"{}\"", name.trim())) };
+        self.open(std::path::Path::new(&path));
+        self.goto_line(line + 1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -472,5 +620,22 @@ mod tests {
         a.docs[a.cur].ed.exec("beginning-of-buffer", 1);
         a.picked(m.kind, "T".into());
         assert_eq!(a.docs[a.cur].ed.text(), "one\nTwo\nThree\n");
+    }
+
+    #[test]
+    fn repeat_eval_and_highlights() {
+        let mut a = app("abcdef");
+        a.after_lua(vec![Effect::Edit("forward-char".into(), 1)]);
+        a.last_fx = vec![Effect::Edit("forward-char".into(), 1)];
+        a.repeat_last();
+        assert_eq!(a.docs[a.cur].ed.cursor().col, 2, "C-x z: once more");
+        let mut a = app("1 + 41");
+        a.docs[a.cur].ed.exec("end-of-line", 1);
+        a.eval_lua("print");
+        assert_eq!(a.docs[a.cur].ed.text(), "1 + 41\n42\n", "C-j writes the value in");
+        let mut a = app("foo bar foo");
+        a.highlight("foo");
+        a.highlight("bar");
+        assert_eq!(a.hl_slot, 2, "the second goes in :2match");
     }
 }

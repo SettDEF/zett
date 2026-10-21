@@ -720,7 +720,7 @@ impl App {
     }
 
     /// A buffer as the minibuffer lists it: inside the project relative to it, else from ~.
-    fn buffer_label(&self, d: &Doc) -> String {
+    pub(crate) fn buffer_label(&self, d: &Doc) -> String {
         let root = format!("{}/", self.root.display());
         d.name.strip_prefix(&root).map(String::from).unwrap_or_else(|| home_short(&d.name))
     }
