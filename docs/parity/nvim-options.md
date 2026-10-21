@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-153 ✓ do something in zett, 221 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+186 ✓ do something in zett, 188 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does |
 |---|---|---|---|---|---|---|
@@ -26,12 +26,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `backupdir` | bdir | string | global | `.,/home/caesar/.local/state/nvim/backup//` | list of directories for the backup file |
 | ✓ | `backupext` | bex | string | global | `~` | extension used for the backup file |
 | ✓ | `backupskip` | bsk | string | global | `/tmp/*` | no backup for files that match these patterns |
-| ◐ | `belloff` | bo | string | global | `all` | do not ring the bell for these reasons |
+| ✓ | `belloff` | bo | string | global | `all` | do not ring the bell for these reasons |
 | ✓ | `binary` | bin | boolean | buf | `false` | read/write/edit file in binary mode |
 | ✓ | `bomb` |  | boolean | buf | `false` | prepend a Byte Order Mark to the file |
-| ◐ | `breakat` | brk | string | global | ` 	!@*-+;:,./?` | characters that may cause a line break |
+| ✓ | `breakat` | brk | string | global | ` 	!@*-+;:,./?` | characters that may cause a line break |
 | ✓ | `breakindent` | bri | boolean | win | `false` | wrapped line repeats indent |
-| ◐ | `breakindentopt` | briopt | string | win | `` | settings for 'breakindent' |
+| ✓ | `breakindentopt` | briopt | string | win | `` | settings for 'breakindent' |
 | ✓ | `browsedir` | bsdir | string | global | `` | which directory to start browsing in |
 | ◐ | `bufhidden` | bh | string | buf | `` | what to do when buffer is no longer in window |
 | ◐ | `buflisted` | bl | boolean | buf | `true` | whether the buffer shows up in the buffer list |
@@ -40,7 +40,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `casemap` | cmp | string | global | `internal,keepascii` | specifies how case of letters is changed |
 | ◐ | `cdhome` | cdh | boolean | global | `true` | change directory to the home directory by ":cd" |
 | ◐ | `cdpath` | cd | string | global | `,,` | list of directories searched with ":cd" |
-| ◐ | `cedit` |  | string | global | `` | key used to open the command-line window |
+| ✓ | `cedit` |  | string | global | `` | key used to open the command-line window |
 | ◐ | `channel` |  | number | buf | `0` |  |
 | ◐ | `charconvert` | ccv | string | global | `` | expression for character encoding conversion |
 | ◐ | `chistory` | chi | number | global | `10` | maximum number of quickfix lists in history |
@@ -68,7 +68,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `confirm` | cf | boolean | global | `false` | ask what to do about unsaved/read-only files |
 | ✓ | `copyindent` | ci | boolean | buf | `false` | make 'autoindent' use existing indent structure |
 | ◐ | `cpoptions` | cpo | string | global | `aABceFs_` | flags for Vi-compatible behavior |
-| ◐ | `cursorbind` | crb | boolean | win | `false` | move cursor in window as it moves in other windows |
+| ✓ | `cursorbind` | crb | boolean | win | `false` | move cursor in window as it moves in other windows |
 | ✓ | `cursorcolumn` | cuc | boolean | win | `false` | highlight the screen column of the cursor |
 | ✓ | `cursorline` | cul | boolean | win | `false` | highlight the screen line of the cursor |
 | ✓ | `cursorlineopt` | culopt | string | win | `both` | settings for 'cursorline' |
@@ -91,7 +91,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `endofline` | eol | boolean | buf | `true` | write <EOL> for last line in file |
 | ✓ | `equalalways` | ea | boolean | global | `true` | windows are automatically made the same size |
 | ✓ | `equalprg` | ep | string | buf | `` | external program to use for "=" command |
-| ◐ | `errorbells` | eb | boolean | global | `false` | ring the bell for error messages |
+| ✓ | `errorbells` | eb | boolean | global | `false` | ring the bell for error messages |
 | ◐ | `errorfile` | ef | string | global | `errors.err` | name of the errorfile for the QuickFix mode |
 | ◐ | `errorformat` | efm | string | buf | `%*[^"]"%f"%*\D%l: %m,"%f"%*\D%l: %m,%-Gg%\?make[%*\d]: *** [%f:%l:%m,%-Gg%\?make: *** [%f:%l:%m,%-G%f:%l: (Each undeclared identifier is reported only once,%-G%f:%l: for each function it appears in.),%-GIn file included from %f:%l:%c:,%-GIn file included from %f:%l:%c\,,%-GIn file included from %f:%l:%c,%-GIn file included from %f:%l,%-G%*[ ]from %f:%l:%c,%-G%*[ ]from %f:%l:,%-G%*[ ]from %f:%l\,,%-G%*[ ]from %f:%l,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,"%f"\, line %l%*\D%c%*[^ ] %m,%D%*\a[%*\d]: Entering directory %*[`']%f',%X%*\a[%*\d]: Leaving directory %*[`']%f',%D%*\a: Entering directory %*[`']%f',%X%*\a: Leaving directory %*[`']%f',%DMaking %*\a in %f,%f\|%l\| %m` | description of the lines in the error file |
 | ◐ | `eventignore` | ei | string | global | `` | autocommand events that are ignored |
@@ -102,7 +102,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `fileencodings` | fencs | string | global | `ucs-bom,utf-8,default,latin1` | automatically detected character encodings |
 | ✓ | `fileformat` | ff | string | buf | `unix` | file format used for file I/O |
 | ◐ | `fileformats` | ffs | string | global | `unix,dos` | automatically detected values for 'fileformat' |
-| ◐ | `fileignorecase` | fic | boolean | global | `false` | ignore case when using file names |
+| ✓ | `fileignorecase` | fic | boolean | global | `false` | ignore case when using file names |
 | ✓ | `filetype` | ft | string | buf | `` | type of file, used for autocommands |
 | ✓ | `fillchars` | fcs | string | win | `` | characters to use for displaying special items |
 | ◐ | `findfunc` | ffu | string | buf | `` | function to be called for the \|:find\| command |
@@ -188,14 +188,14 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `makeencoding` | menc | string | buf | `` | encoding of external make/grep commands |
 | ◐ | `makeprg` | mp | string | buf | `make` | program to use for the ":make" command |
 | ✓ | `matchpairs` | mps | string | buf | `(:),{:},[:]` | pairs of characters that "%" can match |
-| ◐ | `matchtime` | mat | number | global | `5` | tenths of a second to show matching paren |
+| ✓ | `matchtime` | mat | number | global | `5` | tenths of a second to show matching paren |
 | ✓ | `maxcombine` | mco | number | global | `6` | maximum nr of combining characters displayed |
 | ◐ | `maxfuncdepth` | mfd | number | global | `100` | maximum recursive depth for user functions |
 | ◐ | `maxmapdepth` | mmd | number | global | `1000` | maximum recursive depth for mapping |
 | ◐ | `maxmempattern` | mmp | number | global | `1000` | maximum memory (in Kbyte) used for pattern search |
-| ◐ | `maxsearchcount` | msc | number | global | `999` |  |
+| ✓ | `maxsearchcount` | msc | number | global | `999` |  |
 | ✓ | `menuitems` | mis | number | global | `25` | maximum number of items in a menu |
-| ◐ | `messagesopt` | mopt | string | global | `hit-enter,history:500,progress:c` |  |
+| ✓ | `messagesopt` | mopt | string | global | `hit-enter,history:500,progress:c` |  |
 | ◐ | `mkspellmem` | msm | string | global | `460000,2000,500` | memory used before \|:mkspell\| compresses the tree |
 | ✓ | `modeline` | ml | boolean | buf | `true` | recognize modelines at start or end of file |
 | ✓ | `modelineexpr` | mle | boolean | global | `false` | allow setting expression options from a modeline |
@@ -216,7 +216,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `numberwidth` | nuw | number | win | `4` | number of columns used for the line number |
 | ◐ | `omnifunc` | ofu | string | buf | `` | function for filetype-specific completion |
 | ✓ | `opendevice` | odev | boolean | global | `false` | allow reading/writing devices on MS-Windows |
-| ◐ | `operatorfunc` | opfunc | string | global | `` | function to be called for \|g@\| operator |
+| ✓ | `operatorfunc` | opfunc | string | global | `` | function to be called for \|g@\| operator |
 | ◐ | `packpath` | pp | string | global | `/etc/xdg/nvim,/home/caesar/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,/home/caesar/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for packages |
 | ✓ | `paragraphs` | para | string | global | `IPLPPPQPP TPHPLIPpLpItpplpipbp` | nroff macros that separate paragraphs |
 | ✓ | `paste` |  | boolean | global | `false` |  |
@@ -230,9 +230,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `prompt` |  | boolean | global | `true` |  |
 | ◐ | `pumblend` | pb | number | global | `0` |  |
 | ◐ | `pumborder` |  | string | global | `` |  |
-| ◐ | `pumheight` | ph | number | global | `0` | maximum number of items to show in the popup menu |
-| ◐ | `pummaxwidth` | pmw | number | global | `0` |  |
-| ◐ | `pumwidth` | pw | number | global | `15` | minimum width of the popup menu |
+| ✓ | `pumheight` | ph | number | global | `0` | maximum number of items to show in the popup menu |
+| ✓ | `pummaxwidth` | pmw | number | global | `0` |  |
+| ✓ | `pumwidth` | pw | number | global | `15` | minimum width of the popup menu |
 | ◐ | `pyxversion` | pyx | number | global | `3` | Python version used for pyx* commands |
 | ◐ | `quickfixtextfunc` | qftf | string | global | `` |  |
 | ✓ | `quoteescape` | qe | string | buf | `\` | escape characters used in a string |
@@ -251,10 +251,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `runtimepath` | rtp | string | global | `/etc/xdg/nvim,$HOME/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,$HOME/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for runtime files |
 | ✓ | `scroll` | scr | number | win | `0` | lines to scroll with CTRL-U and CTRL-D |
 | ◐ | `scrollback` | scbk | number | buf | `-1` |  |
-| ◐ | `scrollbind` | scb | boolean | win | `false` | scroll in window as other windows scroll |
+| ✓ | `scrollbind` | scb | boolean | win | `false` | scroll in window as other windows scroll |
 | ✓ | `scrolljump` | sj | number | global | `1` | minimum number of lines to scroll |
 | ✓ | `scrolloff` | so | number | win | `0` | minimum nr. of lines above and below cursor |
-| ◐ | `scrollopt` | sbo | string | global | `ver,jump` | how 'scrollbind' should behave |
+| ✓ | `scrollopt` | sbo | string | global | `ver,jump` | how 'scrollbind' should behave |
 | ✓ | `sections` | sect | string | global | `SHNHH HUnhsh` | nroff macros that separate sections |
 | ◐ | `secure` |  | boolean | global | `false` | secure mode for reading .vimrc in current dir |
 | ✓ | `selection` | sel | string | global | `inclusive` | what type of selection to use |
@@ -273,10 +273,10 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `shellxquote` | sxq | string | global | `` | like 'shellquote', but include redirection |
 | ✓ | `shiftround` | sr | boolean | global | `false` | round indent to multiple of shiftwidth |
 | ✓ | `shiftwidth` | sw | number | buf | `8` | number of spaces to use for (auto)indent step |
-| ◐ | `shortmess` | shm | string | global | `ltToOCF` | list of flags, reduce length of messages |
+| ✓ | `shortmess` | shm | string | global | `ltToOCF` | list of flags, reduce length of messages |
 | ✓ | `showbreak` | sbr | string | win | `` | string to use at the start of wrapped lines |
-| ◐ | `showcmd` | sc | boolean | global | `true` | show (partial) command somewhere |
-| ◐ | `showcmdloc` | sloc | string | global | `last` | where to show (partial) command |
+| ✓ | `showcmd` | sc | boolean | global | `true` | show (partial) command somewhere |
+| ✓ | `showcmdloc` | sloc | string | global | `last` | where to show (partial) command |
 | ◐ | `showfulltag` | sft | boolean | global | `false` | show full tag pattern when completing tag |
 | ✓ | `showmatch` | sm | boolean | global | `false` | briefly jump to matching bracket if insert one |
 | ✓ | `showmode` | smd | boolean | global | `true` | message on status line to show current mode |
@@ -301,7 +301,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `startofline` | sol | boolean | global | `false` | commands move cursor to first non-blank in line |
 | ◐ | `statuscolumn` | stc | string | win | `` | custom format for the status column |
 | ✓ | `statusline` | stl | string | win | `%<%f %h%w%m%r %{% v:lua.require('vim._core.util').term_exitcode() %}%=%{% luaeval('(package.loaded[''vim.ui''] and vim.api.nvim_get_current_win() == tonumber(vim.g.actual_curwin or -1) and vim.ui.progress_status()) or '''' ')%}%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%{% luaeval('(package.loaded[''vim.diagnostic''] and next(vim.diagnostic.count()) and vim.diagnostic.status() .. '' '') or '''' ') %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}` | custom format for the status line |
-| ◐ | `suffixes` | su | string | global | `.bak,~,.o,.h,.info,.swp,.obj` | suffixes that are ignored with multiple match |
+| ✓ | `suffixes` | su | string | global | `.bak,~,.o,.h,.info,.swp,.obj` | suffixes that are ignored with multiple match |
 | ◐ | `suffixesadd` | sua | string | buf | `` | suffixes added when searching for a file |
 | ◐ | `swapfile` | swf | boolean | buf | `true` | whether to use a swapfile for a buffer |
 | ◐ | `switchbuf` | swb | string | global | `uselast` | sets behavior when switching to another buffer |
@@ -320,7 +320,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `tagstack` | tgst | boolean | global | `true` | push tags onto the tag stack |
 | ◐ | `termbidi` | tbidi | boolean | global | `false` | terminal takes care of bi-directionality |
 | ✓ | `termencoding` | tenc | string | global | `` |  |
-| ◐ | `termguicolors` | tgc | boolean | global | `false` | enable 24-bit RGB color in the TUI |
+| ✓ | `termguicolors` | tgc | boolean | global | `false` | enable 24-bit RGB color in the TUI |
 | ◐ | `termpastefilter` | tpf | string | global | `BS,HT,ESC,DEL` |  |
 | ✓ | `termsync` |  | boolean | global | `true` |  |
 | ◐ | `terse` |  | boolean | global | `false` |  |
@@ -350,29 +350,29 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ◐ | `viewdir` | vdir | string | global | `/home/caesar/.local/state/nvim/view//` | directory where to store files with :mkview |
 | ◐ | `viewoptions` | vop | string | global | `folds,cursor,curdir` | specifies what to save for :mkview |
 | ◐ | `virtualedit` | ve | string | win | `` | when to use virtual editing |
-| ◐ | `visualbell` | vb | boolean | global | `false` | use visual bell instead of beeping |
+| ✓ | `visualbell` | vb | boolean | global | `false` | use visual bell instead of beeping |
 | ◐ | `warn` |  | boolean | global | `true` | warn for shell command when buffer was changed |
 | ✓ | `whichwrap` | ww | string | global | `b,s` | allow specified keys to cross line boundaries |
 | ◐ | `wildchar` | wc | number | global | `9` | command-line character for wildcard expansion |
 | ◐ | `wildcharm` | wcm | number | global | `0` | like 'wildchar' but also works when mapped |
-| ◐ | `wildignore` | wig | string | global | `` | files matching these patterns are not completed |
-| ◐ | `wildignorecase` | wic | boolean | global | `false` | ignore case when completing file names |
-| ◐ | `wildmenu` | wmnu | boolean | global | `true` | use menu for command line completion |
-| ◐ | `wildmode` | wim | string | global | `full` | mode for 'wildchar' command-line expansion |
-| ◐ | `wildoptions` | wop | string | global | `pum,tagfile` | specifies how command line completion is done |
+| ✓ | `wildignore` | wig | string | global | `` | files matching these patterns are not completed |
+| ✓ | `wildignorecase` | wic | boolean | global | `false` | ignore case when completing file names |
+| ✓ | `wildmenu` | wmnu | boolean | global | `true` | use menu for command line completion |
+| ✓ | `wildmode` | wim | string | global | `full` | mode for 'wildchar' command-line expansion |
+| ✓ | `wildoptions` | wop | string | global | `pum,tagfile` | specifies how command line completion is done |
 | ✓ | `winaltkeys` | wak | string | global | `menu` | when the windows system handles ALT keys |
 | ✓ | `winbar` | wbr | string | win | `` |  |
 | ◐ | `winblend` | winbl | number | win | `0` |  |
-| ◐ | `winborder` |  | string | global | `` |  |
+| ✓ | `winborder` |  | string | global | `` |  |
 | ◐ | `window` | wi | number | global | `23` | nr of lines to scroll for CTRL-F and CTRL-B |
-| ◐ | `winfixbuf` | wfb | boolean | win | `false` | keep window focused on a single buffer |
+| ✓ | `winfixbuf` | wfb | boolean | win | `false` | keep window focused on a single buffer |
 | ◐ | `winfixheight` | wfh | boolean | win | `false` | keep window height when opening/closing windows |
 | ◐ | `winfixwidth` | wfw | boolean | win | `false` | keep window width when opening/closing windows |
-| ◐ | `winheight` | wh | number | global | `1` | minimum number of lines for the current window |
+| ✓ | `winheight` | wh | number | global | `1` | minimum number of lines for the current window |
 | ◐ | `winhighlight` | winhl | string | win | `` | window-local highlighting |
-| ◐ | `winminheight` | wmh | number | global | `1` | minimum number of lines for any window |
-| ◐ | `winminwidth` | wmw | number | global | `1` | minimal number of columns for any window |
-| ◐ | `winwidth` | wiw | number | global | `20` | minimal number of columns for current window |
+| ✓ | `winminheight` | wmh | number | global | `1` | minimum number of lines for any window |
+| ✓ | `winminwidth` | wmw | number | global | `1` | minimal number of columns for any window |
+| ✓ | `winwidth` | wiw | number | global | `20` | minimal number of columns for current window |
 | ✓ | `wrap` |  | boolean | win | `true` | long lines wrap and continue on the next line |
 | ✓ | `wrapmargin` | wm | number | buf | `0` | chars from the right where wrapping starts |
 | ✓ | `wrapscan` | ws | boolean | global | `true` | searches wrap around the end of the file |
