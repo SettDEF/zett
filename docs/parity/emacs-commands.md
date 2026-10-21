@@ -353,7 +353,7 @@ plugin, not the core.
 - · `buffer-face-set` Enable `buffer-face-mode', using face specs SPECS.
 - · `buffer-face-toggle` Toggle `buffer-face-mode', using face specs SPECS.
 - · `buffer-menu` Switch to the Buffer Menu.
-- · `buffer-menu-open` Start key navigation of the buffer menu.
+- ✓ `buffer-menu-open` Start key navigation of the buffer menu.
 - · `buffer-menu-other-window` Display the Buffer Menu in another window.
 - · `buffer-to-register` Store reference to BUFFER in REGISTER.
 
@@ -682,7 +682,7 @@ plugin, not the core.
 ## context
 
 - · `context-menu-mode` Toggle Context Menu mode.
-- · `context-menu-open` Start key navigation of the context menu.
+- ✓ `context-menu-open` Start key navigation of the context menu.
 
 ## cookie
 
@@ -2195,8 +2195,8 @@ plugin, not the core.
 
 ## ignore
 
-- · `ignore` Ignore ARGUMENTS, do nothing, and return nil.
-- · `ignore-preserving-kill-region` Like `ignore', but don't overwrite `last-event' if it's `kill-region'.
+- ✓ `ignore` Ignore ARGUMENTS, do nothing, and return nil.
+- ✓ `ignore-preserving-kill-region` Like `ignore', but don't overwrite `last-event' if it's `kill-region'.
 
 ## iimage
 
@@ -2851,7 +2851,7 @@ plugin, not the core.
 - · `menu-bar-mode` Toggle display of a menu bar on each frame (Menu Bar mode).
 - · `menu-bar-no-scroll-bar` Turn off scroll bars.
 - · `menu-bar-no-window-divider` Do not display window dividers.
-- · `menu-bar-open` Start key navigation of the menu bar in FRAME.
+- ✓ `menu-bar-open` Start key navigation of the menu bar in FRAME.
 - · `menu-bar-open-mouse` Open the menu bar for the menu item clicked on by the mouse.
 - · `menu-bar-options-save` Save current values of Options menu items using Custom.
 - · `menu-bar-read-lispintro` Display the Introduction to Emacs Lisp Programming in Info mode.
@@ -3037,7 +3037,7 @@ plugin, not the core.
 
 - · `mouse-appearance-menu` Show a menu for changing the default face in the current buffer.
 - · `mouse-avoidance-mode` Set Mouse Avoidance mode to MODE.
-- · `mouse-buffer-menu` Pop up a menu of buffers for selection with the mouse.
+- ✓ `mouse-buffer-menu` Pop up a menu of buffers for selection with the mouse.
 - · `mouse-delete-other-windows` Delete all windows except the one you click on.
 - · `mouse-delete-window` Delete the window you click on.
 - · `mouse-drag-and-drop-region` Move text in the region to point where mouse is dragged to.
@@ -3047,9 +3047,9 @@ plugin, not the core.
 - · `mouse-drag-drag` "Drag" the page according to a mouse drag.
 - · `mouse-drag-header-line` Change the height of a window by dragging on its header line.
 - · `mouse-drag-left-edge` Drag left edge of a frame with the mouse.
-- · `mouse-drag-mode-line` Change the height of a window by dragging on its mode line.
-- · `mouse-drag-region` Set the region to the text that the mouse is dragged over.
-- · `mouse-drag-region-rectangle` Set the region to the rectangle that the mouse is dragged over.
+- ✓ `mouse-drag-mode-line` Change the height of a window by dragging on its mode line.
+- ✓ `mouse-drag-region` Set the region to the text that the mouse is dragged over.
+- ✓ `mouse-drag-region-rectangle` Set the region to the rectangle that the mouse is dragged over.
 - · `mouse-drag-region-shift-adjust` Adjust the already active region while dragging the mouse.
 - · `mouse-drag-right-edge` Drag right edge of a frame with the mouse.
 - · `mouse-drag-secondary` Set the secondary selection to the text that the mouse is dragged over.
@@ -3058,30 +3058,30 @@ plugin, not the core.
 - · `mouse-drag-top-edge` Drag top edge of a frame with the mouse.
 - · `mouse-drag-top-left-corner` Drag top left corner of a frame with the mouse.
 - · `mouse-drag-top-right-corner` Drag top right corner of a frame with the mouse.
-- · `mouse-drag-vertical-line` Change the width of a window by dragging on a vertical line.
+- ✓ `mouse-drag-vertical-line` Change the width of a window by dragging on a vertical line.
 - · `mouse-kill` Kill the region between point and the mouse click.
 - · `mouse-kill-ring-save` Copy the region between point and the mouse click in the kill ring.
 - · `mouse-kill-secondary` Kill the text in the secondary selection.
 - · `mouse-minor-mode-menu` Show minor-mode menu for EVENT on minor modes area of the mode line.
-- · `mouse-save-then-kill` Set the region according to CLICK; the second time, kill it.
+- ✓ `mouse-save-then-kill` Set the region according to CLICK; the second time, kill it.
 - · `mouse-secondary-save-then-kill` Set the secondary selection and save it to the kill ring.
 - · `mouse-select-font` Prompt for a font name, using `x-popup-menu', and return it.
-- · `mouse-select-window` Select the window clicked on; don't move point.
+- ✓ `mouse-select-window` Select the window clicked on; don't move point.
 - · `mouse-set-font` Set the default font for the selected frame.
 - · `mouse-set-mark` Set mark at the position clicked on with the mouse.
-- · `mouse-set-point` Move point to the position clicked on with the mouse.
-- · `mouse-set-region` Set the region to the text dragged over, and copy to kill ring.
+- ✓ `mouse-set-point` Move point to the position clicked on with the mouse.
+- ✓ `mouse-set-region` Set the region to the text dragged over, and copy to kill ring.
 - · `mouse-set-secondary` Set the secondary selection to the text that the mouse is dragged over.
 - · `mouse-shift-adjust-mode` Toggle mouse shift adjustment mode.
-- · `mouse-split-window-horizontally` Select Emacs window mouse is on, then split it horizontally in half.
-- · `mouse-split-window-vertically` Select Emacs window mouse is on, then split it vertically in half.
+- ✓ `mouse-split-window-horizontally` Select Emacs window mouse is on, then split it horizontally in half.
+- ✓ `mouse-split-window-vertically` Select Emacs window mouse is on, then split it vertically in half.
 - · `mouse-start-secondary` Set one end of the secondary selection to the position clicked on.
 - · `mouse-tear-off-window` Delete the selected window, and create a new frame displaying its buffer.
 - · `mouse-wheel-global-text-scale` Increase or decrease the global font size according to the EVENT.
 - · `mouse-wheel-mode` Toggle mouse wheel support (Mouse Wheel mode).
 - · `mouse-wheel-text-scale` Adjust font size of the default face according to EVENT.
 - · `mouse-yank-at-click` Insert the last stretch of killed text at the position clicked on.
-- · `mouse-yank-primary` Insert the primary selection,
+- ✓ `mouse-yank-primary` Insert the primary selection,
 - · `mouse-yank-secondary` Insert the secondary selection at the position clicked on.
 
 ## move
@@ -3128,7 +3128,7 @@ plugin, not the core.
 
 ## mwheel
 
-- · `mwheel-scroll` Scroll up or down according to the EVENT.
+- ✓ `mwheel-scroll` Scroll up or down according to the EVENT.
 
 ## name
 
@@ -4668,8 +4668,8 @@ plugin, not the core.
 - · `toggle-debug-on-error` Toggle whether to enter Lisp debugger when an error is signaled.
 - · `toggle-debug-on-quit` Toggle whether to enter Lisp debugger when C-g is pressed.
 - · `toggle-enable-multibyte-characters` Change whether this buffer uses multibyte characters.
-- · `toggle-frame-fullscreen` Toggle fullscreen state of FRAME.
-- · `toggle-frame-maximized` Toggle maximization state of FRAME.
+- ✓ `toggle-frame-fullscreen` Toggle fullscreen state of FRAME.
+- ✓ `toggle-frame-maximized` Toggle maximization state of FRAME.
 - · `toggle-frame-tab-bar` Toggle tab bar of the selected frame.
 - · `toggle-horizontal-scroll-bar` Toggle whether or not the selected frame has horizontal scroll bars.
 - · `toggle-indicate-empty-lines` Toggle whether to indicate trailing empty lines in fringe, globally.

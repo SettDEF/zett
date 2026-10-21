@@ -2,24 +2,24 @@
 
 Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-307 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
+327 of 500 bound commands. ✓ zett has the command under the same name (`M-x`), · not yet.
 
 | | key | command |
 |---|---|---|
 | · | `<Scroll_Lock>` | `scroll-lock-mode` |
-| · | `<XF86WakeUp>` | `ignore` |
-| · | `<bottom-divider> <down-mouse-1>` | `mouse-drag-mode-line` |
-| · | `<bottom-divider> C-<mouse-2>` | `mouse-split-window-horizontally` |
+| ✓ | `<XF86WakeUp>` | `ignore` |
+| ✓ | `<bottom-divider> <down-mouse-1>` | `mouse-drag-mode-line` |
+| ✓ | `<bottom-divider> C-<mouse-2>` | `mouse-split-window-horizontally` |
 | · | `<bottom-edge> <down-mouse-1>` | `mouse-drag-bottom-edge` |
 | · | `<bottom-left-corner> <down-mouse-1>` | `mouse-drag-bottom-left-corner` |
 | · | `<bottom-right-corner> <down-mouse-1>` | `mouse-drag-bottom-right-corner` |
 | · | `<compose-last-chars>` | `compose-last-chars` |
 | · | `<delete-frame>` | `handle-delete-frame` |
 | ✓ | `<deletechar>` | `delete-forward-char` |
-| · | `<down-mouse-1>` | `mouse-drag-region` |
-| · | `<drag-mouse-1>` | `mouse-set-region` |
-| · | `<f10>` | `menu-bar-open` |
-| · | `<f11>` | `toggle-frame-fullscreen` |
+| ✓ | `<down-mouse-1>` | `mouse-drag-region` |
+| ✓ | `<drag-mouse-1>` | `mouse-set-region` |
+| ✓ | `<f10>` | `menu-bar-open` |
+| ✓ | `<f11>` | `toggle-frame-fullscreen` |
 | ✓ | `<f3>` | `kmacro-start-macro-or-insert-counter` |
 | ✓ | `<f4>` | `kmacro-end-or-call-macro` |
 | · | `<find>` | `search-forward` |
@@ -27,13 +27,13 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `<insertchar>` | `overwrite-mode` |
 | · | `<left-edge> <down-mouse-1>` | `mouse-drag-left-edge` |
 | ✓ | `<left>` | `left-char` |
-| · | `<mouse-1>` | `mouse-set-point` |
-| · | `<mouse-2>` | `mouse-yank-primary` |
-| · | `<mouse-3>` | `mouse-save-then-kill` |
-| · | `<mouse-movement>` | `ignore-preserving-kill-region` |
+| ✓ | `<mouse-1>` | `mouse-set-point` |
+| ✓ | `<mouse-2>` | `mouse-yank-primary` |
+| ✓ | `<mouse-3>` | `mouse-save-then-kill` |
+| ✓ | `<mouse-movement>` | `ignore-preserving-kill-region` |
 | · | `<pinch>` | `text-scale-pinch` |
-| · | `<right-divider> <down-mouse-1>` | `mouse-drag-vertical-line` |
-| · | `<right-divider> C-<mouse-2>` | `mouse-split-window-vertically` |
+| ✓ | `<right-divider> <down-mouse-1>` | `mouse-drag-vertical-line` |
+| ✓ | `<right-divider> C-<mouse-2>` | `mouse-split-window-vertically` |
 | · | `<right-edge> <down-mouse-1>` | `mouse-drag-right-edge` |
 | ✓ | `<right>` | `right-char` |
 | · | `<select-window>` | `handle-select-window` |
@@ -47,11 +47,11 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `<touchscreen-pinch>` | `touch-screen-pinch` |
 | · | `<touchscreen-restart-drag>` | `touch-screen-restart-drag` |
 | · | `<touchscreen-scroll>` | `touch-screen-scroll` |
-| · | `<vertical-line> <mouse-1>` | `mouse-select-window` |
+| ✓ | `<vertical-line> <mouse-1>` | `mouse-select-window` |
 | · | `<vertical-scroll-bar> <mouse-1>` | `scroll-bar-toolkit-scroll` |
 | ✓ | `C-9` | `digit-argument` |
-| · | `C-<down-mouse-1>` | `mouse-buffer-menu` |
-| · | `C-<f10>` | `buffer-menu-open` |
+| ✓ | `C-<down-mouse-1>` | `mouse-buffer-menu` |
+| ✓ | `C-<f10>` | `buffer-menu-open` |
 | ✓ | `C-<left>` | `left-word` |
 | ✓ | `C-<right>` | `right-word` |
 | · | `C-<wheel-up>` | `mouse-wheel-text-scale` |
@@ -60,7 +60,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-M-.` | `xref-find-apropos` |
 | ✓ | `C-M-/` | `dabbrev-completion` |
 | ✓ | `C-M-<backspace>` | `backward-kill-sexp` |
-| · | `C-M-<down-mouse-1>` | `mouse-drag-region-rectangle` |
+| ✓ | `C-M-<down-mouse-1>` | `mouse-drag-region-rectangle` |
 | · | `C-M-<wheel-up>` | `mouse-wheel-global-text-scale` |
 | ✓ | `C-M-@` | `mark-sexp` |
 | ✓ | `C-M-S-l` | `recenter-other-window` |
@@ -443,12 +443,12 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `M-<down-mouse-1>` | `mouse-drag-secondary` |
 | · | `M-<drag-mouse-1>` | `mouse-set-secondary` |
 | ✓ | `M-<end>` | `end-of-buffer-other-window` |
-| · | `M-<f10>` | `toggle-frame-maximized` |
+| ✓ | `M-<f10>` | `toggle-frame-maximized` |
 | · | `M-<mouse-1>` | `mouse-start-secondary` |
 | · | `M-<mouse-2>` | `mouse-yank-secondary` |
 | · | `M-<mouse-3>` | `mouse-secondary-save-then-kill` |
 | ✓ | `M-<prior>` | `scroll-other-window-down` |
-| · | `M-<wheel-right>` | `mwheel-scroll` |
+| ✓ | `M-<wheel-right>` | `mwheel-scroll` |
 | ✓ | `M-=` | `count-words-region` |
 | ✓ | `M->` | `end-of-buffer` |
 | ✓ | `M-?` | `xref-find-references` |
@@ -504,5 +504,5 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `M-~` | `not-modified` |
 | ✓ | `RET` | `newline` |
 | · | `S-<down-mouse-1>` | `mouse-appearance-menu` |
-| · | `S-<f10>` | `context-menu-open` |
+| ✓ | `S-<f10>` | `context-menu-open` |
 | · | `SPC..~` | `self-insert-command` |
