@@ -858,6 +858,30 @@ impl App {
     }
 }
 
+impl App {
+    /// The mouse over a help page: a `key` or `name` (in backticks) under it gets zash's quick
+    /// underline, gone again when the mouse leaves it.
+    pub(crate) fn help_hover(&mut self, p: Option<zett_core::Pos>, row: u16) {
+        let d = &self.docs[self.cur];
+        let span = p.filter(|_| crate::draw::fx_draws() && d.name.starts_with("help: ") && d.left == 0).and_then(|p| {
+            let line: Vec<char> = d.ed.buf.line(p.line).chars().filter(|c| *c != '\n').collect();
+            let open = (0..p.col.min(line.len())).rev().find(|&i| line[i] == '`')?;
+            let close = (p.col..line.len()).find(|&i| line[i] == '`')?;
+            // inside one pair: an even number of backticks before the opening one
+            let before = line[..open].iter().filter(|c| **c == '`').count();
+            (before % 2 == 0 && close > open + 1 && !line[open + 1..close].iter().any(|c| *c == '\t')).then(|| (p.line, open + 1, line[open + 1..close].iter().collect::<String>()))
+        });
+        self.fx_hover = span.map(|(line, start, text)| crate::draw::FxMark {
+            x: self.area.x + self.gutter + start as u16,
+            y: row,
+            key: format!("hover:{}:{line}:{start}", self.docs[self.cur].name),
+            text,
+            since: Instant::now(),
+            spec: "underline;color=accent;draw=250ms",
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

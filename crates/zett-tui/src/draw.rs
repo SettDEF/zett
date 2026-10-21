@@ -291,7 +291,25 @@ impl App {
         // H M L and gm need the lines and columns shown
         // a section just found: drawn by zash (a hand-drawn line under it) where it can, else it pulses
         let (flash, fx) = (self.flash, fx_draws());
-        let mut fx_mark: Option<(u16, u16, String, Instant)> = None;
+        let mut fx_marks: Vec<FxMark> = Vec::new();
+        // help pages: their headings drawn under (once, then kept), a found section circled
+        let help = fx && self.docs[di].name.starts_with("help: ");
+        // the headings (outside code blocks), as the outline reads them
+        let heads: std::collections::HashSet<usize> = if help {
+            let mut fence = false;
+            (0..self.docs[di].ed.buf.len_lines())
+                .filter(|&l| {
+                    let t = self.docs[di].ed.buf.line(l);
+                    if t.trim_start().starts_with("```") {
+                        fence = !fence;
+                        return false;
+                    }
+                    !fence && t.starts_with('#')
+                })
+                .collect()
+        } else {
+            Default::default()
+        };
         // diff mode: filler lines and the changed lines' groups (diff.rs)
         let dview = self.diff_view(self.drawing_win, di);
         // the signs placed in it (:sign), by line
@@ -531,9 +549,25 @@ impl App {
                 out.push(Line::from(if gutter > 0 { Span::styled(gut(&format!("{} ", show.fill.eob), gutter as usize), hl::hl("EndOfBuffer")) } else { Span::styled(show.fill.eob.to_string(), hl::hl("EndOfBuffer")) }));
                 continue;
             }
-            if let Some(fl) = flash.filter(|f| fx && f.0 == di && f.1 == ln) {
-                let t: String = d.ed.buf.line(ln).chars().filter(|c| *c != '\n').skip(d.left).take(a.width.saturating_sub(gutter) as usize).collect();
-                fx_mark = Some((a.x + gutter, a.y + out.len() as u16, t, fl.3));
+            let shown_text = || -> String { d.ed.buf.line(ln).chars().filter(|c| *c != '\n').skip(d.left).take(a.width.saturating_sub(gutter) as usize).collect() };
+            let flashed = flash.filter(|f| fx && f.0 == di && f.1 == ln);
+            if let Some(fl) = flashed {
+                // a whole topic's title: drawn under; a section jumped to: a loop round it
+                let spec = if fl.1 == 0 && fl.2 == 1 { "underline;color=accent;draw=700ms" } else { "scribble;color=accent;turns=1.15;wobble=0.08;draw=900ms" };
+                // a heading: its words, the # left out
+                let t = shown_text();
+                let skip = if heads.contains(&ln) && d.left == 0 { t.chars().take_while(|c| *c == '#' || *c == ' ').count() } else { 0 };
+                let text: String = t.chars().skip(skip).collect::<String>().trim_end().to_string();
+                fx_marks.push(FxMark { x: a.x + gutter + skip as u16, y: a.y + out.len() as u16, text, key: format!("found:{}:{ln}", d.name), since: fl.3, spec });
+            } else if help && d.left == 0 && heads.contains(&ln) {
+                // a heading: the words drawn under, the # left out
+                let t = shown_text();
+                let hashes = t.chars().take_while(|c| *c == '#' || *c == ' ').count();
+                let words: String = t.chars().skip(hashes).collect();
+                if !words.trim().is_empty() {
+                    let key = format!("head:{}:{ln}", d.name);
+                    fx_marks.push(FxMark { x: a.x + gutter + hashes as u16, y: a.y + out.len() as u16, text: words.trim_end().to_string(), key, since: Instant::now(), spec: "underline;color=accent;draw=600ms" });
+                }
             }
             // the cursor line's number stands out with cursorline (cursorlineopt number or both)
             let num_style = if ln == c.line && cul && show.cul_number { hl::hl("CursorLineNr") } else { hl::hl("LineNr") };
@@ -825,9 +859,7 @@ impl App {
             }
         }
         f.render_widget(Paragraph::new(out), a);
-        if fx_mark.is_some() {
-            self.fx_mark = fx_mark;
-        }
+        self.fx_marks.extend(fx_marks);
         if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
             let x = a.x + gutter + (ccol.saturating_sub(d.left + starts[crow]) + if crow > 0 { cur_cont } else { 0 }) as u16;
             let y = a.y + cursor_row as u16;
@@ -966,4 +998,15 @@ pub(crate) fn fx_draws() -> bool {
         }
         ok
     })
+}
+
+/// A mark for zash to draw over cells (OSC 7733;fx): where, the text it is drawn on, what it is
+/// (kept by `key` across frames: drawn once, then shown drawn while it stays), when it began.
+pub(crate) struct FxMark {
+    pub x: u16,
+    pub y: u16,
+    pub text: String,
+    pub key: String,
+    pub since: Instant,
+    pub spec: &'static str,
 }

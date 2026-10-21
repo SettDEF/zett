@@ -390,11 +390,15 @@ struct App {
     /// each scope's last change (global, tab, window) for :cd -
     global_dir: PathBuf,
     prev_dirs: [Option<PathBuf>; 3],
-    /// a found place zash draws a line under (x, y, its text, the flash it is for), and the flash sent
-    fx_mark: Option<(u16, u16, String, Instant)>,
-    /// the mark drawn (its flash and place), and the place seen last with the time it was first seen there
-    fx_sent: Option<(Instant, u16, u16)>,
-    fx_seen: Option<(u16, u16, Instant)>,
+    /// zash's drawn marks (draw.rs FxMark): this frame's, where each was sent last, when each was
+    /// first shown (it draws once, then shows drawn), the view they were sent for (buffer, top,
+    /// cursor line, since when), and the one under the mouse (sent, to take away when it leaves)
+    fx_marks: Vec<crate::draw::FxMark>,
+    fx_sent: std::collections::HashMap<String, (u16, u16)>,
+    fx_first: std::collections::HashMap<String, Instant>,
+    fx_view: Option<(usize, usize, usize, Instant)>,
+    fx_hover: Option<crate::draw::FxMark>,
+    fx_hover_sent: Option<(u16, u16, u16, String)>,
     /// the argument list and the one in use; the last :! command; :match per window; :redir under way
     args: Vec<String>,
     arg_idx: usize,
@@ -636,9 +640,12 @@ impl App {
             tag_stack: Vec::new(),
             global_dir: root.clone(),
             prev_dirs: [None, None, None],
-            fx_mark: None,
-            fx_sent: None,
-            fx_seen: None,
+            fx_marks: Vec::new(),
+            fx_sent: Default::default(),
+            fx_first: Default::default(),
+            fx_view: None,
+            fx_hover: None,
+            fx_hover_sent: None,
             args: paths.iter().filter(|p| !p.is_dir()).map(|p| p.display().to_string()).collect(),
             arg_idx: 0,
             last_bang: None,
@@ -815,19 +822,18 @@ impl App {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::BeginSynchronizedUpdate);
             }
             let done = term.draw(|f| self.draw(f))?;
-            // a found place: its cells written again, colours and all, inside zash's hand-drawn
-            // underline (draw.rs fx_draws); once its place has stayed for 150 ms (the jump scrolls the
-            // view, more than once), and again only if it moves: the cells stay, and the line with them
-            let mark = self.fx_mark.take();
-            if let Some((x, y, _, _)) = &mark {
-                if self.fx_seen.is_none_or(|s| (s.0, s.1) != (*x, *y)) {
-                    self.fx_seen = Some((*x, *y, Instant::now()));
-                }
+            // zash's hand-drawn marks (draw.rs FxMark): their cells written again, colours and all,
+            // inside the effect. Once the view has stayed for 150 ms (a jump scrolls it more than once);
+            // a mark keeps its first time, so one already drawn shows drawn (since=) when sent again
+            let marks = std::mem::take(&mut self.fx_marks);
+            let view = (self.cur, self.docs[self.cur].top, self.docs[self.cur].ed.cursor().line);
+            if self.fx_view.is_none_or(|v| (v.0, v.1, v.2) != view) {
+                self.fx_view = Some((view.0, view.1, view.2, Instant::now()));
+                // the cells were written again: what was on them is gone
+                self.fx_sent.clear();
             }
-            let settled = self.fx_seen.is_some_and(|s| s.2.elapsed() >= Duration::from_millis(150));
-            if let Some((x, y, text, at)) = mark.filter(|m| settled && self.fx_sent != Some((m.3, m.0, m.1))) {
-                use std::io::Write;
-                let w = ratatui::text::Line::from(text.as_str()).width() as u16;
+            let settled = self.fx_view.is_some_and(|v| v.3.elapsed() >= Duration::from_millis(150));
+            let cells_of = |x: u16, y: u16, w: u16| {
                 let mut cells = String::new();
                 for cx in x..x.saturating_add(w) {
                     if let Some(c) = done.buffer.cell((cx, y)) {
@@ -835,10 +841,37 @@ impl App {
                         cells.push_str(c.symbol());
                     }
                 }
+                cells
+            };
+            let mut out_fx = String::new();
+            if settled {
+                for m in &marks {
+                    if self.fx_sent.get(&m.key) == Some(&(m.x, m.y)) {
+                        continue;
+                    }
+                    let first = *self.fx_first.entry(m.key.clone()).or_insert(m.since.min(Instant::now()));
+                    let since = first.elapsed().as_millis();
+                    let w = ratatui::text::Line::from(m.text.as_str()).width() as u16;
+                    out_fx.push_str(&format!("\x1b[{};{}H\x1b]7733;fx;{};since={since}\x1b\\{}\x1b[0m\x1b]7733;fx;end\x1b\\", m.y + 1, m.x + 1, m.spec, cells_of(m.x, m.y, w)));
+                    self.fx_sent.insert(m.key.clone(), (m.x, m.y));
+                }
+            }
+            // under the mouse: drawn while it is there, the plain cells back when it leaves
+            let hover = self.fx_hover.as_ref().map(|h| (h.x, h.y, ratatui::text::Line::from(h.text.as_str()).width() as u16, h.key.clone()));
+            if hover != self.fx_hover_sent {
+                if let Some((x, y, w, _)) = self.fx_hover_sent.take() {
+                    out_fx.push_str(&format!("\x1b[{};{}H{}\x1b[0m", y + 1, x + 1, cells_of(x, y, w)));
+                }
+                if let (Some((x, y, w, _)), Some(h)) = (&hover, &self.fx_hover) {
+                    out_fx.push_str(&format!("\x1b[{};{}H\x1b]7733;fx;{}\x1b\\{}\x1b[0m\x1b]7733;fx;end\x1b\\", y + 1, x + 1, h.spec, cells_of(*x, *y, *w)));
+                }
+                self.fx_hover_sent = hover;
+            }
+            if !out_fx.is_empty() {
+                use std::io::Write;
                 let mut out = std::io::stdout();
-                let _ = write!(out, "\x1b7\x1b[{};{}H\x1b]7733;fx;underline;color=accent;draw=700ms\x1b\\{cells}\x1b[0m\x1b]7733;fx;end\x1b\\\x1b8", y + 1, x + 1);
+                let _ = write!(out, "\x1b7{out_fx}\x1b8");
                 let _ = out.flush();
-                self.fx_sent = Some((at, x, y));
             }
             if sync {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EndSynchronizedUpdate);

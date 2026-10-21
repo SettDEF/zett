@@ -668,6 +668,10 @@ impl App {
         let step = |k: &str, def: usize| ms.split(',').find_map(|p| p.strip_prefix(k)?.strip_prefix(':')?.parse().ok()).unwrap_or(def);
         let vim = !self.docs[self.cur].ed.is_emacs();
         let visual = matches!(self.docs[self.cur].ed.mode(), Mode::Visual | Mode::VisualLine | Mode::VisualBlock);
+        if m.kind == MouseEventKind::Moved {
+            let p = pos_at(self, m.column, m.row);
+            return self.help_hover(p, m.row);
+        }
         match m.kind {
             MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
                 let n = step("ver", 3);
