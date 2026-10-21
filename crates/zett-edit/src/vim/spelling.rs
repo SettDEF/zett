@@ -66,7 +66,9 @@ impl Editor {
         let Some((a, b)) = self.spell_word() else { return };
         let word = self.buf.slice(a, b);
         let n = self.count.take();
-        let list = crate::spell::with(|s| if s.available() { s.suggest(&word, 25) } else { Vec::new() });
+        // spellsuggest: how many ("best,9"; Vim lists 25 when no number is given)
+        let many = self.opt("spellsuggest").unwrap_or("best").split(',').find_map(|p| p.parse::<usize>().ok()).unwrap_or(25);
+        let list = crate::spell::with(|s| if s.available() { s.suggest(&word, many) } else { Vec::new() });
         if list.is_empty() {
             return self.vim.requests.push(Request::Message(format!("Sorry, no suggestions for \"{word}\"")));
         }

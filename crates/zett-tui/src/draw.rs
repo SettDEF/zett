@@ -1,7 +1,7 @@
 //! Drawing: the buffers, their text and line numbers, the tab line, the : line, the which-key menu.
 
 use super::*;
-use crate::display::{fold_cells, gut, Signs, TAB_FILL, TAB_FIRST, TAB_LAST};
+use crate::display::{ends_sentence, fold_cells, gut, spell_marks, Signs, TAB_FILL, TAB_FIRST, TAB_LAST};
 
 impl App {
     // ── drawing ──
@@ -202,6 +202,10 @@ impl App {
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
         SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
         let show = self.display(di);
+        // spell: only when on and a dictionary is there (the first use loads it)
+        let spell_on = self.flag(di, "spell") && zett_edit::spell::with(|s| s.available());
+        let camel = self.setting(di, "spelloptions").split(',').any(|o| o == "camel");
+        let capcheck = !self.setting(di, "spellcapcheck").is_empty();
         let lc = show.list.clone().unwrap_or_default();
         // showmatch: in insert mode, right after a closing bracket, its pair stands out
         let paren = (self.docs[di].ed.mode() == zett_edit::Mode::Insert && self.flag(di, "showmatch")).then(|| self.docs[di].ed.match_before_cursor()).flatten();
@@ -480,6 +484,8 @@ impl App {
                 (p >= ls && p < ls + body.chars().count()).then(|| screen_col(&line_text, p - ls))
             });
             let cursorcol = show.cursorcolumn && focused && ln != c.line;
+            // spell: misspelled words (SpellBad), a sentence starting with a small letter (SpellCap)
+            let (bad, cap) = if spell_on { spell_marks(&line_text, camel, capcheck, ln > 0 && ends_sentence(&d.ed.buf.line(ln - 1))) } else { (Vec::new(), Vec::new()) };
             for (st, text) in d.spans(ln, ss, &hl) {
                 for ch in text.chars() {
                     if wrap || (x >= d.left && x < d.left + width) {
@@ -504,6 +510,11 @@ impl App {
                         }
                         if cursorcol && x == ccol {
                             s = s.patch(hl::hl("CursorColumn"));
+                        }
+                        if bad.iter().any(|&(a, b)| x >= a && x < b) {
+                            s = s.add_modifier(Modifier::UNDERLINED).underline_color(Color::Indexed(1));
+                        } else if cap.iter().any(|&(a, b)| x >= a && x < b) {
+                            s = s.add_modifier(Modifier::UNDERLINED).underline_color(Color::Indexed(4));
                         }
                         if paren_col == Some(x) {
                             s = s.patch(hl::hl("MatchParen"));

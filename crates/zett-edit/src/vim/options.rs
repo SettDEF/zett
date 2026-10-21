@@ -12,7 +12,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "selection", "report", "modifiable", "textwidth", "wrapmargin", "formatoptions", "quoteescape", "paragraphs",
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
-    "foldopen", "foldclose",
+    "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions",
 ];
 
 impl Editor {
@@ -20,6 +20,12 @@ impl Editor {
     pub fn set_opt(&mut self, name: &str, value: &str) {
         if name == "iskeyword" {
             self.vim.kw = parse_iskeyword(value);
+        }
+        // the spell checker is shared: it takes the languages and the word file from here
+        match name {
+            "spelllang" => crate::spell::set_lang(value),
+            "spellfile" => crate::spell::set_file(value),
+            _ => {}
         }
         self.vim.opts.insert(name.to_string(), value.to_string());
     }

@@ -185,3 +185,44 @@ pub(crate) fn gut(s: &str, w: usize) -> String {
     let n = s.chars().count();
     if n >= w { s.chars().skip(n - w).collect() } else { format!("{}{s}", " ".repeat(w - n)) }
 }
+
+/// The line ends a sentence (. ! ? and maybe a closing quote or bracket): the next starts big.
+pub(crate) fn ends_sentence(line: &str) -> bool {
+    let t = line.trim_end().trim_end_matches(['"', '\'', ')', ']']);
+    t.ends_with(['.', '!', '?'])
+}
+
+/// Spelling marks in screen columns: misspelled words, and with `capcheck` words starting a
+/// sentence (after . ! ?, or at the line start when the line before ended one) with a small letter.
+pub(crate) fn spell_marks(line: &str, camel: bool, capcheck: bool, starts_sentence: bool) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+    let body = line.trim_end_matches('\n');
+    let bad = zett_edit::spell::with(|s| s.bad_in(body, camel));
+    let mut cap = Vec::new();
+    if capcheck {
+        let cs: Vec<char> = body.chars().collect();
+        let mut after_end = starts_sentence;
+        let mut i = 0;
+        while i < cs.len() {
+            let c = cs[i];
+            if c.is_alphabetic() {
+                let a = i;
+                while i < cs.len() && cs[i].is_alphabetic() {
+                    i += 1;
+                }
+                if after_end && c.is_lowercase() {
+                    cap.push((a, i));
+                }
+                after_end = false;
+                continue;
+            }
+            if matches!(c, '.' | '!' | '?') {
+                after_end = cs.get(i + 1).is_none_or(|n| n.is_whitespace() || matches!(n, '"' | '\'' | ')' | ']'));
+            } else if !c.is_whitespace() && !matches!(c, '"' | '\'' | ')' | ']') {
+                after_end = false;
+            }
+            i += 1;
+        }
+    }
+    let to_screen = |v: Vec<(usize, usize)>| v.into_iter().map(|(a, b)| (crate::screen_col(line, a), crate::screen_col(line, b))).collect();
+    (to_screen(bad), to_screen(cap))
+}

@@ -67,6 +67,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "equalalways", "eadirection",
     "readonly", "modified", "modeline", "modelines", "modelineexpr",
     "mouse", "mousescroll", "mousetime", "mousemodel",
+    "spell", "spellcapcheck",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 

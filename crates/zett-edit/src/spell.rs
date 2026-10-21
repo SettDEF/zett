@@ -15,6 +15,8 @@ pub struct Spell {
     // zG zW: for this session only
     session_good: HashSet<String>,
     session_wrong: HashSet<String>,
+    /// spellfile: where zg and zw write (None: the language's .add file)
+    file: Option<PathBuf>,
 }
 
 fn dir() -> PathBuf {
@@ -22,9 +24,22 @@ fn dir() -> PathBuf {
     PathBuf::from(std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{home}/.local/share"))).join("zett/spell")
 }
 
+static S: OnceLock<Mutex<Spell>> = OnceLock::new();
+/// spelllang and spellfile as last set: the checker loads them when first used, not before
+static WANT: Mutex<(String, String)> = Mutex::new((String::new(), String::new()));
+
 fn spell() -> &'static Mutex<Spell> {
-    static S: OnceLock<Mutex<Spell>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(Spell::load(&std::env::var("ZETT_SPELLLANG").unwrap_or_else(|_| "en_US".into()))))
+    S.get_or_init(|| {
+        let (lang, file) = WANT.lock().unwrap().clone();
+        let lang = if lang.is_empty() { std::env::var("ZETT_SPELLLANG").unwrap_or_else(|_| "en_US".into()) } else { lang };
+        let mut s = Spell::load(&lang);
+        if !file.is_empty() {
+            s.file = Some(PathBuf::from(file));
+            s.good.clear();
+            s.read_add();
+        }
+        Mutex::new(s)
+    })
 }
 
 /// Works with the spell checker (loaded on first use).
@@ -33,7 +48,8 @@ pub fn with<R>(f: impl FnOnce(&mut Spell) -> R) -> R {
 }
 
 impl Spell {
-    pub fn load(lang: &str) -> Spell {
+    /// The dictionaries of `langs` ("en_us,de": Vim's names; hunspell's en_US is found too).
+    pub fn load(langs: &str) -> Spell {
         let mut dict = HashSet::new();
         let read = |p: PathBuf, dict: &mut HashSet<String>| {
             if let Ok(t) = std::fs::read_to_string(&p) {
@@ -46,28 +62,48 @@ impl Spell {
                 }
             }
         };
-        for p in [dir().join(format!("{lang}.dic")), PathBuf::from(format!("/usr/share/hunspell/{lang}.dic")), dir().join(format!("{lang}.words")), PathBuf::from("/usr/share/dict/words")] {
-            read(p, &mut dict);
+        for lang in langs.split(',').map(str::trim).filter(|l| !l.is_empty()) {
+            let hun = match lang.split_once('_') {
+                Some((a, b)) => format!("{a}_{}", b.to_uppercase()),
+                None => lang.to_string(),
+            };
+            let mut names = vec![lang.to_string()];
+            if hun != lang {
+                names.push(hun);
+            }
+            for n in names {
+                for p in [dir().join(format!("{n}.dic")), PathBuf::from(format!("/usr/share/hunspell/{n}.dic")), dir().join(format!("{n}.words"))] {
+                    read(p, &mut dict);
+                }
+            }
+            if lang.starts_with("en") {
+                read(PathBuf::from("/usr/share/dict/words"), &mut dict);
+            }
         }
-        let mut s = Spell { lang: lang.to_string(), dict, good: HashSet::new(), wrong: HashSet::new(), session_good: HashSet::new(), session_wrong: HashSet::new() };
-        if let Ok(t) = std::fs::read_to_string(s.add_file()) {
+        let mut s = Spell { lang: langs.to_string(), dict, good: HashSet::new(), wrong: HashSet::new(), session_good: HashSet::new(), session_wrong: HashSet::new(), file: None };
+        s.read_add();
+        s
+    }
+
+    /// The user's own good and wrong words (zg zw), from the add file.
+    fn read_add(&mut self) {
+        if let Ok(t) = std::fs::read_to_string(self.add_file()) {
             for l in t.lines().map(str::trim).filter(|l| !l.is_empty()) {
                 match l.strip_suffix("/!") {
-                    Some(w) => s.wrong.insert(w.to_lowercase()),
-                    None => s.good.insert(l.to_lowercase()),
+                    Some(w) => self.wrong.insert(w.to_lowercase()),
+                    None => self.good.insert(l.to_lowercase()),
                 };
             }
         }
-        s
     }
 
     /// A spell checker over these words alone (tests).
     pub fn from_words(words: &[&str]) -> Spell {
-        Spell { lang: "test".into(), dict: words.iter().map(|w| w.to_lowercase()).collect(), good: HashSet::new(), wrong: HashSet::new(), session_good: HashSet::new(), session_wrong: HashSet::new() }
+        Spell { lang: "test".into(), dict: words.iter().map(|w| w.to_lowercase()).collect(), good: HashSet::new(), wrong: HashSet::new(), session_good: HashSet::new(), session_wrong: HashSet::new(), file: None }
     }
 
     fn add_file(&self) -> PathBuf {
-        dir().join(format!("{}.add", self.lang.split('_').next().unwrap_or("en")))
+        self.file.clone().unwrap_or_else(|| dir().join(format!("{}.add", self.lang.split([',', '_']).next().unwrap_or("en"))))
     }
 
     /// There is a dictionary to check against.
@@ -151,6 +187,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bad_words_of_a_line() {
+        let s = Spell::from_words(&["the", "quick", "fox", "file", "name"]);
+        assert_eq!(s.bad_in("the qiuck fox", false), vec![(4, 9)]);
+        assert_eq!(s.bad_in("x2 foo_bar fileName", false), vec![(11, 19)], "names with digits or _ are not words");
+        assert!(s.bad_in("fileName", true).is_empty(), "spelloptions=camel checks each part");
+    }
+
+    #[test]
     fn stems_lists_and_suggestions() {
         let mut s = Spell::from_words(&["house", "walk", "happy", "city", "the", "quick"]);
         assert!(s.ok("houses") && s.ok("walked") && s.ok("walking") && s.ok("cities") && s.ok("The"));
@@ -163,5 +207,87 @@ mod tests {
         assert!(!s.ok("zett"));
         s.mark("walk", false, true, false);
         assert!(!s.ok("walk"), "marked wrong wins over the dictionary");
+    }
+}
+
+
+/// spelllang: the languages to check against ("en_us,de"); loaded again only when they change, and
+/// not at all until spelling is used.
+pub fn set_lang(langs: &str) {
+    let langs = langs.trim();
+    {
+        let mut w = WANT.lock().unwrap();
+        if w.0 == langs {
+            return;
+        }
+        w.0 = langs.to_string();
+    }
+    if let Some(m) = S.get() {
+        let mut s = m.lock().unwrap();
+        let file = s.file.clone();
+        *s = Spell::load(if langs.is_empty() { "en_US" } else { langs });
+        s.file = file;
+        s.good.clear();
+        s.read_add();
+    }
+}
+
+/// spellfile: where zg and zw keep words (empty: ~/.local/share/zett/spell/LANG.add).
+pub fn set_file(path: &str) {
+    let path = path.split(',').next().unwrap_or("").trim();
+    {
+        let mut w = WANT.lock().unwrap();
+        if w.1 == path {
+            return;
+        }
+        w.1 = path.to_string();
+    }
+    if let Some(m) = S.get() {
+        let mut s = m.lock().unwrap();
+        s.file = (!path.is_empty()).then(|| PathBuf::from(path));
+        s.good.clear();
+        s.wrong.clear();
+        s.read_add();
+    }
+}
+impl Spell {
+    /// The misspelled words of a line, as character columns (start, end); with `camel`
+    /// (spelloptions=camel) each part of a CamelCase word is checked alone.
+    pub fn bad_in(&self, line: &str, camel: bool) -> Vec<(usize, usize)> {
+        let cs: Vec<char> = line.chars().collect();
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < cs.len() {
+            if !cs[i].is_alphabetic() {
+                i += 1;
+                continue;
+            }
+            let a = i;
+            while i < cs.len() && (cs[i].is_alphabetic() || (cs[i] == '\'' && cs.get(i + 1).is_some_and(|c| c.is_alphabetic()))) {
+                i += 1;
+            }
+            // a word glued to digits or an underscore is a name, not a word
+            if cs.get(i).is_some_and(|c| c.is_ascii_digit() || *c == '_') || (a > 0 && (cs[a - 1].is_ascii_digit() || cs[a - 1] == '_')) {
+                continue;
+            }
+            let mut parts = vec![(a, i)];
+            if camel {
+                parts = Vec::new();
+                let mut s = a;
+                for j in a + 1..i {
+                    if cs[j].is_uppercase() && cs[j - 1].is_lowercase() {
+                        parts.push((s, j));
+                        s = j;
+                    }
+                }
+                parts.push((s, i));
+            }
+            for (x, y) in parts {
+                if !self.ok(&cs[x..y].iter().collect::<String>()) {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
     }
 }
