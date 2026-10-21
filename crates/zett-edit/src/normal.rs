@@ -24,11 +24,13 @@ impl Editor {
                     return;
                 }
             }
-            if k.code == Code::Char('r') {
+            if k.code == Code::Char('r') && self.prefix.is_none() {
                 let n = self.take_count();
                 for _ in 0..n {
                     self.redo_once();
                 }
+            } else {
+                self.vim_unknown();
             }
             return;
         }
@@ -53,7 +55,7 @@ impl Editor {
                 }
                 Code::Backspace => return self.normal_key(Key::ctrl('h')),
                 Code::Delete => 'x',
-                _ => return,
+                _ => return self.vim_unknown(),
             };
             return self.normal_key(Key::ch(mapped));
         };
@@ -83,6 +85,7 @@ impl Editor {
                 }
                 _ => {
                     if !self.vim_prefixed(p, c) {
+                        self.vim.unknown += 1;
                         self.count = None;
                         self.op = None;
                     }
@@ -101,6 +104,10 @@ impl Editor {
             return;
         }
 
+        // an operator waits for a motion: anything else cancels it (as Vim; do and dp are diff commands)
+        if self.vim_op_refuses(c) {
+            return;
+        }
         let line = self.cur_line();
         match c {
             // motions
@@ -227,7 +234,7 @@ impl Editor {
 
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
             _ if self.vim_more(c) => {}
-            _ => { self.count = None; self.op = None; }
+            _ => self.vim_unknown(),
         }
     }
 

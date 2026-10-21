@@ -7,6 +7,10 @@ impl Editor {
 
     pub(crate) fn text_object_key(&mut self, inner: bool, obj: char) {
         let Some((s, e, lines)) = self.text_object(inner, obj) else {
+            // an object zett does not know is a key no command took; one not found here just cancels
+            if !"wW\"'`()b[]{}B<>pst".contains(obj) {
+                return self.vim_unknown();
+            }
             self.op = None;
             self.count = None;
             return;
@@ -37,6 +41,8 @@ impl Editor {
             '{' | '}' | 'B' => self.bracket_object(inner, '{', '}'),
             '<' | '>' => self.bracket_object(inner, '<', '>'),
             'p' => self.paragraph_object(inner),
+            's' => self.sentence_object(inner),
+            't' => self.tag_object(inner),
             _ => None,
         }
     }
@@ -215,4 +221,72 @@ impl Editor {
         }
     }
 
+}
+
+impl Editor {
+    /// `is` / `as`: the sentence around the cursor (`as` with the blanks after it).
+    pub(crate) fn sentence_object(&self, inner: bool) -> Option<(usize, usize, bool)> {
+        let n = self.buf.len_chars();
+        if n == 0 {
+            return None;
+        }
+        let ends = |e: &Self, k: usize| e.char(k).is_some_and(|c| matches!(c, '.' | '!' | '?')) && e.char(k + 1).is_none_or(char::is_whitespace);
+        let para = |e: &Self, k: usize| e.char(k) == Some('\n') && e.char(k + 1) == Some('\n');
+        let mut s = self.cursor.min(n - 1);
+        while s > 0 && !ends(self, s - 1) && !para(self, s - 1) {
+            s -= 1;
+        }
+        while s < n && self.char(s).is_some_and(char::is_whitespace) {
+            s += 1;
+        }
+        let mut e = self.cursor.max(s);
+        while e < n && !ends(self, e) && !para(self, e) {
+            e += 1;
+        }
+        let mut e = (e + 1).min(n);
+        if !inner {
+            while e < n && self.char(e).is_some_and(|c| c == ' ' || c == '\t') {
+                e += 1;
+            }
+        }
+        (e > s).then_some((s, e, false))
+    }
+
+    /// `it` / `at`: the XML/HTML tag pair around the cursor (inner: what is between them).
+    pub(crate) fn tag_object(&self, inner: bool) -> Option<(usize, usize, bool)> {
+        let text: Vec<char> = self.buf.text().chars().collect();
+        let at = self.cursor;
+        // each opening tag before the cursor, nearest first, whose closing tag comes after it
+        let mut i = at.min(text.len().saturating_sub(1));
+        loop {
+            if text.get(i) == Some(&'<') && text.get(i + 1).is_some_and(|c| c.is_alphabetic()) {
+                let name: String = text[i + 1..].iter().take_while(|c| c.is_alphanumeric() || **c == '-' || **c == ':').collect();
+                let open_end = (i..text.len()).find(|&k| text[k] == '>')?;
+                if text[open_end.saturating_sub(1)] != '/' {
+                    // the matching close, counting nested tags of the same name
+                    let (open_pat, close_pat): (Vec<char>, Vec<char>) = (format!("<{name}").chars().collect(), format!("</{name}>").chars().collect());
+                    let mut depth = 1;
+                    let mut k = open_end + 1;
+                    while k < text.len() {
+                        if text[k..].starts_with(&close_pat) {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        } else if text[k..].starts_with(&open_pat) && text.get(k + open_pat.len()).is_some_and(|c| !c.is_alphanumeric()) {
+                            depth += 1;
+                        }
+                        k += 1;
+                    }
+                    if depth == 0 && k + close_pat.len() > at {
+                        return Some(if inner { (open_end + 1, k, false) } else { (i, k + close_pat.len(), false) });
+                    }
+                }
+            }
+            if i == 0 {
+                return None;
+            }
+            i -= 1;
+        }
+    }
 }

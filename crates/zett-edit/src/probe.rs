@@ -64,58 +64,7 @@ pub fn expand(written: &str, tag: &str) -> String {
     out
 }
 
-impl Editor {
-    /// Everything a key could change, as one comparable string.
-    fn probe_state(&self) -> String {
-        format!(
-            "{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{}|{:?}|{:?}",
-            self.buf.text(),
-            self.cursor,
-            self.mode,
-            self.count,
-            self.op,
-            self.op_count,
-            self.prefix,
-            self.reg,
-            self.undo.cur,
-            self.undo.nodes.len(),
-            self.last_find,
-            self.mark,
-            self.last_search,
-            self.isearch.is_some(),
-            self.view,
-        ) + &self.vim_probe()
-    }
-}
-
-/// The state after `keys`, from the prepared start; None when keys are still waiting (a prefix, an
-/// operator, a count): those did nothing yet.
-fn settled(keys: &[crate::keys::Key]) -> Option<String> {
-    let mut e = Editor::from_str(TEXT);
-    e.prepare();
-    e.last_search = "beta".into();
-    e.set_cursor(crate::Pos { line: 1, col: 10 });
-    for k in keys {
-        e.key(*k);
-    }
-    (e.prefix.is_none() && e.op.is_none() && e.count.is_none()).then(|| e.probe_state())
-}
-
-/// The state after `keys`, from the prepared start.
-fn after(keys: &[crate::keys::Key]) -> String {
-    let mut e = Editor::from_str(TEXT);
-    e.prepare();
-    e.last_search = "beta".into();
-    e.set_cursor(crate::Pos { line: 1, col: 10 });
-    for k in keys {
-        e.key(*k);
-    }
-    e.probe_state()
-}
-
-/// Whether the keys do anything in the Vim profile: the first key must make the difference (fed
-/// without it, what follows ends elsewhere), so `ma` with no marks is not counted because `a`
-/// alone starts inserting.
+/// Whether the keys are commands of the Vim profile (each one taken, nothing left waiting).
 pub fn handles(keys: &str) -> bool {
     let Some(ks) = crate::keys::parse_strict(keys) else { return false };
     if ks.is_empty() {
@@ -127,10 +76,31 @@ pub fn handles(keys: &str) -> bool {
         e.feed(keys);
         return e.count.is_some();
     }
-    // and something must have happened at all: a key swallowed by a prefix (`gX`) changes nothing
-    let Some(full) = settled(&ks) else { return false };
-    // different from every shorter tail: `guw` where g only swallows the u ends as `w` alone would
-    (1..=ks.len()).all(|i| full != after(&ks[i..]))
+    // every key taken by a command (the editor counts the ones none took: `gX`, `ma` without marks),
+    // nothing left waiting; an operator alone (`g?`) gets a `w` to act on
+    taken(&ks) || (taken_pending(&ks) && taken(&[ks.clone(), crate::keys::parse("w")].concat()))
+}
+
+fn run(keys: &[crate::keys::Key]) -> Editor {
+    let mut e = Editor::from_str(TEXT);
+    e.prepare();
+    e.last_search = "beta".into();
+    e.set_cursor(crate::Pos { line: 1, col: 10 });
+    e.vim.unknown = 0;
+    for k in keys {
+        e.key(*k);
+    }
+    e
+}
+
+fn taken(keys: &[crate::keys::Key]) -> bool {
+    let e = run(keys);
+    e.vim.unknown == 0 && e.prefix.is_none() && e.op.is_none() && e.count.is_none() && e.isearch.is_none()
+}
+
+fn taken_pending(keys: &[crate::keys::Key]) -> bool {
+    let e = run(keys);
+    e.vim.unknown == 0 && e.op.is_some()
 }
 
 #[cfg(test)]

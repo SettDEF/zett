@@ -85,6 +85,8 @@ pub(crate) struct VimState {
     /// the window's lines around the buffer (top, height) and width: H M L, gm
     pub screen: (usize, usize, usize),
     pub requests: Vec<Request>,
+    /// keys no command took (the parity probe counts a key only when none was left over)
+    pub unknown: u32,
     /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
     pub jumps: Vec<usize>,
     jump_at: usize,
@@ -166,16 +168,6 @@ impl Editor {
     /// The macro being recorded, for the mode line ("recording @q").
     pub fn recording(&self) -> Option<char> {
         self.vim.recording.as_ref().map(|r| r.0)
-    }
-
-    /// For the parity probe: the Vim state a key can change (not the keys being typed).
-    pub(crate) fn vim_probe(&self) -> String {
-        let v = &self.vim;
-        let mut marks: Vec<_> = v.marks.iter().collect();
-        marks.sort();
-        let mut regs: Vec<_> = v.regs.iter().map(|(k, r)| (*k, r.text.clone())).collect();
-        regs.sort();
-        format!("{marks:?}{regs:?}{:?}{:?}{:?}{:?}{}{}", v.use_reg, v.recording.as_ref().map(|r| r.0), v.requests, v.last_visual, v.replace, v.search_back)
     }
 
     /// The window's top line moves to `t`: asked of the window, and kept here until it says otherwise.

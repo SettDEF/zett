@@ -138,3 +138,22 @@ mod batch2 {
         assert_eq!(e.cursor().line, 79);
     }
 }
+
+mod objects {
+    use crate::Editor;
+
+    #[test]
+    fn sentences_and_tags() {
+        let mut e = Editor::from_str("One two. Three four. Five.");
+        e.feed("fhdis");
+        assert_eq!(e.text(), "One two.  Five.", "is keeps the blanks around it, as Vim");
+        let mut e = Editor::from_str("One two. Three four. Five.");
+        e.feed("fhdas");
+        assert_eq!(e.text(), "One two. Five.");
+        let mut e = Editor::from_str("<p>hi <b>there</b> you</p>");
+        e.feed("fedit");
+        assert_eq!(e.text(), "<p>hi <b></b> you</p>");
+        e.feed("0fhdat");
+        assert_eq!(e.text(), "");
+    }
+}

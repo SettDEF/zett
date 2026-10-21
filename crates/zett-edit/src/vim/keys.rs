@@ -270,3 +270,34 @@ impl Editor {
 
 
 }
+
+impl Editor {
+    /// A key no command takes: what was pending is dropped, and it is counted (probe.rs).
+    pub(crate) fn vim_unknown(&mut self) {
+        self.count = None;
+        self.op = None;
+        self.vim.unknown += 1;
+    }
+
+    /// With an operator waiting, keys that are not motions or text objects cancel it.
+    pub(crate) fn vim_op_refuses(&mut self, c: char) -> bool {
+        let Some(op) = self.op else { return false };
+        let motion = matches!(c, 'h' | 'j' | 'k' | 'l' | 'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '0' | '^' | '$' | 'G' | 'g' | 'f' | 'F' | 't' | 'T' | ';' | ',' | '/' | '?' | 'n' | 'N' | '*' | '#' | '%' | '(' | ')' | '{' | '}' | 'H' | 'M' | 'L' | '|' | '+' | '-' | '_' | '\'' | '`' | '[' | ']' | 'i' | 'a' | 'v' | 'V' | ' ');
+        if motion {
+            return false;
+        }
+        if op == Op::Delete && matches!(c, 'o' | 'p') {
+            self.op = None;
+            self.count = None;
+            self.vim.requests.push(Request::Message("E99: Current buffer is not in diff mode".into()));
+            return true;
+        }
+        // the same operator's own key (dd cc yy >> g~~ …) is not refused: it means the lines
+        let doubles = matches!((op, c), (Op::Delete, 'd') | (Op::Change, 'c') | (Op::Yank, 'y'));
+        if doubles {
+            return false;
+        }
+        self.vim_unknown();
+        true
+    }
+}
