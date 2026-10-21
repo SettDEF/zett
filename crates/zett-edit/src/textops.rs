@@ -66,6 +66,24 @@ pub fn fill(words: &[&str], first: &str, rest: &str, width: usize) -> Vec<String
 }
 
 impl Editor {
+    /// expandtab: Some(shiftwidth) makes Tab insert spaces to the next stop; None, a tab character.
+    pub fn set_soft_tab(&mut self, width: Option<usize>) {
+        self.soft_tab = width.map(|w| w.max(1));
+    }
+
+    /// Tab: a tab character, or spaces to the next multiple of the shift width.
+    pub(crate) fn insert_tab(&mut self) {
+        let s = match self.soft_tab {
+            Some(w) => {
+                let col = self.cursor().col;
+                " ".repeat(w - col % w)
+            }
+            None => "\t".to_string(),
+        };
+        self.ins(self.cursor, &s);
+        self.cursor += s.chars().count();
+    }
+
     /// The fill column (zett.opt.fill_column; 80).
     pub fn set_fill_column(&mut self, n: usize) {
         self.fill_column = n.max(10);

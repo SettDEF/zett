@@ -101,6 +101,8 @@ pub struct Editor {
     last_cmd_was_mark_word: bool,
     mark_word_end: usize,
     dabbrev: Option<textops::Dabbrev>,
+    /// expandtab: Tab inserts spaces to the next multiple of this (None: a tab character)
+    soft_tab: Option<usize>,
 }
 
 fn class(c: char) -> u8 {
@@ -130,6 +132,7 @@ impl Editor {
             last_cmd_was_mark_word: false,
             mark_word_end: 0,
             dabbrev: None,
+            soft_tab: None,
             kill_ring: KillRing::shared(),
             isearch: None,
             last_search: String::new(),
@@ -1092,10 +1095,7 @@ impl Editor {
                 self.ins(self.cursor, &format!("\n{ind}"));
                 self.cursor += 1 + ind.chars().count();
             }
-            Code::Tab => {
-                self.ins(self.cursor, "\t");
-                self.cursor += 1;
-            }
+            Code::Tab => self.insert_tab(),
             Code::Backspace => {
                 if self.cursor > 0 {
                     self.rem(self.cursor - 1, self.cursor);

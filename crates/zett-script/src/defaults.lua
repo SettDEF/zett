@@ -96,3 +96,10 @@ end
 function z.confirm(question, f)
   z.input({ prompt = question .. " [y/N] " }, function(a) f(a:lower():sub(1, 1) == "y") end)
 end
+
+-- settings per file type (zett.ft.<type>.<setting>, the type in lower case): prose wraps at words
+z.ft = z.ft or {}
+z.ft.markdown = z.ft.markdown or { wrap = true, linebreak = true }
+z.ft.plain_text = z.ft.plain_text or { wrap = true, linebreak = true }
+z.ft.makefile = z.ft.makefile or { expandtab = false }
+z.ft.go = z.ft.go or { expandtab = false }

@@ -402,7 +402,7 @@ impl App {
     pub(crate) fn lsp_format(&mut self) {
         let Some((path, _, _)) = self.lsp_ready() else { return };
         if let Some(c) = self.client_for(self.cur) {
-            c.format(&path, TAB);
+            c.format(&path, tab());
         }
     }
 

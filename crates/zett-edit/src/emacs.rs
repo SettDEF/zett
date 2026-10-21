@@ -306,10 +306,7 @@ impl Editor {
                     self.cursor += 1 + ind.chars().count();
                 }
                 "open-line" => self.ins(self.cursor, "\n"),
-                "indent-for-tab-command" => {
-                    self.ins(self.cursor, "\t");
-                    self.cursor += 1;
-                }
+                "indent-for-tab-command" => self.insert_tab(),
                 "transpose-chars" => {
                     // at the end of a line, the two before; else the ones around the cursor
                     let end = self.line_end(self.cur_line());

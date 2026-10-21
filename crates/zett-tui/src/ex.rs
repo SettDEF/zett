@@ -313,10 +313,10 @@ impl App {
                             return l;
                         }
                         if name == ">" {
-                            format!("{}{l}", " ".repeat(TAB * steps))
+                            format!("{}{l}", " ".repeat(tab() * steps))
                         } else {
                             let mut s = l.as_str();
-                            for _ in 0..TAB * steps {
+                            for _ in 0..tab() * steps {
                                 s = s.strip_prefix(' ').or_else(|| s.strip_prefix('\t')).unwrap_or(s);
                             }
                             s.to_string()
@@ -361,7 +361,7 @@ impl App {
             }
             "ret" | "retab" => {
                 let (a, b) = range.unwrap_or(all);
-                let w = arg.parse::<usize>().unwrap_or(TAB);
+                let w = arg.parse::<usize>().unwrap_or(tab());
                 let v = self.lines_of(a, b).into_iter().map(|l| l.replace('\t', &" ".repeat(w))).collect();
                 self.set_lines(a, b, v);
             }

@@ -347,6 +347,32 @@ impl Engine {
         }
     }
 
+    /// A setting for one file type: `zett.ft.markdown.wrap` (the file type in lower case, spaces as _).
+    pub fn ft_opt(&self, ft: &str, name: &str) -> Option<String> {
+        let z: Table = self.lua.globals().get("zett").ok()?;
+        let fts: Table = z.get("ft").ok()?;
+        let t: Table = fts.get(ft).ok()?;
+        match t.get::<Value>(name).ok()? {
+            Value::String(s) => Some(s.to_string_lossy()),
+            Value::Integer(i) => Some(i.to_string()),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Boolean(b) => Some(b.to_string()),
+            _ => None,
+        }
+    }
+
+    /// `:set wrap` for a core setting: `zett.opt.NAME` as a boolean, a whole number or text.
+    pub fn set_opt(&self, name: &str, value: &str, kind: char) -> Result<(), String> {
+        let z: Table = self.lua.globals().get("zett").map_err(|e| e.to_string())?;
+        let o: Table = z.get("opt").map_err(|e| e.to_string())?;
+        let v = match kind {
+            'b' => Value::Boolean(!matches!(value, "false" | "off" | "no" | "0")),
+            'i' => Value::Integer(value.parse::<i64>().map_err(|_| format!("{name} wants a number, not {value}"))?),
+            _ => Value::String(self.lua.create_string(value).map_err(|e| e.to_string())?),
+        };
+        o.set(name, v).map_err(|e| e.to_string())
+    }
+
     /// Lends the workspace to the engine for one call and takes it back: the host keeps
     /// owning its folder, scripts see it only while they run.
     pub fn lend<R>(&mut self, folder: Folder, f: impl FnOnce(&mut Engine) -> R) -> (Folder, R) {

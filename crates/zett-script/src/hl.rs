@@ -58,6 +58,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("CursorLineNr", "fg=3 bold"),
     // the line the cursor is on, and a soft fade on the lines around it
     ("CursorLine", "bg=+13"),
+    ("ColorColumn", "bg=+8"),
     ("CursorLineGlow", "bg=+7"),
     ("CursorLineGlow2", "bg=+3"),
     // incremental search: every match, and the one the cursor is on

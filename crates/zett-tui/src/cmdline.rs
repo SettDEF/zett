@@ -254,8 +254,11 @@ impl App {
                 on && !matches!(value, "off" | "false" | "0"),
             ))
         };
+        // :set alone lists the core settings; a core one is set by settings.rs
         if name.is_empty() {
-            self.cmdline = Some("set ".into());
+            return self.settings_list();
+        }
+        if self.set_core(arg, false) {
             return;
         }
         if let Some((which, on)) = flag(name) {

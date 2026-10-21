@@ -129,6 +129,40 @@ G. the rest
   for every edit: zett-edit)
 - skip: mail, RSS, IRC (other apps do it better)
 
+### Settings, as Neovim's options and Emacs's variables (2026-10-21)
+One table of core settings (name, Vim alias, type, default, what it does), `:set` / `:setlocal` /
+`zett.opt`, values per file type (`zett.ft.markdown = { wrap = true }`), shown in `:set` and the
+settings page.
+- [x] the table (zett-tui settings.rs): :set, :setlocal, :set name? / noname, :set alone lists them,
+  zett.opt, zett.ft.<type> (Markdown and plain text wrap); wrap, linebreak, cursorline, colorcolumn,
+  list, scrolloff, tabstop, shiftwidth, expandtab, trim_trailing_whitespace, final_newline, fill_column
+- [ ] display: listchars, signcolumn,
+  signcolumn, number / relativenumber (have), conceal for Markdown
+- [ ] indenting: tabstop, shiftwidth, expandtab, autoindent, smartindent; editorconfig
+- [ ] search: ignorecase, smartcase, hlsearch, incsearch (have), wrapscan
+- [ ] files: autosave (seconds), backup, autoread (reload a file changed elsewhere when untouched),
+  trim trailing whitespace and final newline on save, fileformat / fileencoding
+- [ ] per file type: settings, keys and hooks per language (ftplugin, Emacs mode hooks)
+
+### Plugins: the words, and how far one can go (2026-10-21)
+- core = Emacs × Neovim (what Neovim has built in stays built in); a **plugin** is anything installed,
+  Lua (later WASM); **bundled plugins** ship with zett and can be switched off (git buffer, query
+  blocks, notebook, agent, outline extras). No "extensions" or "add-ons": one word.
+- have: commands, keys and groups, settings, events (zett.on), highlight groups, zett.buf (the current
+  buffer, its undo states), zett.fs (read, write, stat, remove, exec to the end), zett.defer, zett.input,
+  zett.open, zett.panel (floating panels), zett.notify, pages
+- [ ] zett.job: processes that stream (stdout/stderr lines, stdin, kill, exit callback), timers that repeat
+- [ ] buffers by id: create, hidden / scratch ones, per-buffer settings and variables, extmarks
+  (marks that follow edits) and virtual text / lines (what query blocks and the agent draw)
+- [ ] UI from Lua: the minibuffer / pickers (items, preview, actions), windows (split, focus, size),
+  mode-line segments, the dashboard, menus, the echo area
+- [ ] language: LSP requests from Lua, diagnostics, completion sources, tree-sitter queries
+- [ ] network and data: HTTP, JSON, sockets, file watching, a key-value store per plugin
+- [ ] modes: major (one per file type) and minor modes with their own keymaps
+- [ ] safety and packaging: plugin.toml (version, what it may do: network, files, programs), a
+  lockfile, `zett sync`, `zett doctor`; a plugin cannot freeze the editor (time limits, async calls)
+- [ ] the bundled plugins (git, query, notebook, agent) rewritten on this API: proof that it is enough
+
 ### zett everywhere (2026-10-21, design)
 - [x] zett-edit (~/.scripts/apps/zett): the clipboard (Super+Shift+E, the clipboard toast's zett chip),
   a file or stdin, each save written back; every edit kept in ~/.local/share/zett/edits (a git folder:

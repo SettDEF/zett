@@ -16,6 +16,7 @@ mod refs;
 mod notebook;
 mod everything;
 mod git;
+mod settings;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -34,7 +35,14 @@ use zett_core::{Buffer, Pos};
 use zett_edit::{Code, Editor, Key, Mode};
 use zett_script::{Effect, Engine, Feed, MenuItem, PanelView};
 
-const TAB: usize = 4;
+thread_local! {
+    /// the buffer being drawn: its tabstop and whether list shows tabs (set per buffer, read below)
+    static SHOW: std::cell::Cell<(usize, bool)> = const { std::cell::Cell::new((4, false)) };
+}
+/// Columns a tab takes (the tabstop setting of the buffer being drawn or edited).
+fn tab() -> usize {
+    SHOW.with(|s| s.get().0)
+}
 
 // ── syntax colours from the terminal's palette ──
 
@@ -124,6 +132,8 @@ struct Doc {
     diags: Vec<zett_lsp::Diag>,
     lsp: bool,
     lsp_rev: u64,
+    /// :setlocal values (settings.rs)
+    local: std::collections::HashMap<String, String>,
 }
 
 impl Doc {
@@ -146,7 +156,7 @@ impl Doc {
 
     fn new(ed: Editor, name: String, syntax: String) -> Doc {
         let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
-        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0 }
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default() }
     }
 
     fn dirty(&self) -> bool {
@@ -201,12 +211,33 @@ impl Doc {
 }
 
 fn expand(s: &str) -> String {
-    s.replace('\t', &" ".repeat(TAB))
+    let (t, list) = SHOW.with(|s| s.get());
+    s.replace('\t', &if list { format!("→{}", " ".repeat(t.saturating_sub(1))) } else { " ".repeat(t) })
 }
 
-/// The screen column of a character column in a line (tabs count as TAB).
+/// Where a wrapped line's rows start, in screen columns (wrap): every `width` columns, or with
+/// `words` (linebreak) after the last space that fits, so a word moves to the next row whole.
+fn wrap_starts(line: &str, width: usize, words: bool) -> Vec<usize> {
+    let cells: Vec<char> = expand(line.trim_end_matches('\n')).chars().collect();
+    let width = width.max(1);
+    let mut starts = vec![0];
+    let mut s = 0;
+    while cells.len() - s > width {
+        let mut e = s + width;
+        if words {
+            if let Some(sp) = (s + 1..e).rev().find(|&i| cells[i - 1] == ' ' && cells[i] != ' ') {
+                e = sp;
+            }
+        }
+        starts.push(e);
+        s = e;
+    }
+    starts
+}
+
+/// The screen column of a character column in a line (a tab counts as tabstop columns).
 fn screen_col(line: &str, col: usize) -> usize {
-    line.chars().take(col).map(|c| if c == '\t' { TAB } else { 1 }).sum()
+    line.chars().take(col).map(|c| if c == '\t' { tab() } else { 1 }).sum()
 }
 
 // ── the file finder ──
@@ -717,10 +748,9 @@ impl App {
     /// Runs before each draw, so no place that opens a buffer has to.
     fn sync_profile(&mut self) {
         let emacs = self.emacs;
-        // where M-q wraps (zett.opt.fill_column, 80)
-        let fill = self.engine.opt("fill_column").and_then(|s| s.parse::<usize>().ok()).unwrap_or(80);
+        // the settings the editor acts on itself: expandtab, shiftwidth, fill_column (settings.rs)
+        self.apply_settings();
         for d in self.docs.iter_mut() {
-            d.ed.set_fill_column(fill);
             if d.ed.is_emacs() != emacs {
                 d.ed.set_emacs(emacs);
             }
@@ -1073,6 +1103,11 @@ impl App {
             "compile" => self.compile(arg),
             "h" | "help" => self.open_help(arg),
             "set" | "se" => self.set_command(arg),
+            "setlocal" | "setl" => {
+                if !self.set_core(arg, true) {
+                    self.say(format!("{arg}: :setlocal takes a core setting (:set lists them)"));
+                }
+            }
             "hi" | "highlight" => self.hi_command(arg),
             "rename" => self.lsp_rename(arg),
             "wa" | "wall" => {
@@ -1182,6 +1217,10 @@ impl App {
         if d.ed.buf.path().is_none() {
             return self.say("no file name: :w name");
         }
+        // trim_trailing_whitespace, final_newline (settings.rs)
+        let i = self.cur;
+        self.tidy_for_save(i);
+        let d = &mut self.docs[i];
         let lines = d.ed.buf.len_lines();
         match d.ed.buf.save() {
             Ok(()) => {
@@ -1254,7 +1293,7 @@ impl App {
                 let mut sc = 0;
                 let mut col = 0;
                 for ch in text.chars() {
-                    let w = if ch == '\t' { TAB } else { 1 };
+                    let w = if ch == '\t' { tab() } else { 1 };
                     if sc + w > want {
                         break;
                     }
@@ -1390,6 +1429,10 @@ impl App {
         let (ss, theme) = (&self.ss, &self.theme);
         let hl = Highlighter::new(theme);
         let (numbers, relative) = (self.numbers, self.relative);
+        // this buffer's display settings (settings.rs)
+        let (wrap, words, cul, scrolloff, list) = (self.flag(di, "wrap"), self.flag(di, "linebreak"), self.flag(di, "cursorline"), self.num(di, "scrolloff"), self.flag(di, "list"));
+        let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
+        SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
         let (queries, embeds, nb, root) = (&mut self.queries, &mut self.embeds, &self.notebook, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
@@ -1417,26 +1460,41 @@ impl App {
         // folded and narrowed-away ones take no rows
         d.ed.refresh_view();
         let c = d.ed.cursor();
-        let margin = 3.min(height / 4);
+        let margin = scrolloff.min(height.saturating_sub(1) / 2);
         d.top = d.top.min(lines.saturating_sub(1));
         while d.top + 1 < lines && d.ed.is_hidden(d.top) {
             d.top += 1;
         }
+        // the rows a line takes: one, or its wrapped rows
+        let rows_of = |d: &Doc, l: usize| if wrap { wrap_starts(&d.ed.buf.line(l), width, words).len() } else { 1 };
+        let cur_line_text = d.ed.buf.line(c.line);
+        let ccol = screen_col(&cur_line_text, c.col);
+        // which wrapped row of its line the cursor is on, and its column there
+        let starts = if wrap { wrap_starts(&cur_line_text, width, words) } else { vec![0] };
+        let crow = starts.iter().rposition(|&s| s <= ccol).unwrap_or(0);
         let above = d.ed.step_shown(c.line, margin, true);
         if above < d.top {
             d.top = above;
         } else {
-            // a suggestion's lines take rows too
-            let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum::<usize>()
-                + qrows.iter().filter(|(after, _)| *after >= d.top && *after < c.line).map(|(_, r)| r.len()).sum::<usize>();
-            let rows = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height).count() + extra;
-            if rows + margin >= height {
-                d.top = d.ed.step_shown(c.line, height.saturating_sub(margin + 1), true);
+            // the rows from the top to the cursor: lines (wrapped ones count each row), a
+            // suggestion's lines and a block's results; the top moves down until the cursor fits
+            loop {
+                let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum::<usize>()
+                    + qrows.iter().filter(|(after, _)| *after >= d.top && *after < c.line).map(|(_, r)| r.len()).sum::<usize>();
+                let rows: usize = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height * 2).map(|l| rows_of(d, l)).sum::<usize>() + extra + crow;
+                if rows + margin < height || d.top >= c.line {
+                    break;
+                }
+                let next = d.ed.step_shown(d.top, 1, false);
+                if next <= d.top {
+                    break;
+                }
+                d.top = next;
             }
         }
-        let cur_line_text = d.ed.buf.line(c.line);
-        let ccol = screen_col(&cur_line_text, c.col);
-        if ccol < d.left {
+        if wrap {
+            d.left = 0;
+        } else if ccol < d.left {
             d.left = ccol;
         } else if ccol >= d.left + width.max(1) {
             d.left = ccol + 1 - width.max(1);
@@ -1473,7 +1531,7 @@ impl App {
                 queued_for = next;
                 for h in hunks.iter().filter(|h| h.end() == next) {
                     for (i, t) in h.new.iter().enumerate() {
-                        let shown: String = t.replace('\t', &" ".repeat(TAB)).chars().skip(d.left).take(width).collect();
+                        let shown: String = t.replace('\t', &" ".repeat(tab())).chars().skip(d.left).take(width).collect();
                         let mut spans = vec![Span::styled(format!("{:>w$} ", "+", w = gutter as usize - 1), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
                         if i == 0 {
                             spans.push(Span::styled(format!(" {} ", h.author), hl::hl("AgentTag")));
@@ -1502,7 +1560,8 @@ impl App {
             let ln = next;
             next += 1;
             if ln == c.line {
-                cursor_row = row;
+                // on a wrapped line: the row of it the cursor is on
+                cursor_row = row + crow;
             }
             if ln >= lines {
                 out.push(Line::from(Span::styled(format!("{:>w$} ", "~", w = gutter as usize - 1), hl::hl("NonText"))));
@@ -1556,10 +1615,19 @@ impl App {
             let mut x = 0usize;
             // a line a suggestion would replace
             let replaced = hunks.iter().find(|h| h.at <= ln && ln < h.end());
+            // list: where the spaces at the line's end begin (shown as ·)
+            let trail = if list { screen_col(&line_text, line_text.trim_end_matches('\n').trim_end_matches([' ', '\t']).chars().count()) } else { usize::MAX };
             for (st, text) in d.spans(ln, ss, &hl) {
                 for ch in text.chars() {
-                    if x >= d.left && x < d.left + width {
+                    if wrap || (x >= d.left && x < d.left + width) {
                         let mut s = st;
+                        let ch = if ch == ' ' && x >= trail { '·' } else { ch };
+                        if x >= trail || ch == '→' {
+                            s = s.patch(hl::hl("NonText"));
+                        }
+                        if colorcols.contains(&(x + 1)) {
+                            s = s.patch(hl::hl("ColorColumn"));
+                        }
                         if replaced.is_some() {
                             s = s.patch(hl::hl("AgentDelete"));
                         }
@@ -1578,8 +1646,18 @@ impl App {
                 }
             }
             // a selection over the line end shows one cell for the line break
-            if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && x >= d.left && x < d.left + width {
+            if sel_cols.is_some_and(|(a, b)| x >= a && x < b) && (wrap || (x >= d.left && x < d.left + width)) {
                 spans.push(Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
+            }
+            let cells = spans.len() - 1;
+            // colorcolumn past the line's end: the marked columns still show
+            if !wrap {
+                let mut at = x.max(d.left);
+                for &cc in colorcols.iter().filter(|&&cc| cc > x && cc - 1 < d.left + width) {
+                    spans.push(Span::raw(" ".repeat(cc - 1 - at)));
+                    spans.push(Span::styled(" ", hl::hl("ColorColumn")));
+                    at = cc;
+                }
             }
             // a suggestion that only deletes: its tag on the first line it would delete
             if let Some(h) = replaced.filter(|h| h.new.is_empty() && h.at == ln) {
@@ -1591,24 +1669,58 @@ impl App {
             }
             // the current line stands out, and fades over the lines around it (CursorLine, CursorLineGlow…)
             let band = match ln.abs_diff(c.line) {
-                _ if !focused => None,
+                _ if !focused || !cul => None,
                 0 => Some("CursorLine"),
                 1 => Some("CursorLineGlow"),
                 2 => Some("CursorLineGlow2"),
                 _ => None,
             };
-            match band.map(hl::hl).filter(|s| s.bg.is_some()) {
-                Some(s) => {
-                    let used: usize = spans.iter().map(|s| s.width()).sum();
-                    spans.push(Span::raw(" ".repeat((a.width as usize).saturating_sub(used))));
-                    out.push(Line::from(spans).style(s));
+            let style = band.map(hl::hl).filter(|s| s.bg.is_some());
+            let finish = |mut spans: Vec<Span<'static>>| {
+                match style {
+                    Some(s) => {
+                        let used: usize = spans.iter().map(|s| s.width()).sum();
+                        spans.push(Span::raw(" ".repeat((a.width as usize).saturating_sub(used))));
+                        Line::from(spans).style(s)
+                    }
+                    None => Line::from(spans),
                 }
-                None => out.push(Line::from(spans)),
+            };
+            // wrap: the line's cells cut into rows; the first goes here, the rest are drawn next
+            let wstarts = if wrap { wrap_starts(&line_text, width, words) } else { vec![0] };
+            if wstarts.len() > 1 {
+                let mut rest = spans.split_off(1);
+                let extras = rest.split_off(cells.min(rest.len()));
+                let mut chunks: Vec<Vec<Span<'static>>> = Vec::new();
+                for (k, &s0) in wstarts.iter().enumerate().rev() {
+                    let part = rest.split_off(s0.min(rest.len()));
+                    chunks.push(part);
+                    if k == 0 {
+                        break;
+                    }
+                }
+                chunks.reverse();
+                let n = chunks.len();
+                for (k, mut part) in chunks.into_iter().enumerate() {
+                    if k + 1 == n {
+                        part.extend(extras.iter().cloned());
+                    }
+                    if k == 0 {
+                        spans.extend(part);
+                        out.push(finish(std::mem::take(&mut spans)));
+                    } else {
+                        let mut row = vec![Span::raw(" ".repeat(gutter as usize))];
+                        row.extend(part);
+                        virt.push_back(finish(row));
+                    }
+                }
+            } else {
+                out.push(finish(spans));
             }
         }
         f.render_widget(Paragraph::new(out), a);
         if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
-            let x = a.x + gutter + (ccol - d.left) as u16;
+            let x = a.x + gutter + ccol.saturating_sub(d.left + starts[crow]) as u16;
             let y = a.y + cursor_row as u16;
             self.cursor_xy = (x, y);
             f.set_cursor_position(Position { x: x.min(a.right().saturating_sub(1)), y });
