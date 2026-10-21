@@ -355,7 +355,7 @@ plugin, not the core.
 - · `buffer-menu` Switch to the Buffer Menu.
 - ✓ `buffer-menu-open` Start key navigation of the buffer menu.
 - · `buffer-menu-other-window` Display the Buffer Menu in another window.
-- · `buffer-to-register` Store reference to BUFFER in REGISTER.
+- ✓ `buffer-to-register` Store reference to BUFFER in REGISTER.
 
 ## Buffer
 
@@ -582,10 +582,10 @@ plugin, not the core.
 
 ## clone
 
-- · `clone-buffer` Create and return a twin copy of the current buffer.
+- ✓ `clone-buffer` Create and return a twin copy of the current buffer.
 - · `clone-frame` Make a new frame with the same parameters and windows as FRAME.
 - · `clone-indirect-buffer` Create an indirect buffer that is a twin copy of the current buffer.
-- · `clone-indirect-buffer-other-window` Like `clone-indirect-buffer' but display in another window.
+- ✓ `clone-indirect-buffer-other-window` Like `clone-indirect-buffer' but display in another window.
 
 ## close
 
@@ -650,7 +650,7 @@ plugin, not the core.
 
 ## completion
 
-- · `completion-at-point` Perform completion on the text around point.
+- ✓ `completion-at-point` Perform completion on the text around point.
 - · `completion-help-at-point` Display the completions on the text around point.
 - · `completion-in-region-mode` Transient minor mode used during `completion-in-region'.
 - · `completion-list-mode` Major mode for buffers showing lists of possible completions.
@@ -1041,7 +1041,7 @@ plugin, not the core.
 
 - · `display-about-screen` Display the *About GNU Emacs* buffer.
 - · `display-battery-mode` Toggle battery status display in mode line (Display Battery mode).
-- · `display-buffer` Display BUFFER-OR-NAME in some window, without selecting it.
+- ✓ `display-buffer` Display BUFFER-OR-NAME in some window, without selecting it.
 - · `display-buffer-other-frame` Display buffer BUFFER preferably in another frame.
 - · `display-call-tree` Display a call graph of a specified file.
 - · `display-fill-column-indicator-mode` Toggle display of `fill-column' indicator.
@@ -1628,7 +1628,7 @@ plugin, not the core.
 - · `file-cache-minibuffer-complete` Complete a filename in the minibuffer using a preloaded cache.
 - · `file-name-shadow-mode` Toggle file-name shadowing in minibuffers (File-Name Shadow mode).
 - · `file-notify-handle-event` Handle a file system monitoring event, coming from backends.
-- · `file-to-register` Insert FILE-NAME into REGISTER.
+- ✓ `file-to-register` Insert FILE-NAME into REGISTER.
 
 ## fill
 
@@ -1803,7 +1803,7 @@ plugin, not the core.
 
 ## frameset
 
-- · `frameset-to-register` Store the current frameset in register REGISTER.
+- ✓ `frameset-to-register` Store the current frameset in register REGISTER.
 
 ## fringe
 
@@ -2060,11 +2060,11 @@ plugin, not the core.
 - · `hi-lock-face-buffer` Set face of each match of REGEXP to FACE.
 - · `hi-lock-face-phrase-buffer` Set face of each match of phrase REGEXP to FACE.
 - · `hi-lock-face-symbol-at-point` Highlight each instance of the symbol at point.
-- · `hi-lock-find-patterns` Add patterns from the current buffer to the list of hi-lock patterns.
+- ✓ `hi-lock-find-patterns` Add patterns from the current buffer to the list of hi-lock patterns.
 - · `hi-lock-line-face-buffer` Highlight all lines that match REGEXP using FACE.
 - · `hi-lock-mode` Toggle selective highlighting of patterns (Hi Lock mode).
 - · `hi-lock-unface-buffer` Remove highlighting of each match to REGEXP set by hi-lock.
-- · `hi-lock-write-interactive-patterns` Write interactively added patterns, if any, into buffer at point.
+- ✓ `hi-lock-write-interactive-patterns` Write interactively added patterns, if any, into buffer at point.
 
 ## hide
 
@@ -2256,7 +2256,7 @@ plugin, not the core.
 - · `indent-for-comment` Indent this line's comment to `comment-column', or insert an empty comment.
 - ✓ `indent-for-tab-command` Indent the current line or region, or insert a tab, as appropriate.
 - · `indent-new-comment-line` Break line at point and indent, continuing comment if within one.
-- · `indent-pp-sexp` Indent each line of the list starting just after point, or prettyprint it.
+- ✓ `indent-pp-sexp` Indent each line of the list starting just after point, or prettyprint it.
 - ✓ `indent-region` Indent each nonblank line in the region.
 - · `indent-relative` Space out to under next indent point in previous nonblank line.
 - · `indent-relative-first-indent-point` Indent the current line like the previous nonblank line.
@@ -3323,7 +3323,7 @@ plugin, not the core.
 - ✓ `other-tab-prefix` Display the buffer of the next command in a new tab.
 - ✓ `other-window` Select another window in cyclic ordering of windows.
 - ✓ `other-window-backward` Select another window in the reverse cyclic ordering of windows.
-- · `other-window-prefix` Display the buffer of the next command in a new window.
+- ✓ `other-window-prefix` Display the buffer of the next command in a new window.
 
 ## outline
 
@@ -3454,7 +3454,7 @@ plugin, not the core.
 
 ## pop
 
-- · `pop-global-mark` Pop off global mark ring and jump to the top location.
+- ✓ `pop-global-mark` Pop off global mark ring and jump to the top location.
 - · `pop-tag-mark` Go back to the previous position in xref history.
 - · `pop-to-buffer` Display buffer specified by BUFFER-OR-NAME and select its window.
 - · `pop-to-mark-command` Jump to mark, and pop a new position for mark off the ring.
@@ -3622,7 +3622,7 @@ plugin, not the core.
 - ✓ `project-or-external-find-regexp` Find all matches for REGEXP in the project roots or external roots.
 - · `project-other-frame-command` Run project command, displaying resultant buffer in another frame.
 - ✓ `project-other-tab-command` Run project command, displaying resultant buffer in a new tab.
-- · `project-other-window-command` Run project command, displaying resultant buffer in another window.
+- ✓ `project-other-window-command` Run project command, displaying resultant buffer in another window.
 - · `project-prefix-or-any-command` Run the next command in the current project.
 - · `project-query-replace-regexp` Query-replace REGEXP in all the files of the project.
 - · `project-recompile` Run `recompile' in the project root with an appropriate buffer.
@@ -3818,13 +3818,13 @@ plugin, not the core.
 
 - ✓ `rename-buffer` Change current buffer's name to NEWNAME (a string).
 - · `rename-file` Rename FILE as NEWNAME.  Both args must be strings.
-- · `rename-uniquely` Rename current buffer to a similar name not already taken.
+- ✓ `rename-uniquely` Rename current buffer to a similar name not already taken.
 - · `rename-visited-file` Rename the file visited by the current buffer to NEW-LOCATION.
 
 ## repeat
 
 - ✓ `repeat` Repeat most recently executed command.
-- · `repeat-complex-command` Edit and re-evaluate last complex command, or ARGth from last.
+- ✓ `repeat-complex-command` Edit and re-evaluate last complex command, or ARGth from last.
 - · `repeat-exit` Exit the repeating sequence.
 - · `repeat-matching-complex-command` Edit and re-evaluate complex command with name matching PATTERN.
 - · `repeat-mode` Toggle Repeat mode.
@@ -3845,7 +3845,7 @@ plugin, not the core.
 
 ## reposition
 
-- · `reposition-window` Make the current definition and/or comment visible.
+- ✓ `reposition-window` Make the current definition and/or comment visible.
 
 ## repunctuate
 
@@ -3976,7 +3976,7 @@ plugin, not the core.
 
 ## same
 
-- · `same-window-prefix` Display the buffer of the next command in the same window.
+- ✓ `same-window-prefix` Display the buffer of the next command in the same window.
 
 ## save
 
@@ -4041,7 +4041,7 @@ plugin, not the core.
 - · `search-backward` Search backward from point for STRING.
 - · `search-backward-regexp` Search backward from point for regular expression REGEXP.
 - · `search-emacs-glossary` Display the Glossary node of the Emacs manual in Info mode.
-- · `search-forward` Search forward from point for STRING.
+- ✓ `search-forward` Search forward from point for STRING.
 - · `search-forward-help-for-help` Search forward in the `help-for-help' window.
 - · `search-forward-regexp` Search forward from point for regular expression REGEXP.
 - · `search-unencodable-char` Search forward from point for a character that is not encodable.
@@ -4651,7 +4651,7 @@ plugin, not the core.
 
 ## tmm
 
-- · `tmm-menubar` Text-mode emulation of looking and choosing from a menubar.
+- ✓ `tmm-menubar` Text-mode emulation of looking and choosing from a menubar.
 - · `tmm-menubar-mouse` Text-mode emulation of looking and choosing from a menubar.
 
 ## todo
@@ -5157,7 +5157,7 @@ plugin, not the core.
 
 ## window
 
-- · `window-configuration-to-register` Store the window configuration of the selected frame in REGISTER.
+- ✓ `window-configuration-to-register` Store the window configuration of the selected frame in REGISTER.
 - · `window-divider-mode` Display dividers between windows (Window Divider mode).
 - ✓ `window-layout-flip-leftright` Flip WINDOW's child windows horizontally.
 - ✓ `window-layout-flip-topdown` Flip WINDOW's child windows vertically.
