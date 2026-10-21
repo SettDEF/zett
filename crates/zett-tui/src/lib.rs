@@ -12,6 +12,7 @@ mod minibuf;
 mod travel;
 mod agent;
 mod query;
+mod refs;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -258,6 +259,8 @@ struct App {
     asking: bool,
     /// the live query blocks' results (query.rs)
     queries: query::Cache,
+    /// what the block references show (refs.rs)
+    embeds: refs::Embeds,
     /// where the minibuffer is drawn (zett.opt.minibuffer)
     placement: Placement,
     popup: Option<Popup>,
@@ -382,6 +385,7 @@ impl App {
             travel: None,
             agent: None,
             queries: Default::default(),
+            embeds: Default::default(),
             asking: false,
             placement: Placement::Bottom,
             popup: None,
@@ -1346,14 +1350,18 @@ impl App {
         let (ss, theme) = (&self.ss, &self.theme);
         let hl = Highlighter::new(theme);
         let (numbers, relative) = (self.numbers, self.relative);
-        let (queries, root) = (&mut self.queries, self.root.clone());
+        let (queries, embeds, root) = (&mut self.queries, &mut self.embeds, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
         // live query blocks: their results under the closing fence (Markdown only)
         let qrows = if d.syntax == "Markdown" && lines < 20_000 {
             let text: Vec<String> = (0..lines).map(|i| d.ed.buf.line(i).trim_end_matches('\n').to_string()).collect();
-            let root = std::fs::canonicalize(&d.name).ok().and_then(|p| doom::project_of(&p)).unwrap_or(root);
-            query::rows(queries, &root, &text)
+            let file = std::fs::canonicalize(&d.name).ok();
+            let root = file.as_deref().and_then(doom::project_of).unwrap_or(root);
+            // and the block references' text, and what links here (refs.rs)
+            let mut rows = query::rows(queries, &root, &text);
+            rows.extend(refs::rows(embeds, queries, &root, file.as_deref(), &text));
+            rows
         } else {
             Vec::new()
         };

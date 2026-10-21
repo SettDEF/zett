@@ -79,7 +79,11 @@ See PLAN.md for the vision and milestones.
   grep TEXT, files GLOB, recent 7d, links NAME; in DIR, limit N) draws its results under the closing
   fence, looked up again every 10 s; C-c C-o / SPC s q lists them all to jump to one; `:help query`
   - [ ] the window (pages): the same blocks through Loro; a query over block properties once blocks have them
-- [ ] 4 block references everywhere · [ ] 6 notebook blocks
+- [x] 4 block references (zett-tui refs.rs): a line `![[target#part]]` shows the note, file, heading or
+  code block (by outline section) under it, read again every 3 s; C-c C-o follows it; every note ends
+  with what links to it, from notes and code comments; C-c b / SPC s b lists them
+  - [ ] references by block id (once blocks have ids, M2), editing through a reference, the window
+- [ ] 6 notebook blocks
 - [ ] 7 search everything incl. history · [ ] 8 git buffer + blame · [ ] 9 sync without a server
 - [ ] 10 canvas
 

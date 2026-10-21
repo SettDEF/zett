@@ -84,6 +84,10 @@ fn wild(p: &[u8], s: &[u8]) -> bool {
 }
 
 /// The project's files: no hidden folders, build output or dependencies; at most 5000.
+pub(crate) fn files(root: &Path) -> Vec<(PathBuf, SystemTime)> {
+    walk(root)
+}
+
 fn walk(root: &Path) -> Vec<(PathBuf, SystemTime)> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -150,9 +154,10 @@ pub(crate) fn run(root: &Path, q: &Query) -> Vec<Hit> {
             by_line(&files, false, &move |l: &str| if smart { l.contains(&t) } else { l.to_lowercase().contains(&t2) })
         }
         Kind::Links(n) => {
+            // in notes and in code (a comment that says [[design]]); a reference ![[n#part]] counts too
             let (a, b) = (format!("[[{n}]]"), format!("({n}.md)"));
-            let c = format!("[[{n}|");
-            by_line(&files, true, &move |l: &str| l.contains(&a) || l.contains(&b) || l.contains(&c))
+            let (c, e) = (format!("[[{n}|"), format!("[[{n}#"));
+            by_line(&files, false, &move |l: &str| l.contains(&a) || l.contains(&b) || l.contains(&c) || l.contains(&e))
         }
         Kind::Files(g) => {
             files.sort_by(|a, b| b.1.cmp(&a.1));
@@ -305,6 +310,10 @@ mod tests {
 impl crate::App {
     /// C-c C-o: the results of the query block the cursor is in (or on), all of them, in the minibuffer.
     pub(crate) fn query_open(&mut self) {
+        // on a block reference: open what it names
+        if self.ref_open() {
+            return;
+        }
         let d = &self.docs[self.cur];
         let at = d.ed.cursor().line;
         let lines: Vec<String> = (0..d.ed.buf.len_lines()).map(|i| d.ed.buf.line(i).trim_end_matches('\n').to_string()).collect();

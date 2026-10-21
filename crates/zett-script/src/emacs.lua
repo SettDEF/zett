@@ -51,6 +51,7 @@ map("<C-_>", "undo")
 map("<C-x>u", "undo")
 map("<C-c>t", "time-travel")
 map("<C-c><C-o>", "query-open")
+map("<C-c>b", "backlinks")
 
 -- ── the agent beside you: its changes come as suggestions, taken or dropped one by one ──
 map("<C-c>a", "agent-ask")

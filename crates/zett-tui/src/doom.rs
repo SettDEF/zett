@@ -618,6 +618,7 @@ impl App {
             "commands" => self.pick(Pick::Commands),
             "timeTravel" => self.travel_start(),
             "queryOpen" => self.query_open(),
+            "backlinks" => self.backlinks(),
             "agentAsk" => self.agent_ask(),
             "save" => self.save(None),
             "yankPath" => {

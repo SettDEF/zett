@@ -26,3 +26,15 @@ Any query takes `in DIR` (a folder of the project) and `limit N` (50 unless said
   Enter opens one at its line. A block shows 12 under it, the rest are there.
 
 Build output, dependencies and hidden folders (`.git`, `target`, `node_modules`) are not searched.
+
+# Block references
+
+A line that is only `![[target]]` shows the target's text under it, as it is now: a note, a file,
+or one part of it with `#`: `![[plan#Next steps]]` (a heading; the exact name, else the first
+containing the words), `![[src/main.rs#fn main]]` (a block of code, by its first line). The target is
+a path from the note's folder or the project (`.md` may be left out), or a note's name anywhere in
+the project. It is read again every 3 s; 15 lines show, `C-c C-o` (`SPC s q`) on the line opens it
+at that part.
+
+At the end of every note: what links to it, `[[name]]`, `[[name#part]]` or `(name.md)`, in notes and
+in code comments (`// design: [[plan]]`). `C-c b` (`SPC s b`) lists them all.
