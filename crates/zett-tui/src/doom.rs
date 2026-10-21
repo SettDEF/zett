@@ -1062,6 +1062,40 @@ impl App {
                     let m = format!("\"{}\"{} {lines} line{} --{}%--", d.name, if d.dirty() { " [Modified]" } else { "" }, if lines == 1 { "" } else { "s" }, line * 100 / lines.max(1));
                     self.say(m);
                 }
+                Request::Diagnostic(dir) => {
+                    // [d ]d [D ]D: the language server's errors and warnings, in order
+                    let d = &self.docs[self.cur];
+                    let c = d.ed.cursor();
+                    let mut all: Vec<(usize, usize, String)> = d.diags.iter().map(|x| (x.line, x.col, x.message.clone())).collect();
+                    all.sort_by_key(|x| (x.0, x.1));
+                    let pick = match dir {
+                        1 => all.iter().find(|x| (x.0, x.1) > (c.line, c.col)),
+                        -1 => all.iter().rev().find(|x| (x.0, x.1) < (c.line, c.col)),
+                        -2 => all.first(),
+                        _ => all.last(),
+                    }
+                    .cloned();
+                    match pick {
+                        Some((l, col, m)) => {
+                            self.doc().ed.set_cursor(zett_core::Pos { line: l, col });
+                            self.say(m);
+                        }
+                        None => self.say("No more diagnostics".to_string()),
+                    }
+                }
+                Request::Hunk(dir) => {
+                    // ]c [c: the changed parts against git (git diff -U0's @@ lines)
+                    let path = std::path::PathBuf::from(&self.docs[self.cur].name);
+                    let dir_of = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+                    let out = std::process::Command::new("git").arg("-C").arg(&dir_of).args(["diff", "-U0", "--"]).arg(&path).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+                    let starts: Vec<usize> = out.lines().filter_map(|l| l.strip_prefix("@@ ")).filter_map(|l| l.split_whitespace().nth(1)).filter_map(|p| p.trim_start_matches('+').split(',').next()?.parse::<usize>().ok()).map(|n| n.saturating_sub(1)).collect();
+                    let here = self.docs[self.cur].ed.cursor().line;
+                    let to = if dir > 0 { starts.iter().find(|&&l| l > here) } else { starts.iter().rev().find(|&&l| l < here) };
+                    match to {
+                        Some(&l) => self.goto_line(l + 1),
+                        None => self.say(if starts.is_empty() { "No changes against git here".to_string() } else { "No more changes that way".to_string() }),
+                    }
+                }
                 Request::Redraw => self.clear = true,
                 Request::Suspend => self.suspend = true,
                 Request::CmdWindow(c) => {

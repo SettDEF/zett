@@ -19,8 +19,14 @@ impl Editor {
             return;
         }
         if k.ctrl {
+            if !matches!(k.code, Code::Char(_)) {
+                if !self.vim_special(k) {
+                    self.vim_unknown();
+                }
+                return;
+            }
             if let Code::Char(c) = k.code.clone() {
-                if c != 'r' && self.vim_ctrl(c) {
+                if (c != 'r' || self.prefix.is_some()) && self.vim_ctrl(c) {
                     return;
                 }
             }
@@ -35,6 +41,10 @@ impl Editor {
             return;
         }
         let Some(c) = k.char() else {
+            // page keys, F1, Insert, Undo, shifted arrows, the mouse (vim/special.rs)
+            if self.vim_special(k) {
+                return;
+            }
             // arrows behave like h j k l
             let mapped = match k.code {
                 Code::Left => 'h',

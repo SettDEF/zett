@@ -156,6 +156,9 @@ impl App {
             self.gutter = gutter;
         }
         let width = a.width.saturating_sub(gutter) as usize;
+        // H M L gm gj gk: the lines shown and the text's width, without the gutter
+        d.ed.set_screen(top, a.height as usize, width);
+        d.ed.set_wrap(wrap);
         let height = a.height as usize;
         // keep the cursor in view (a few lines of margin, like scrolloff), counting shown lines:
         // folded and narrowed-away ones take no rows

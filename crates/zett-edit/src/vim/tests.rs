@@ -157,3 +157,59 @@ mod objects {
         assert_eq!(e.text(), "");
     }
 }
+
+mod brackets {
+    use crate::Editor;
+
+    #[test]
+    fn unmatched_sections_marks_and_puts() {
+        let mut e = Editor::from_str("f(a, g(b), c)");
+        e.feed("fb[(");
+        assert_eq!(e.cursor, 6);
+        e.feed("[(");
+        assert_eq!(e.cursor, 1);
+        e.feed("])");
+        assert_eq!(e.cursor, 12);
+        let mut e = Editor::from_str("int a;\n{\n  x;\n}\nint b;\n{\n  y;\n}\n");
+        e.feed("]]");
+        assert_eq!(e.cursor().line, 1);
+        e.feed("]]");
+        assert_eq!(e.cursor().line, 5);
+        e.feed("[]");
+        assert_eq!(e.cursor().line, 3);
+        let mut e = Editor::from_str("a\nb\nc\nd\n");
+        e.feed("majmbG['");
+        assert_eq!(e.cursor().line, 1);
+        let mut e = Editor::from_str("    x\ny\n");
+        e.feed("jyyk]p");
+        assert_eq!(e.text(), "    x\n    y\ny\n");
+    }
+}
+
+mod line_undo_and_screen_lines {
+    use crate::Editor;
+
+    #[test]
+    fn u_restores_the_line_q_replays_and_gj_follows_the_wrap() {
+        let mut e = Editor::from_str("hello world\nnext\n");
+        e.feed("xxwx");
+        assert_eq!(e.text(), "llo orld\nnext\n");
+        e.feed("U");
+        assert_eq!(e.text(), "hello world\nnext\n");
+        e.feed("U");
+        assert_eq!(e.text(), "llo orld\nnext\n", "U again undoes the U");
+        let mut e = Editor::from_str("a\nb\nc\n");
+        e.feed("qwA;<Esc>jq");
+        e.feed("Q");
+        assert_eq!(e.text(), "a;\nb;\nc\n");
+        let mut e = Editor::from_str(&format!("{}\nshort\n", "x".repeat(25)));
+        e.set_screen(0, 10, 10);
+        e.set_wrap(true);
+        e.feed("gj");
+        assert_eq!(e.cursor, 10, "a screen row down inside the long line");
+        e.feed("gjgj");
+        assert_eq!(e.cursor().line, 1);
+        e.feed("ggg$");
+        assert_eq!(e.cursor, 9, "the end of the first screen row");
+    }
+}

@@ -18,6 +18,20 @@ impl Editor {
                 self.vim.requests.push(Request::Window(format!("C-{c}"), n));
                 return true;
             }
+            Some(b @ ('[' | ']')) => {
+                self.prefix = None;
+                return match c {
+                    'i' => self.vim_bracket(b, super::brackets::BR_TAB),
+                    'd' => self.vim_bracket(b, super::brackets::BR_DEF),
+                    _ => false,
+                };
+            }
+            Some(CWG) => {
+                self.prefix = None;
+                let n = self.count.take();
+                self.vim.requests.push(Request::Window(if c == 'i' { "g<Tab>".into() } else { format!("g C-{c}") }, n));
+                return true;
+            }
             Some(CBS) => {
                 // CTRL-\ CTRL-N / CTRL-G: to normal mode (here already)
                 self.prefix = None;

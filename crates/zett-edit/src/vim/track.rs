@@ -16,6 +16,8 @@ impl Editor {
             if self.vim.typing.is_empty() {
                 self.vim.typing_from = self.edit_marker();
                 self.vim.typing_pos = self.cursor;
+                let l = self.cur_line();
+                self.vim.typing_line = (l, self.buf.line(l));
             }
             self.vim.typing.push(k);
         }
@@ -73,6 +75,7 @@ impl Editor {
         let first = keys[0].char();
         // undo, redo and the dot itself are not changes to repeat
         if changed && !matches!(first, Some('u' | '.')) && !(keys[0].ctrl && first == Some('r')) {
+            let first_key = keys.first().and_then(|k| k.char());
             self.vim.dot = keys;
             let at = self.cursor;
             if self.vim.changes.last() != Some(&at) {
@@ -82,6 +85,10 @@ impl Editor {
                 }
             }
             self.vim.change_at = self.vim.changes.len();
+            // U brings back the line as it was before the changes made on it
+            if first_key != Some('U') && self.vim.uline.as_ref().map(|u| u.0) != Some(self.vim.typing_line.0) {
+                self.vim.uline = Some(self.vim.typing_line.clone());
+            }
             self.vim.marks.insert('.', at);
         }
     }

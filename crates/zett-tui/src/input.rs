@@ -332,7 +332,11 @@ impl App {
                 Effect::Ui(name, arg) if self.doom_ui(&name, &arg) => {}
                 Effect::Ui(name, arg) => match name.as_str() {
                     "quickOpen" | "search" => self.open_picker(),
-                    "commandLine" => self.cmdline = Some(arg),
+                    "commandLine" => {
+                        // a count before : becomes a range (2: → :.,.+1)
+                        let n = self.docs[self.cur].ed.take_pending_count();
+                        self.cmdline = Some(match n { Some(1) => ".".into(), Some(n) => format!(".,.+{}", n - 1), None => arg });
+                    }
                     "help" => self.help(&arg),
                     "reload" => {
                         let mut e = Engine::new(None);

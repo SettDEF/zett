@@ -84,16 +84,57 @@ impl Editor {
                 self.motion(Span::Chars(self.cursor.min(at), self.cursor.max(at) + 1), Some(at));
             }
             '0' | '^' | '$' | 'm' | 'M' => {
+                // the screen row the cursor is on (the whole line when lines do not wrap)
                 let (s, e) = (self.line_start(line), self.line_end(line));
+                let w = self.vim.screen.2.max(1);
+                let (rs, re) = if self.vim.wrap {
+                    let row = (self.cursor - s) / w;
+                    (s + row * w, (s + (row + 1) * w).min(e))
+                } else {
+                    (s, e)
+                };
                 let at = match c {
-                    '0' => s,
-                    '^' => self.first_non_blank(line),
-                    '$' => e.saturating_sub(1).max(s),
-                    'm' => (s + self.vim.screen.2.max(2) / 2).min(e),
+                    '0' => rs,
+                    '^' => (rs..re).find(|&i| self.char(i).is_some_and(|ch| !ch.is_whitespace())).unwrap_or(rs),
+                    '$' => re.saturating_sub(1).max(rs),
+                    'm' => (rs + w / 2).min(re.saturating_sub(1).max(rs)),
                     _ => s + (e - s) / 2,
                 };
                 self.motion(Span::Chars(self.cursor.min(at), self.cursor.max(at)), Some(at));
             }
+            'j' | 'k' => {
+                // down or up a screen row; without wrap the same as j and k
+                if !self.vim.wrap {
+                    self.normal_key(Key::ch(c));
+                    return true;
+                }
+                let w = self.vim.screen.2.max(1);
+                let n = self.take_count();
+                let mut at = self.cursor;
+                for _ in 0..n {
+                    let l = self.buf.to_pos(at).line;
+                    let (s, e) = (self.line_start(l), self.line_end(l));
+                    let col = (at - s) % w;
+                    at = if c == 'j' {
+                        if at + w <= e.max(s) && (at - s) / w < (e - s) / w { (at + w).min(e.saturating_sub(1).max(s)) } else if l + 1 < self.buf.len_lines() { (self.line_start(l + 1) + col).min(self.line_end(l + 1).saturating_sub(1).max(self.line_start(l + 1))) } else { at }
+                    } else if at - s >= w {
+                        at - w
+                    } else if l > 0 {
+                        let (ps, pe) = (self.line_start(l - 1), self.line_end(l - 1));
+                        let last_row = (pe - ps) / w;
+                        (ps + last_row * w + col).min(pe.saturating_sub(1).max(ps))
+                    } else {
+                        at
+                    };
+                }
+                self.motion(Span::Chars(self.cursor.min(at), self.cursor.max(at) + 1), Some(at));
+            }
+            '\'' | '`' => {
+                // g' g`: to a mark without the jump list
+                self.vim.no_jump = true;
+                self.prefix = Some(c);
+            }
+            ']' => self.vim.requests.push(Request::Definition),
             'o' => {
                 // to byte N (1 by default)
                 let n = self.count.take().unwrap_or(1).saturating_sub(1);

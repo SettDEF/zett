@@ -640,6 +640,7 @@ fn draw_help(f: &mut Frame, title: &str, rows: &[(String, String)]) {
 fn to_key(k: &KeyEvent) -> Option<Key> {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let alt = k.modifiers.contains(KeyModifiers::ALT);
+    let shift = k.modifiers.contains(KeyModifiers::SHIFT) && !matches!(k.code, KeyCode::Char(_));
     let code = match k.code {
         KeyCode::Char(c) => Code::Char(c),
         KeyCode::Esc => Code::Esc,
@@ -653,9 +654,14 @@ fn to_key(k: &KeyEvent) -> Option<Key> {
         KeyCode::Down => Code::Down,
         KeyCode::Home => Code::Home,
         KeyCode::End => Code::End,
+        KeyCode::PageUp => Code::PageUp,
+        KeyCode::PageDown => Code::PageDown,
+        KeyCode::Insert => Code::Insert,
+        KeyCode::F(n) if (1..=12).contains(&n) => Code::F(n),
+        KeyCode::BackTab => return Some(Key { code: Code::Tab, ctrl, alt, shift: true }),
         _ => return None,
     };
-    Some(Key { code, ctrl, alt })
+    Some(Key { code, ctrl, alt, shift })
 }
 
 /// What zett shows when it starts without a file: `zett.opt.startup`.

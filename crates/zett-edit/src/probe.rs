@@ -71,7 +71,7 @@ pub fn handles(keys: &str) -> bool {
         return false;
     }
     // a count: only waits, so ask whether it was taken
-    if !keys.is_empty() && keys.chars().all(|c| c.is_ascii_digit()) {
+    if keys.starts_with(|c: char| ('1'..='9').contains(&c)) && keys.chars().all(|c| c.is_ascii_digit()) {
         let mut e = Editor::from_str(TEXT);
         e.feed(keys);
         return e.count.is_some();

@@ -45,6 +45,10 @@ pub enum Request {
     Suspend,
     /// the command-line window (q: q/ q?)
     CmdWindow(char),
+    /// the next (+1) or previous (-1) diagnostic, the first (-2) or last (+2): [d ]d [D ]D
+    Diagnostic(i32),
+    /// the next (+1) or previous (-1) changed part (a git hunk): ]c [c
+    Hunk(i32),
 }
 
 /// The system clipboard, for `"+` and `"*`: the window sets it (the editor itself reads no
@@ -87,6 +91,16 @@ pub(crate) struct VimState {
     pub requests: Vec<Request>,
     /// keys no command took (the parity probe counts a key only when none was left over)
     pub unknown: u32,
+    /// where the mouse is (the window says, before a mouse key)
+    pub mouse: usize,
+    /// U: the last changed line as it was before its changes; the line the command under way started on
+    pub uline: Option<(usize, String)>,
+    typing_line: (usize, String),
+    /// the register the last recording went into (Q replays it), g' jumping without the jump list
+    pub last_recorded: Option<char>,
+    pub no_jump: bool,
+    /// long lines wrap on screen (gj gk g0 g$ go by screen lines then)
+    pub wrap: bool,
     /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
     pub jumps: Vec<usize>,
     jump_at: usize,
@@ -130,11 +144,13 @@ fn is_word(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+mod brackets;
 mod g;
 mod keys;
 mod motions;
 mod ops;
 mod search;
+mod special;
 mod track;
 mod window;
 #[cfg(test)]
@@ -154,6 +170,15 @@ impl Editor {
     pub fn set_screen(&mut self, top: usize, height: usize, width: usize) {
         self.vim.screen = (top, height, width);
     }
+    /// The wrap setting: gj gk g0 g^ g$ gm move by screen lines when on.
+    pub fn set_wrap(&mut self, on: bool) {
+        self.vim.wrap = on;
+    }
+    /// A count typed before `:`, taken (the window opens the line with it as a range).
+    pub fn take_pending_count(&mut self) -> Option<usize> {
+        self.count.take()
+    }
+
     /// The wrapscan setting: searches go on from the other end.
     pub fn set_wrapscan(&mut self, on: bool) {
         self.vim.wrapscan = on;

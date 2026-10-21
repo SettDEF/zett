@@ -14,6 +14,22 @@ pub enum Code {
     Down,
     Home,
     End,
+    PageUp,
+    PageDown,
+    Insert,
+    /// F1 … F12
+    F(u8),
+    Help,
+    Undo,
+    /// a mouse button pressed where the window last said (Editor::set_mouse)
+    Mouse(MouseButton),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -21,17 +37,18 @@ pub struct Key {
     pub code: Code,
     pub ctrl: bool,
     pub alt: bool,
+    pub shift: bool,
 }
 
 impl Key {
     pub const fn ch(c: char) -> Self {
-        Self { code: Code::Char(c), ctrl: false, alt: false }
+        Self { code: Code::Char(c), ctrl: false, alt: false, shift: false }
     }
     pub const fn code(code: Code) -> Self {
-        Self { code, ctrl: false, alt: false }
+        Self { code, ctrl: false, alt: false, shift: false }
     }
     pub const fn ctrl(c: char) -> Self {
-        Self { code: Code::Char(c), ctrl: true, alt: false }
+        Self { code: Code::Char(c), ctrl: true, alt: false, shift: false }
     }
     /// The key in Vim notation (`x`, `<C-a>`, `<Esc>`), as macros keep it.
     pub fn notation(&self) -> String {
@@ -50,10 +67,19 @@ impl Key {
             Code::Down => "Down".into(),
             Code::Home => "Home".into(),
             Code::End => "End".into(),
+            Code::PageUp => "PageUp".into(),
+            Code::PageDown => "PageDown".into(),
+            Code::Insert => "Insert".into(),
+            Code::F(n) => format!("F{n}"),
+            Code::Help => "Help".into(),
+            Code::Undo => "Undo".into(),
+            Code::Mouse(MouseButton::Left) => "LeftMouse".into(),
+            Code::Mouse(MouseButton::Middle) => "MiddleMouse".into(),
+            Code::Mouse(MouseButton::Right) => "RightMouse".into(),
             #[allow(unreachable_patterns)]
             _ => "Nop".into(),
         };
-        let m = format!("{}{}", if self.ctrl { "C-" } else { "" }, if self.alt { "A-" } else { "" });
+        let m = format!("{}{}{}", if self.shift { "S-" } else { "" }, if self.ctrl { "C-" } else { "" }, if self.alt { "A-" } else { "" });
         format!("<{m}{base}>")
     }
 
@@ -107,6 +133,9 @@ pub fn parse_strict(s: &str) -> Option<Vec<Key>> {
 
 fn named(name: &str) -> Option<Key> {
     let lower = name.to_ascii_lowercase();
+    if lower == "s--" {
+        return Some(Key { code: Code::Char('-'), ctrl: false, alt: false, shift: true });
+    }
     let (mods, base) = match lower.rsplit_once('-') {
         Some((m, b)) if !b.is_empty() && m.chars().all(|c| "cams-".contains(c)) => (m.to_string(), b.to_string()),
         _ => (String::new(), lower.clone()),
@@ -125,6 +154,16 @@ fn named(name: &str) -> Option<Key> {
         "end" => Code::End,
         "space" => Code::Char(' '),
         "lt" => Code::Char('<'),
+        "pageup" => Code::PageUp,
+        "pagedown" => Code::PageDown,
+        "insert" | "ins" => Code::Insert,
+        "help" => Code::Help,
+        "undo" => Code::Undo,
+        "nl" => return Some(Key { code: Code::Char('j'), ctrl: true, alt: false, shift: mods.contains('s') }),
+        "leftmouse" => Code::Mouse(MouseButton::Left),
+        "middlemouse" => Code::Mouse(MouseButton::Middle),
+        "rightmouse" => Code::Mouse(MouseButton::Right),
+        b if b.len() >= 2 && b.starts_with('f') && b[1..].parse::<u8>().is_ok_and(|n| (1..=12).contains(&n)) => Code::F(b[1..].parse().unwrap()),
         "bar" => Code::Char('|'),
         b if b.chars().count() == 1 && !mods.is_empty() => {
             // keep the case the user wrote for <C-R> vs <C-r>: Vim treats them the same
@@ -132,7 +171,7 @@ fn named(name: &str) -> Option<Key> {
         }
         _ => return None,
     };
-    Some(Key { code, ctrl: mods.contains('c'), alt: mods.contains('a') || mods.contains('m') })
+    Some(Key { code, ctrl: mods.contains('c'), alt: mods.contains('a') || mods.contains('m'), shift: mods.contains('s') })
 }
 
 #[cfg(test)]

@@ -97,6 +97,7 @@ impl Editor {
                     let text = keys.iter().map(|k| k.notation()).collect::<String>();
                     self.vim.regs.insert(r, Register { text, linewise: false });
                     self.vim.macros.insert(r, keys);
+                    self.vim.last_recorded = Some(r);
                     return true;
                 }
                 self.prefix = Some(c);
@@ -174,7 +175,26 @@ impl Editor {
                 }
             }
             '&' => self.vim.requests.push(Request::Ex("s".into())),
-            'Q' => self.vim.requests.push(Request::CmdLine(String::new())),
+            // Neovim: Q replays the register recorded last (gQ is Ex mode)
+            'Q' => {
+                let r = self.vim.last_recorded.unwrap_or('q');
+                self.vim_prefixed('@', r);
+            }
+            'U' => {
+                if let Some((l, was)) = self.vim.uline.clone().filter(|u| u.0 < self.buf.len_lines()) {
+                    let now = self.buf.line(l);
+                    let (s, e) = (self.line_start(l), self.line_end(l));
+                    self.replace_range(s, e, was.trim_end_matches('\n'));
+                    // U again undoes the U
+                    self.vim.uline = Some((l, now));
+                    self.cursor = s;
+                    self.clamp();
+                }
+            }
+            ':' => {
+                let n = self.count.take();
+                self.vim.requests.push(Request::CmdLine(n.map(|n| if n > 1 { format!(".,.+{}", n - 1) } else { ".".into() }).unwrap_or_default()));
+            }
             _ => return false,
         }
         true
@@ -211,8 +231,10 @@ impl Editor {
                     self.vim.requests.push(Request::Message("E20: Mark not set".into()));
                     return true;
                 };
-                // the jump back to here
-                self.vim.marks.insert('\'', self.cursor);
+                // the jump back to here (g' and g` leave it and the jump list alone)
+                if !std::mem::take(&mut self.vim.no_jump) {
+                    self.vim.marks.insert('\'', self.cursor);
+                }
                 let line = self.cur_line();
                 if p == '\'' {
                     let to = self.buf.to_pos(at).line;
@@ -248,6 +270,7 @@ impl Editor {
                 self.vim.replaying -= 1;
             }
             ('z', c) => return self.vim_z(c),
+            ('[' | ']', c) => return self.vim_bracket(p, c),
             ('q', w @ (':' | '/' | '?')) => self.vim.requests.push(Request::CmdWindow(w)),
             (CW | CWG | CBS, c) => return self.vim_window_prefixed(p, c),
             ('Z', 'Z') => self.vim.requests.push(Request::Ex("x".into())),

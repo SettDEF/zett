@@ -31,7 +31,7 @@ mod visual;
 #[cfg(test)]
 mod tests;
 mod undo;
-pub use keys::{Code, Key};
+pub use keys::{Code, Key, MouseButton};
 pub use killring::{KillRing, SharedKillRing};
 pub use search::Isearch;
 
