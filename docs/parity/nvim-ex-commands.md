@@ -65,54 +65,54 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:bunload` | `:bun[load]` | unload a specific buffer |
 | · | `:bwipeout` | `:bw[ipeout]` | really delete a buffer |
 | ✓ | `:change` | `:c[hange]` | replace a line or series of lines |
-| · | `:cNext` | `:cN[ext]` | go to previous error |
-| · | `:cNfile` | `:cNf[ile]` | go to last error in previous file |
+| ✓ | `:cNext` | `:cN[ext]` | go to previous error |
+| ✓ | `:cNfile` | `:cNf[ile]` | go to last error in previous file |
 | · | `:cabbrev` | `:ca[bbrev]` | like ":abbreviate" but for Command-line mode |
 | · | `:cabclear` | `:cabc[lear]` | clear all abbreviations for Command-line mode |
-| · | `:cabove` | `:cabo[ve]` | go to error above current line |
-| · | `:caddbuffer` | `:cad[dbuffer]` | add errors from buffer |
-| · | `:caddexpr` | `:cadde[xpr]` | add errors from expr |
-| · | `:caddfile` | `:caddf[ile]` | add error message to current quickfix list |
-| · | `:cafter` | `:caf[ter]` | go to error after current cursor |
+| ✓ | `:cabove` | `:cabo[ve]` | go to error above current line |
+| ✓ | `:caddbuffer` | `:cad[dbuffer]` | add errors from buffer |
+| ✓ | `:caddexpr` | `:cadde[xpr]` | add errors from expr |
+| ✓ | `:caddfile` | `:caddf[ile]` | add error message to current quickfix list |
+| ✓ | `:cafter` | `:caf[ter]` | go to error after current cursor |
 | · | `:call` | `:cal[l]` | call a function |
 | · | `:catch` | `:cat[ch]` | part of a :try command |
-| · | `:cbefore` | `:cbe[fore]` | go to error before current cursor |
-| · | `:cbelow` | `:cbel[ow]` | go to error below current line |
-| · | `:cbottom` | `:cbo[ttom]` | scroll to the bottom of the quickfix window |
-| · | `:cbuffer` | `:cb[uffer]` | parse error messages and jump to first error |
-| · | `:cc` | `:cc` | go to specific error |
-| · | `:cclose` | `:ccl[ose]` | close quickfix window |
+| ✓ | `:cbefore` | `:cbe[fore]` | go to error before current cursor |
+| ✓ | `:cbelow` | `:cbel[ow]` | go to error below current line |
+| ✓ | `:cbottom` | `:cbo[ttom]` | scroll to the bottom of the quickfix window |
+| ✓ | `:cbuffer` | `:cb[uffer]` | parse error messages and jump to first error |
+| ✓ | `:cc` | `:cc` | go to specific error |
+| ✓ | `:cclose` | `:ccl[ose]` | close quickfix window |
 | · | `:cd` | `:cd` | change directory |
-| · | `:cdo` | `:cdo` | execute command in each valid error list entry |
-| · | `:cfdo` | `:cfd[o]` | execute command in each file in error list |
+| ✓ | `:cdo` | `:cdo` | execute command in each valid error list entry |
+| ✓ | `:cfdo` | `:cfd[o]` | execute command in each file in error list |
 | · | `:center` | `:ce[nter]` | format lines at the center |
-| · | `:cexpr` | `:cex[pr]` | read errors from expr and jump to first |
-| · | `:cfile` | `:cf[ile]` | read file with error messages and jump to first |
-| · | `:cfirst` | `:cfir[st]` | go to the specified error, default first one |
-| · | `:cgetbuffer` | `:cgetb[uffer]` | get errors from buffer |
-| · | `:cgetexpr` | `:cgete[xpr]` | get errors from expr |
-| · | `:cgetfile` | `:cg[etfile]` | read file with error messages |
+| ✓ | `:cexpr` | `:cex[pr]` | read errors from expr and jump to first |
+| ✓ | `:cfile` | `:cf[ile]` | read file with error messages and jump to first |
+| ✓ | `:cfirst` | `:cfir[st]` | go to the specified error, default first one |
+| ✓ | `:cgetbuffer` | `:cgetb[uffer]` | get errors from buffer |
+| ✓ | `:cgetexpr` | `:cgete[xpr]` | get errors from expr |
+| ✓ | `:cgetfile` | `:cg[etfile]` | read file with error messages |
 | · | `:changes` | `:changes` | print the change list |
 | · | `:chdir` | `:chd[ir]` | change directory |
 | ✓ | `:checkhealth` | `:che[ckhealth]` | run healthchecks |
 | · | `:checkpath` | `:checkp[ath]` | list included files |
 | ✓ | `:checktime` | `:checkt[ime]` | check timestamp of loaded buffers |
-| · | `:chistory` | `:chi[story]` | list the error lists |
-| · | `:clast` | `:cla[st]` | go to the specified error, default last one |
+| ✓ | `:chistory` | `:chi[story]` | list the error lists |
+| ✓ | `:clast` | `:cla[st]` | go to the specified error, default last one |
 | · | `:clearjumps` | `:cle[arjumps]` | clear the jump list |
-| · | `:clist` | `:cl[ist]` | list all errors |
+| ✓ | `:clist` | `:cl[ist]` | list all errors |
 | · | `:close` | `:clo[se]` | close current window |
 | · | `:cmap` | `:cm[ap]` | like ":map" but for Command-line mode |
 | · | `:cmapclear` | `:cmapc[lear]` | clear all mappings for Command-line mode |
 | · | `:cmenu` | `:cme[nu]` | add menu for Command-line mode |
-| · | `:cnext` | `:cn[ext]` | go to next error |
-| · | `:cnewer` | `:cnew[er]` | go to newer error list |
-| · | `:cnfile` | `:cnf[ile]` | go to first error in next file |
+| ✓ | `:cnext` | `:cn[ext]` | go to next error |
+| ✓ | `:cnewer` | `:cnew[er]` | go to newer error list |
+| ✓ | `:cnfile` | `:cnf[ile]` | go to first error in next file |
 | · | `:cnoremap` | `:cno[remap]` | like ":noremap" but for Command-line mode |
 | · | `:cnoreabbrev` | `:cnorea[bbrev]` | like ":noreabbrev" but for Command-line mode |
 | · | `:cnoremenu` | `:cnoreme[nu]` | like ":noremenu" but for Command-line mode |
 | ✓ | `:copy` | `:co[py]` | copy lines |
-| · | `:colder` | `:col[der]` | go to older error list |
+| ✓ | `:colder` | `:col[der]` | go to older error list |
 | · | `:colorscheme` | `:colo[rscheme]` | load a specific color scheme |
 | ✓ | `:command` | `:com[mand]` | create user-defined command |
 | · | `:comclear` | `:comc[lear]` | clear all user-defined commands |
@@ -120,15 +120,15 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:continue` | `:con[tinue]` | go back to :while |
 | · | `:confirm` | `:conf[irm]` | prompt user when confirmation required |
 | · | `:const` | `:cons[t]` | create a variable as a constant |
-| · | `:copen` | `:cope[n]` | open quickfix window |
-| · | `:cprevious` | `:cp[revious]` | go to previous error |
-| · | `:cpfile` | `:cpf[ile]` | go to last error in previous file |
+| ✓ | `:copen` | `:cope[n]` | open quickfix window |
+| ✓ | `:cprevious` | `:cp[revious]` | go to previous error |
+| ✓ | `:cpfile` | `:cpf[ile]` | go to last error in previous file |
 | · | `:cquit` | `:cq[uit]` | quit Vim with an error code |
-| · | `:crewind` | `:cr[ewind]` | go to the specified error, default first one |
+| ✓ | `:crewind` | `:cr[ewind]` | go to the specified error, default first one |
 | · | `:cunmap` | `:cu[nmap]` | like ":unmap" but for Command-line mode |
 | · | `:cunabbrev` | `:cuna[bbrev]` | like ":unabbrev" but for Command-line mode |
 | · | `:cunmenu` | `:cunme[nu]` | remove menu for Command-line mode |
-| · | `:cwindow` | `:cw[indow]` | open or close quickfix window |
+| ✓ | `:cwindow` | `:cw[indow]` | open or close quickfix window |
 | ✓ | `:delete` | `:d[elete]` | delete lines |
 | · | `:debug` | `:deb[ug]` | run a command in debugging mode |
 | · | `:debuggreedy` | `:debugg[reedy]` | read debug mode commands from normal input |
@@ -194,8 +194,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:function` | `:fu[nction]` | define a user function |
 | ✓ | `:global` | `:g[lobal]` | execute commands for matching lines |
 | · | `:goto` | `:go[to]` | go to byte in the buffer |
-| · | `:grep` | `:gr[ep]` | run 'grepprg' and jump to first match |
-| · | `:grepadd` | `:grepa[dd]` | like :grep, but append to current list |
+| ✓ | `:grep` | `:gr[ep]` | run 'grepprg' and jump to first match |
+| ✓ | `:grepadd` | `:grepa[dd]` | like :grep, but append to current list |
 | · | `:gui` | `:gu[i]` | start the GUI |
 | · | `:gvim` | `:gv[im]` | start the GUI |
 | ✓ | `:help` | `:h[elp]` | open a help window |
@@ -232,58 +232,58 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | · | `:keepmarks` | `:kee[pmarks]` | following command keeps marks where they are |
 | · | `:keepjumps` | `:keepj[umps]` | following command keeps jumplist and marks |
 | · | `:keeppatterns` | `:keepp[atterns]` | following command keeps search pattern history |
-| · | `:lNext` | `:lN[ext]` | go to previous entry in location list |
-| · | `:lNfile` | `:lNf[ile]` | go to last entry in previous file |
+| ✓ | `:lNext` | `:lN[ext]` | go to previous entry in location list |
+| ✓ | `:lNfile` | `:lNf[ile]` | go to last entry in previous file |
 | ✓ | `:list` | `:l[ist]` | print lines |
-| · | `:labove` | `:lab[ove]` | go to location above current line |
-| · | `:laddexpr` | `:lad[dexpr]` | add locations from expr |
-| · | `:laddbuffer` | `:laddb[uffer]` | add locations from buffer |
-| · | `:laddfile` | `:laddf[ile]` | add locations to current location list |
-| · | `:lafter` | `:laf[ter]` | go to location after current cursor |
+| ✓ | `:labove` | `:lab[ove]` | go to location above current line |
+| ✓ | `:laddexpr` | `:lad[dexpr]` | add locations from expr |
+| ✓ | `:laddbuffer` | `:laddb[uffer]` | add locations from buffer |
+| ✓ | `:laddfile` | `:laddf[ile]` | add locations to current location list |
+| ✓ | `:lafter` | `:laf[ter]` | go to location after current cursor |
 | · | `:last` | `:la[st]` | go to the last file in the argument list |
 | · | `:language` | `:lan[guage]` | set the language (locale) |
 | ✓ | `:later` | `:lat[er]` | go to newer change, redo |
-| · | `:lbefore` | `:lbe[fore]` | go to location before current cursor |
-| · | `:lbelow` | `:lbel[ow]` | go to location below current line |
-| · | `:lbottom` | `:lbo[ttom]` | scroll to the bottom of the location window |
-| · | `:lbuffer` | `:lb[uffer]` | parse locations and jump to first location |
+| ✓ | `:lbefore` | `:lbe[fore]` | go to location before current cursor |
+| ✓ | `:lbelow` | `:lbel[ow]` | go to location below current line |
+| ✓ | `:lbottom` | `:lbo[ttom]` | scroll to the bottom of the location window |
+| ✓ | `:lbuffer` | `:lb[uffer]` | parse locations and jump to first location |
 | · | `:lcd` | `:lc[d]` | change directory locally |
 | · | `:lchdir` | `:lch[dir]` | change directory locally |
-| · | `:lclose` | `:lcl[ose]` | close location window |
-| · | `:ldo` | `:ld[o]` | execute command in valid location list entries |
-| · | `:lfdo` | `:lfd[o]` | execute command in each file in location list |
+| ✓ | `:lclose` | `:lcl[ose]` | close location window |
+| ✓ | `:ldo` | `:ld[o]` | execute command in valid location list entries |
+| ✓ | `:lfdo` | `:lfd[o]` | execute command in each file in location list |
 | · | `:left` | `:le[ft]` | left align lines |
 | · | `:leftabove` | `:lefta[bove]` | make split window appear left or above |
 | · | `:let` | `:let` | assign a value to a variable or option |
-| · | `:lexpr` | `:lex[pr]` | read locations from expr and jump to first |
-| · | `:lfile` | `:lf[ile]` | read file with locations and jump to first |
-| · | `:lfirst` | `:lfir[st]` | go to the specified location, default first one |
-| · | `:lgetbuffer` | `:lgetb[uffer]` | get locations from buffer |
-| · | `:lgetexpr` | `:lgete[xpr]` | get locations from expr |
-| · | `:lgetfile` | `:lg[etfile]` | read file with locations |
-| · | `:lgrep` | `:lgr[ep]` | run 'grepprg' and jump to first match |
-| · | `:lgrepadd` | `:lgrepa[dd]` | like :grep, but append to current list |
+| ✓ | `:lexpr` | `:lex[pr]` | read locations from expr and jump to first |
+| ✓ | `:lfile` | `:lf[ile]` | read file with locations and jump to first |
+| ✓ | `:lfirst` | `:lfir[st]` | go to the specified location, default first one |
+| ✓ | `:lgetbuffer` | `:lgetb[uffer]` | get locations from buffer |
+| ✓ | `:lgetexpr` | `:lgete[xpr]` | get locations from expr |
+| ✓ | `:lgetfile` | `:lg[etfile]` | read file with locations |
+| ✓ | `:lgrep` | `:lgr[ep]` | run 'grepprg' and jump to first match |
+| ✓ | `:lgrepadd` | `:lgrepa[dd]` | like :grep, but append to current list |
 | · | `:lhelpgrep` | `:lh[elpgrep]` | like ":helpgrep" but uses location list |
-| · | `:lhistory` | `:lhi[story]` | list the location lists |
-| · | `:ll` | `:ll` | go to specific location |
-| · | `:llast` | `:lla[st]` | go to the specified location, default last one |
-| · | `:llist` | `:lli[st]` | list all locations |
-| · | `:lmake` | `:lmak[e]` | execute external command 'makeprg' and parse |
+| ✓ | `:lhistory` | `:lhi[story]` | list the location lists |
+| ✓ | `:ll` | `:ll` | go to specific location |
+| ✓ | `:llast` | `:lla[st]` | go to the specified location, default last one |
+| ✓ | `:llist` | `:lli[st]` | list all locations |
+| ✓ | `:lmake` | `:lmak[e]` | execute external command 'makeprg' and parse |
 | · | `:lmap` | `:lm[ap]` | like ":map!" but includes Lang-Arg mode |
 | · | `:lmapclear` | `:lmapc[lear]` | like ":mapclear!" but includes Lang-Arg mode |
-| · | `:lnext` | `:lne[xt]` | go to next location |
-| · | `:lnewer` | `:lnew[er]` | go to newer location list |
-| · | `:lnfile` | `:lnf[ile]` | go to first location in next file |
+| ✓ | `:lnext` | `:lne[xt]` | go to next location |
+| ✓ | `:lnewer` | `:lnew[er]` | go to newer location list |
+| ✓ | `:lnfile` | `:lnf[ile]` | go to first location in next file |
 | · | `:lnoremap` | `:ln[oremap]` | like ":noremap!" but includes Lang-Arg mode |
 | · | `:loadkeymap` | `:loadk[eymap]` | load the following keymaps until EOF |
 | · | `:loadview` | `:lo[adview]` | load view for current window from a file |
 | · | `:lockmarks` | `:loc[kmarks]` | following command keeps marks where they are |
 | · | `:lockvar` | `:lockv[ar]` | lock variables |
-| · | `:lolder` | `:lol[der]` | go to older location list |
-| · | `:lopen` | `:lop[en]` | open location window |
-| · | `:lprevious` | `:lp[revious]` | go to previous location |
-| · | `:lpfile` | `:lpf[ile]` | go to last location in previous file |
-| · | `:lrewind` | `:lr[ewind]` | go to the specified location, default first one |
+| ✓ | `:lolder` | `:lol[der]` | go to older location list |
+| ✓ | `:lopen` | `:lop[en]` | open location window |
+| ✓ | `:lprevious` | `:lp[revious]` | go to previous location |
+| ✓ | `:lpfile` | `:lpf[ile]` | go to last location in previous file |
+| ✓ | `:lrewind` | `:lr[ewind]` | go to the specified location, default first one |
 | ✓ | `:ls` | `:ls` | list all buffers |
 | · | `:lsp` | `:lsp` | language server protocol |
 | · | `:ltag` | `:lt[ag]` | jump to tag and add matching tags to the |
@@ -291,9 +291,9 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:lua` | `:lua` | execute \|Lua\| command |
 | · | `:luado` | `:luad[o]` | execute Lua command for each line |
 | ✓ | `:luafile` | `:luaf[ile]` | execute \|Lua\| script file |
-| · | `:lvimgrep` | `:lv[imgrep]` | search for pattern in files |
-| · | `:lvimgrepadd` | `:lvimgrepa[dd]` | like :vimgrep, but append to current list |
-| · | `:lwindow` | `:lw[indow]` | open or close location window |
+| ✓ | `:lvimgrep` | `:lv[imgrep]` | search for pattern in files |
+| ✓ | `:lvimgrepadd` | `:lvimgrepa[dd]` | like :vimgrep, but append to current list |
+| ✓ | `:lwindow` | `:lw[indow]` | open or close location window |
 | ✓ | `:move` | `:m[ove]` | move lines |
 | · | `:mark` | `:ma[rk]` | set a mark |
 | ✓ | `:make` | `:mak[e]` | execute external command 'makeprg' and parse |
@@ -392,7 +392,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:retab` | `:ret[ab]` | change tab size |
 | · | `:return` | `:retu[rn]` | return from a user function |
 | · | `:rewind` | `:rew[ind]` | go to the first file in the argument list |
-| · | `:right` | `:ri[ght]` | right align text |
+| ✓ | `:right` | `:ri[ght]` | right align text |
 | · | `:rightbelow` | `:rightb[elow]` | make split window appear right or below |
 | · | `:rshada` | `:rsh[ada]` | read from \|shada\| file |
 | · | `:ruby` | `:rub[y]` | execute Ruby command |
@@ -523,8 +523,8 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:version` | `:ve[rsion]` | print version number and other info |
 | · | `:verbose` | `:verb[ose]` | execute command with 'verbose' set |
 | · | `:vertical` | `:vert[ical]` | make following command split vertically |
-| · | `:vimgrep` | `:vim[grep]` | search for pattern in files |
-| · | `:vimgrepadd` | `:vimgrepa[dd]` | like :vimgrep, but append to current list |
+| ✓ | `:vimgrep` | `:vim[grep]` | search for pattern in files |
+| ✓ | `:vimgrepadd` | `:vimgrepa[dd]` | like :vimgrep, but append to current list |
 | · | `:visual` | `:vi[sual]` | same as ":edit", but turns off "Ex" mode |
 | · | `:viusage` | `:viu[sage]` | overview of Normal mode commands |
 | · | `:view` | `:vie[w]` | edit a file read-only |
