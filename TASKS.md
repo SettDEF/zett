@@ -142,7 +142,8 @@ settings page.
 - [ ] display: listchars, signcolumn,
   signcolumn, number / relativenumber (have), conceal for Markdown
 - [ ] indenting: tabstop, shiftwidth, expandtab, autoindent, smartindent; editorconfig
-- [ ] search: ignorecase, smartcase, hlsearch, incsearch (have), wrapscan
+- [x] search: ignorecase, smartcase (2026-10-21; both on by default, Emacs's way; incsearch is how it works)
+- [ ] search: hlsearch, wrapscan
 - [ ] files: autosave (seconds), backup, autoread (reload a file changed elsewhere when untouched),
   trim trailing whitespace and final newline on save, fileformat / fileencoding
 - [ ] per file type: settings, keys and hooks per language (ftplugin, Emacs mode hooks)

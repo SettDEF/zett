@@ -29,6 +29,8 @@ struct Step {
 #[derive(Debug, Clone)]
 pub struct Isearch {
     origin: usize,
+    /// the case rule the last step ran with
+    fold: bool,
     now: Step,
     /// every step before this one, for isearch-delete-char
     back: Vec<Step>,
@@ -55,9 +57,9 @@ impl Isearch {
         self.now.at
     }
 
-    /// No capitals: either case matches (Emacs's search-upper-case).
+    /// Either case matches: as the search ran (ignorecase, and smartcase looking for capitals).
     pub fn folds(&self) -> bool {
-        !self.now.query.chars().any(char::is_uppercase)
+        self.fold
     }
 }
 
@@ -124,11 +126,23 @@ impl Editor {
         true
     }
 
+    /// The case rule (the ignorecase and smartcase settings; both on is Emacs's way).
+    pub fn set_case(&mut self, ignore: bool, smart: bool) {
+        self.case = (ignore, smart);
+    }
+
+    /// Does a search for `query` match either case?
+    pub fn folds_for(&self, query: &str) -> bool {
+        let (ignore, smart) = self.case;
+        ignore && !(smart && query.chars().any(char::is_uppercase))
+    }
+
     fn isearch_start(&mut self, forward: bool) {
         let at = self.cursor;
         self.mark_active = false;
         self.isearch = Some(Isearch {
             origin: at,
+            fold: true,
             now: Step { query: String::new(), forward, at: None, cursor: at, wrapped: false },
             back: Vec::new(),
         });
@@ -171,11 +185,12 @@ impl Editor {
     }
 
     fn isearch_go(&mut self, query: String, forward: bool, from: usize, wrapped: bool) {
-        let Some(s) = &mut self.isearch else { return };
-        let fold = !query.chars().any(char::is_uppercase);
+        let fold = self.folds_for(&query);
         let n = query.chars().count();
         let at = self.buf.find(&query, from, forward, fold).map(|i| (i, i + n));
+        let Some(s) = &mut self.isearch else { return };
         let cursor = s.now.cursor;
+        s.fold = fold;
         let prev = std::mem::replace(&mut s.now, Step { query, forward, at, cursor, wrapped });
         s.back.push(prev);
         if let Some((a, b)) = at {
@@ -272,5 +287,28 @@ mod tests {
         typed(&mut e, "ab");
         assert_eq!(e.isearch_matches(0, 8), vec![(0, 2), (3, 5), (6, 8)]);
         assert_eq!(e.isearch_matches(1, 6), vec![(3, 5)]);
+    }
+}
+
+#[cfg(test)]
+mod case_tests {
+    use crate::Editor;
+
+    #[test]
+    fn ignorecase_and_smartcase_decide_the_match() {
+        let mut e = Editor::from_str("Alpha alpha");
+        e.set_emacs(true);
+        // both on (the default): lower case matches either, a capital only itself
+        assert!(e.folds_for("alpha") && !e.folds_for("Alpha"));
+        e.set_case(true, false);
+        assert!(e.folds_for("Alpha"), "ignorecase alone: always either case");
+        e.set_case(false, true);
+        assert!(!e.folds_for("alpha"), "noignorecase: exact, whatever smartcase says");
+        // a search really follows it
+        e.exec("isearch-forward", 1);
+        for c in "alpha".chars() {
+            e.isearch_char(c);
+        }
+        assert_eq!(e.isearch().unwrap().current(), Some((6, 11)), "exact: skips Alpha");
     }
 }

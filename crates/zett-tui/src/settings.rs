@@ -36,6 +36,8 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("trim_trailing_whitespace", &["trim"], Kind::Bool, "false", "saving removes spaces at line ends"),
     s("final_newline", &["eol"], Kind::Bool, "true", "saving ends the file with a line break"),
     s("autosave", &[], Kind::Int, "0", "save changed files after this many seconds (0: never)"),
+    s("ignorecase", &["ic"], Kind::Bool, "true", "searches match either case"),
+    s("smartcase", &["scs"], Kind::Bool, "true", "… unless the search has a capital (with ignorecase; Emacs's way)"),
     s("cmdline", &[], Kind::Text, "bottom", "where : asks: bottom (Vim), top, center (a box, like noice.nvim), cursor (a box at the cursor)"),
     s("cmdwidth", &[], Kind::Int, "64", "the width of the : box (center, cursor)"),
     s("fill_column", &["textwidth", "tw"], Kind::Int, "80", "where M-q (fill-paragraph) wraps"),
@@ -128,6 +130,8 @@ impl App {
             let d = &mut self.docs[i];
             d.ed.set_soft_tab(et.then_some(sw));
             d.ed.set_fill_column(fill.max(10));
+            let (ic, scs) = (self.flag(i, "ignorecase"), self.flag(i, "smartcase"));
+            self.docs[i].ed.set_case(ic, scs);
         }
     }
 

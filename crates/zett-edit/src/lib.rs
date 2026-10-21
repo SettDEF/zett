@@ -78,6 +78,8 @@ pub struct Editor {
     last_find: Option<(char, char)>,
     /// Emacs profile (emacs.rs): modeless, keys are commands
     emacs: bool,
+    /// searching: (ignore case, unless the query has capitals) — the ignorecase and smartcase settings
+    case: (bool, bool),
     /// Emacs's mark: with the cursor it makes the region
     mark: Option<usize>,
     /// the region is active (shown, acted on by default): transient-mark-mode
@@ -126,6 +128,7 @@ impl Editor {
             undo: undo::Tree::default(),
             open: None,
             emacs: false,
+            case: (true, true),
             mark: None,
             mark_active: false,
             fill_column: 80,
