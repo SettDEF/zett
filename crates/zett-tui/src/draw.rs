@@ -291,6 +291,8 @@ impl App {
         let mut fx_mark: Option<(u16, u16, String, Instant)> = None;
         // diff mode: filler lines and the changed lines' groups (diff.rs)
         let dview = self.diff_view(self.drawing_win, di);
+        // the signs placed in it (:sign), by line
+        let usigns = self.sign_rows(di);
         let top = self.docs[di].top;
         self.docs[di].ed.set_screen(top, a.height as usize, a.width as usize);
         if focused {
@@ -346,7 +348,7 @@ impl App {
         let digits = lines.to_string().len();
         let sign_w = match show.signs {
             Signs::Yes => 2,
-            Signs::Auto if !d.diags.is_empty() => 2,
+            Signs::Auto if !d.diags.is_empty() || !usigns.is_empty() => 2,
             _ => 0,
         };
         let num_w = match (numbers, show.signs) {
@@ -552,13 +554,27 @@ impl App {
                 let (depth, start) = d.ed.fold_mark(ln);
                 spans.push(Span::styled(fold_cells(show.foldcolumn, depth, start, &show.fill), hl::hl("FoldColumn")));
             }
+            // a placed sign (:sign) over a diagnostic when its priority is above 10, as Neovim
+            let us = usigns.get(&ln).filter(|u| sign.is_none() || u.priority > 10);
+            let num_style = match usigns.get(&ln).and_then(|u| u.numhl) {
+                Some(h) => num_style.patch(h),
+                None => num_style,
+            };
             if sign_w > 0 {
-                spans.push(match sign {
-                    Some(s) => Span::styled("● ", Style::default().fg(lsp::severity_color(s))),
-                    None => Span::styled("  ", hl::hl("SignColumn")),
+                spans.push(match (us, sign) {
+                    (Some(u), _) => Span::styled(u.text.clone(), u.texthl),
+                    (None, Some(s)) => Span::styled("● ", Style::default().fg(lsp::severity_color(s))),
+                    (None, None) => Span::styled("  ", hl::hl("SignColumn")),
                 });
             }
-            if numbers {
+            if numbers && show.signs == Signs::Number && us.is_some() {
+                // signcolumn=number: the sign's text where the number starts
+                let num = gut(&format!("{shown} "), num_w);
+                let u = us.unwrap();
+                let rest: String = num.chars().skip(2).collect();
+                spans.push(Span::styled(u.text.clone(), u.texthl));
+                spans.push(Span::styled(rest, num_style));
+            } else if numbers {
                 let num = gut(&format!("{shown} "), num_w);
                 spans.push(match sign.filter(|_| show.signs == Signs::Number) {
                     Some(s) => Span::styled(format!("●{}", &num[num.char_indices().nth(1).map(|(i, _)| i).unwrap_or(num.len())..]), num_style.fg(lsp::severity_color(s))),
@@ -747,7 +763,11 @@ impl App {
                     }
                     Some(s)
                 }
-                None => band.map(hl::hl).filter(|s| s.bg.is_some()),
+                // a sign's linehl colours its whole line
+                None => match usigns.get(&ln).and_then(|u| u.linehl) {
+                    Some(h) => Some(h),
+                    None => band.map(hl::hl).filter(|s| s.bg.is_some()),
+                },
             };
             let finish = |mut spans: Vec<Span<'static>>| {
                 match style {

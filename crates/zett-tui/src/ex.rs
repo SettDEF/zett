@@ -283,6 +283,7 @@ impl App {
             n if crate::defsearch::def_name(n).is_some() => self.def_command(n, arg, bang, range),
             n if crate::diff::diff_name(n).is_some() => self.diff_command(n, arg, bang, range),
             n if crate::runtime::runtime_name(n).is_some() => self.runtime_command(n, arg, bang),
+            "sig" | "sign" => self.sign_command(arg),
             // the quickfix and location lists (qfcmd.rs)
             n if crate::qfcmd::qf_name(n).is_some() => {
                 self.qf_command(n, arg, bang);

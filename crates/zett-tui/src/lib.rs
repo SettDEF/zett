@@ -33,6 +33,7 @@ mod dircmd;
 mod defsearch;
 mod diff;
 mod runtime;
+mod signs;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -156,6 +157,8 @@ struct Doc {
     seen: bool,
     /// the tab's own folder (:tcd; zett's tabs are its buffers)
     tcd: Option<PathBuf>,
+    /// the signs placed in it (:sign place)
+    signs: Vec<signs::Placed>,
 }
 
 impl Doc {
@@ -178,7 +181,7 @@ impl Doc {
 
     fn new(ed: Editor, name: String, syntax: String) -> Doc {
         let shape = (ed.buf.len_lines(), ed.buf.len_chars(), ed.cursor().line);
-        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), mtime: None, seen: false, tcd: None }
+        Doc { ed, name, syntax, top: 0, left: 0, states: Vec::new(), shape, diags: Vec::new(), lsp: false, lsp_rev: 0, local: Default::default(), mtime: None, seen: false, tcd: None, signs: Vec::new() }
     }
 
     fn dirty(&self) -> bool {
@@ -405,6 +408,8 @@ struct App {
     cabbrevs: Vec<(String, String)>,
     /// CTRL-K on the : line: waiting for the digraph's first character, or its second
     cmd_digraph: Option<Option<char>>,
+    /// :sign define: each sign's look
+    sign_defs: std::collections::HashMap<String, signs::SignDef>,
     /// :append :insert :change: where the lines go, the lines they replace, and the lines so far
     ex_text: Option<(usize, Option<(usize, usize)>, Vec<String>)>,
     /// the files :source, :runtime and the rest ran (:scriptnames), the packages :packadd added, whether
@@ -605,6 +610,7 @@ impl App {
             abbrevs: Vec::new(),
             cabbrevs: Vec::new(),
             cmd_digraph: None,
+            sign_defs: Default::default(),
             ex_text: None,
             sourced: Vec::new(),
             packs: Vec::new(),

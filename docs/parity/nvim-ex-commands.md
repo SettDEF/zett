@@ -423,7 +423,7 @@ Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:setlocal` | `:setl[ocal]` | show or set options locally |
 | ✓ | `:sfind` | `:sf[ind]` | split current window and edit file in 'path' |
 | ✓ | `:sfirst` | `:sfir[st]` | split window and go to first file in the |
-| · | `:sign` | `:sig[n]` | manipulate signs |
+| ✓ | `:sign` | `:sig[n]` | manipulate signs |
 | ✓ | `:silent` | `:sil[ent]` | run a command silently |
 | ✓ | `:sleep` | `:sl[eep]` | do nothing for a few seconds |
 | ✓ | `:sleep!` | `:sl[eep]!` | do nothing for a few seconds, without the |

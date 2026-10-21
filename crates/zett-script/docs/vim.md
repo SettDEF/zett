@@ -100,6 +100,12 @@ paragraphs, `i( a( ib` `i[ a[` `i{ a{ iB` `i< a<` brackets, `i" a" i' a' i` a` `
   line below); `:ilist :isearch :ijump :isplit`, `:dlist :dsearch :djump :dsplit` for definitions,
   `:checkpath` the included files not found (`include`, `define`, `path`, `suffixesadd`)
 
+## Signs
+
+- `:sign define NAME text=>> texthl=Error linehl=… numhl=…`, `:sign place ID line=N name=NAME`
+  (`priority=`, `file=` or `buffer=`), `:sign unplace ID` (`*` all), `:sign jump ID`, `:sign list`;
+  in the sign column (`signcolumn`), over a diagnostic above priority 10; a sign keeps its line number
+
 ## Diff mode
 
 - `:diffsplit FILE` compares this buffer with FILE beside it (`diffopt` `vertical` side by side),
