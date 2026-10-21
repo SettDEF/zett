@@ -178,8 +178,9 @@ Where it stands: normal-mode keys 477/477 ✓ · options 42/374 (the rest kept, 
   diffopt diffexpr patchexpr patchmode, comments commentstring formatlistpat, lisp lispwords
   lispoptions cinkeys cinoptions cinwords cinscopedecls indentkeys, define include isident
   isprint, highlight winhighlight winblend winborder, busy, channel, scrollback, ...
-- [ ] O10 legacy and GUI options (Arabic, Hebrew, GUI fonts and tab tooltips, input methods): the
-  decision below
+- [ ] O10 legacy and GUI options (Arabic, Hebrew, GUI fonts and tab tooltips, input methods): decided
+  2026-10-21: as Neovim's terminal UI. What it ignores in a terminal (guifont, guitablabel, linespace…)
+  zett ignores too and says so in :help; real features (rightleft, keymap, langmap, input methods) are built
 
 **P3 — Ex commands** (the same parse: ranges, counts, !, registers; each a test)
 - [ ] X1 buffers, args, windows, tabs: :ls :b :bn :bp :bd :bw :ball :sball :args :argadd
@@ -203,7 +204,9 @@ Where it stands: normal-mode keys 477/477 ✓ · options 42/374 (the rest kept, 
   :diffupdate :diffsplit :tag :tags :tselect :tjump :pop :spellgood :spellwrong :spellundo
   :spellrepall :fold :foldopen :foldclose :folddoopen :folddoclosed :highlight (done) :syntax
   :colorscheme :filetype :setfiletype :options :checkhealth :messages :history :redraw :sleep
-- [ ] X8 providers and menus: the decision below
+- [ ] X8 providers and menus: decided 2026-10-21: :python3 :perl :ruby (and their do / file forms) run
+  the real interpreters when installed (the code alone, no editor API inside; E319 when one is missing);
+  menus (:menu family, :popup) as zett pickers
 
 **P4 — vim.api and vim.fn** (Neovim plugins run unchanged): a `vim` table in zett-script over
 zett's own API: buffers, windows, tabs, options (vim.o vim.bo vim.wo vim.opt), keymaps, autocmds,
