@@ -145,6 +145,8 @@ impl App {
                         .collect();
                     items
                 }
+                // the colorschemes on the runtime path, then Neovim's own
+                "colo" | "colorscheme" => pick(self.colorschemes().into_iter().map(|(n, from)| (n, String::new(), from)).collect()),
                 "h" | "help" => pick(zett_script::docs::TOPICS.iter().map(|(n, about, _)| (n.to_string(), String::new(), about.to_string())).chain([("commands".to_string(), String::new(), "every command and its keys".to_string())]).collect()),
                 "compile" => {
                     let root = doom::project_of(&self.root).unwrap_or(self.root.clone());

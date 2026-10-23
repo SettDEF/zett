@@ -230,3 +230,24 @@ impl App {
         self.docs[self.cur].touched(l1);
     }
 }
+
+#[cfg(test)]
+mod colorscheme_tests {
+    // Neovim's own colorschemes: curly-brace names, &t_Co, and true colours over cterm ones
+    #[test]
+    fn a_vim_colorscheme_file_applies_its_true_colours() {
+        let dir = std::env::temp_dir().join(format!("zett-colo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("mine.vim");
+        std::fs::write(&f, "hi clear\nlet g:colors_name = 'mine'\nlet s:t_Co = &t_Co\nlet g:terminal_ansi_colors = ['#101010', '#a00000']\nfor i in range(g:terminal_ansi_colors->len())\n  let g:terminal_color_{i} = g:terminal_ansi_colors[i]\nendfor\nif s:t_Co >= 256\n  hi Comment guifg=#767676 guibg=NONE gui=NONE ctermfg=243 ctermbg=NONE cterm=NONE term=bold\nendif\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("source {}", f.display()));
+        let get = |app: &mut crate::App, e: &str| app.engine.eval(&format!("return tostring({e})")).map(|r| r.0).unwrap_or_default();
+        let (name, c1) = (get(&mut app, "vim.g.colors_name"), get(&mut app, "vim.g.terminal_color_1"));
+        let comment = app.engine.highlight("Comment").map(|h| h.describe()).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(name, "mine", "the file stopped early");
+        assert_eq!(c1, "#a00000", "curly-brace name");
+        assert!(comment.contains("767676") && !comment.contains("bold"), "true colour, not cterm or term=: {comment}");
+    }
+}

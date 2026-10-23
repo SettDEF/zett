@@ -204,8 +204,13 @@ fn show_color(c: &HlColor) -> String {
 impl Hl {
     /// `fg=3 bg=#202020 bold italic link=Other` laid over this one (`clear` starts afresh).
     pub fn apply(&mut self, args: &str) -> Result<(), String> {
+        // a line with true colours (guifg= guibg= gui=) is read for those, its cterm ones left
+        // out (Neovim with 'termguicolors'); term= is for terminals without colour: never
+        let gui = args.split_whitespace().any(|t| t.starts_with("guifg=") || t.starts_with("guibg=") || t.starts_with("gui="));
         for t in args.split_whitespace() {
             match t.split_once('=') {
+                Some(("term", _)) => {}
+                Some(("ctermfg" | "ctermbg" | "cterm", _)) if gui => {}
                 Some(("fg" | "guifg" | "ctermfg", v)) => self.fg = Some(color(v).ok_or_else(|| format!("not a colour: {v}"))?),
                 Some(("bg" | "guibg" | "ctermbg", v)) => self.bg = Some(color(v).ok_or_else(|| format!("not a colour: {v}"))?),
                 Some(("link", v)) => self.link = Some(v.to_string()),
@@ -414,8 +419,12 @@ mod vim_attr_tests {
     fn gui_and_cterm_lists_and_what_is_kept_but_not_drawn() {
         let mut h = Hl::default();
         h.apply("guifg=#ff8000 gui=bold,italic guisp=#00ff00 cterm=underline").unwrap();
-        assert!(h.bold && h.italic && h.underline);
+        // true colours on the line: its gui ones count, cterm=underline is for 256-colour terminals
+        assert!(h.bold && h.italic && !h.underline);
         assert_eq!(h.fg, Some(HlColor::Rgb(255, 128, 0)));
+        let mut c = Hl::default();
+        c.apply("ctermfg=3 cterm=underline term=bold").unwrap();
+        assert!(c.underline && !c.bold, "cterm alone still counts; term= never");
         h.apply("gui=NONE").unwrap();
         assert!(!h.bold && !h.italic);
         h.apply("default guibg=#000000").unwrap();

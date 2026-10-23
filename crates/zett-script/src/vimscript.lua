@@ -389,6 +389,17 @@ local function lex(s)
         elseif sc and (s:sub(i + 2, i + 2) == "" or s:sub(i + 2, i + 2):match("[,%)%]%[]")) and (s:sub(i - 1, i - 1) == "" or not s:sub(i - 1, i - 1):match("[%w_]")) then id = sc .. ":"
         else id = s:match("^[%w_#]+", i) end
       end
+      -- curly-brace names: g:terminal_color_{i} (a part of the name computed); not a lambda
+      while s:sub(i + #id, i + #id) == "{" and s:sub(i + #id - 1, i + #id - 1):match("[%w_]") do
+        local j, depth = i + #id + 1, 1
+        while j <= n and depth > 0 do
+          local d = s:sub(j, j)
+          if d == "{" then depth = depth + 1 elseif d == "}" then depth = depth - 1 end
+          j = j + 1
+        end
+        if depth > 0 or s:sub(i + #id + 1, j - 2):find("->", 1, true) then break end
+        id = s:sub(i, j - 1) .. (s:match("^[%w_#]*", j) or "")
+      end
       push("id", id, sp)
       i = i + #id
     elseif three == "==#" or three == "==?" or three == "!=#" or three == "!=?" or three == ">=#" or three == ">=?" or three == "<=#" or three == "<=?" or three == "=~#" or three == "=~?" or three == "!~#" or three == "!~?" or three == "..=" then
@@ -420,6 +431,30 @@ local function q(s) return string.format("%q", s) end
 
 -- a variable's Lua place: g:x vim.g["x"], l:x / a bare one in a function L["x"], a:x A["x"]…
 function P:var(id)
+  -- a curly-brace name: the table of its scope, keyed by the name put together
+  if id:find("{", 1, true) then
+    local sc, rest = id:match("^(%a):(.*)$")
+    if not sc then rest = id end
+    local parts, pos = {}, 1
+    while true do
+      local a = rest:find("{", pos, true)
+      if not a then
+        if pos <= #rest then parts[#parts + 1] = q(rest:sub(pos)) end
+        break
+      end
+      if a > pos then parts[#parts + 1] = q(rest:sub(pos, a - 1)) end
+      local depth, j = 1, a + 1
+      while j <= #rest and depth > 0 do
+        local d = rest:sub(j, j)
+        if d == "{" then depth = depth + 1 elseif d == "}" then depth = depth - 1 end
+        j = j + 1
+      end
+      parts[#parts + 1] = "V.str(" .. parser(rest:sub(a + 1, j - 2), self.ctx):expr() .. ")"
+      pos = j
+    end
+    local base = sc and (({ g = "vim.g", l = "L", a = "A", s = "S", v = "vim.v" })[sc] or ("vim." .. sc)) or (self.ctx.fn and "L" or "vim.g")
+    return base .. "[" .. table.concat(parts, " .. ") .. "]"
+  end
   local params = self.ctx.params
   if params and params[id] then return "P_" .. id end
   local sc, name = id:match("^(%a):(.*)$")
@@ -527,6 +562,8 @@ function P:primary()
   local t = self:next()
   if t.k == "num" then return tostring(t.v) end
   if t.k == "str" then return q(t.v) end
+  -- &t_Co: the colours there are (true colour reports 256, as Neovim does)
+  if t.k == "opt" and t.v.name == "t_Co" then return "256" end
   if t.k == "opt" then
     local tbl = t.v.scope == "l" and "vim.bo" or "vim.o"
     return "V.opt(" .. tbl .. "[" .. q(t.v.name) .. "])"

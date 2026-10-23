@@ -239,7 +239,8 @@ impl App {
                     let name = self.colors_name.clone();
                     return self.say(name);
                 }
-                let file = self.runtime_files(&format!("colors/{arg}.lua")).into_iter().chain(self.runtime_files(&format!("colors/{arg}.vim"))).next();
+                // the runtime path first (plugins, ~/.config/zett/colors), then the ones Neovim ships
+                let file = self.runtime_files(&format!("colors/{arg}.lua")).into_iter().chain(self.runtime_files(&format!("colors/{arg}.vim"))).chain(nvim_colors().into_iter().filter(|p| p.file_stem().is_some_and(|s| s == arg))).next();
                 match file {
                     Some(f) => match self.source_file(&f) {
                         Ok(()) => self.colors_name = arg.to_string(),
@@ -707,5 +708,28 @@ mod live_theme_tests {
         let after = bg(&app);
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(after, Some(ratatui::style::Color::Rgb(0x10, 0x20, 0x30)), "Normal did not follow the palette (was {before:?})");
+    }
+}
+
+/// The colorschemes Neovim ships (habamax, retrobox, sorbet …).
+fn nvim_colors() -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = ["/usr/share/nvim/runtime/colors", "/usr/local/share/nvim/runtime/colors"].iter().flat_map(|d| std::fs::read_dir(d).into_iter().flatten().flatten().map(|e| e.path())).filter(|p| p.extension().is_some_and(|e| e == "vim" || e == "lua") && p.file_stem().is_some_and(|s| s != "vim")).collect();
+    v.sort();
+    v
+}
+
+impl App {
+    /// Every colorscheme :colorscheme finds: (name, where from), the runtime path's first.
+    pub(crate) fn colorschemes(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        let own = self.runtime_files("colors/*.lua").into_iter().chain(self.runtime_files("colors/*.vim"));
+        for (p, from) in own.map(|p| (p, "")).chain(nvim_colors().into_iter().map(|p| (p, "Neovim"))) {
+            let Some(n) = p.file_stem().map(|s| s.to_string_lossy().to_string()) else { continue };
+            if !out.iter().any(|o| o.0 == n) {
+                let from = if from.is_empty() { p.parent().and_then(|d| d.parent()).and_then(|d| d.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default() } else { from.to_string() };
+                out.push((n, from));
+            }
+        }
+        out
     }
 }
