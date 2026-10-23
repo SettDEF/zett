@@ -32,6 +32,8 @@ pub enum SearchKind {
     Regexp,
     Word,
     Symbol,
+    /// Vim's / and ?: a Vim pattern (vimre.rs)
+    Vim,
 }
 
 /// Emacs's regexp syntax in the regex crate's: \( \) \| \{ \} group and count, bare ones are
@@ -94,6 +96,7 @@ fn pattern(query: &str, kind: SearchKind, fold: bool) -> Option<Result<regex::Re
         // words: whatever is between them (blanks, punctuation, line breaks)
         SearchKind::Word => query.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|w| !w.is_empty()).map(regex::escape).collect::<Vec<_>>().join(r"\W+"),
         SearchKind::Symbol => regex::escape(query),
+        SearchKind::Vim => return None,
     };
     // a word or a symbol: whole, never part of a longer one
     let p = if matches!(kind, SearchKind::Word | SearchKind::Symbol) { format!(r"\b{p}\b") } else { p };
@@ -143,6 +146,7 @@ impl Isearch {
             SearchKind::Regexp => "Regexp ",
             SearchKind::Word => "Word ",
             SearchKind::Symbol => "Symbol ",
+            SearchKind::Vim => "",
         };
         // a regexp still being typed (an open \\( ): not a failure yet
         let state = if self.incomplete { "Pending " } else { state };
@@ -175,6 +179,9 @@ impl Editor {
     /// The next match of a search from `from` (char index) either way: (start, end); Err when a
     /// regexp does not parse yet.
     fn search_find(&self, query: &str, kind: SearchKind, from: usize, forward: bool, fold: bool) -> Result<Option<(usize, usize)>, ()> {
+        if kind == SearchKind::Vim {
+            return self.vim_find(query, from, forward, fold);
+        }
         let Some(re) = pattern(query, kind, fold) else {
             let n = query.chars().count();
             return Ok(self.buf.find(query, from, forward, fold).map(|i| (i, i + n)));
@@ -203,6 +210,9 @@ impl Editor {
         let Some(s) = &self.isearch else { return Vec::new() };
         if s.now.query.is_empty() {
             return Vec::new();
+        }
+        if s.kind == SearchKind::Vim {
+            return self.vim_find_all(&s.now.query, s.folds(), from, to);
         }
         let mut out = Vec::new();
         let mut at = from;
@@ -297,6 +307,7 @@ impl Editor {
         self.isearch_start(forward);
         if let Some(s) = self.isearch.as_mut() {
             s.vim = true;
+            s.kind = SearchKind::Vim;
         }
     }
 

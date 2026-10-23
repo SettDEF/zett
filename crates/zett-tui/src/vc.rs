@@ -58,6 +58,11 @@ impl App {
     }
 
     fn vc_run(&mut self, root: &Path, args: &[&str], ok: &str) {
+        // C-x v !: the git line to the : line, to be changed and run there
+        if std::mem::take(&mut self.vc_edit_next) {
+            self.cmdline = Some(format!("!git -C {} {}", root.display(), args.join(" ")));
+            return;
+        }
         match git(root, args) {
             Ok(out) => {
                 let first = out.lines().find(|l| !l.trim().is_empty()).map(str::to_string);
@@ -269,6 +274,52 @@ impl App {
                 self.doom_ui("findFile", "");
             }
             "delete-worktree" => self.vc_run(&root, &["worktree", "remove", arg], &format!("Removed the working tree {arg}")),
+            // C-x v w a / A: the file's (or every) uncommitted change applied in another working tree too
+            "apply-worktree" | "apply-root-worktree" => {
+                let file = if what == "apply-worktree" {
+                    match need_file() {
+                        Ok(f) => Some(f),
+                        Err(e) => return self.say(e),
+                    }
+                } else {
+                    None
+                };
+                let mut args = vec!["diff", "HEAD"];
+                if let Some(f) = &file {
+                    args.extend(["--", f.as_str()]);
+                }
+                let patch = match git(&root, &args) {
+                    Ok(p) if p.trim().is_empty() => return self.say("no changes to apply"),
+                    Ok(p) => p,
+                    Err(e) => return self.say(e),
+                };
+                let applied = std::process::Command::new("git").arg("-C").arg(arg).args(["apply", "-"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().and_then(|mut c| {
+                    use std::io::Write;
+                    c.stdin.take().map(|mut s| s.write_all(patch.as_bytes())).transpose()?;
+                    c.wait_with_output()
+                });
+                match applied {
+                    Ok(o) if o.status.success() => self.say(format!("Applied {} to {arg}", file.as_deref().unwrap_or("every change"))),
+                    Ok(o) => self.say(format!("git apply: {}", String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or("failed"))),
+                    Err(e) => self.say(format!("git apply: {e}")),
+                }
+            }
+            // C-x v w k: the buffers of the other working trees closed (unsaved ones stay)
+            "kill-other-worktree-buffers" => {
+                let others: Vec<PathBuf> = git(&root, &["worktree", "list", "--porcelain"]).unwrap_or_default().lines().filter_map(|l| l.strip_prefix("worktree ")).map(PathBuf::from).filter(|p| *p != root).collect();
+                let mut n = 0;
+                let mut i = self.docs.len();
+                while i > 0 {
+                    i -= 1;
+                    let inside = self.docs[i].abs_path().is_some_and(|p| others.iter().any(|o| p.starts_with(o)));
+                    if inside && !self.docs[i].dirty() && self.docs.len() > 1 {
+                        self.cur = i;
+                        self.close(false);
+                        n += 1;
+                    }
+                }
+                self.say(format!("Closed {n} buffer{} of other working trees", if n == 1 { "" } else { "s" }));
+            }
             "move-worktree" => {
                 let mut p = arg.split_whitespace();
                 let (Some(a), Some(b)) = (p.next(), p.next()) else { return self.say("needs the working tree and where it goes") };

@@ -63,7 +63,7 @@ impl Editor {
         for _ in 0..n {
             let mut from = if forward { at + 1 } else { at };
             let found = loop {
-                let hit = self.buf.find(&q, from.min(len), forward, fold);
+                let hit = self.vim_find(&q, from.min(len), forward, fold).ok().flatten().map(|m| m.0);
                 match hit {
                     Some(i) if self.vim.search_word && !self.whole_word_at(i, q.chars().count()) => {
                         from = if forward { i + 1 } else { i };
@@ -77,7 +77,7 @@ impl Editor {
                 }
                 let mut from = if forward { 0 } else { len };
                 loop {
-                    match self.buf.find(&q, from.min(len), forward, fold) {
+                    match self.vim_find(&q, from.min(len), forward, fold).ok().flatten().map(|m| m.0) {
                         Some(i) if self.vim.search_word && !self.whole_word_at(i, q.chars().count()) => from = if forward { i + 1 } else { i },
                         other => break other,
                     }
@@ -150,6 +150,8 @@ impl Editor {
     /// maxsearchcount it says >N).
     fn search_note(&mut self, q: &str, fold: bool, at: usize, wrapped: bool, forward: bool) {
         let sm = self.opt("shortmess").unwrap_or("ltToOCF").to_string();
+        // terse (Vim's old way to say shortmess s): no "search hit BOTTOM"
+        let sm = if self.opt_on("terse", false) { format!("{sm}s") } else { sm };
         let mut m = if wrapped && !sm.contains('s') {
             if forward { "search hit BOTTOM, continuing at TOP".to_string() } else { "search hit TOP, continuing at BOTTOM".to_string() }
         } else {
@@ -157,26 +159,80 @@ impl Editor {
         };
         if !sm.contains('S') {
             let max = self.opt_num("maxsearchcount", 999).max(1) as usize;
-            let (len, n) = (self.buf.len_chars(), q.chars().count());
-            let (mut total, mut index, mut from) = (0usize, 0usize, 0usize);
-            while let Some(i) = self.buf.find(q, from.min(len), true, fold) {
-                if !self.vim.search_word || self.whole_word_at(i, n) {
-                    total += 1;
-                    if i <= at {
-                        index = total;
-                    }
-                    if total > max {
-                        break;
-                    }
-                }
-                from = i + 1;
-                if from > len {
-                    break;
-                }
-            }
+            let len = self.buf.len_chars();
+            // every match (vim_find_all stops at 1000; maxsearchcount says >N past it)
+            let all = self.vim_find_all(q, fold, 0, len);
+            let total = all.len().min(max + 1);
+            let index = all.iter().take_while(|m| m.0 <= at).count().min(max + 1);
             let shown = if total > max { format!("[{}/>{max}]", if index > max { format!(">{max}") } else { index.to_string() }) } else { format!("[{index}/{total}]") };
             m = format!("{m}  {shown}");
         }
         self.vim.requests.push(Request::Message(m));
+    }
+}
+
+impl Editor {
+    /// A match of Vim pattern `q` from char `from` (forward: the first starting at or after it;
+    /// backward: the last starting before it), as (start, end) chars; Err while it does not parse
+    /// (a search being typed: `\(` not closed yet). After * and # the word is found as it is.
+    pub(crate) fn vim_find(&self, q: &str, from: usize, forward: bool, fold: bool) -> Result<Option<(usize, usize)>, ()> {
+        if self.vim.search_word {
+            let n = q.chars().count();
+            return Ok(self.buf.find(q, from, forward, fold).map(|i| (i, i + n)));
+        }
+        let re = crate::vimre::compile(q, fold, false).map_err(|_| ())?;
+        let text = self.buf.text();
+        let byte_of = |c: usize| text.char_indices().nth(c).map_or(text.len(), |(b, _)| b);
+        let char_of = |b: usize| text[..b].chars().count();
+        let at = byte_of(from);
+        let hit = if forward {
+            re.find_at(&text, at)
+        } else {
+            re.find_all(&text).into_iter().take_while(|(s, _)| *s < at).last()
+        };
+        Ok(hit.map(|(s, e)| (char_of(s), char_of(e))))
+    }
+
+    /// Every match of `q` starting in [from, to) (chars), compiled once and looked for only in the
+    /// lines around that range: hlsearch, incsearch's other matches, the [n/N] count.
+    pub(crate) fn vim_find_all(&self, q: &str, fold: bool, from: usize, to: usize) -> Vec<(usize, usize)> {
+        if self.vim.search_word {
+            let n = q.chars().count();
+            let mut out = Vec::new();
+            let mut at = from;
+            while let Some(i) = self.buf.find(q, at, true, fold) {
+                if i >= to || out.len() >= 1000 {
+                    break;
+                }
+                if self.whole_word_at(i, n) {
+                    out.push((i, i + n));
+                }
+                at = i + 1;
+            }
+            return out;
+        }
+        let Ok(re) = crate::vimre::compile(q, fold, false) else { return Vec::new() };
+        let len = self.buf.len_chars();
+        let (from, to) = (from.min(len), to.min(len));
+        // whole lines, so ^ $ \< and lookbehind see what they need
+        let start = self.buf.to_char(zett_core::Pos { line: self.buf.to_pos(from).line, col: 0 });
+        let last = self.buf.to_pos(to).line;
+        let end = if last + 1 < self.buf.len_lines() { self.buf.to_char(zett_core::Pos { line: last + 1, col: 0 }) } else { len };
+        let text = self.buf.slice(start, end);
+        let mut out = Vec::new();
+        let mut chars = 0usize;
+        let mut prev = 0usize;
+        for (s, e) in re.find_all(&text) {
+            chars += text[prev..s].chars().count();
+            prev = s;
+            let (cs, ce) = (start + chars, start + chars + text[s..e].chars().count());
+            if cs >= to || out.len() >= 1000 {
+                break;
+            }
+            if cs >= from {
+                out.push((cs, ce));
+            }
+        }
+        out
     }
 }

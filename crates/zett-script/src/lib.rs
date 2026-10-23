@@ -121,9 +121,15 @@ pub struct Engine {
     st: Rc<RefCell<State>>,
     pub errors: Vec<String>,
     pub plugins: Vec<String>,
+    /// what the config asked of the editor while it loaded (vim.cmd, :set), for the editor to do
+    pub loaded: Vec<Effect>,
 }
 
 const DEFAULTS: &str = include_str!("defaults.lua");
+/// Neovim's Lua API (vim.*) on zett's, so Neovim configs and plugins run (`:help vim-api`).
+const VIM: &str = include_str!("vim.lua");
+/// Vimscript, translated to Lua on vim.lua (:let, :if, :function, init.vim, .vim files).
+const VIMSCRIPT: &str = include_str!("vimscript.lua");
 /// The code editor's layer (Doom's SPC tree), on top of the defaults when `frontend` is "editor".
 const EDITOR: &str = include_str!("editor.lua");
 /// The default keys, Emacs' (mode "e"); the editor uses them unless `zett.opt.keys` is "vim".
@@ -250,7 +256,7 @@ impl Engine {
     pub fn new(folder: Option<Rc<RefCell<Folder>>>) -> Engine {
         let lua = Lua::new();
         let st = Rc::new(RefCell::new(State { folder, leader: "<Space>".into(), loading: "zett".into(), hl: hl::defaults(), hl_rev: 1, ..Default::default() }));
-        let mut e = Engine { lua, st, errors: Vec::new(), plugins: Vec::new() };
+        let mut e = Engine { lua, st, errors: Vec::new(), plugins: Vec::new(), loaded: Vec::new() };
         if let Err(err) = e.install_api() {
             e.errors.push(format!("zett API: {err}"));
         }
@@ -280,6 +286,8 @@ impl Engine {
     /// Built-in defaults, then plugins, then the user's init.lua (the user has the last word).
     pub fn load_config(&mut self, dir: &Path) {
         self.exec_named(DEFAULTS, "zett", "defaults.lua");
+        self.exec_named(VIM, "zett", "vim.lua");
+        self.exec_named(VIMSCRIPT, "zett", "vimscript.lua");
         let plugins = dir.join("plugins");
         if self.frontend() == "editor" {
             self.exec_named(EDITOR, "zett", "editor.lua");
@@ -309,6 +317,16 @@ impl Engine {
                 Err(e) => self.errors.push(format!("plugin {name}: {e}")),
             }
         }
+        // packages under pack/*/start (here and in the data folder's zett/site): their lua/ folders
+        // found by require before init.lua runs, as Neovim has them on 'runtimepath' from the start
+        let data = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".local/share"));
+        for base in [dir.to_path_buf(), data.join("zett/site")] {
+            for group in std::fs::read_dir(base.join("pack")).into_iter().flatten().flatten() {
+                for p in std::fs::read_dir(group.path().join("start")).into_iter().flatten().flatten() {
+                    self.add_lua_dir(&p.path());
+                }
+            }
+        }
         let init = dir.join("init.lua");
         if let Ok(code) = std::fs::read_to_string(&init) {
             if let Ok(package) = self.lua.globals().get::<Table>("package") {
@@ -317,8 +335,14 @@ impl Engine {
             }
             self.exec_named(&code, "init.lua", "init.lua");
         }
+        // a Vim user's init.vim (Vimscript, vimscript.lua), after init.lua as Neovim reads only one
+        let vimrc = dir.join("init.vim");
+        if vimrc.is_file() {
+            let call = format!("local ok, e = vim._vimscript.source({:?}) if not ok then error(e, 0) end", vimrc.display().to_string());
+            self.exec_named(&call, "init.vim", "init.vim");
+        }
         self.leader_from_opts();
-        let _ = self.take_effects();
+        self.loaded = self.take_effects();
         // kept for the host: a start hook may open files or run commands (zett.opt.startup too)
         let fx = self.emit("start", Value::Nil);
         self.st.borrow_mut().start = fx;
@@ -653,7 +677,8 @@ impl Engine {
         self.emit(event, data.unwrap_or(Value::Nil))
     }
 
-    fn take_effects(&mut self) -> Vec<Effect> {
+    /// What scripts asked of the editor since the last hand-over (the config's vim.cmd, :set from vim.o).
+    pub fn take_effects(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.st.borrow_mut().effects)
     }
 
@@ -967,5 +992,22 @@ impl Engine {
     /// The start screen the config made with zett.dashboard{…}, if it made one.
     pub fn dashboard(&self) -> Option<Dashboard> {
         self.st.borrow().dashboard.clone()
+    }
+}
+
+impl Engine {
+    /// A package's lua/ folder found by `require` (its modules and their init.lua), first in line.
+    pub fn add_lua_dir(&self, pkg: &std::path::Path) {
+        let lua_dir = pkg.join("lua");
+        if !lua_dir.is_dir() {
+            return;
+        }
+        if let Ok(package) = self.lua.globals().get::<Table>("package") {
+            let path: String = package.get("path").unwrap_or_default();
+            let mine = format!("{}/?.lua;{}/?/init.lua;", lua_dir.display(), lua_dir.display());
+            if !path.contains(&mine) {
+                let _ = package.set("path", format!("{mine}{path}"));
+            }
+        }
     }
 }

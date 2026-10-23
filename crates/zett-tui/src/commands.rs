@@ -25,6 +25,7 @@ impl App {
     }
 
     pub(crate) fn open(&mut self, p: &Path) {
+        self.sync_undodir();
         // already open: show it
         let name = p.display().to_string();
         // by the real path too: "notes/a.md" and "/home/…/notes/a.md" are one buffer
@@ -56,6 +57,19 @@ impl App {
     }
 
     pub(crate) fn cmdline_key(&mut self, k: KeyEvent) {
+        // wildchar / wildcharm: the key that completes (Tab unless set); Tab is then itself
+        let tok = crate::token(&k);
+        let wild = [self.setting(self.cur, "wildchar"), self.setting(self.cur, "wildcharm")].iter().any(|w| wild_token(w).is_some_and(|t| t.eq_ignore_ascii_case(&tok)));
+        let k = match (wild, k.code) {
+            (true, _) => KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+            (false, KeyCode::Tab) if self.prompt.is_none() => {
+                if let Some(l) = self.cmdline.as_mut() {
+                    l.push('\t');
+                }
+                return;
+            }
+            _ => k,
+        };
         let cedit = self.setting(self.cur, "cedit");
         let Some(line) = self.cmdline.as_mut() else { return };
         // the commit message for the git buffer
@@ -174,11 +188,24 @@ impl App {
 
     /// A `:` line: Vim's file commands, then zett's commands and `lua …`.
     pub(crate) fn command(&mut self, l: &str) {
+        // Vimscript (:let, :if … :endif, :function … :endfunction, :call): vimscript.rs
+        if self.vimscript_line(l) {
+            return;
+        }
+        // cmd | cmd: one after the other (the commands that take | as theirs keep it)
+        let parts = bar_split(l);
+        if parts.len() > 1 {
+            for p in parts {
+                self.command(trim_cmd(p.trim_start()));
+            }
+            return;
+        }
+        let l = &parts[0];
         // Neovim's commands with ranges and the rest of its everyday ones
         if self.ex(l) {
             return;
         }
-        let (cmd, arg) = l.split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((l, ""));
+        let (cmd, arg) = l.split_once(' ').map(|(a, b)| (a, trim_cmd(b.trim_start()))).unwrap_or((l, ""));
         match cmd {
             "" => {}
             "w" | "w!" => {
@@ -202,7 +229,8 @@ impl App {
                     }
                 }
             }
-            "hi" | "highlight" => self.hi_command(arg),
+            // ! (Vim: also over a group already linked): the same here, :hi lays over as it is
+            "hi" | "highlight" | "hi!" | "highlight!" => self.hi_command(arg),
             "rename" => self.lsp_rename(arg),
             "wa" | "wall" => {
                 let keep = self.cur;
@@ -268,8 +296,10 @@ impl App {
                 },
             },
             "bo" | "bonly" | "bufonly" => self.close_others(),
-            "ls" | "buffers" => {
-                let list: Vec<String> = self.docs.iter().enumerate().map(|(i, d)| format!("{}{}{}", if i == self.cur { "%" } else { " " }, d.name, if d.dirty() { " [+]" } else { "" })).collect();
+            "ls" | "buffers" | "ls!" | "buffers!" => {
+                // nobuflisted buffers (a plugin's own) show only with :ls!
+                let all = arg.starts_with('!') || cmd.ends_with('!');
+                let list: Vec<String> = self.docs.iter().enumerate().filter(|(i, _)| all || self.flag(*i, "buflisted")).map(|(i, d)| format!("{}{}{}", if i == self.cur { "%" } else { " " }, d.name, if d.dirty() { " [+]" } else { "" })).collect();
                 self.say(list.join("   "));
             }
             "lua" => match self.with_lua(|e| e.eval(arg)) {
@@ -296,6 +326,14 @@ impl App {
 
     pub(crate) fn save(&mut self, to: Option<PathBuf>) {
         let root = self.root.clone();
+        // another file that is there already: only with ! (or writeany)
+        if let Some(p) = &to {
+            let p = if p.is_absolute() { p.clone() } else { root.join(p) };
+            let mine = self.docs[self.cur].abs_path().is_some_and(|m| m == p);
+            if p.exists() && !mine && !self.bang && !self.flag(self.cur, "writeany") {
+                return self.say("E13: File exists (add ! to override)");
+            }
+        }
         let d = self.doc();
         if let Some(p) = to {
             let p = if p.is_absolute() { p } else { root.join(p) };
@@ -313,7 +351,13 @@ impl App {
         // trim_trailing_whitespace, final_newline (settings.rs)
         self.tidy_for_save(i);
         let lines = self.docs[i].ed.buf.len_lines();
+        // read as root (C-x x @): written as root too
+        if self.docs[i].local.get("sudo").is_some_and(|v| v == "true") {
+            self.sudo = Some(true);
+            return;
+        }
         match self.write_buffer(i) {
+            Err(e) if e.contains("Permission denied") => self.say(format!("{e}: M-x sudo-save (or C-x x @ first) writes it as root")),
             Ok(()) => {
                 let m = format!("\"{}\" {lines} lines written", self.docs[i].name);
                 self.docs[i].mtime = self.disk_time(i);
@@ -331,6 +375,11 @@ impl App {
 
     pub(crate) fn close(&mut self, force: bool) {
         if self.docs[self.cur].dirty() && !force {
+            // confirm: asked instead (input.rs takes the answer)
+            if self.flag(self.cur, "confirm") {
+                self.char_for = Some(("confirm:close".into(), None));
+                return self.say(format!("Save changes to \"{}\"? (y)es, (n)o, (c)ancel", self.docs[self.cur].name));
+            }
             return self.say("unsaved changes: :w saves, :q! drops them");
         }
         let gone = self.cur;
@@ -363,5 +412,98 @@ pub(crate) fn expand_abbrev(line: &mut String, abbrevs: &[(String, String)]) {
     let Some(start) = start else { return };
     if let Some((_, rhs)) = abbrevs.iter().find(|(l, _)| *l == line[start..]) {
         line.replace_range(start.., rhs);
+    }
+}
+
+/// A : line cut at its bars into commands, as Vim does: `\|` is a bar of the command's own, and
+/// the commands that take the rest of the line (:g :normal :! the maps :command :autocmd :bufdo
+/// :windo … :r ! :w !) keep every bar.
+pub(crate) fn bar_split(l: &str) -> Vec<String> {
+    let t = l.trim_start().trim_start_matches(':');
+    // the range first (numbers, . $ % ' marks, +, -, , ;, /pattern/)
+    let rest = t.trim_start_matches(|c: char| c.is_ascii_digit() || ".$%,;+-<>'".contains(c) || c.is_ascii_whitespace());
+    let name: String = rest.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+    let after = &rest[name.len()..];
+    const WHOLE: &[&str] = &[
+        "g", "gl", "global", "v", "vg", "vglobal", "norm", "norma", "normal", "com", "comm", "comma", "comman", "command",
+        "au", "aut", "auto", "autoc", "autocm", "autocmd", "bufdo", "windo", "tabdo", "argdo", "cdo", "cfdo", "ldo", "lfdo",
+        "lua", "luado", "exe", "execute",
+    ];
+    let maps = name.ends_with("map") || name.ends_with("noremap") || name.ends_with("unmap") || matches!(name.as_str(), "ab" | "abbreviate" | "iab" | "cab" | "no" | "nn" | "ino" | "vn" | "xn" | "cno" | "ono" | "nm" | "im" | "vm" | "xm" | "cm" | "om");
+    let shell = rest.starts_with('!') || (matches!(name.as_str(), "r" | "read" | "w" | "write") && after.trim_start().starts_with('!'));
+    if WHOLE.contains(&name.as_str()) || maps || shell || !l.contains('|') {
+        return vec![l.to_string()];
+    }
+    let mut out = vec![String::new()];
+    let mut it = l.chars().peekable();
+    while let Some(c) = it.next() {
+        match c {
+            '\\' if it.peek() == Some(&'|') => {
+                out.last_mut().unwrap().push('|');
+                it.next();
+            }
+            '|' => out.push(String::new()),
+            c => out.last_mut().unwrap().push(c),
+        }
+    }
+    // a bar at the end of a command that cannot split again is just a bar: the rest goes on as one
+    let mut res: Vec<String> = Vec::new();
+    for p in out {
+        if p.trim().is_empty() {
+            continue;
+        }
+        res.push(p);
+    }
+    if res.is_empty() {
+        res.push(String::new());
+    }
+    // the first command decides; the ones after are cut again by their own rules
+    if res.len() > 1 {
+        let rest = res[1..].join("|");
+        let mut first = vec![res[0].clone()];
+        first.extend(bar_split(&rest));
+        return first;
+    }
+    res
+}
+
+#[cfg(test)]
+mod bar_tests {
+    use super::bar_split;
+
+    #[test]
+    fn bars_split_commands_but_not_theirs() {
+        assert_eq!(bar_split("split | resize 4"), vec!["split ", " resize 4"]);
+        assert_eq!(bar_split("w | bd"), vec!["w ", " bd"]);
+        assert_eq!(bar_split("%s/a\\|b/x/g"), vec!["%s/a|b/x/g"]);
+        assert_eq!(bar_split("g/x/s/a/b/ | echo 1"), vec!["g/x/s/a/b/ | echo 1"]);
+        assert_eq!(bar_split("!ls | wc -l"), vec!["!ls | wc -l"]);
+        assert_eq!(bar_split("nnoremap x :a<CR>|:b<CR>"), vec!["nnoremap x :a<CR>|:b<CR>"]);
+        assert_eq!(bar_split("bufdo %s/a/b/g | update"), vec!["bufdo %s/a/b/g | update"]);
+        // the second command keeps its own bars
+        assert_eq!(bar_split("echo 1 | normal! a|b"), vec!["echo 1 ", " normal! a|b"]);
+        assert_eq!(bar_split("set ts=4"), vec!["set ts=4"]);
+    }
+}
+
+/// A wildchar value (a number as Vim keeps it, 9 for Tab, or key notation) as the key it is.
+fn wild_token(w: &str) -> Option<String> {
+    match w.trim().parse::<u32>() {
+        Ok(0) => None,
+        Ok(9) => Some("<Tab>".into()),
+        Ok(n) if n < 32 => Some(format!("<C-{}>", (n as u8 + 96) as char)),
+        Ok(n) => char::from_u32(n).map(|c| c.to_string()),
+        Err(_) if w.starts_with('<') => Some(w.to_string()),
+        Err(_) => None,
+    }
+}
+
+/// A command's end trimmed, but a space after a backslash kept (Vim's `:set stc=%l\ `).
+pub(crate) fn trim_cmd(s: &str) -> &str {
+    let t = s.trim_end();
+    if t.ends_with('\\') && t.len() < s.len() {
+        &s[..t.len() + 1]
+    } else {
+        t
     }
 }

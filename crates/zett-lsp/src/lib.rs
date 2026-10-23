@@ -8,26 +8,151 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
+/// From the config (zett.opt.lsp): servers by extension (command line, language id) that come
+/// before the built-in ones, and more folders to find server programs in (Mason's bin).
+static CONFIG: Mutex<(Vec<(String, Vec<String>, &'static str)>, Vec<PathBuf>)> = Mutex::new((Vec::new(), Vec::new()));
+
+/// Sets those (again on a config reload).
+pub fn configure(servers: Vec<(String, Vec<String>, String)>, dirs: Vec<PathBuf>) {
+    let mut c = CONFIG.lock().unwrap_or_else(|e| e.into_inner());
+    c.0 = servers.into_iter().map(|(e, cmd, l)| (e, cmd, &*Box::leak(l.into_boxed_str()))).collect();
+    c.1 = dirs;
+}
+
+/// A server's name: its program without the folder (Mason's full path shown short).
+fn prog_name(cmd: &str) -> String {
+    Path::new(cmd).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| cmd.to_string())
+}
+
+/// A program by name: in PATH, else in the config's folders (then by its full path).
+fn find_program(name: &str) -> Option<String> {
+    if name.contains('/') {
+        return Path::new(name).is_file().then(|| name.to_string());
+    }
+    if std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(name).is_file())) {
+        return Some(name.to_string());
+    }
+    let c = CONFIG.lock().unwrap_or_else(|e| e.into_inner());
+    c.1.iter().map(|d| d.join(name)).find(|p| p.is_file()).map(|p| p.display().to_string())
+}
+
 /// The server for a file, by its extension: the command line and the language id.
 pub fn server_for(path: &Path) -> Option<(Vec<String>, &'static str)> {
-    let ext = path.extension()?.to_str()?;
-    let (cmd, lang): (&[&str], &str) = match ext {
-        "rs" => (&["rust-analyzer"], "rust"),
-        "c" | "h" => (&["clangd"], "c"),
-        "cpp" | "cc" | "hpp" | "cxx" => (&["clangd"], "cpp"),
-        "ts" | "tsx" => (&["typescript-language-server", "--stdio"], "typescript"),
-        "js" | "jsx" | "mjs" => (&["typescript-language-server", "--stdio"], "javascript"),
-        "py" => (&["pyright-langserver", "--stdio"], "python"),
-        "lua" => (&["lua-language-server"], "lua"),
-        "sh" | "bash" => (&["bash-language-server", "start"], "shellscript"),
-        "go" => (&["gopls"], "go"),
-        "toml" => (&["taplo", "lsp", "stdio"], "toml"),
-        "md" => (&["marksman", "server"], "markdown"),
-        "qml" => (&["qmlls"], "qml"),
+    // files known by name (no extension, or a name that says more than it)
+    let name = path.file_name()?.to_str()?;
+    let ext = match name {
+        "Dockerfile" | "Containerfile" => "dockerfile",
+        "CMakeLists.txt" => "cmake",
+        "docker-compose.yml" | "docker-compose.yaml" | "compose.yml" | "compose.yaml" => "compose",
+        "justfile" | "Justfile" | ".justfile" => "just",
+        _ => path.extension()?.to_str()?,
+    };
+    let own = CONFIG.lock().unwrap_or_else(|e| e.into_inner()).0.iter().find(|(e, _, _)| e == ext).map(|(_, c, l)| (c.clone(), *l));
+    if let Some((mut cmd, lang)) = own {
+        let prog = find_program(cmd.first()?)?;
+        cmd[0] = prog;
+        return Some((cmd, lang));
+    }
+    // the servers for each language, the first one installed is used
+    let (cands, lang): (&[&[&str]], &str) = match ext {
+        "rs" => (&[&["rust-analyzer"]], "rust"),
+        "c" | "h" => (&[&["clangd"], &["ccls"]], "c"),
+        "cpp" | "cc" | "hpp" | "cxx" | "hh" | "hxx" | "ino" => (&[&["clangd"], &["ccls"]], "cpp"),
+        "m" | "mm" => (&[&["clangd"]], "objective-c"),
+        "cu" | "cuh" => (&[&["clangd"]], "cuda"),
+        "ts" | "mts" | "cts" => (&[&["typescript-language-server", "--stdio"], &["vtsls", "--stdio"]], "typescript"),
+        "tsx" => (&[&["typescript-language-server", "--stdio"], &["vtsls", "--stdio"]], "typescriptreact"),
+        "js" | "mjs" | "cjs" => (&[&["typescript-language-server", "--stdio"], &["vtsls", "--stdio"]], "javascript"),
+        "jsx" => (&[&["typescript-language-server", "--stdio"], &["vtsls", "--stdio"]], "javascriptreact"),
+        "vue" => (&[&["vue-language-server", "--stdio"]], "vue"),
+        "svelte" => (&[&["svelteserver", "--stdio"]], "svelte"),
+        "astro" => (&[&["astro-ls", "--stdio"]], "astro"),
+        "html" | "htm" | "xhtml" => (&[&["vscode-html-language-server", "--stdio"], &["superhtml", "lsp"]], "html"),
+        "css" => (&[&["vscode-css-language-server", "--stdio"]], "css"),
+        "scss" => (&[&["vscode-css-language-server", "--stdio"], &["some-sass-language-server", "--stdio"]], "scss"),
+        "sass" => (&[&["some-sass-language-server", "--stdio"]], "sass"),
+        "less" => (&[&["vscode-css-language-server", "--stdio"]], "less"),
+        "json" => (&[&["vscode-json-language-server", "--stdio"], &["biome", "lsp-proxy"]], "json"),
+        "jsonc" | "json5" => (&[&["vscode-json-language-server", "--stdio"]], "jsonc"),
+        "yaml" | "yml" => (&[&["yaml-language-server", "--stdio"]], "yaml"),
+        "compose" => (&[&["docker-compose-langserver", "--stdio"], &["yaml-language-server", "--stdio"]], "dockercompose"),
+        "toml" => (&[&["taplo", "lsp", "stdio"], &["tombi", "lsp"]], "toml"),
+        "xml" | "xsd" | "xsl" | "svg" => (&[&["lemminx"]], "xml"),
+        "md" | "markdown" => (&[&["marksman", "server"], &["markdown-oxide"]], "markdown"),
+        "tex" | "bib" | "sty" | "cls" => (&[&["texlab"]], "latex"),
+        "typ" => (&[&["tinymist"]], "typst"),
+        "py" | "pyi" => (&[&["pyright-langserver", "--stdio"], &["basedpyright-langserver", "--stdio"], &["pylsp"], &["jedi-language-server"]], "python"),
+        "lua" => (&[&["lua-language-server"]], "lua"),
+        "sh" | "bash" | "zsh" => (&[&["bash-language-server", "start"]], "shellscript"),
+        "fish" => (&[&["fish-lsp", "start"]], "fish"),
+        "ps1" | "psm1" => (&[&["pwsh-language-server"]], "powershell"),
+        "go" => (&[&["gopls"]], "go"),
+        "zig" | "zon" => (&[&["zls"]], "zig"),
+        "nix" => (&[&["nil"], &["nixd"]], "nix"),
+        "java" => (&[&["jdtls"]], "java"),
+        "kt" | "kts" => (&[&["kotlin-language-server"], &["kotlin-lsp"]], "kotlin"),
+        "scala" | "sc" | "sbt" => (&[&["metals"]], "scala"),
+        "groovy" | "gradle" => (&[&["groovy-language-server"]], "groovy"),
+        "cs" => (&[&["csharp-ls"], &["OmniSharp", "-lsp"]], "csharp"),
+        "fs" | "fsx" | "fsi" => (&[&["fsautocomplete"]], "fsharp"),
+        "swift" => (&[&["sourcekit-lsp"]], "swift"),
+        "dart" => (&[&["dart", "language-server", "--protocol=lsp"]], "dart"),
+        "rb" | "rake" | "gemspec" => (&[&["ruby-lsp"], &["solargraph", "stdio"]], "ruby"),
+        "php" => (&[&["intelephense", "--stdio"], &["phpactor", "language-server"]], "php"),
+        "ex" | "exs" | "heex" => (&[&["lexical"], &["elixir-ls"], &["nextls", "--stdio"]], "elixir"),
+        "erl" | "hrl" => (&[&["erlang_ls"], &["elp", "server"]], "erlang"),
+        "gleam" => (&[&["gleam", "lsp"]], "gleam"),
+        "hs" | "lhs" => (&[&["haskell-language-server-wrapper", "--lsp"], &["haskell-language-server", "--lsp"]], "haskell"),
+        "ml" | "mli" => (&[&["ocamllsp"]], "ocaml"),
+        "clj" | "cljs" | "cljc" | "edn" => (&[&["clojure-lsp"]], "clojure"),
+        "el" => (&[&["ellsp"]], "elisp"),
+        "rkt" => (&[&["racket", "-l", "racket-langserver"]], "racket"),
+        "jl" => (&[&["julia-lsp"]], "julia"),
+        "r" | "R" => (&[&["R", "--slave", "-e", "languageserver::run()"]], "r"),
+        "nim" | "nims" => (&[&["nimlangserver"]], "nim"),
+        "odin" => (&[&["ols"]], "odin"),
+        "v" => (&[&["v-analyzer"]], "v"),
+        "d" => (&[&["serve-d"]], "d"),
+        "cr" => (&[&["crystalline"]], "crystal"),
+        "sol" => (&[&["vscode-solidity-server", "--stdio"], &["nomicfoundation-solidity-language-server", "--stdio"]], "solidity"),
+        // the system's first: the same Qt as the program (Mason's qmlls is built for another one, and
+        // lacked a library here)
+        "qml" => (&[&["qmlls6"], &["/usr/lib/qt6/bin/qmlls"], &["qmlls"]], "qml"),
+        "slint" => (&[&["slint-lsp"]], "slint"),
+        "gd" | "gdscript" => (&[&["godot-lsp-stdio-bridge"]], "gdscript"),
+        "glsl" | "vert" | "frag" | "geom" | "comp" | "tesc" | "tese" => (&[&["glsl_analyzer"], &["glslls", "--stdin"]], "glsl"),
+        "wgsl" => (&[&["wgsl-analyzer"]], "wgsl"),
+        "hlsl" => (&[&["shader-language-server", "--stdio"]], "hlsl"),
+        "cmake" => (&[&["cmake-language-server"], &["neocmakelsp", "--stdio"]], "cmake"),
+        "dockerfile" => (&[&["docker-langserver", "--stdio"], &["docker-language-server", "start", "--stdio"]], "dockerfile"),
+        "tf" | "tfvars" => (&[&["terraform-ls", "serve"], &["tofu-ls", "serve"]], "terraform"),
+        "hcl" => (&[&["terraform-ls", "serve"]], "hcl"),
+        "sql" => (&[&["sqls"], &["sql-language-server", "up", "--method", "stdio"]], "sql"),
+        "graphql" | "gql" => (&[&["graphql-lsp", "server", "-m", "stream"]], "graphql"),
+        "proto" => (&[&["buf", "lsp", "serve"], &["protols"]], "proto"),
+        "prisma" => (&[&["prisma-language-server", "--stdio"]], "prisma"),
+        "vim" => (&[&["vim-language-server", "--stdio"]], "vim"),
+        "just" => (&[&["just-lsp"]], "just"),
+        "kdl" => (&[&["kdl-lsp"]], "kdl"),
+        "asm" | "s" | "S" => (&[&["asm-lsp"]], "asm"),
+        "vhd" | "vhdl" => (&[&["vhdl_ls"]], "vhdl"),
+        "sv" | "svh" => (&[&["verible-verilog-ls"], &["svls"]], "systemverilog"),
+        "tla" => (&[&["tlaplus-ls"]], "tla"),
+        "lean" => (&[&["lake", "serve"]], "lean"),
+        "elm" => (&[&["elm-language-server"]], "elm"),
+        "purs" => (&[&["purescript-language-server", "--stdio"]], "purescript"),
+        "fnl" => (&[&["fennel-ls"]], "fennel"),
+        "teal" | "tl" => (&[&["teal-language-server"]], "teal"),
+        "ron" => (&[&["ron-lsp"]], "ron"),
+        "hypr" => (&[&["hyprls"]], "hyprlang"),
         _ => return None,
     };
-    let found = std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(cmd[0]).is_file()));
-    found.then(|| (cmd.iter().map(|s| s.to_string()).collect(), lang))
+    cands.iter().find_map(|cmd| {
+        let prog = find_program(cmd[0])?;
+        let mut cmd: Vec<String> = cmd.iter().map(|s| s.to_string()).collect();
+        cmd[0] = prog;
+        Some((cmd, lang))
+    })
 }
 
 pub fn uri(p: &Path) -> String {
@@ -149,7 +274,7 @@ impl Client {
         let pending: Arc<Mutex<HashMap<i64, Pending>>> = Arc::default();
         let encoding = Arc::new(Mutex::new("utf-16".to_string()));
         let gate: Arc<Mutex<Gate>> = Arc::default();
-        let name = cmd[0].clone();
+        let name = prog_name(&cmd[0]);
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let tag = format!("{name}#{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         {
@@ -483,10 +608,11 @@ impl Servers {
     /// The client for a file (started when needed); None: no server for it.
     pub fn for_file(&mut self, path: &Path, root: &Path) -> Option<(&mut Client, &'static str)> {
         let (cmd, lang) = server_for(path)?;
-        if self.disabled.contains(&cmd[0]) {
+        let name = prog_name(&cmd[0]);
+        if self.disabled.contains(&name) {
             return None;
         }
-        let key = (root.to_path_buf(), cmd[0].clone());
+        let key = (root.to_path_buf(), name);
         if !self.clients.contains_key(&key) {
             let c = Client::start(&cmd, root, self.tx.clone()?).ok()?;
             self.clients.insert(key.clone(), c);
@@ -496,7 +622,7 @@ impl Servers {
 
     /// The server a file would use (its command name), started or not.
     pub fn name_for(path: &Path) -> Option<String> {
-        server_for(path).map(|(c, _)| c[0].clone())
+        server_for(path).map(|(c, _)| prog_name(&c[0]))
     }
 
     /// Stops the servers by that command name (all with None): dropped, each says shutdown and exit.

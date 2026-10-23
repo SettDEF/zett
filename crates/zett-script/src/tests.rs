@@ -182,3 +182,139 @@ fn every_emacs_key_points_at_a_command() {
     assert_eq!(e.feed("e", &k("<C-x>o")), Feed::Ran(vec![Effect::Ui("focusWin".into(), "next".into())]));
     assert_eq!(e.feed("e", &k("<C-M-f>")), Feed::Ran(vec![Effect::Edit("forward-sexp".into(), 1)]));
 }
+
+#[test]
+fn vim_api_reads_and_writes_the_buffer_and_options() {
+    let (d, f) = ws("vim-api");
+    let mut e = Engine::new(Some(f));
+    e.set_options(vec![("tabstop".into(), vec!["ts".into()], "int".into(), "8".into()), ("number".into(), vec!["nu".into()], "bool".into(), "false".into())]);
+    e.load_config(&d.join("no-config"));
+    assert!(e.errors.is_empty(), "{:?}", e.errors);
+    let mut ed = zett_edit::Editor::from_str("one\ntwo\nthree\n");
+    let run = |e: &mut Engine, ed: &mut zett_edit::Editor, code: &str| e.lend_buffer(ed, "/tmp/x.txt", &d, |e| e.eval(code)).unwrap();
+    // lines: Neovim's indexing (from 0, end not included, -1 the end)
+    assert_eq!(run(&mut e, &mut ed, "table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), ',')").0, "one,two,three");
+    run(&mut e, &mut ed, "vim.api.nvim_buf_set_lines(0, 1, 2, false, { 'TWO', 'two and a half' })");
+    assert_eq!(ed.text(), "one\nTWO\ntwo and a half\nthree\n");
+    run(&mut e, &mut ed, "vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'four' })");
+    assert_eq!(ed.text(), "one\nTWO\ntwo and a half\nthree\nfour\n");
+    run(&mut e, &mut ed, "vim.api.nvim_buf_set_lines(0, 0, 1, false, {})");
+    assert_eq!(ed.text(), "TWO\ntwo and a half\nthree\nfour\n");
+    run(&mut e, &mut ed, "vim.fn.setline(1, 'two'); vim.fn.append(0, 'zero')");
+    assert_eq!(ed.text(), "zero\ntwo\ntwo and a half\nthree\nfour\n");
+    assert_eq!(run(&mut e, &mut ed, "vim.fn.line('$')").0, "5");
+    // options: short names, defaults by kind, a set one read back; :set goes to the editor too
+    assert_eq!(run(&mut e, &mut ed, "vim.o.ts").0, "8");
+    assert_eq!(run(&mut e, &mut ed, "vim.o.number").0, "false");
+    let (_, fx) = run(&mut e, &mut ed, "vim.opt.tabstop = 4");
+    assert!(fx.contains(&Effect::Ui("ex".into(), "set tabstop=4".into())), "{fx:?}");
+    assert_eq!(run(&mut e, &mut ed, "vim.o.tabstop").0, "4");
+    let (_, fx) = run(&mut e, &mut ed, "vim.keymap.set('n', '<leader>w', ':w<CR>', { silent = true })");
+    assert!(fx.contains(&Effect::Ui("ex".into(), "nnoremap <silent> <leader>w :w<CR>".into())), "{fx:?}");
+    // the plain functions plugins lean on
+    assert_eq!(run(&mut e, &mut ed, "vim.fn.fnamemodify('/a/b/c.txt', ':t:r')").0, "c");
+    assert_eq!(run(&mut e, &mut ed, "vim.fn.substitute('a-b-c', '-', '+', 'g')").0, "a+b+c");
+    assert_eq!(run(&mut e, &mut ed, "vim.json.encode(vim.json.decode('{\"a\":[1,2,{\"b\":true}]}'))").0, "{\"a\":[1,2,{\"b\":true}]}");
+    assert_eq!(run(&mut e, &mut ed, "vim.tbl_deep_extend('force', { a = { b = 1, c = 2 } }, { a = { c = 3 } }).a.c").0, "3");
+    assert_eq!(run(&mut e, &mut ed, "#vim.split('a,,b', ',', { plain = true })").0, "3");
+    assert_eq!(run(&mut e, &mut ed, "vim.fn.has('nvim')").0, "1");
+}
+
+#[test]
+fn vim_patterns_become_lua_patterns() {
+    let (d, f) = ws("vim-pat");
+    let mut e = Engine::new(Some(f));
+    e.load_config(&d.join("no-config"));
+    let ev = |e: &mut Engine, c: &str| e.eval(c).unwrap().0;
+    assert_eq!(ev(&mut e, "vim.fn.substitute('a-b-c', '-', '+', 'g')"), "a+b+c");
+    assert_eq!(ev(&mut e, "vim.fn.substitute('foo  bar', '\\\\s\\\\+', ' ', '')"), "foo bar");
+    assert_eq!(ev(&mut e, "vim.fn.substitute('key=val', '\\\\(\\\\w\\\\+\\\\)=\\\\(\\\\w\\\\+\\\\)', '\\\\2:\\\\1', '')"), "val:key");
+    assert_eq!(ev(&mut e, "vim.fn.matchstr('version 1.2.3', '\\\\d\\\\+\\\\.\\\\d\\\\+')"), "1.2");
+    assert_eq!(ev(&mut e, "vim.fn.match('the cat', '\\\\<cat\\\\>')"), "4");
+    assert_eq!(ev(&mut e, "vim.fn.substitute('a.b', '.', 'x', 'g')"), "xxx");
+}
+
+#[test]
+fn vimscript_runs_translated_to_lua() {
+    let (d, f) = ws("vimscript");
+    let mut e = Engine::new(Some(f));
+    e.set_options(vec![("tabstop".into(), vec!["ts".into()], "int".into(), "8".into()), ("expandtab".into(), vec!["et".into()], "bool".into(), "false".into())]);
+    e.load_config(&d.join("no-config"));
+    assert!(e.errors.is_empty(), "{:?}", e.errors);
+    let script = r#"
+" a comment
+let s:count = 0
+function! s:Add(a, b) abort
+  let s:count += 1
+  return a:a + a:b
+endfunction
+function! Greet(name, ...)
+  let extra = a:0 > 0 ? ' and ' . join(a:000, ', ') : ''
+  return 'hi ' . a:name . extra
+endfunction
+let g:sum = 0
+for i in range(1, 5)
+  if i == 3
+    continue
+  endif
+  let g:sum = s:Add(g:sum, i)
+endfor
+let g:calls = s:count
+let g:greet = Greet('ann', 'bo', 'cy')
+let d = {'x': 1, 'y': [10, 20, 30]}
+let d.z = d.y[1] * 2
+let g:z = d.z
+let g:last = d.y[-1]
+let g:slice = join(d.y[0:1], '-')
+let g:doubled = join(map([1, 2, 3], 'v:val * 2'), ',')
+let g:big = join(filter([1, 5, 9], {_, v -> v > 3}), ',')
+let n = 0
+while n < 10
+  let n += 3
+endwhile
+let g:n = n
+try
+  throw 'oops'
+catch /^oo/
+  let g:caught = v:exception
+finally
+  let g:finally = 1
+endtry
+set ts=4 expandtab
+let g:ts = &ts
+let g:et = &et
+let g:cat = 'a' . 1 .. 'b'
+let g:cmp = ('abc' ==# 'abc') + ('abc' ==? 'ABC') + ('abc' =~ '^a')
+let [g:p, g:q] = [7, 8]
+function! Deferred()
+  defer add(g:log, 'deferred')
+  call add(g:log, 'body')
+  return 5
+endfunction
+let g:log = []
+let g:rv = Deferred()
+let g:logs = join(g:log, ',')
+"#;
+    e.eval(&format!("vim._vimscript.run({script:?}, 'test.vim')")).unwrap();
+    let g = |e: &mut Engine, k: &str| e.eval(&format!("tostring(vim.g.{k})")).unwrap().0;
+    assert_eq!(g(&mut e, "sum"), "12", "1+2+4+5, 3 skipped by :continue");
+    assert_eq!(g(&mut e, "calls"), "4");
+    assert_eq!(g(&mut e, "greet"), "hi ann and bo, cy");
+    assert_eq!(g(&mut e, "z"), "40");
+    assert_eq!(g(&mut e, "last"), "30");
+    assert_eq!(g(&mut e, "slice"), "10-20");
+    assert_eq!(g(&mut e, "doubled"), "2,4,6");
+    assert_eq!(g(&mut e, "big"), "5,9");
+    assert_eq!(g(&mut e, "n"), "12");
+    assert_eq!(g(&mut e, "caught"), "oops");
+    assert_eq!(g(&mut e, "finally"), "1");
+    assert_eq!(g(&mut e, "ts"), "4");
+    assert_eq!(g(&mut e, "et"), "1");
+    assert_eq!(g(&mut e, "cat"), "a1b");
+    assert_eq!(g(&mut e, "cmp"), "3");
+    assert_eq!(g(&mut e, "p") + &g(&mut e, "q"), "78");
+    assert_eq!(g(&mut e, "rv"), "5");
+    assert_eq!(g(&mut e, "logs"), "body,deferred");
+    // an error is a Vim error, not a crash
+    assert!(e.eval("vim._vimscript.run('echo NoSuchFunc()')").is_ok());
+}

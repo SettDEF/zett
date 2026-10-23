@@ -27,6 +27,11 @@ impl Editor {
             Op::ShiftRight | Op::ShiftLeft | Op::Reindent => {
                 // equalprg: = filters the lines through that program instead
                 if op == Op::Reindent {
+                    // indentexpr: the window indents each line by it
+                    if self.opt("indentexpr").is_some_and(|e| !e.trim().is_empty()) {
+                        self.vim.requests.push(Request::IndentExpr(l1, l2));
+                        return true;
+                    }
                     if let Some(prg) = self.opt("equalprg").filter(|p| !p.trim().is_empty()) {
                         let l = format!("{},{}!{prg}", l1 + 1, l2 + 1);
                         self.vim.requests.push(Request::Ex(l));
@@ -77,24 +82,18 @@ impl Editor {
                 self.cursor = self.first_non_blank(l1);
             }
             Op::Format => {
+                // formatexpr: the window evaluates it (non-zero: the internal formatting after all)
+                if self.opt("formatexpr").is_some_and(|e| !e.trim().is_empty()) {
+                    self.vim.requests.push(Request::FormatExpr(l1, l2));
+                    return true;
+                }
                 // formatprg: gq filters the lines through that program instead
                 if let Some(prg) = self.opt("formatprg").filter(|p| !p.trim().is_empty()) {
                     let l = format!("{},{}!{prg}", l1 + 1, l2 + 1);
                     self.vim.requests.push(Request::Ex(l));
                     return true;
                 }
-                let width = self.fill_column.max(10);
-                let text = self.buf.slice(self.line_start(l1), self.line_end(l2));
-                let mut out: Vec<String> = Vec::new();
-                for para in text.split("\n\n") {
-                    let first = para.lines().next().unwrap_or("");
-                    let (p1, rest) = crate::textops::fill_prefix(first);
-                    let words: Vec<&str> = para.split_whitespace().collect();
-                    out.push(crate::textops::fill(&words, &p1, &rest, width).join("\n"));
-                }
-                let (s, e) = (self.line_start(l1), self.line_end(l2));
-                self.replace_range(s, e, &out.join("\n\n"));
-                self.cursor = self.first_non_blank(l1.min(self.buf.len_lines() - 1));
+                self.format_lines(l1, l2);
             }
             Op::Filter => self.vim.requests.push(Request::CmdLine(if l1 == l2 { ".!".into() } else { format!(".,.+{}!", l2 - l1) })),
             Op::Func => {
@@ -127,4 +126,24 @@ impl Editor {
         self.close();
     }
 
+}
+
+impl Editor {
+    /// gq's own formatting of lines `l1..=l2`: each paragraph filled to the text width, its first
+    /// line's prefix (a comment leader, a list mark) kept (also when formatexpr gives non-zero).
+    pub fn format_lines(&mut self, l1: usize, l2: usize) {
+        let l2 = l2.min(self.buf.len_lines().saturating_sub(1));
+        let width = self.fill_column.max(10);
+        let text = self.buf.slice(self.line_start(l1), self.line_end(l2));
+        let mut out: Vec<String> = Vec::new();
+        for para in text.split("\n\n") {
+            let first = para.lines().next().unwrap_or("");
+            let (p1, rest) = crate::textops::fill_prefix(first);
+            let words: Vec<&str> = para.split_whitespace().collect();
+            out.push(crate::textops::fill(&words, &p1, &rest, width).join("\n"));
+        }
+        let (s, e) = (self.line_start(l1), self.line_end(l2));
+        self.replace_range(s, e, &out.join("\n\n"));
+        self.cursor = self.first_non_blank(l1.min(self.buf.len_lines() - 1));
+    }
 }

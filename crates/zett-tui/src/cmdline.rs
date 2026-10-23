@@ -251,7 +251,7 @@ impl App {
         if foot == 1 {
             lines.push(Line::from(vec![Span::styled(" e.g.  ", hl("Muted")), Span::styled(format!(":{}", sel.example), hl("SuggestExample"))]));
         }
-        f.render_widget(Clear, a);
+        crate::layer(f, a);
         let more = if all.len() > shown { format!(" {}/{} ", self.cmd_sel + 1, all.len()) } else { String::new() };
         let block = Block::default()
             .borders(Borders::ALL)
@@ -345,6 +345,25 @@ impl App {
 impl App {
     /// `:hi` (every group), `:hi NAME` (how it looks), `:hi NAME fg=3 bold` (change it).
     pub(crate) fn hi_command(&mut self, arg: &str) {
+        // Vim's forms: :hi [default] link From To, :hi clear Group, :hi default Group …
+        let arg = arg.trim();
+        let arg = arg.strip_prefix("default ").map(str::trim_start).unwrap_or(arg);
+        if let Some(rest) = arg.strip_prefix("link ") {
+            let mut w = rest.split_whitespace();
+            if let (Some(from), Some(to)) = (w.next(), w.next()) {
+                let args = if to.eq_ignore_ascii_case("NONE") { "clear".to_string() } else { format!("link={to}") };
+                if let Err(e) = self.engine.set_highlight(from, &args) {
+                    self.say(e);
+                }
+                return;
+            }
+        }
+        if let Some(group) = arg.strip_prefix("clear ") {
+            if let Err(e) = self.engine.set_highlight(group.trim(), "clear") {
+                self.say(e);
+            }
+            return;
+        }
         let (name, args) = arg.split_once(' ').map(|(a, b)| (a, b.trim())).unwrap_or((arg.trim(), ""));
         if name.is_empty() {
             let rows = self.engine.highlights().into_iter().map(|(n, raw, _)| (n, raw)).collect();
@@ -360,7 +379,8 @@ impl App {
             return self.say(m);
         }
         match self.engine.set_highlight(name, args) {
-            Ok(m) => self.say(format!("{m} (for good: zett.hl(\"{name}\", {{ … }}) in init.lua)")),
+            // quiet as in Vim (nvim_set_hl from plugins goes through here)
+            Ok(_) => {}
             Err(e) => self.say(e),
         }
     }

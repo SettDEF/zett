@@ -211,6 +211,8 @@ pub(crate) struct Comp {
     pub line: usize,
     /// where the word being completed starts
     pub start: usize,
+    /// keyword completion (CTRL-N / CTRL-P): what was typed (CTRL-E brings it back); None from a server
+    pub keyword: Option<String>,
 }
 
 fn ident(c: char) -> bool {
@@ -220,21 +222,29 @@ fn ident(c: char) -> bool {
 impl App {
     /// After a key in insert mode: refine the popup, ask for one, or close it.
     pub(crate) fn comp_after_key(&mut self, typed: Option<char>) {
+        // keyword completion ends with the next key typed (the word stays as it is)
+        if self.comp.as_ref().is_some_and(|c| c.keyword.is_some()) {
+            self.comp = None;
+            return;
+        }
         if !self.docs[self.cur].lsp || self.docs[self.cur].ed.mode() != Mode::Insert {
             self.comp = None;
             return;
         }
+        // autocomplete: the menu comes by itself after autocompletedelay ms (else C-n / C-x C-o ask)
+        let auto = self.flag(self.cur, "autocomplete");
+        let delay = Duration::from_millis(self.setting(self.cur, "autocompletedelay").parse().unwrap_or(120));
         match typed {
             Some(c) if ident(c) => {
                 if self.comp.is_some() {
                     self.comp_filter();
-                } else {
-                    self.comp_due = Some(Instant::now() + Duration::from_millis(120));
+                } else if auto {
+                    self.comp_due = Some(Instant::now() + delay);
                 }
             }
             Some('.') | Some(':') => {
                 self.comp = None;
-                self.comp_due = Some(Instant::now() + Duration::from_millis(60));
+                self.comp_due = auto.then(|| Instant::now() + delay / 2);
             }
             None if self.comp.is_some() => self.comp_filter(),
             _ => {
@@ -272,7 +282,7 @@ impl App {
         while start > 0 && ident(text[start - 1]) {
             start -= 1;
         }
-        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start });
+        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start, keyword: None });
         self.comp_filter();
     }
 
@@ -350,10 +360,36 @@ impl App {
         let w = if maxw > 0 { w.min(maxw) } else { w };
         let w = w.min(area.width as usize) as u16;
         let x = cx.saturating_sub((self.docs[self.cur].ed.cursor().col - comp.start) as u16 + 2).min(area.width.saturating_sub(w));
-        let below = cy + 1 + rows <= area.bottom().saturating_sub(2);
+        // a frame (pumborder) takes a row above and below as well
+        let framed = !matches!(self.setting(self.cur, "pumborder").as_str(), "" | "none");
+        let below = cy + 1 + rows + if framed { 2 } else { 0 } <= area.bottom().saturating_sub(2);
         let y = if below { cy + 1 } else { cy.saturating_sub(rows) };
         let a = Rect { x, y, width: w, height: rows };
-        f.render_widget(Clear, a);
+        // pumborder: a frame round the menu (none by default, as Neovim), the items inside it
+        let set = match self.setting(self.cur, "pumborder").as_str() {
+            "single" => Some(ratatui::symbols::border::PLAIN),
+            "double" => Some(ratatui::symbols::border::DOUBLE),
+            "rounded" => Some(ratatui::symbols::border::ROUNDED),
+            "bold" => Some(ratatui::symbols::border::THICK),
+            "solid" | "shadow" => Some(ratatui::symbols::border::Set { top_left: " ", top_right: " ", bottom_left: " ", bottom_right: " ", vertical_left: " ", vertical_right: " ", horizontal_top: " ", horizontal_bottom: " " }),
+            _ => None,
+        };
+        let a = match set {
+            Some(set) => {
+                // the frame stays off the cursor's line: below it from the next row, above it ending a row higher
+                // (above with too little room: fewer rows, as Neovim shortens the menu)
+                let h = if below { a.height } else { a.height.min(cy.saturating_sub(2)).max(1) };
+                let oy = if below { a.y } else { cy.saturating_sub(h + 2) };
+                let outer = Rect { x: a.x.saturating_sub(1), y: oy, width: (a.width + 2).min(area.width), height: (h + 2).min(area.height) }.intersection(area);
+                crate::layer(f, outer);
+                f.render_widget(ratatui::widgets::Block::default().borders(ratatui::widgets::Borders::ALL).border_set(set).border_style(hl("PmenuBorder").patch(hl("FloatBorder"))).style(hl("Pmenu")), outer);
+                Rect { x: outer.x + 1, y: outer.y + 1, width: outer.width.saturating_sub(2), height: outer.height.saturating_sub(2) }
+            }
+            None => {
+                crate::layer(f, a);
+                a
+            }
+        };
         let first = comp.sel.saturating_sub(rows as usize - 1);
         let lines: Vec<Line> = comp
             .shown
@@ -592,4 +628,28 @@ mod lsp_command_tests {
         assert!(app.msg.as_ref().is_some_and(|m| m.0.starts_with("E475")));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// zett.opt.lsp from init.lua to the client: { path = { folders with servers }, servers = {
+/// ext = { cmd = { … }, lang = "id" } } } (servers for more file types, or other ones).
+pub(crate) fn apply_config(engine: &mut zett_script::Engine) {
+    let code = r#"(function()
+  local l = zett.opt.lsp or {}
+  local home = os.getenv("HOME") or ""
+  local out = {}
+  for _, d in ipairs(l.path or {}) do out[#out + 1] = "dir\t" .. tostring(d):gsub("^~", home) end
+  for ext, s in pairs(l.servers or {}) do out[#out + 1] = "srv\t" .. ext .. "\t" .. (s.lang or ext) .. "\t" .. table.concat(s.cmd or {}, "\31") end
+  return table.concat(out, "\30")
+end)()"#;
+    let Ok((text, _)) = engine.eval(code) else { return };
+    let (mut servers, mut dirs) = (Vec::new(), Vec::new());
+    for row in text.split('\u{1e}') {
+        let f: Vec<&str> = row.split('\t').collect();
+        match f.as_slice() {
+            ["dir", d] => dirs.push(std::path::PathBuf::from(d)),
+            ["srv", ext, lang, cmd] if !cmd.is_empty() => servers.push((ext.to_string(), cmd.split('\u{1f}').map(String::from).collect(), lang.to_string())),
+            _ => {}
+        }
+    }
+    zett_lsp::configure(servers, dirs);
 }

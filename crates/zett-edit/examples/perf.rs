@@ -36,6 +36,11 @@ fn main() {
     c.time("dd, 100k lines", us(200), || e.feed("dd"));
     c.time("p, 100k lines", us(200), || e.feed("p"));
     c.time("u, 100k lines", us(200), || e.feed("u"));
+    // Vim's search is a regex (vimre.rs): n over the whole text, hlsearch for one screen
+    e.feed("gg/line 9999\\d<CR>");
+    c.time("search n (a regex), 100k lines", ms(30), || e.feed("n"));
+    let (a, b) = (e.buf.to_char(zett_core::Pos { line: 50_000, col: 0 }), e.buf.to_char(zett_core::Pos { line: 50_060, col: 0 }));
+    c.time("hlsearch, a screen of 60 lines", us(500), || e.hl_matches(a, b));
 
     // ── the block tree ──
     let ws = c.time("create 100k blocks", ms(500), || {

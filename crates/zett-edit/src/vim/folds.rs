@@ -29,7 +29,7 @@ impl Editor {
         self.fold_lines().into_iter().filter(|f| f.2 && f.1 > f.0 && f.1 - f.0 >= min).map(|(a, b, _)| (a + 1, b + 1)).collect()
     }
 
-    fn folds_changed(&mut self) {
+    pub(crate) fn folds_changed(&mut self) {
         // the view works the hidden lines out again
         self.view_touch();
         // the cursor goes to the start of a fold that closed over it

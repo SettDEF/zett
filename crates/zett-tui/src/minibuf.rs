@@ -469,7 +469,7 @@ fn draw_float(f: &mut Frame, m: &Minibuf) {
     let w = (area.width * 7 / 10).max(40).min(area.width);
     let h = (area.height * 7 / 10).max(10).min(area.height);
     let a = Rect { x: area.x + (area.width - w) / 2, y: area.y + (area.height - h) / 3, width: w, height: h };
-    f.render_widget(Clear, a);
+    crate::layer(f, a);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_set(crate::display::float_set())

@@ -1,6 +1,6 @@
 # Emacs's commands
 
-Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 All 3163 interactive commands of a plain Emacs (`emacs -Q`), by their package's prefix. ✓ zett has it under
 the same name. Most are packages (mail, games, modes for other languages): zett's answer to many is a
@@ -46,7 +46,7 @@ plugin, not the core.
 
 ## activate
 
-- · `activate-transient-input-method` Select and enable a transient input method for the current buffer.
+- ✓ `activate-transient-input-method` Select and enable a transient input method for the current buffer.
 
 ## ad
 
@@ -56,8 +56,8 @@ plugin, not the core.
 
 ## add
 
-- · `add-change-log-entry` Find ChangeLog buffer, add an entry for today and an item for this file.
-- · `add-change-log-entry-other-window` Find change log file in other window and add entry and item.
+- ✓ `add-change-log-entry` Find ChangeLog buffer, add an entry for today and an item for this file.
+- ✓ `add-change-log-entry-other-window` Find change log file in other window and add entry and item.
 - · `add-dir-local-variable` Add directory-local VARIABLE with its VALUE and MODE to .dir-locals.el.
 - · `add-file-local-variable` Add file-local VARIABLE with its VALUE to the Local Variables list.
 - · `add-file-local-variable-prop-line` Add file-local VARIABLE with its VALUE to the -*- line.
@@ -118,7 +118,7 @@ plugin, not the core.
 
 ## apply
 
-- · `apply-macro-to-region-lines` Apply last keyboard macro to all lines in the region.
+- ✓ `apply-macro-to-region-lines` Apply last keyboard macro to all lines in the region.
 
 ## appt
 
@@ -583,7 +583,7 @@ plugin, not the core.
 ## clone
 
 - ✓ `clone-buffer` Create and return a twin copy of the current buffer.
-- · `clone-frame` Make a new frame with the same parameters and windows as FRAME.
+- ✓ `clone-frame` Make a new frame with the same parameters and windows as FRAME.
 - · `clone-indirect-buffer` Create an indirect buffer that is a twin copy of the current buffer.
 - ✓ `clone-indirect-buffer-other-window` Like `clone-indirect-buffer' but display in another window.
 
@@ -621,7 +621,7 @@ plugin, not the core.
 - ✓ `comment-line` Comment or uncomment current line and leave point after it.
 - · `comment-or-uncomment-region` Call `comment-region', unless the region only consists of comments,
 - · `comment-region` Comment or uncomment each line in the region.
-- · `comment-set-column` Set the comment column based on point.
+- ✓ `comment-set-column` Set the comment column based on point.
 
 ## common
 
@@ -885,13 +885,13 @@ plugin, not the core.
 - · `delete-file-local-variable` Delete all settings of file-local VARIABLE from the Local Variables list.
 - · `delete-file-local-variable-prop-line` Delete all settings of file-local VARIABLE from the -*- line.
 - ✓ `delete-forward-char` Delete the following N characters (previous if N is negative).
-- · `delete-frame` Delete FRAME, eliminating it from use.
+- ✓ `delete-frame` Delete FRAME, eliminating it from use.
 - ✓ `delete-horizontal-space` Delete all spaces and tabs around point.
 - ✓ `delete-indentation` Join this line to previous and fix up whitespace at join.
 - · `delete-matching-lines` Delete lines containing matches for REGEXP.
 - · `delete-minibuffer-contents` Delete all user input in a minibuffer.
 - · `delete-non-matching-lines` Delete all lines except those containing matches for REGEXP.
-- · `delete-other-frames` Delete all frames on FRAME's terminal, except FRAME.
+- ✓ `delete-other-frames` Delete all frames on FRAME's terminal, except FRAME.
 - ✓ `delete-other-windows` Make WINDOW fill its frame.
 - · `delete-other-windows-internal` Make WINDOW fill its frame.
 - · `delete-other-windows-vertically` Delete the windows in the same column with WINDOW, but not WINDOW itself.
@@ -929,13 +929,13 @@ plugin, not the core.
 - ✓ `describe-char` Describe position POS (interactively, point) and the char after POS.
 - · `describe-character-set` Display information about built-in character set CHARSET.
 - · `describe-char-fold-equivalences` Display characters equivalent to CHAR under character-folding.
-- · `describe-coding-system` Display information about CODING-SYSTEM.
+- ✓ `describe-coding-system` Display information about CODING-SYSTEM.
 - ✓ `describe-command` Display the full documentation of COMMAND (a symbol).
-- · `describe-copying` Display info on how you may redistribute copies of GNU Emacs.
-- · `describe-current-coding-system` Display coding systems currently used, in detail.
+- ✓ `describe-copying` Display info on how you may redistribute copies of GNU Emacs.
+- ✓ `describe-current-coding-system` Display coding systems currently used, in detail.
 - · `describe-current-coding-system-briefly` Display coding systems currently used in a brief format in echo area.
 - · `describe-current-display-table` Describe the display table in use in the selected window and buffer.
-- · `describe-distribution` Display info on how to obtain the latest version of GNU Emacs.
+- ✓ `describe-distribution` Display info on how to obtain the latest version of GNU Emacs.
 - · `describe-editorconfig-properties` Display EditorConfig properties extracted for current buffer.
 - · `describe-face` Display the properties of face FACE on FRAME.
 - · `describe-font` Display information about a font whose name is FONTNAME.
@@ -943,22 +943,22 @@ plugin, not the core.
 - ✓ `describe-function` Display the full documentation of FUNCTION (a symbol).
 - · `describe-gnu-project` Browse online information on the GNU project.
 - · `describe-icon` Pop to a buffer to describe ICON.
-- · `describe-input-method` Describe input method INPUT-METHOD.
+- ✓ `describe-input-method` Describe input method INPUT-METHOD.
 - ✓ `describe-key` Display documentation of the function invoked by KEY-LIST.
 - ✓ `describe-key-briefly` Print the name of the functions KEY-LIST invokes.
 - · `describe-keymap` Describe key bindings in KEYMAP.
-- · `describe-language-environment` Describe how Emacs supports language environment LANGUAGE-NAME.
+- ✓ `describe-language-environment` Describe how Emacs supports language environment LANGUAGE-NAME.
 - · `describe-minor-mode` Display documentation of a minor mode given as MINOR-MODE.
 - · `describe-minor-mode-from-indicator` Display documentation of a minor mode specified by INDICATOR.
 - · `describe-minor-mode-from-symbol` Display documentation of a minor mode given as a symbol, SYMBOL.
 - ✓ `describe-mode` Display documentation of current major mode and minor modes.
-- · `describe-no-warranty` Display info on all the kinds of warranty Emacs does NOT have.
+- ✓ `describe-no-warranty` Display info on all the kinds of warranty Emacs does NOT have.
 - ✓ `describe-package` Display the full documentation of PACKAGE (a symbol).
 - · `describe-personal-keybindings` Display all the personal keybindings defined by `bind-key'.
 - · `describe-prefix-bindings` Describe the bindings of the prefix used to reach this command.
 - · `describe-specified-language-support` Describe how Emacs supports the specified language environment.
 - ✓ `describe-symbol` Display the full documentation of SYMBOL.
-- · `describe-syntax` Describe the syntax specifications in the syntax table of BUFFER.
+- ✓ `describe-syntax` Describe the syntax specifications in the syntax table of BUFFER.
 - · `describe-text-properties` Describe widgets, buttons, overlays, and text properties at POS.
 - · `describe-theme` Display a description of the Custom theme THEME (a symbol).
 - ✓ `describe-variable` Display the full documentation of VARIABLE (a symbol).
@@ -1020,7 +1020,7 @@ plugin, not the core.
 - · `dired-from-menubar` Edit an existing directory.
 - ✓ `dired-jump` Jump to Dired buffer corresponding to current buffer.
 - ✓ `dired-jump-other-window` Like \[dired-jump] (`dired-jump') but in other window.
-- · `dired-other-frame` "Edit" directory DIRNAME.  Like `dired' but make a new frame.
+- ✓ `dired-other-frame` "Edit" directory DIRNAME.  Like `dired' but make a new frame.
 - ✓ `dired-other-tab` "Edit" directory DIRNAME.  Like `dired' but make a new tab.
 - ✓ `dired-other-window` "Edit" directory DIRNAME.  Like `dired' but select in another window.
 
@@ -1042,7 +1042,7 @@ plugin, not the core.
 - · `display-about-screen` Display the *About GNU Emacs* buffer.
 - · `display-battery-mode` Toggle battery status display in mode line (Display Battery mode).
 - ✓ `display-buffer` Display BUFFER-OR-NAME in some window, without selecting it.
-- · `display-buffer-other-frame` Display buffer BUFFER preferably in another frame.
+- ✓ `display-buffer-other-frame` Display buffer BUFFER preferably in another frame.
 - · `display-call-tree` Display a call graph of a specified file.
 - · `display-fill-column-indicator-mode` Toggle display of `fill-column' indicator.
 - ✓ `display-line-numbers-mode` Toggle display of line numbers in the buffer.
@@ -1319,7 +1319,7 @@ plugin, not the core.
 ## elisp
 
 - · `elisp-byte-code-mode` Major mode for *.elc files.
-- · `elisp-byte-compile-buffer` Byte compile the current buffer, but don't write a file.
+- ✓ `elisp-byte-compile-buffer` Byte compile the current buffer, but don't write a file.
 - · `elisp-byte-compile-file` Byte compile the file the current buffer is visiting.
 - · `elisp-enable-lexical-binding` Make the current buffer use `lexical-binding'.
 - ✓ `elisp-eval-region-or-buffer` Evaluate the forms in the active region or the whole current buffer.
@@ -1376,9 +1376,9 @@ plugin, not the core.
 - · `emoji-list-select` 
 - ✓ `emoji-recent` 
 - ✓ `emoji-search` 
-- · `emoji-zoom-decrease` Decrease the size of the character under point.
-- · `emoji-zoom-increase` Increase the size of the character under point.
-- · `emoji-zoom-reset` Reset the size of the character under point.
+- ✓ `emoji-zoom-decrease` Decrease the size of the character under point.
+- ✓ `emoji-zoom-increase` Increase the size of the character under point.
+- ✓ `emoji-zoom-reset` Reset the size of the character under point.
 
 ## enable
 
@@ -1652,11 +1652,11 @@ plugin, not the core.
 - · `find-file-at-point` Find FILENAME, guessing a default from text around point.
 - · `find-file-existing` Edit the existing file FILENAME.
 - · `find-file-literally` Visit file FILENAME with no conversion of any kind.
-- · `find-file-other-frame` Edit file FILENAME, in another frame.
+- ✓ `find-file-other-frame` Edit file FILENAME, in another frame.
 - ✓ `find-file-other-tab` Edit file FILENAME, in another tab.
 - ✓ `find-file-other-window` Edit file FILENAME, in another window.
 - ✓ `find-file-read-only` Edit file FILENAME but don't allow changes.
-- · `find-file-read-only-other-frame` Edit file FILENAME in another frame but don't allow changes.
+- ✓ `find-file-read-only-other-frame` Edit file FILENAME in another frame but don't allow changes.
 - ✓ `find-file-read-only-other-tab` Edit file FILENAME, in another tab, but don't allow changes.
 - ✓ `find-file-read-only-other-window` Edit file FILENAME in another window but don't allow changes.
 - · `find-function` Find the definition of the Emacs Lisp FUNCTION near point.
@@ -1872,7 +1872,7 @@ plugin, not the core.
 - · `global-subword-mode` Toggle Subword mode in many buffers.
 - · `global-superword-mode` Toggle Superword mode in many buffers.
 - · `global-tab-line-mode` Toggle Tab-Line mode in many buffers.
-- · `global-text-scale-adjust` Change (a.k.a. "adjust") the font size of all faces by INCREMENT.
+- ✓ `global-text-scale-adjust` Change (a.k.a. "adjust") the font size of all faces by INCREMENT.
 - · `global-unset-key` Remove global binding of KEY.
 - · `global-visual-line-mode` Toggle Visual-Line mode in many buffers.
 - · `global-visual-wrap-prefix-mode` Toggle Visual-Wrap-Prefix mode in many buffers.
@@ -2029,13 +2029,13 @@ plugin, not the core.
 - · `help` Help command.
 - · `help-at-pt-cancel-timer` Cancel any timer set by `help-at-pt-set-timer'.
 - · `help-at-pt-set-timer` Enable `help-at-pt-display-when-idle'.
-- · `help-find-source` Switch to a buffer visiting the source of what is being described in *Help*.
+- ✓ `help-find-source` Switch to a buffer visiting the source of what is being described in *Help*.
 - ✓ `help-for-help` Help command.
 - · `help-for-help-internal` Help command.
 - · `help-make-xrefs` Parse and hyperlink documentation cross-references in the given BUFFER.
 - · `help-mode` Major mode for viewing help text and navigating references in it.
 - · `help-quick` Display a quick-help buffer showing popular commands and their bindings.
-- · `help-quick-toggle` Toggle display of a window showing popular commands and their bindings.
+- ✓ `help-quick-toggle` Toggle display of a window showing popular commands and their bindings.
 - ✓ `help-quit` Just exit from the Help command's command loop.
 - ✓ `help-with-tutorial` Select the Emacs learn-by-doing tutorial.
 - · `help-with-tutorial-spec-language` Use the Emacs tutorial, specifying which language you want.
@@ -2517,7 +2517,7 @@ plugin, not the core.
 
 ## kbd
 
-- · `kbd-macro-query` Query user during kbd macro execution.
+- ✓ `kbd-macro-query` Query user during kbd macro execution.
 
 ## keep
 
@@ -2580,9 +2580,9 @@ plugin, not the core.
 - · `kmacro-end-call-mouse` Call last keyboard macro, ending it first if currently being defined.
 - ✓ `kmacro-end-macro` Finish defining a keyboard macro.
 - ✓ `kmacro-end-or-call-macro` End kbd macro if currently being defined; else call last kbd macro.
-- · `kmacro-keymap` Keymap for keyboard macro commands.
+- ✓ `kmacro-keymap` Keymap for keyboard macro commands.
 - · `kmacro-menu` List the keyboard macros.
-- · `kmacro-name-last-macro` Assign a name to the last keyboard macro defined.
+- ✓ `kmacro-name-last-macro` Assign a name to the last keyboard macro defined.
 - ✓ `kmacro-start-macro` Record subsequent keyboard input, defining a keyboard macro.
 - ✓ `kmacro-start-macro-or-insert-counter` Record subsequent keyboard input, defining a keyboard macro.
 
@@ -2776,7 +2776,7 @@ plugin, not the core.
 - · `make-face-unbold` Make the font of FACE be non-bold, if possible.
 - · `make-face-unitalic` Make the font of FACE be non-italic, if possible.
 - · `make-frame` Return a newly created frame displaying the current buffer.
-- · `make-frame-command` Make a new frame, on the same terminal as the selected frame.
+- ✓ `make-frame-command` Make a new frame, on the same terminal as the selected frame.
 - · `make-frame-invisible` Make the frame FRAME invisible.
 - · `make-frame-on-current-monitor` Make a frame on the currently selected monitor.
 - · `make-frame-on-display` Make a frame on display DISPLAY.
@@ -3077,9 +3077,9 @@ plugin, not the core.
 - ✓ `mouse-split-window-vertically` Select Emacs window mouse is on, then split it vertically in half.
 - · `mouse-start-secondary` Set one end of the secondary selection to the position clicked on.
 - · `mouse-tear-off-window` Delete the selected window, and create a new frame displaying its buffer.
-- · `mouse-wheel-global-text-scale` Increase or decrease the global font size according to the EVENT.
+- ✓ `mouse-wheel-global-text-scale` Increase or decrease the global font size according to the EVENT.
 - · `mouse-wheel-mode` Toggle mouse wheel support (Mouse Wheel mode).
-- · `mouse-wheel-text-scale` Adjust font size of the default face according to EVENT.
+- ✓ `mouse-wheel-text-scale` Adjust font size of the default face according to EVENT.
 - · `mouse-yank-at-click` Insert the last stretch of killed text at the position clicked on.
 - ✓ `mouse-yank-primary` Insert the primary selection,
 - · `mouse-yank-secondary` Insert the secondary selection at the position clicked on.
@@ -3132,7 +3132,7 @@ plugin, not the core.
 
 ## name
 
-- · `name-last-kbd-macro` Assign a name to the last keyboard macro defined.
+- ✓ `name-last-kbd-macro` Assign a name to the last keyboard macro defined.
 
 ## narrow
 
@@ -3318,8 +3318,8 @@ plugin, not the core.
 
 ## other
 
-- · `other-frame` Select the ARGth visible frame on current display, and raise it.
-- · `other-frame-prefix` Display the buffer of the next command in a new frame.
+- ✓ `other-frame` Select the ARGth visible frame on current display, and raise it.
+- ✓ `other-frame-prefix` Display the buffer of the next command in a new frame.
 - ✓ `other-tab-prefix` Display the buffer of the next command in a new tab.
 - ✓ `other-window` Select another window in cyclic ordering of windows.
 - ✓ `other-window-backward` Select another window in the reverse cyclic ordering of windows.
@@ -3620,11 +3620,11 @@ plugin, not the core.
 - ✓ `project-list-buffers` Display a list of project buffers.
 - ✓ `project-or-external-find-file` Visit a file (with completion) in the current project or external roots.
 - ✓ `project-or-external-find-regexp` Find all matches for REGEXP in the project roots or external roots.
-- · `project-other-frame-command` Run project command, displaying resultant buffer in another frame.
+- ✓ `project-other-frame-command` Run project command, displaying resultant buffer in another frame.
 - ✓ `project-other-tab-command` Run project command, displaying resultant buffer in a new tab.
 - ✓ `project-other-window-command` Run project command, displaying resultant buffer in another window.
 - · `project-prefix-or-any-command` Run the next command in the current project.
-- · `project-query-replace-regexp` Query-replace REGEXP in all the files of the project.
+- ✓ `project-query-replace-regexp` Query-replace REGEXP in all the files of the project.
 - · `project-recompile` Run `recompile' in the project root with an appropriate buffer.
 - · `project-remember-project` Add project PR to the front of the project list.
 - · `project-root-find-file` Edit file FILENAME.
@@ -3871,7 +3871,7 @@ plugin, not the core.
 
 - ✓ `revert-buffer` Replace current buffer text with the text of the visited file on disk.
 - ✓ `revert-buffer-quick` Like `revert-buffer', but asks for less confirmation.
-- · `revert-buffer-with-coding-system` Visit the current buffer's file again using coding system CODING-SYSTEM.
+- ✓ `revert-buffer-with-coding-system` Visit the current buffer's file again using coding system CODING-SYSTEM.
 - · `revert-buffer-with-fine-grain` Revert buffer preserving markers, overlays, etc.
 
 ## rgrep
@@ -4018,15 +4018,15 @@ plugin, not the core.
 - · `scroll-bar-toolkit-scroll` Handle event EVENT on vertical scroll bar.
 - · `scroll-down` Scroll text of selected window down ARG lines.
 - ✓ `scroll-down-command` Scroll text of selected window down ARG lines; or near full screen if no ARG.
-- · `scroll-down-line` Scroll text of selected window down ARG lines; or one line if no ARG.
+- ✓ `scroll-down-line` Scroll text of selected window down ARG lines; or one line if no ARG.
 - ✓ `scroll-left` Scroll selected window display ARG columns left.
-- · `scroll-lock-mode` Buffer-local minor mode for pager-like scrolling.
+- ✓ `scroll-lock-mode` Buffer-local minor mode for pager-like scrolling.
 - ✓ `scroll-other-window` Scroll next window upward LINES lines; or near full screen if no ARG.
 - ✓ `scroll-other-window-down` Scroll next window downward LINES lines; or near full screen if no ARG.
 - ✓ `scroll-right` Scroll selected window display ARG columns right.
 - · `scroll-up` Scroll text of selected window upward ARG lines.
 - ✓ `scroll-up-command` Scroll text of selected window upward ARG lines; or near full screen if no ARG.
-- · `scroll-up-line` Scroll text of selected window upward ARG lines; or one line if no ARG.
+- ✓ `scroll-up-line` Scroll text of selected window upward ARG lines; or one line if no ARG.
 
 ## scss
 
@@ -4042,7 +4042,7 @@ plugin, not the core.
 - · `search-backward-regexp` Search backward from point for regular expression REGEXP.
 - · `search-emacs-glossary` Display the Glossary node of the Emacs manual in Info mode.
 - ✓ `search-forward` Search forward from point for STRING.
-- · `search-forward-help-for-help` Search forward in the `help-for-help' window.
+- ✓ `search-forward-help-for-help` Search forward in the `help-for-help' window.
 - · `search-forward-regexp` Search forward from point for regular expression REGEXP.
 - · `search-unencodable-char` Search forward from point for a character that is not encodable.
 
@@ -4060,7 +4060,7 @@ plugin, not the core.
 ## self
 
 - · `self-insert-and-exit` Terminate minibuffer input.
-- · `self-insert-command` Insert the character you type.
+- ✓ `self-insert-command` Insert the character you type.
 
 ## semantic
 
@@ -4088,8 +4088,8 @@ plugin, not the core.
 
 - · `set-background-color` Set the background color of the selected frame to COLOR-NAME.
 - · `set-border-color` Set the color of the border of the selected frame to COLOR-NAME.
-- · `set-buffer-file-coding-system` Set the file coding-system of the current buffer to CODING-SYSTEM.
-- · `set-buffer-process-coding-system` Set coding systems for the process associated with the current buffer.
+- ✓ `set-buffer-file-coding-system` Set the file coding-system of the current buffer to CODING-SYSTEM.
+- ✓ `set-buffer-process-coding-system` Set coding systems for the process associated with the current buffer.
 - · `set-clipboard-coding-system` Make CODING-SYSTEM used for communicating with other X clients.
 - · `set-comment-column` Set the comment column based on point.
 - · `set-cursor-color` Set the text cursor color of the selected frame to COLOR-NAME.
@@ -4103,7 +4103,7 @@ plugin, not the core.
 - · `set-face-stipple` Change the stipple pixmap of face FACE to STIPPLE.
 - · `set-face-underline` Specify whether face FACE is underlined.
 - · `set-file-modes` Set mode bits of file named FILENAME to MODE (an integer).
-- · `set-file-name-coding-system` Set coding system for decoding and encoding file names to CODING-SYSTEM.
+- ✓ `set-file-name-coding-system` Set coding system for decoding and encoding file names to CODING-SYSTEM.
 - ✓ `set-fill-column` Set `fill-column' to specified argument.
 - ✓ `set-fill-prefix` Set the fill prefix to the current line up to point.
 - · `set-foreground-color` Set the foreground color of the selected frame to COLOR-NAME.
@@ -4113,25 +4113,25 @@ plugin, not the core.
 - · `set-frame-width` Set text width of frame FRAME to WIDTH columns.
 - · `set-fringe-style` Set the default appearance of fringes on the selected frame.
 - ✓ `set-goal-column` Set the current horizontal position as a goal column.
-- · `set-input-method` Select and activate input method INPUT-METHOD for the current buffer.
+- ✓ `set-input-method` Select and activate input method INPUT-METHOD for the current buffer.
 - · `set-justification` Set the region's justification style to STYLE.
 - · `set-justification-center` Make paragraphs in the region centered.
 - · `set-justification-full` Make paragraphs in the region fully justified.
 - · `set-justification-left` Make paragraphs in the region left-justified.
 - · `set-justification-none` Disable automatic filling for paragraphs in the region.
 - · `set-justification-right` Make paragraphs in the region right-justified.
-- · `set-keyboard-coding-system` Set coding system for keyboard input on TERMINAL to CODING-SYSTEM.
-- · `set-language-environment` Set up multilingual environment for using LANGUAGE-NAME.
+- ✓ `set-keyboard-coding-system` Set coding system for keyboard input on TERMINAL to CODING-SYSTEM.
+- ✓ `set-language-environment` Set up multilingual environment for using LANGUAGE-NAME.
 - · `set-left-margin` Set the left margin of the region to WIDTH.
-- · `set-locale-environment` Set up multilingual environment for using LOCALE-NAME.
+- ✓ `set-locale-environment` Set up multilingual environment for using LOCALE-NAME.
 - ✓ `set-mark-command` Set the mark where point is, and activate it; or jump to the mark.
 - · `set-mouse-color` Set the color of the mouse pointer of the selected frame to COLOR-NAME.
-- · `set-next-selection-coding-system` Use CODING-SYSTEM for next communication with other window system clients.
+- ✓ `set-next-selection-coding-system` Use CODING-SYSTEM for next communication with other window system clients.
 - · `set-right-margin` Set the right margin of the region to WIDTH.
 - · `set-rmail-inbox-list` Set the inbox list of the current RMAIL file to FILE-NAME.
-- · `set-selection-coding-system` Make CODING-SYSTEM used for communicating with other X clients.
-- · `set-selective-display` Set `selective-display' to ARG; clear it if no arg.
-- · `set-terminal-coding-system` Set coding system of terminal output to CODING-SYSTEM.
+- ✓ `set-selection-coding-system` Make CODING-SYSTEM used for communicating with other X clients.
+- ✓ `set-selective-display` Set `selective-display' to ARG; clear it if no arg.
+- ✓ `set-terminal-coding-system` Set coding system of terminal output to CODING-SYSTEM.
 - · `set-variable` Set VARIABLE to VALUE.  VALUE is a Lisp object.
 - · `set-visited-file-name` Change name of file visited in current buffer to FILENAME.
 
@@ -4163,7 +4163,7 @@ plugin, not the core.
 
 - · `shell` Run an inferior shell, with I/O through BUFFER (which defaults to `*shell*').
 - ✓ `shell-command` Execute string COMMAND in inferior shell; display output, if any.
-- · `shell-command-on-region` Execute string COMMAND in inferior shell with region as input.
+- ✓ `shell-command-on-region` Execute string COMMAND in inferior shell with region as input.
 - · `shell-script-mode` Major mode for editing shell scripts.
 
 ## shortdoc
@@ -4390,7 +4390,7 @@ plugin, not the core.
 ## switch
 
 - ✓ `switch-to-buffer` Display buffer BUFFER-OR-NAME in the selected window.
-- · `switch-to-buffer-other-frame` Switch to buffer BUFFER-OR-NAME in another frame.
+- ✓ `switch-to-buffer-other-frame` Switch to buffer BUFFER-OR-NAME in another frame.
 - ✓ `switch-to-buffer-other-tab` Switch to buffer BUFFER-OR-NAME in another tab.
 - ✓ `switch-to-buffer-other-window` Select the buffer specified by BUFFER-OR-NAME in another window.
 - · `switch-to-completions` Select the completion list window.
@@ -4447,7 +4447,7 @@ plugin, not the core.
 - ✓ `tab-close-other` Close all tabs on the selected frame, except the tab TAB-NUMBER.
 - · `tab-detach` Move tab number FROM-NUMBER to a new frame.
 - ✓ `tab-duplicate` Clone the current tab to ARG positions to the right.
-- · `tab-group` Add the tab specified by its absolute position TAB-NUMBER to GROUP-NAME.
+- ✓ `tab-group` Add the tab specified by its absolute position TAB-NUMBER to GROUP-NAME.
 - · `tab-last` Switch to the last tab or ARGth tab from the end of the tab bar.
 - · `tab-line-mode` Toggle display of tab line in the windows displaying the current buffer.
 - · `tab-list` Display a list of named window configurations.
@@ -4554,7 +4554,7 @@ plugin, not the core.
 
 ## tear
 
-- · `tear-off-window` Delete the selected window, and create a new frame displaying its buffer.
+- ✓ `tear-off-window` Delete the selected window, and create a new frame displaying its buffer.
 
 ## telnet
 
@@ -4599,9 +4599,9 @@ plugin, not the core.
 
 - · `text-mode` Major mode for editing text written for humans to read.
 - · `text-mode-menu` Menu for `text-mode'.
-- · `text-scale-adjust` Adjust the font size in the current buffer by INC steps.
-- · `text-scale-decrease` Decrease the font size of the default face in the current buffer by DEC steps.
-- · `text-scale-increase` Increase the font size of the default face in current buffer by INC steps.
+- ✓ `text-scale-adjust` Adjust the font size in the current buffer by INC steps.
+- ✓ `text-scale-decrease` Decrease the font size of the default face in the current buffer by DEC steps.
+- ✓ `text-scale-increase` Increase the font size of the default face in current buffer by INC steps.
 - · `text-scale-pinch` Adjust the height of the default face by the scale in the pinch event EVENT.
 - · `text-scale-set` Set the scale factor of the default face in the current buffer to LEVEL.
 
@@ -4673,7 +4673,7 @@ plugin, not the core.
 - · `toggle-frame-tab-bar` Toggle tab bar of the selected frame.
 - · `toggle-horizontal-scroll-bar` Toggle whether or not the selected frame has horizontal scroll bars.
 - · `toggle-indicate-empty-lines` Toggle whether to indicate trailing empty lines in fringe, globally.
-- · `toggle-input-method` Enable or disable multilingual text input method for the current buffer.
+- ✓ `toggle-input-method` Enable or disable multilingual text input method for the current buffer.
 - · `toggle-menu-bar-mode-from-frame` Toggle display of the menu bar.
 - · `toggle-option` Toggle the value of boolean option SYMBOL for this session.
 - · `toggle-rot13-mode` Toggle the use of ROT13 encoding for the current window.
@@ -4688,7 +4688,7 @@ plugin, not the core.
 - · `toggle-uniquify-buffer-names` Toggle whether to uniquify buffer names by adding parent directory names.
 - · `toggle-use-system-font` Toggle whether to use the monospaced font defined by the system.
 - · `toggle-viper-mode` Toggle Viper on/off.
-- · `toggle-window-dedicated` Toggle whether WINDOW is dedicated to its current buffer.
+- ✓ `toggle-window-dedicated` Toggle whether WINDOW is dedicated to its current buffer.
 - · `toggle-word-wrap` Toggle whether to use word-wrapping for continuation lines.
 
 ## toml
@@ -4730,7 +4730,7 @@ plugin, not the core.
 ## tramp
 
 - · `tramp-dired-find-file-with-sudo` Visit the file or directory named on this line as the superuser.
-- · `tramp-revert-buffer-with-sudo` Visit the current file again with superuser, or root, permissions.
+- ✓ `tramp-revert-buffer-with-sudo` Visit the current file again with superuser, or root, permissions.
 - · `tramp-unload-tramp` Discard Tramp from loading remote files.
 
 ## transient
@@ -4798,7 +4798,7 @@ plugin, not the core.
 
 ## undelete
 
-- · `undelete-frame` Undelete a frame deleted with `delete-frame'.
+- ✓ `undelete-frame` Undelete a frame deleted with `delete-frame'.
 - · `undelete-frame-by-id` Undelete the frame with the matching ID.
 - · `undelete-frame-mode` Enable the `undelete-frame' command.
 
@@ -4841,7 +4841,7 @@ plugin, not the core.
 
 - ✓ `universal-argument` Begin a numeric argument for the following command.
 - · `universal-argument-more` 
-- · `universal-coding-system-argument` Execute an I/O command using the specified CODING-SYSTEM.
+- ✓ `universal-coding-system-argument` Execute an I/O command using the specified CODING-SYSTEM.
 
 ## unix
 
@@ -4912,8 +4912,8 @@ plugin, not the core.
 
 - ✓ `vc-add-working-tree` Create working tree DIRECTORY with same backing repository as this tree.
 - ✓ `vc-annotate` Display the edit history of the current FILE using colors.
-- · `vc-apply-root-to-other-working-tree` Apply all local changes in this working tree to the tree under DIRECTORY.
-- · `vc-apply-to-other-working-tree` Apply VC fileset's local changes to working tree under DIRECTORY.
+- ✓ `vc-apply-root-to-other-working-tree` Apply all local changes in this working tree to the tree under DIRECTORY.
+- ✓ `vc-apply-to-other-working-tree` Apply VC fileset's local changes to working tree under DIRECTORY.
 - · `vc-auto-revert-mode` Toggle Auto-Revert mode in many buffers.
 - · `vc-change-backend` Make BACKEND the current version control system for FILE.
 - · `vc-cherry-pick` Copy the changes from a single revision REV to the current branch.
@@ -4933,13 +4933,13 @@ plugin, not the core.
 - ✓ `vc-dir` Show the VC status for "interesting" files in and below DIR.
 - · `vc-dir-root` Run `vc-dir' in the repository root directory without prompt.
 - · `vc-ediff` Display diffs between file revisions using ediff.
-- · `vc-edit-next-command` Request editing the next VC shell command before execution.
+- ✓ `vc-edit-next-command` Request editing the next VC shell command before execution.
 - · `vc-find-conflicted-file` Visit the next conflicted file in the current project.
 - · `vc-find-file-hook` Refresh the VC state of the current buffer's file.
 - · `vc-git-grep` Run git grep, searching for REGEXP in FILES in directory DIR.
 - ✓ `vc-ignore` Ignore FILE under the VCS of DIRECTORY.
 - · `vc-insert-headers` Insert headers into a file for use with a version control system.
-- · `vc-kill-other-working-tree-buffers` Kill buffers visiting versions of this file in other working trees.
+- ✓ `vc-kill-other-working-tree-buffers` Kill buffers visiting versions of this file in other working trees.
 - ✓ `vc-log-mergebase` Show a log of changes between the merge base of revisions REV1 and REV2.
 - ✓ `vc-log-remote-unintegrated` Show remote log for VC fileset since merge base with UPSTREAM-LOCATION.
 - · `vc-log-search` Search the VC log of changes for PATTERN and show log of matching changes.
@@ -4984,7 +4984,7 @@ plugin, not the core.
 - ✓ `vc-switch-working-tree` Switch to the version of this file in working tree under DIRECTORY.
 - · `vc-uncommit-revisions-from-end` Delete revisions newer than REV without touching the working tree.
 - ✓ `vc-update` Update the current fileset or branch.
-- · `vc-update-change-log` Find change log file and add entries from recent version control logs.
+- ✓ `vc-update-change-log` Find change log file and add entries from recent version control logs.
 - · `vc-version-diff` Report diffs between revisions REV1 and REV2 in the repository history.
 - · `vc-version-ediff` Show differences between REV1 and REV2 of FILES using ediff.
 - ✓ `vc-working-tree-switch-project` Like \[project-switch-project] but limited to projects with the same backing repository.
@@ -5018,19 +5018,19 @@ plugin, not the core.
 - · `view-buffer-other-frame` View BUFFER in View mode in another frame.
 - · `view-buffer-other-window` View BUFFER in View mode in another window.
 - ✓ `view-echo-area-messages` View the log of recent echo-area messages: the `*Messages*' buffer.
-- · `view-emacs-debugging` Display info on how to debug Emacs problems.
-- · `view-emacs-FAQ` Display the Emacs Frequently Asked Questions (FAQ) file.
-- · `view-emacs-news` Display info on recent changes to Emacs.
-- · `view-emacs-problems` Display info on known problems with Emacs and possible workarounds.
-- · `view-emacs-todo` Display the Emacs TODO list.
-- · `view-external-packages` Display info on where to get more Emacs packages.
+- ✓ `view-emacs-debugging` Display info on how to debug Emacs problems.
+- ✓ `view-emacs-FAQ` Display the Emacs Frequently Asked Questions (FAQ) file.
+- ✓ `view-emacs-news` Display info on recent changes to Emacs.
+- ✓ `view-emacs-problems` Display info on known problems with Emacs and possible workarounds.
+- ✓ `view-emacs-todo` Display the Emacs TODO list.
+- ✓ `view-external-packages` Display info on where to get more Emacs packages.
 - · `view-file` View FILE in View mode, returning to previous buffer when done.
 - · `view-file-other-frame` View FILE in View mode in another frame.
 - · `view-file-other-window` View FILE in View mode in another window.
-- · `view-hello-file` Display the HELLO file, which lists many languages and characters.
+- ✓ `view-hello-file` Display the HELLO file, which lists many languages and characters.
 - ✓ `view-lossage` Display last few input keystrokes and the commands run.
 - · `view-mode` Toggle View mode, a minor mode for viewing text but not editing it.
-- · `view-order-manuals` Display information on how to buy printed copies of Emacs manuals.
+- ✓ `view-order-manuals` Display information on how to buy printed copies of Emacs manuals.
 - · `view-register` Display the description of the contents of REGISTER.
 
 ## View
@@ -5165,7 +5165,7 @@ plugin, not the core.
 - ✓ `window-layout-rotate-clockwise` Rotate layout of WINDOW's child windows clockwise by 90 degrees.
 - ✓ `window-layout-transpose` Transpose child windows of WINDOW.
 - · `window-swap-states` Swap the states of live windows WINDOW-1 and WINDOW-2.
-- · `window-toggle-side-windows` Toggle display of side windows on specified FRAME.
+- ✓ `window-toggle-side-windows` Toggle display of side windows on specified FRAME.
 - · `window-tool-bar-mode` Toggle display of the tool bar in the tab line of the current buffer.
 
 ## winner
@@ -5223,7 +5223,7 @@ plugin, not the core.
 - ✓ `xref-find-apropos` Find all meaningful symbols that match PATTERN.
 - ✓ `xref-find-definitions` Find the definition of the identifier at point.
 - · `xref-find-definitions-at-mouse` Find the definition of identifier at or around mouse click.
-- · `xref-find-definitions-other-frame` Like `xref-find-definitions' but switch to the other frame.
+- ✓ `xref-find-definitions-other-frame` Like `xref-find-definitions' but switch to the other frame.
 - ✓ `xref-find-definitions-other-window` Like `xref-find-definitions' but switch to the other window.
 - ✓ `xref-find-references` Find references to the identifier at point.
 - · `xref-find-references-at-mouse` Find references to the identifier at or around mouse click.

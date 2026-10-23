@@ -1,0 +1,34 @@
+2C-command	two-column mode: zett's windows side by side (C-x 3, scroll-bind)
+calc-dispatch	the calculator is a package: a plugin, or M-: for Lua arithmetic
+compose-mail	mail is a package: a plugin
+compose-mail-other-frame	mail is a package: a plugin
+compose-mail-other-window	mail is a package: a plugin
+describe-gnu-project	a page on gnu.org
+analyze-text-conversion	Android's input method
+compose-last-chars	glyph composition is the terminal's (zash shapes the text)
+handle-delete-frame	a GUI frame event; the terminal's window is zash's
+handle-select-window	a GUI frame event; the terminal's window is zash's
+handle-switch-frame	a GUI frame event; the terminal's window is zash's
+mouse-appearance-menu	the GUI font menu; the font is the terminal's (C-x C-= in zash)
+mouse-drag-bottom-edge	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-bottom-left-corner	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-bottom-right-corner	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-left-edge	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-right-edge	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-top-edge	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-top-left-corner	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-top-right-corner	GUI window edges; zett's dividers drag (the mouse section)
+mouse-drag-secondary	X11's secondary selection, which a terminal never gets
+mouse-secondary-save-then-kill	X11's secondary selection, which a terminal never gets
+mouse-set-secondary	X11's secondary selection, which a terminal never gets
+mouse-start-secondary	X11's secondary selection, which a terminal never gets
+mouse-yank-secondary	X11's secondary selection, which a terminal never gets
+scroll-bar-toolkit-horizontal-scroll	GUI scroll bars; the wheel scrolls
+scroll-bar-toolkit-scroll	GUI scroll bars; the wheel scrolls
+text-scale-pinch	a touchpad pinch reaches the terminal, not the program
+touch-screen-drag	touch screens reach the terminal, not the program
+touch-screen-hold	touch screens reach the terminal, not the program
+touch-screen-pinch	touch screens reach the terminal, not the program
+touch-screen-restart-drag	touch screens reach the terminal, not the program
+touch-screen-scroll	touch screens reach the terminal, not the program
+tab-detach	frames are zett's tabs (C-x 5): a tab is its own already

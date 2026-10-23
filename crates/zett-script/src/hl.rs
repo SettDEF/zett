@@ -209,6 +209,22 @@ impl Hl {
                 Some(("fg" | "guifg" | "ctermfg", v)) => self.fg = Some(color(v).ok_or_else(|| format!("not a colour: {v}"))?),
                 Some(("bg" | "guibg" | "ctermbg", v)) => self.bg = Some(color(v).ok_or_else(|| format!("not a colour: {v}"))?),
                 Some(("link", v)) => self.link = Some(v.to_string()),
+                // Vim's attribute lists (gui=bold,italic cterm=underline; nvim_set_hl writes these)
+                Some(("gui" | "cterm" | "term", v)) => {
+                    for a in v.split(',') {
+                        match a.trim() {
+                            "bold" => self.bold = true,
+                            "italic" => self.italic = true,
+                            "underline" | "undercurl" | "underdouble" | "underdotted" | "underdashed" => self.underline = true,
+                            "reverse" | "inverse" | "standout" => self.reverse = true,
+                            "strikethrough" => self.strikethrough = true,
+                            "NONE" | "none" => (self.bold, self.italic, self.underline, self.reverse, self.strikethrough) = (false, false, false, false, false),
+                            _ => {}
+                        }
+                    }
+                }
+                // kept by Neovim, not drawn here: the underline's colour, blending, fonts
+                Some(("guisp" | "sp" | "ctermul" | "blend" | "font" | "start" | "stop", _)) => {}
                 Some((k, _)) => return Err(format!("unknown: {k} (fg= bg= link=)")),
                 None => match t {
                     "bold" => self.bold = true,
@@ -222,6 +238,8 @@ impl Hl {
                     "noreverse" => self.reverse = false,
                     "nostrikethrough" => self.strikethrough = false,
                     "clear" | "NONE" => *self = Hl::default(),
+                    // :hi default …: only where a group is not set yet (zett lays it over as usual)
+                    "default" => {}
                     o => return Err(format!("unknown: {o} (bold italic underline reverse strikethrough clear)")),
                 },
             }
@@ -378,5 +396,22 @@ mod tests {
         assert!(h.apply("fg=nonsense").is_err());
         let d = defaults();
         assert_eq!(d["GitAdded"].link.as_deref(), Some("Added"));
+    }
+}
+
+#[cfg(test)]
+mod vim_attr_tests {
+    use super::*;
+
+    #[test]
+    fn gui_and_cterm_lists_and_what_is_kept_but_not_drawn() {
+        let mut h = Hl::default();
+        h.apply("guifg=#ff8000 gui=bold,italic guisp=#00ff00 cterm=underline").unwrap();
+        assert!(h.bold && h.italic && h.underline);
+        assert_eq!(h.fg, Some(HlColor::Rgb(255, 128, 0)));
+        h.apply("gui=NONE").unwrap();
+        assert!(!h.bold && !h.italic);
+        h.apply("default guibg=#000000").unwrap();
+        assert_eq!(h.bg, Some(HlColor::Rgb(0, 0, 0)));
     }
 }

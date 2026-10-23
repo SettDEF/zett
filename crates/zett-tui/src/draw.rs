@@ -23,12 +23,15 @@ impl App {
         };
         // cmdheight: the rows under the windows (0: only while there is something to show)
         let busy = self.cmdline.is_some() || self.msg.is_some() || self.minibuf.is_some() || self.docs[cur].ed.isearch().is_some() || !self.keyseq.is_empty();
-        let cmd_rows = match self.num(cur, "cmdheight") {
-            0 if busy => 1,
-            n => n.min(10) as u16,
-        };
         // laststatus 3: one status line for the focused window, under all of them
         let laststatus = self.num(cur, "laststatus");
+        // with 0 and a status line at the bottom, the : line and messages take that line's place
+        // (no row is added, the windows never move); without one, a row comes while busy
+        let over_status = self.num(cur, "cmdheight") == 0 && laststatus != 0;
+        let cmd_rows = match self.num(cur, "cmdheight") {
+            0 if busy && !over_status => 1,
+            n => n.min(10) as u16,
+        };
         let global = u16::from(laststatus == 3);
         // the minibuffer's candidates take rows from the windows, as in Emacs
         let mini = self.minibuf.as_ref().filter(|_| self.placement == Placement::Bottom).map_or(0, |m| m.rows() as u16);
@@ -40,6 +43,12 @@ impl App {
             Constraint::Length(cmd_rows),
         ])
         .areas(f.area());
+        let cmd = if over_status && busy {
+            let at = if global > 0 { gline } else { Rect { y: body.bottom().saturating_sub(1), height: 1, ..body } };
+            Rect { y: at.y, height: 1, ..f.area() }
+        } else {
+            cmd
+        };
         if tabs {
             // tabline: its own format, else zett's buffer tabs
             let fmt = self.setting(cur, "tabline");
@@ -185,8 +194,33 @@ impl App {
                 if travelling {
                     std::mem::swap(&mut self.docs[di], &mut self.travel.as_mut().unwrap().preview);
                 }
+                self.fold_texts(di);
+                // statuscolumn for the lines this window may show (the view can still move a little)
+                let (t, h) = (self.docs[di].top, text.height as usize);
+                self.stc_lines(di, t.saturating_sub(h), t + 2 * h);
+                self.ext_marks(di, t.saturating_sub(h), t + 2 * h);
                 self.drawing_win = id;
+                let winhl = self.setting(di, "winhighlight");
+                crate::hl::set_winhighlight(&winhl);
                 self.draw_text(f, text, di, focused);
+                // Normal read as another group: the window takes its colours where nothing else set
+                // them (Neovim fills a window with Normal)
+                if winhl.split(',').any(|p| p.trim_start().starts_with("Normal:")) {
+                    let n = hl::hl("Normal");
+                    let buf = f.buffer_mut();
+                    for y in text.top()..text.bottom() {
+                        for x in text.left()..text.right() {
+                            let c = &mut buf[(x, y)];
+                            if let Some(bg) = n.bg.filter(|_| c.bg == Color::Reset) {
+                                c.set_bg(bg);
+                            }
+                            if let Some(fg) = n.fg.filter(|_| c.fg == Color::Reset) {
+                                c.set_fg(fg);
+                            }
+                        }
+                    }
+                }
+                crate::hl::set_winhighlight("");
                 if travelling {
                     std::mem::swap(&mut self.docs[di], &mut self.travel.as_mut().unwrap().preview);
                 }
@@ -223,6 +257,11 @@ impl App {
         }
         self.draw_float_panels(f, body);
         self.draw_floats(f, body);
+        // over the status line: that line cleared first, so none of it shows around the : line
+        if over_status && busy {
+            f.render_widget(ratatui::widgets::Clear, cmd);
+            f.render_widget(ratatui::widgets::Block::default().style(hl("MsgArea")), cmd);
+        }
         let (line_at, boxed, below) = self.cmd_place(body, cmd);
         self.draw_cmd(f, cmd, line_at, boxed);
         // showcmd: the keys of a command under way, at the right of the last line (showcmdloc=last)
@@ -288,12 +327,15 @@ impl App {
     }
 
     pub(crate) fn draw_text(&mut self, f: &mut Frame, a: Rect, di: usize, focused: bool) {
+        // conceallevel / concealcursor: how extmarks' conceal shows (0: not at all)
+        let (clevel, ccursor) = (self.num(di, "conceallevel"), self.setting(di, "concealcursor"));
         // H M L and gm need the lines and columns shown
         // a section just found: drawn by zash (a hand-drawn line under it) where it can, else it pulses
         let (flash, fx) = (self.flash, fx_draws());
         let mut fx_marks: Vec<FxMark> = Vec::new();
         // help pages: their headings drawn under (once, then kept), a found section circled
         let help = fx && self.docs[di].name.starts_with("help: ");
+        let quiet = self.fx_quiet();
         // the headings (outside code blocks), as the outline reads them
         let heads: std::collections::HashSet<usize> = if help {
             let mut fence = false;
@@ -378,7 +420,11 @@ impl App {
             (false, Signs::Number) => 1,
             (false, _) => 0,
         };
-        let gutter = (show.foldcolumn + sign_w + num_w) as u16;
+        // statuscolumn: as wide as it worked out to be
+        let gutter = match self.stc.get(&di) {
+            Some((_, w, _)) => *w as u16,
+            None => (show.foldcolumn + sign_w + num_w) as u16,
+        };
         if focused {
             self.gutter = gutter;
         }
@@ -551,22 +597,42 @@ impl App {
             }
             let shown_text = || -> String { d.ed.buf.line(ln).chars().filter(|c| *c != '\n').skip(d.left).take(a.width.saturating_sub(gutter) as usize).collect() };
             let flashed = flash.filter(|f| fx && f.0 == di && f.1 == ln);
+            let head_key = format!("head:{}:{ln}", d.name);
+            // a whole topic's title is drawn under by the flash: the same mark as its heading's
+            // (two keys drew it twice, the second time with its own sound, when the flash ended)
+            let title_flash = flashed.is_some_and(|fl| fl.1 == 0 && fl.2 == 1) && heads.contains(&ln) && d.left == 0;
             if let Some(fl) = flashed {
                 // a whole topic's title: drawn under; a section jumped to: a loop round it
-                let spec = if fl.1 == 0 && fl.2 == 1 { "underline;color=accent;draw=700ms" } else { "scribble;color=accent;turns=1.15;wobble=0.08;draw=900ms" };
+                let spec = if fl.1 == 0 && fl.2 == 1 { "underline;color=accent;draw=700ms;sound=draw;volume=0.4" } else { "scribble;color=accent;turns=1.15;wobble=0.08;draw=900ms;sound=draw;volume=0.45" };
                 // a heading: its words, the # left out
                 let t = shown_text();
                 let skip = if heads.contains(&ln) && d.left == 0 { t.chars().take_while(|c| *c == '#' || *c == ' ').count() } else { 0 };
                 let text: String = t.chars().skip(skip).collect::<String>().trim_end().to_string();
-                fx_marks.push(FxMark { x: a.x + gutter + skip as u16, y: a.y + out.len() as u16, text, key: format!("found:{}:{ln}", d.name), since: fl.3, spec });
-            } else if help && d.left == 0 && heads.contains(&ln) {
+                let key = if title_flash { head_key.clone() } else { format!("found:{}:{ln}", d.name) };
+                fx_marks.push(FxMark { x: a.x + gutter + skip as u16, y: a.y + out.len() as u16, text, key, since: fl.3, spec, transient: false });
+            }
+            // a heading's underline, a jumped-to one's too (with its loop, not 2 s after it)
+            if help && d.left == 0 && heads.contains(&ln) && !title_flash {
                 // a heading: the words drawn under, the # left out
                 let t = shown_text();
                 let hashes = t.chars().take_while(|c| *c == '#' || *c == ' ').count();
                 let words: String = t.chars().skip(hashes).collect();
                 if !words.trim().is_empty() {
-                    let key = format!("head:{}:{ln}", d.name);
-                    fx_marks.push(FxMark { x: a.x + gutter + hashes as u16, y: a.y + out.len() as u16, text: words.trim_end().to_string(), key, since: Instant::now(), spec: "underline;color=accent;draw=600ms" });
+                    fx_marks.push(FxMark { x: a.x + gutter + hashes as u16, y: a.y + out.len() as u16, text: words.trim_end().to_string(), key: head_key, since: Instant::now(), spec: "underline;color=accent;draw=600ms;sound=draw;volume=0.35", transient: false });
+                }
+            }
+            // the cursor on a help page: a big loop round the `name` it is on, else round the heading it is on
+            if help && fx && !quiet && d.left == 0 && ln == c.line {
+                let t: Vec<char> = d.ed.buf.line(ln).chars().filter(|ch| *ch != '\n').collect();
+                let around = crate::emacs::tick_span(&t, c.col).map(|(start, text)| (start, text)).or_else(|| {
+                    heads.contains(&ln).then(|| {
+                        let hashes = t.iter().take_while(|ch| **ch == '#' || **ch == ' ').count();
+                        (hashes, t[hashes..].iter().collect::<String>().trim_end().to_string())
+                    })
+                });
+                if let Some((start, text)) = around.filter(|(_, text)| !text.trim().is_empty()) {
+                    let key = format!("cur:{}:{ln}:{start}", d.name);
+                    fx_marks.push(FxMark { x: a.x + gutter + start as u16, y: a.y + out.len() as u16, text, key, since: Instant::now(), spec: crate::emacs::CIRCLE, transient: true });
                 }
             }
             // the cursor line's number stands out with cursorline (cursorlineopt number or both)
@@ -623,6 +689,14 @@ impl App {
                     None => Span::raw(" "),
                 });
             }
+            // statuscolumn: its pieces in place of the gutter (LineNr where they name no group)
+            if let Some((w, m)) = self.stc.get(&di).map(|(_, w, m)| (*w, m)) {
+                spans.clear();
+                match m.get(&ln) {
+                    Some(pieces) => spans.extend(pieces.iter().map(|(t, g)| Span::styled(t.clone(), g.as_ref().map_or(num_style, |g| num_style.patch(hl::hl(g)))))),
+                    None => spans.push(Span::raw(" ".repeat(w))),
+                }
+            }
             let gn = spans.len();
             // the selection on this line, in screen columns
             let sel_cols = sel.and_then(|(s, e)| {
@@ -667,6 +741,18 @@ impl App {
             });
             let cursorcol = show.cursorcolumn && focused && ln != c.line;
             let mhits: Vec<Vec<(usize, usize)>> = mpats.iter().map(|(_, re)| re.find_iter(body).flatten().map(|m| (screen_col(&line_text, body[..m.start()].chars().count()), screen_col(&line_text, body[..m.end()].chars().count()))).collect()).collect();
+            // extmarks' highlights on this line (a plugin's), in screen columns, lowest priority first
+            let emarks: &[crate::extmarks::ExtMark] = self.extmarks.get(&di).map(|(_, v)| v.as_slice()).unwrap_or(&[]);
+            let eranges: Vec<(usize, usize, Style)> = crate::extmarks::line_ranges(emarks, ln, &line_text).into_iter().map(|(a, b, g, _)| (screen_col(&line_text, a), screen_col(&line_text, b), hl::hl(&g))).collect();
+            // concealed text (extmarks' conceal): the cursor's line shows it unless concealcursor has
+            // the mode's letter
+            let mode_letter = match d.ed.mode() {
+                Mode::Insert => 'i',
+                Mode::Visual | Mode::VisualLine | Mode::VisualBlock => 'v',
+                _ => 'n',
+            };
+            let conceal_here = clevel > 0 && (ln != c.line || ccursor.contains(mode_letter));
+            let cranges: Vec<(usize, usize, String)> = if conceal_here { crate::extmarks::conceal_ranges(emarks, ln, &line_text).into_iter().map(|(a, b, s)| (screen_col(&line_text, a), screen_col(&line_text, b), s)).collect() } else { Vec::new() };
             // diff mode: this line's group, and the part of it that differs (DiffText), in screen columns
             let dline = dview.as_ref().and_then(|v| v.lines.get(&ln)).copied();
             let dtext = dline.and_then(|(_, r)| r).map(|(p, q)| (screen_col(&line_text, p), screen_col(&line_text, q)));
@@ -674,6 +760,21 @@ impl App {
             let (bad, cap) = if spell_on { spell_marks(&line_text, camel, capcheck, ln > 0 && ends_sentence(&d.ed.buf.line(ln - 1))) } else { (Vec::new(), Vec::new()) };
             for (st, text) in d.spans(ln, ss, &hl) {
                 for ch in text.chars() {
+                    // concealed: one character in its place (level 1: it or a blank, 2: it, 3: none)
+                    if let Some(cr) = cranges.iter().find(|r| x >= r.0 && x < r.1) {
+                        if x == cr.0 && (wrap || (x >= d.left && x < d.left + width)) {
+                            let shown = match clevel {
+                                1 if cr.2.is_empty() => " ".to_string(),
+                                1 | 2 => cr.2.clone(),
+                                _ => String::new(),
+                            };
+                            if !shown.is_empty() {
+                                spans.push(Span::styled(shown, hl::hl("Conceal")));
+                            }
+                        }
+                        x += 1;
+                        continue;
+                    }
                     if wrap || (x >= d.left && x < d.left + width) {
                         // synmaxcol: no syntax colours past it
                         let mut s = if x >= show.synmaxcol { Style::default() } else { st };
@@ -711,6 +812,11 @@ impl App {
                         for ((ms, _), hits) in mpats.iter().zip(&mhits) {
                             if hits.iter().any(|&(a, b)| x >= a && x < b) {
                                 s = s.patch(*ms);
+                            }
+                        }
+                        for (a, b, es) in &eranges {
+                            if x >= *a && x < *b {
+                                s = s.patch(*es);
                             }
                         }
                         if replaced.is_some() {
@@ -771,8 +877,27 @@ impl App {
             if let Some(h) = replaced.filter(|h| h.new.is_empty() && h.at == ln) {
                 spans.push(Span::styled(format!(" {}: delete ", h.author), hl::hl("AgentTag")));
             }
-            // a folded section: what it hides, after its heading
-            if d.ed.is_fold_start(ln) {
+            // extmarks' virtual text: after the line (eol, overlay), or at the window's right edge
+            for m in emarks.iter().filter(|m| m.row == ln && !m.virt.is_empty() && m.virt_pos != "inline") {
+                let w: usize = m.virt.iter().map(|c| c.0.chars().count()).sum();
+                if m.virt_pos == "right_align" {
+                    let used: usize = spans[gn..].iter().map(|s| s.width()).sum();
+                    spans.push(Span::raw(" ".repeat(width.saturating_sub(used + w))));
+                } else {
+                    spans.push(Span::raw(" "));
+                }
+                for (t, g) in &m.virt {
+                    spans.push(Span::styled(t.clone(), if g.is_empty() { Style::default() } else { hl::hl(g) }));
+                }
+            }
+            // a folded section: what it hides, after its heading; with a foldtext, its text in place
+            // of the line, the rest of the row filled (fillchars fold:)
+            if let Some(t) = self.fold_text.get(&di).and_then(|(_, m)| m.get(&ln)) {
+                spans.truncate(gn);
+                let n = Span::raw(t.as_str()).width();
+                spans.push(Span::styled(t.clone(), hl::hl("Folded")));
+                spans.push(Span::styled(show.fill.fold.to_string().repeat(width.saturating_sub(n)), hl::hl("Folded")));
+            } else if d.ed.is_fold_start(ln) {
                 spans.push(Span::styled(" …", hl::hl("Folded")));
             }
             // the current line stands out, and fades over the lines around it (CursorLine, CursorLineGlow…)
@@ -801,7 +926,7 @@ impl App {
                     Some(s)
                 }
                 // a sign's linehl colours its whole line
-                None => match usigns.get(&ln).and_then(|u| u.linehl) {
+                None => match usigns.get(&ln).and_then(|u| u.linehl).or_else(|| emarks.iter().filter(|m| !m.line_hl.is_empty() && m.row <= ln && ln <= m.end_row).max_by_key(|m| m.priority).map(|m| hl::hl(&m.line_hl))) {
                     Some(h) => Some(h),
                     None => band.map(hl::hl).filter(|s| s.bg.is_some()),
                 },
@@ -878,7 +1003,7 @@ impl App {
             if boxed {
                 // a floating line: a rounded box, its prompt as the title
                 let outer = Rect { x: line_at.x - 1, y: line_at.y - 1, width: line_at.width + 2, height: 3 };
-                f.render_widget(Clear, outer);
+                crate::layer(f, outer);
                 let title = if p == ":" { " Command ".to_string() } else { format!(" {} ", p.trim_end_matches([':', ' '])) };
                 f.render_widget(Block::default().borders(Borders::ALL).border_set(crate::display::float_set()).border_style(hl("FloatBorder")).title(Span::styled(title, hl("Prompt"))), outer);
             } else if line_at != a {
@@ -950,7 +1075,7 @@ impl App {
         let rows = n.div_ceil(cols);
         let h = (rows as u16 + 2).min(body.height);
         let a = Rect { x: body.x, y: body.bottom().saturating_sub(h), width: body.width, height: h };
-        f.render_widget(Clear, a);
+        crate::layer(f, a);
         let title: Vec<String> = self.keyseq.iter().map(|k| if k == "<Space>" { "SPC".into() } else { k.clone() }).collect();
         let block = Block::default().borders(Borders::ALL).border_set(crate::display::float_set()).border_style(hl("FloatBorderDim")).title(format!(" {} … ", title.join(" ")));
         let inner = block.inner(a);
@@ -1009,4 +1134,6 @@ pub(crate) struct FxMark {
     pub key: String,
     pub since: Instant,
     pub spec: &'static str,
+    /// there only while the mouse or the cursor is (plain cells back when it goes)
+    pub transient: bool,
 }

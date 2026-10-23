@@ -51,6 +51,15 @@ impl App {
             let text: String = format!("{:<2}", def.text).chars().take(2).collect();
             out.insert(p.line, Shown { text, texthl: group(&def.texthl).unwrap_or_else(|| hl::hl("SignColumn")), linehl: group(&def.linehl), numhl: group(&def.numhl), priority: p.priority });
         }
+        // extmarks' signs (a plugin's: gitsigns, diagnostics), by the same priority rule
+        for m in self.extmarks.get(&di).map(|(_, v)| v.as_slice()).unwrap_or(&[]) {
+            if m.sign.is_empty() || out.get(&m.row).is_some_and(|s| s.priority as i64 >= m.priority) {
+                continue;
+            }
+            let group = |g: &str| (!g.is_empty()).then(|| hl::hl(g));
+            let text: String = format!("{:<2}", m.sign).chars().take(2).collect();
+            out.insert(m.row, Shown { text, texthl: group(&m.sign_hl).unwrap_or_else(|| hl::hl("SignColumn")), linehl: group(&m.line_hl), numhl: group(&m.num_hl), priority: m.priority as i32 });
+        }
         out
     }
 

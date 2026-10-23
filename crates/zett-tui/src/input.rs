@@ -6,11 +6,24 @@ impl App {
     // ── input ──
 
     pub(crate) fn key(&mut self, k: KeyEvent) {
+        // the Kitty keyboard protocol tells C-i from Tab, C-m from Enter and C-[ from Esc; zett
+        // means them as one, as every terminal sends them (C-= C-\ C-Enter are what it adds)
+        let k = match (k.code, k.modifiers) {
+            (KeyCode::Char('i'), KeyModifiers::CONTROL) => KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+            (KeyCode::Char('m'), KeyModifiers::CONTROL) => KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            (KeyCode::Char('['), KeyModifiers::CONTROL) => KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            _ => k,
+        };
         self.typed_at = Instant::now();
+        self.held = false;
         if let Some(p) = self.popup.take() {
             // any key closes help (Esc and q too)
             let _ = p;
             return;
+        }
+        // a macro stopped at its query point (C-x q): y goes on, n skips to the next repetition, q stops
+        if let Some((rest, reps)) = self.kmacro_paused.take() {
+            return self.kmacro_answer(k, rest, reps);
         }
         if self.minibuf.is_some() {
             return self.minibuf_key(k);
@@ -138,6 +151,15 @@ impl App {
             if tok == "<CR>" && self.keyseq.is_empty() && (self.follow_help() || self.follow_cmdwin() || self.follow_qf()) {
                 return;
             }
+            // help pages: CTRL-] follows a link, CTRL-T / CTRL-O come back (a tag stack, as Vim's)
+            if self.keyseq.is_empty() && self.docs[self.cur].name.starts_with("help: ") {
+                if tok == "<C-]>" && self.follow_help() {
+                    return;
+                }
+                if matches!(tok.as_str(), "<C-t>" | "<C-o>") && self.help_back() {
+                    return;
+                }
+            }
             if tok == "<Esc>" && !self.keyseq.is_empty() {
                 self.keyseq.clear();
                 self.menu.clear();
@@ -147,12 +169,38 @@ impl App {
             seq.push(tok);
             // after an operator (d c y …) the keys are its motion: :omap's mappings, not :nmap's
             let km = if self.docs[self.cur].ed.op_pending() { "o" } else { "n" };
-            let feed = if self.noremap > 0 { Feed::None } else { self.with_lua(|e| e.feed(km, &seq)) };
+            let feed = if self.noremap > 0 || self.docs[self.cur].ed.prefix_pending() { Feed::None } else { self.with_lua(|e| e.feed(km, &seq)) };
             return self.after_feed(feed, seq);
         }
         // the completion popup takes its keys first
         if mode == Mode::Insert && self.comp.is_some() {
             let n = self.comp.as_ref().map(|c| c.shown.len()).unwrap_or(0);
+            // keyword completion: CTRL-N / CTRL-P put each choice in (unless completeopt has
+            // noinsert), CTRL-Y and Enter take it, CTRL-E brings back what was typed
+            if self.comp.as_ref().is_some_and(|c| c.keyword.is_some()) {
+                let n = n.max(1);
+                let step = match k.code {
+                    KeyCode::Char('n') if ctrl => Some(1),
+                    KeyCode::Down | KeyCode::Tab => Some(1),
+                    KeyCode::Char('p') if ctrl => Some(n - 1),
+                    KeyCode::Up | KeyCode::BackTab => Some(n - 1),
+                    _ => None,
+                };
+                if let Some(s) = step {
+                    let c = self.comp.as_mut().unwrap();
+                    c.sel = (c.sel + s) % n;
+                    if !self.setting(self.cur, "completeopt").split(',').any(|o| o.trim() == "noinsert") {
+                        self.comp_put();
+                    }
+                    return;
+                }
+                match k.code {
+                    KeyCode::Char('y') if ctrl => return self.comp_accept(),
+                    KeyCode::Enter => return self.comp_accept(),
+                    KeyCode::Char('e') if ctrl => return self.comp_cancel(),
+                    _ => {}
+                }
+            }
             let c = self.comp.as_mut().unwrap();
             match k.code {
                 KeyCode::Tab | KeyCode::Down => return c.sel = (c.sel + 1) % n.max(1),
@@ -164,6 +212,24 @@ impl App {
                 KeyCode::Esc => self.comp = None,
                 _ => {}
             }
+        }
+        // CTRL-X: the next CTRL key picks the completion (CTRL-N CTRL-K CTRL-T CTRL-U CTRL-O CTRL-L
+        // CTRL-F); any other key leaves the mode and is typed as usual
+        if mode == Mode::Insert && std::mem::take(&mut self.ctrlx_pending) {
+            self.msg = None;
+            if let KeyCode::Char(c) = k.code {
+                if ctrl {
+                    return self.ctrl_x(c);
+                }
+            }
+        }
+        if mode == Mode::Insert && ctrl && self.comp.is_none() && k.code == KeyCode::Char('x') {
+            self.ctrlx_pending = true;
+            return self.say("-- ^X mode (^N^P ^K ^T ^U ^O ^L ^F)");
+        }
+        // CTRL-N / CTRL-P with no menu: Vim's keyword completion
+        if mode == Mode::Insert && ctrl && self.comp.is_none() && matches!(k.code, KeyCode::Char('n' | 'p')) {
+            return self.keyword_complete(k.code == KeyCode::Char('p'));
         }
         let typed = match k.code {
             KeyCode::Char(c) if !ctrl => Some(c),
@@ -181,6 +247,10 @@ impl App {
             }
         }
         self.edit_key(ek);
+        // a character typed: the input method (C-\) may turn what is before the cursor into another
+        if self.input_method_on().is_some() && matches!(typed, Some(c) if c != '\0') {
+            self.input_method_compose();
+        }
         if mode == Mode::Insert {
             self.comp_after_key(typed);
         }
@@ -206,10 +276,47 @@ impl App {
             Feed::None => {
                 self.menu.clear();
                 for t in seq {
+                    let typed = t.chars().count() == 1;
                     for k in zett_edit::keys::parse(&t) {
                         self.edit_key(k);
                     }
+                    // a character typed: the input method may turn what is before the cursor into another
+                    if typed && self.input_method_on().is_some() {
+                        self.input_method_compose();
+                    }
                 }
+            }
+        }
+    }
+
+    /// The input method (C-\) on what was just typed: a finished sequence becomes its character.
+    /// The input method typing goes through: C-\'s, or Vim's way, keymap (one of zett's methods by
+    /// name) with iminsert=1 or 2, in insert mode.
+    pub(crate) fn input_method_on(&self) -> Option<String> {
+        if self.input_method.is_some() {
+            return self.input_method.clone();
+        }
+        let km = self.setting(self.cur, "keymap");
+        (self.num(self.cur, "iminsert") > 0 && crate::inputmethod::METHODS.iter().any(|(n, _)| *n == km)).then_some(km)
+    }
+
+    pub(crate) fn input_method_compose(&mut self) {
+        let Some(method) = self.input_method_on() else { return };
+        let d = &self.docs[self.cur];
+        // only while typing goes into the text (the Emacs profile, Vim's insert mode)
+        if !d.ed.is_emacs() && d.ed.mode() != zett_edit::Mode::Insert {
+            return;
+        }
+        let at = d.ed.buf.to_char(d.ed.cursor());
+        let start = at.saturating_sub(32);
+        let before: String = d.ed.text().chars().skip(start).take(at - start).collect();
+        if let Some((back, put)) = crate::inputmethod::compose(&method, &before) {
+            let line = d.ed.cursor().line;
+            self.doc().ed.replace_text(at - back, at, &put);
+            self.doc().touched(line);
+            if self.input_method_once {
+                self.input_method_once = false;
+                self.input_method = None;
             }
         }
     }
@@ -289,6 +396,16 @@ impl App {
     /// Emacs profile: every key goes through the keymap (chords like C-x C-f wait for more);
     /// an unbound printable key types itself, anything else unbound says so.
     pub(crate) fn emacs_key(&mut self, k: &KeyEvent) {
+        // help pages: RET and C-] follow a link, C-t comes back (as Emacs's help buttons and Vim's tags)
+        if self.char_for.is_none() && self.keyseq.is_empty() && self.docs[self.cur].name.starts_with("help: ") {
+            let tok = token(k);
+            if matches!(tok.as_str(), "<CR>" | "<C-]>") && self.follow_help() {
+                return;
+            }
+            if tok == "<C-t>" && self.help_back() {
+                return;
+            }
+        }
         // a command asked for a key (C-x r s, M-z, C-q): this one is it
         if let Some((name, arg)) = self.char_for.take() {
             self.msg = None;
@@ -306,6 +423,20 @@ impl App {
             // registers that hold a buffer, a file or the windows (C-x r B F w): the front end's
             if let Some(what) = name.strip_prefix("place:") {
                 return self.place_to_register(what, c);
+            }
+            // confirm's question: y saves and closes, n closes without saving, anything else keeps it
+            if name == "confirm:close" {
+                match c.to_ascii_lowercase() {
+                    'y' => {
+                        self.save(None);
+                        if !self.docs[self.cur].dirty() {
+                            self.close(true);
+                        }
+                    }
+                    'n' => self.close(true),
+                    _ => {}
+                }
+                return;
             }
             if name == "jump-to-register" && self.jump_to_place(c) {
                 return;
@@ -448,6 +579,9 @@ impl App {
                         }
                         self.doc().touched(before);
                         self.edit_at = Instant::now();
+                        if self.input_method_on().is_some() {
+                            self.input_method_compose();
+                        }
                         // the language server's completions while typing, as in Vim's insert mode
                         self.comp_after_key(Some(c));
                     }
@@ -509,6 +643,7 @@ impl App {
                         let mut e = Engine::new(None);
                         e.set_frontend("editor");
                         e.load_config(&zett_script::config_dir());
+                        crate::lsp::apply_config(&mut e);
                         let n = e.plugins.len();
                         self.engine = e;
                         hl::reset();
@@ -623,6 +758,24 @@ impl App {
     }
 
     pub(crate) fn mouse(&mut self, m: ratatui::crossterm::event::MouseEvent) {
+        // a button held (scrolling, selecting) or the wheel turning: the help circles wait
+        match m.kind {
+            MouseEventKind::Down(_) | MouseEventKind::Drag(_) => {
+                self.mouse_held = true;
+                self.fx_hover = None;
+            }
+            MouseEventKind::Up(_) => {
+                self.mouse_held = false;
+                self.fx_wait(crate::emacs::FX_QUIET);
+            }
+            // a plain move: no button is down (a release zeit kept, off the pane, ends the hold too)
+            MouseEventKind::Moved => self.mouse_held = false,
+            MouseEventKind::ScrollDown | MouseEventKind::ScrollUp | MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => {
+                self.fx_wait(crate::emacs::FX_QUIET);
+                self.fx_hover = None;
+            }
+        }
+        self.mouse_at = (m.column, m.row);
         if self.panel_mouse(&m) {
             return;
         }

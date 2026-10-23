@@ -13,7 +13,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
     "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions", "equalprg", "formatprg", "incsearch",
-    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph",
+    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr",
 ];
 
 impl Editor {
@@ -27,6 +27,9 @@ impl Editor {
         }
         // the spell checker is shared: it takes the languages and the word file from here
         match name {
+            "magic" => crate::vimre::set_magic(matches!(value, "true" | "1" | "on" | "yes")),
+            "fileformats" => *zett_core::FILEFORMATS.lock().unwrap() = value.to_string(),
+            "fileencodings" => *zett_core::FILEENCODINGS.lock().unwrap() = value.to_string(),
             "spelllang" => crate::spell::set_lang(value),
             "spellfile" => crate::spell::set_file(value),
             _ => {}
@@ -268,7 +271,7 @@ impl Editor {
 }
 
 /// iskeyword ("@,48-57,_,192-255") as a table of the first 256 characters.
-fn parse_iskeyword(v: &str) -> Option<[bool; 256]> {
+pub(crate) fn parse_iskeyword(v: &str) -> Option<[bool; 256]> {
     let mut t = [false; 256];
     for part in v.split(',').filter(|p| !p.is_empty()) {
         let (neg, part) = match part.strip_prefix('^') { Some(p) if !p.is_empty() => (true, p), _ => (false, part) };
@@ -333,4 +336,34 @@ pub(crate) fn parse_langmap(v: &str) -> std::collections::HashMap<char, char> {
         }
     }
     map
+}
+
+impl Editor {
+    /// indentexpr: a new line (o O Enter) is indented by the window when the option is set.
+    pub(crate) fn indent_expr_line(&mut self, line: usize) {
+        if self.opt("indentexpr").is_some_and(|e| !e.trim().is_empty()) {
+            self.vim.requests.push(Request::IndentExpr(line, line));
+        }
+    }
+
+    /// Line `line` given `width` columns of indent (as made with expandtab and tabstop); the cursor
+    /// stays on the same text.
+    pub fn set_indent(&mut self, line: usize, width: usize) {
+        if line >= self.buf.len_lines() {
+            return;
+        }
+        let old = self.indent_of(line);
+        let new = self.make_indent(width);
+        if old == new {
+            return;
+        }
+        let s = self.line_start(line);
+        let (n_old, n_new) = (old.chars().count(), new.chars().count());
+        self.rem(s, s + n_old);
+        self.ins(s, &new);
+        if self.cur_line() == line {
+            let col = self.cursor - s;
+            self.cursor = s + if col >= n_old { col - n_old + n_new } else { n_new };
+        }
+    }
 }

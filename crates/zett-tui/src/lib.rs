@@ -4,6 +4,8 @@ mod commands;
 mod doom;
 mod draw;
 mod input;
+mod extmarks;
+mod keyword;
 mod lsp;
 mod panels;
 mod hl;
@@ -38,6 +40,9 @@ mod emacs;
 mod vc;
 mod tabs;
 mod chars;
+mod inputmethod;
+mod changelog;
+mod vimscript;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -171,7 +176,16 @@ struct Doc {
 
 impl Doc {
     fn open(path: &Path, ss: &SyntaxSet) -> std::io::Result<Doc> {
-        let buf = Buffer::open(path)?;
+        Doc::open_as(path, ss, None)
+    }
+
+    /// As [`Doc::open`], read in the encoding given rather than a guessed one.
+    fn open_as(path: &Path, ss: &SyntaxSet, encoding: Option<&str>) -> std::io::Result<Doc> {
+        Ok(Doc::with_buffer(path, Buffer::open_as(path, encoding)?, ss))
+    }
+
+    /// The buffer for `path`, read already (sudo cat, a forced encoding).
+    fn with_buffer(path: &Path, buf: Buffer, ss: &SyntaxSet) -> Doc {
         let name = path.display().to_string();
         let syntax = ss.find_syntax_for_file(path).ok().flatten().map(|s| s.name.clone()).unwrap_or_else(|| {
             let first = buf.line(0);
@@ -180,7 +194,7 @@ impl Doc {
         let mut d = Doc::new(Editor::new(buf), name, syntax);
         // the history it was saved with, so time travel and undo reach past this session
         d.load_history();
-        Ok(d)
+        d
     }
 
     fn scratch() -> Doc {
@@ -398,7 +412,25 @@ struct App {
     fx_first: std::collections::HashMap<String, Instant>,
     fx_view: Option<(usize, usize, usize, Instant)>,
     fx_hover: Option<crate::draw::FxMark>,
-    fx_hover_sent: Option<(u16, u16, u16, String)>,
+    /// a mouse button held, and till when the help circles wait (a scroll, a release, a key: a
+    /// held key repeats inside it, so holding j to scroll draws none)
+    mouse_held: bool,
+    fx_quiet_until: Option<Instant>,
+    /// the next new drawing's turn (several at once go one after another)
+    fx_next_first: Instant,
+    mouse_at: (u16, u16),
+    /// the transient marks (hover, the cursor's) on screen now: where, how wide, which
+    fx_trans_sent: Vec<(u16, u16, u16, String)>,
+    /// marks waiting their turn (not sent yet), and when the next one is due
+    fx_pending: std::collections::HashSet<String>,
+    fx_due: Option<Instant>,
+    /// each buffer's comment column (Emacs C-x ;), by name
+    comment_cols: std::collections::HashMap<String, usize>,
+    /// the input method typing goes through (C-\\), the last one used, and whether it is for one
+    /// character only (C-x \\)
+    input_method: Option<String>,
+    last_input_method: String,
+    input_method_once: bool,
     /// the argument list and the one in use; the last :! command; :match per window; :redir under way
     args: Vec<String>,
     arg_idx: usize,
@@ -458,6 +490,41 @@ struct App {
     cmd_hist: Vec<String>,
     clear: bool,
     suspend: bool,
+    /// the screen left for sudo to ask its password: the file read as root (false) or written (true)
+    sudo: Option<bool>,
+    /// a Vimscript block typed on the : line (:function … :endfunction), kept until it closes
+    vim_block: Vec<String>,
+    /// the tab shown before this one (tabclose=uselast)
+    last_tab: Option<usize>,
+    /// help links followed (CTRL-]): where each was followed from, for CTRL-T
+    help_stack: Vec<(usize, Pos)>,
+    /// CursorHold fired for this pause already (updatetime)
+    held: bool,
+    /// the folder's own config (exrc) is running and secure is on: no shell commands, no writes
+    secure_now: bool,
+    /// foldmethod=expr: what each buffer's levels were worked out from (its text, the expression)
+    fold_expr_key: std::collections::HashMap<usize, String>,
+    /// foldtext per buffer: (what it was worked out for, closed fold's line → its text)
+    fold_text: std::collections::HashMap<usize, (String, std::collections::HashMap<usize, String>)>,
+    /// statuscolumn per buffer: (what it was worked out for, its width, line → its pieces)
+    stc: std::collections::HashMap<usize, (String, usize, std::collections::HashMap<usize, Vec<crate::statusline::Piece>>)>,
+    /// insert mode's CTRL-X was typed: the next key picks how to complete (keyword.rs)
+    ctrlx_pending: bool,
+    /// extmarks per buffer as last read: (seq|rows, the marks) (extmarks.rs)
+    extmarks: std::collections::HashMap<usize, (String, Vec<crate::extmarks::ExtMark>)>,
+    /// C-x w s hid the side panels; C-x v ! asked to edit the next VC command
+    sides_hidden: bool,
+    vc_edit_next: bool,
+    /// what getqflist was last given (title, idx, items, lists, current)
+    qf_sent: Option<(String, usize, usize, usize, usize)>,
+    /// plugin/ and after/plugin/ sourced (once, before the first file or the first frame)
+    runtime_loaded: bool,
+    /// how long the history was when Lua last saw it
+    hist_sent: usize,
+    /// the preview window (:pedit, :pbuffer): its id, for :pclose
+    preview_win: Option<usize>,
+    /// the floats last told to zash (OSC 7733;layers)
+    layers_sent: String,
     /// z= suggestions waiting for the picker
     spell_offer: Vec<String>,
     last_compile: Option<String>,
@@ -472,6 +539,8 @@ struct App {
     char_for: Option<(String, Option<i64>)>,
     /// M-%: the match shown and what replaces it (emacs.rs)
     qr: Option<emacs::QueryReplace>,
+    /// C-x p r across the project: the files still to go, what is replaced with what, how many so far
+    project_qr: Option<(std::collections::VecDeque<std::path::PathBuf>, String, String, usize)>,
     /// C-h k (false) or C-h c (true) waiting for keys, and the keys so far
     describing: Option<(bool, Vec<String>)>,
     /// the last 300 keys, for C-h l
@@ -482,6 +551,13 @@ struct App {
     kmacro: Option<Vec<String>>,
     last_kmacro: Vec<String>,
     kmacro_again: bool,
+    /// the macro counter (C-x C-k C-i, F3 while recording) and its format ("%d", "%03d", "%x")
+    kmacro_counter: i64,
+    kmacro_format: String,
+    /// a macro stopped at a query point (C-x q): the keys left, and the repetitions after this one
+    kmacro_paused: Option<(Vec<String>, usize)>,
+    /// macros given a name (C-x C-k n): each an M-x command
+    named_kmacros: std::collections::HashMap<String, Vec<String>>,
     /// what the last keys did, for C-x z (and z again)
     last_fx: Vec<Effect>,
     repeat_again: bool,
@@ -550,7 +626,26 @@ pub fn options() -> Vec<(&'static str, &'static [&'static str], bool)> {
 /// The exit status zett leaves with (:cquit sets it).
 pub static EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
+
+/// The Kitty keyboard protocol, asked of zash (zeit passes the request on, and the keys back):
+/// keys a classic terminal cannot send (C-= C-\ C-Enter C-.) reach zett as themselves.
+fn kitty_keys() -> bool {
+    std::env::var("TERM_PROGRAM").is_ok_and(|t| t == "zash") && std::env::var_os("ZETT_NO_KITTY_KEYS").is_none()
+}
+
+/// The protocol on (`on`) or back off (on the way out, and around :suspend and sudo).
+fn kitty_keys_set(on: bool) {
+    use ratatui::crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
+    if kitty_keys() {
+        let _ = if on { execute!(std::io::stdout(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)) } else { execute!(std::io::stdout(), PopKeyboardEnhancementFlags) };
+    }
+}
 pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
+    run_with(paths, Vec::new())
+}
+
+/// As [`run`], with Ex commands run once the files are open (-p -o -O -c +CMD).
+pub fn run_with(paths: Vec<PathBuf>, start: Vec<String>) -> std::io::Result<()> {
     // "+ and "* reach the system clipboard
     fn clip_get() -> Option<String> {
         clipboard::paste()
@@ -560,9 +655,15 @@ pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
     }
     let _ = zett_edit::vim::CLIPBOARD.set((clip_get, clip_set));
     let mut app = App::new(paths);
+    for c in &start {
+        app.command(c);
+    }
     let mut term = ratatui::init();
     let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture);
+    kitty_keys_set(true);
     let r = app.main_loop(&mut term);
+    layers_none();
+    kitty_keys_set(false);
     let _ = execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture, SetCursorStyle::DefaultUserShape);
     ratatui::restore();
     r
@@ -571,7 +672,7 @@ pub fn run(paths: Vec<PathBuf>) -> std::io::Result<()> {
 impl App {
     fn new(paths: Vec<PathBuf>) -> App {
         let started = Instant::now();
-        let ss = SyntaxSet::load_defaults_newlines();
+        let ss = syntax_set();
         let mut root = std::env::current_dir().unwrap_or_default();
         let mut docs = Vec::new();
         let mut msg = None;
@@ -595,8 +696,11 @@ impl App {
             docs.push(Doc::scratch());
         }
         let mut engine = Engine::new(None);
+        // vim.o and zett.option_info see every option, before the config (which may set them) runs
+        engine.set_options(settings::all().into_iter().map(|s| (s.name.to_string(), s.short.iter().map(|x| x.to_string()).collect(), match s.kind { settings::Kind::Bool => "bool", settings::Kind::Int => "int", settings::Kind::Text => "text" }.to_string(), s.default.to_string())).collect());
         engine.set_frontend("editor");
         engine.load_config(&zett_script::config_dir());
+        lsp::apply_config(&mut engine);
         if let Some(e) = engine.errors.first() {
             msg = Some((e.clone(), Instant::now()));
         }
@@ -653,7 +757,17 @@ impl App {
             fx_first: Default::default(),
             fx_view: None,
             fx_hover: None,
-            fx_hover_sent: None,
+            mouse_held: false,
+            fx_quiet_until: None,
+            fx_next_first: Instant::now(),
+            mouse_at: (0, 0),
+            fx_trans_sent: Vec::new(),
+            fx_pending: Default::default(),
+            fx_due: None,
+            comment_cols: Default::default(),
+            input_method: None,
+            last_input_method: "TeX".into(),
+            input_method_once: false,
             args: paths.iter().filter(|p| !p.is_dir()).map(|p| p.display().to_string()).collect(),
             arg_idx: 0,
             last_bang: None,
@@ -692,6 +806,24 @@ impl App {
             cmd_hist: Vec::new(),
             clear: false,
             suspend: false,
+            sudo: None,
+            vim_block: Vec::new(),
+            last_tab: None,
+            help_stack: Vec::new(),
+            held: false,
+            secure_now: false,
+            fold_expr_key: Default::default(),
+            fold_text: Default::default(),
+            stc: Default::default(),
+            ctrlx_pending: false,
+            extmarks: Default::default(),
+            sides_hidden: false,
+            vc_edit_next: false,
+            qf_sent: None,
+            runtime_loaded: false,
+            hist_sent: usize::MAX,
+            preview_win: None,
+            layers_sent: String::new(),
             spell_offer: Vec::new(),
             last_compile: None,
             numbers: true,
@@ -701,12 +833,17 @@ impl App {
             meta: false,
             char_for: None,
             qr: None,
+            project_qr: None,
             describing: None,
             lossage: Default::default(),
             ran_keys: 0,
             kmacro: None,
             last_kmacro: Vec::new(),
             kmacro_again: false,
+            kmacro_counter: 0,
+            kmacro_format: "%d".into(),
+            kmacro_paused: None,
+            named_kmacros: Default::default(),
             last_fx: Vec::new(),
             repeat_again: false,
             hl_slot: 0,
@@ -746,6 +883,31 @@ impl App {
         };
         // the options first: the startup depends on them (the key profile)
         app.take_opts();
+        // what the config asked for while it loaded (vim.cmd, vim.keymap.set with keys, :set)
+        let fx = std::mem::take(&mut app.engine.loaded);
+        let before = app.msg.clone();
+        app.after_lua(fx);
+        // exrc (off unless the config turns it on): the folder's own config, as Neovim reads it
+        if app.flag(app.cur, "exrc") {
+            if let Some(p) = [".nvim.lua", ".nvimrc", ".exrc"].iter().map(|n| app.root.join(n)).find(|p| p.is_file()) {
+                // :trust: denied, it is not read; trusted as it is now, it runs as the user's own;
+                // else secure keeps what it asks of zett from shell commands and writes
+                match runtime::trust_of(&p) {
+                    runtime::Trust::Denied => app.say(format!("{}: denied (:trust ++remove to read it again)", p.display())),
+                    trust => {
+                        app.secure_now = trust == runtime::Trust::Unknown && app.flag(app.cur, "secure");
+                        if let Err(e) = app.source_file(&p) {
+                            app.say(e);
+                        }
+                        app.secure_now = false;
+                    }
+                }
+            }
+        }
+        // the config's :set lines confirm themselves as typed ones do; at startup only errors show
+        if !app.msg.as_ref().is_some_and(|(m, _)| m.starts_with('E') && m[1..].starts_with(|c: char| c.is_ascii_digit())) {
+            app.msg = before;
+        }
         // a folder: the file finder; nothing: what zett.opt.startup says (scratch by default)
         if !opened_files {
             if paths.iter().any(|p| p.is_dir()) {
@@ -770,6 +932,16 @@ impl App {
 
     fn say(&mut self, m: impl Into<String>) {
         let m = m.into();
+        // verbosefile: every message also goes to that file
+        let vf = self.setting(self.cur, "verbosefile");
+        if !vf.is_empty() && !m.is_empty() {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(crate::files::expand_env(&vf)) {
+                let _ = writeln!(f, "{m}");
+            }
+        }
+        // tabs (print()'s separators) as spaces to the next stop: drawn as they are, they move the cursor
+        let m = if m.contains('\t') { expand_tabs(&m) } else { m };
         // :redir: what is said is kept for the file or register
         if let Some((_, text)) = self.redir.as_mut() {
             text.push_str(&m);
@@ -821,11 +993,28 @@ impl App {
                 term.clear()?;
             }
             if std::mem::take(&mut self.suspend) {
+                layers_none();
+                self.layers_sent.clear();
+                kitty_keys_set(false);
                 let _ = ratatui::crossterm::terminal::disable_raw_mode();
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::LeaveAlternateScreen, ratatui::crossterm::event::DisableMouseCapture);
                 let _ = std::process::Command::new("kill").args(["-TSTP", &std::process::id().to_string()]).status();
                 let _ = ratatui::crossterm::terminal::enable_raw_mode();
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EnterAlternateScreen, ratatui::crossterm::event::EnableMouseCapture);
+                kitty_keys_set(true);
+                term.clear()?;
+            }
+            // sudo: the screen left so it can ask for the password on the terminal
+            if let Some(write) = self.sudo.take() {
+                layers_none();
+                self.layers_sent.clear();
+                kitty_keys_set(false);
+                let _ = ratatui::crossterm::terminal::disable_raw_mode();
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::LeaveAlternateScreen, ratatui::crossterm::event::DisableMouseCapture);
+                self.sudo_run(write);
+                let _ = ratatui::crossterm::terminal::enable_raw_mode();
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EnterAlternateScreen, ratatui::crossterm::event::EnableMouseCapture);
+                kitty_keys_set(true);
                 term.clear()?;
             }
             // termsync: the frame reaches the terminal as one update (no half-drawn screens)
@@ -833,7 +1022,36 @@ impl App {
             if sync {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::BeginSynchronizedUpdate);
             }
-            let done = term.draw(|f| self.draw(f))?;
+            self.sync_undodir();
+            self.expr_folds();
+            // inccommand: a :s being typed shows its result in the buffer (only drawn; put back after)
+            let preview = self.cmdline.as_deref().and_then(|l| self.sub_preview(l));
+            let real = preview.map(|text| {
+                let cur = self.cur;
+                let mut ed = Editor::from_str(&text);
+                ed.set_cursor(self.docs[cur].ed.cursor());
+                self.docs[cur].states.clear();
+                (cur, std::mem::replace(&mut self.docs[cur].ed, ed))
+            });
+            LAYERS.with(|l| l.borrow_mut().clear());
+            let done = term.draw(|f| self.draw(f));
+            // the floats this frame, for zash to raise (as Neovim tells Neovide where its floats are)
+            if zash_layers() {
+                let now: Vec<String> = LAYERS.with(|l| l.borrow().iter().map(|r| format!("{},{},{},{}", r.x, r.y, r.width, r.height)).collect());
+                let msg = now.join(";");
+                if msg != self.layers_sent {
+                    use std::io::Write;
+                    let _ = write!(std::io::stdout(), "\x1b]7733;layers;{msg}\x07");
+                    let _ = std::io::stdout().flush();
+                    self.layers_sent = msg;
+                }
+            }
+            if let Some((cur, ed)) = real {
+                self.docs[cur].ed = ed;
+                self.docs[cur].states.clear();
+                self.docs[cur].touched(0);
+            }
+            let done = done?;
             // zash's hand-drawn marks (draw.rs FxMark): their cells written again, colours and all,
             // inside the effect. Once the view has stayed for 150 ms (a jump scrolls it more than once);
             // a mark keeps its first time, so one already drawn shows drawn (since=) when sent again
@@ -844,7 +1062,6 @@ impl App {
                 // the cells were written again: what was on them is gone
                 self.fx_sent.clear();
             }
-            let settled = self.fx_view.is_some_and(|v| v.3.elapsed() >= Duration::from_millis(150));
             let cells_of = |x: u16, y: u16, w: u16| {
                 let mut cells = String::new();
                 for cx in x..x.saturating_add(w) {
@@ -856,28 +1073,82 @@ impl App {
                 cells
             };
             let mut out_fx = String::new();
-            if settled {
+            // marks there only while the mouse or the cursor is: the hover's and the cursor's
+            let (trans, marks): (Vec<crate::draw::FxMark>, Vec<crate::draw::FxMark>) = marks.into_iter().chain(self.fx_hover.as_ref().map(|h| crate::draw::FxMark { x: h.x, y: h.y, text: h.text.clone(), key: h.key.clone(), since: h.since, spec: h.spec, transient: true })).partition(|m| m.transient);
+            let place = |m: &crate::draw::FxMark| (m.x, m.y, ratatui::text::Line::from(m.text.as_str()).width() as u16, m.key.clone());
+            let now_trans: Vec<(u16, u16, u16, String)> = trans.iter().map(place).collect();
+            // gone ones: their plain cells back; a mark they covered (a heading's underline) is sent again below
+            for (x, y, w, key) in std::mem::take(&mut self.fx_trans_sent) {
+                if now_trans.iter().any(|t| t.3 == key && (t.0, t.1) == (x, y)) {
+                    self.fx_trans_sent.push((x, y, w, key));
+                    continue;
+                }
+                out_fx.push_str(&format!("\x1b[{};{}H{}\x1b[0m", y + 1, x + 1, cells_of(x, y, w)));
+                self.fx_sent.retain(|_, at| at.1 != y);
+                self.fx_first.remove(&key);
+            }
+            // the rows marks went to this frame: a transient one there is drawn again over them
+            let mut marked_rows = std::collections::HashSet::new();
+            // every frame, scrolling too: a scroll rewrites the cells and takes the marks with it, so they
+            // go out again where their text is now, each with the time it began: a drawing carries on
+            // where it was, moving with its text, as ink on paper would
+            {
+                let (quiet, now) = (self.fx_quiet(), Instant::now());
+                // one waiting its turn that left the screen before it: a new turn when it comes back
+                // (else it came back drawn already, its sound played for text no longer there)
+                self.fx_pending.retain(|k| {
+                    let here = marks.iter().any(|m| &m.key == k);
+                    if !here {
+                        self.fx_first.remove(k);
+                    }
+                    here
+                });
+                self.fx_due = None;
                 for m in &marks {
                     if self.fx_sent.get(&m.key) == Some(&(m.x, m.y)) {
                         continue;
                     }
-                    let first = *self.fx_first.entry(m.key.clone()).or_insert(m.since.min(Instant::now()));
-                    let since = first.elapsed().as_millis();
+                    let first = match self.fx_first.get(&m.key) {
+                        Some(t) => *t,
+                        // a new one waits while the page scrolls; then they draw one after another,
+                        // each from when it is sent (from when it was laid out, a late frame made it
+                        // older than zash's 80 ms and its sound was skipped)
+                        None if quiet => continue,
+                        None => {
+                            let t = now.max(self.fx_next_first);
+                            self.fx_next_first = t + std::time::Duration::from_millis(150);
+                            self.fx_first.insert(m.key.clone(), t);
+                            self.fx_pending.insert(m.key.clone());
+                            t
+                        }
+                    };
+                    // its turn still to come: not sent yet (zash would start its sound's timer now,
+                    // and play it even when the page has scrolled past); woken for it instead
+                    if first > now {
+                        self.fx_due = Some(self.fx_due.map_or(first, |d| d.min(first)));
+                        continue;
+                    }
+                    self.fx_pending.remove(&m.key);
+                    let when = format!("since={}", first.elapsed().as_millis());
                     let w = ratatui::text::Line::from(m.text.as_str()).width() as u16;
-                    out_fx.push_str(&format!("\x1b[{};{}H\x1b]7733;fx;{};since={since}\x1b\\{}\x1b[0m\x1b]7733;fx;end\x1b\\", m.y + 1, m.x + 1, m.spec, cells_of(m.x, m.y, w)));
+                    out_fx.push_str(&format!("\x1b[{};{}H\x1b]7733;fx;{};{when}\x1b\\{}\x1b[0m\x1b]7733;fx;end\x1b\\", m.y + 1, m.x + 1, m.spec, cells_of(m.x, m.y, w)));
                     self.fx_sent.insert(m.key.clone(), (m.x, m.y));
+                    marked_rows.insert(m.y);
                 }
             }
-            // under the mouse: drawn while it is there, the plain cells back when it leaves
-            let hover = self.fx_hover.as_ref().map(|h| (h.x, h.y, ratatui::text::Line::from(h.text.as_str()).width() as u16, h.key.clone()));
-            if hover != self.fx_hover_sent {
-                if let Some((x, y, w, _)) = self.fx_hover_sent.take() {
-                    out_fx.push_str(&format!("\x1b[{};{}H{}\x1b[0m", y + 1, x + 1, cells_of(x, y, w)));
+            for (m, (x, y, w, key)) in trans.iter().zip(now_trans) {
+                let shown = self.fx_trans_sent.iter().any(|t| t.3 == key);
+                if shown && !marked_rows.contains(&y) {
+                    continue;
                 }
-                if let (Some((x, y, w, _)), Some(h)) = (&hover, &self.fx_hover) {
-                    out_fx.push_str(&format!("\x1b[{};{}H\x1b]7733;fx;{}\x1b\\{}\x1b[0m\x1b]7733;fx;end\x1b\\", y + 1, x + 1, h.spec, cells_of(*x, *y, *w)));
+                // drawn once: shown drawn when it only comes back over a mark; silent (it follows the
+                // cursor and the mouse: a pen sound on every j or mouse move)
+                let first = *self.fx_first.entry(key.clone()).or_insert(m.since.min(Instant::now()));
+                let since = first.elapsed().as_millis();
+                out_fx.push_str(&format!("\x1b[{};{}H\x1b]7733;fx;{};since={since}\x1b\\{}\x1b[0m\x1b]7733;fx;end\x1b\\", y + 1, x + 1, silent(m.spec), cells_of(x, y, w)));
+                if !shown {
+                    self.fx_trans_sent.push((x, y, w, key));
                 }
-                self.fx_hover_sent = hover;
             }
             if !out_fx.is_empty() {
                 use std::io::Write;
@@ -893,6 +1164,10 @@ impl App {
             if self.last_mode != Some(m) {
                 match (self.last_mode, m) {
                     (None, _) => {
+                        // loadplugins: the start packages' plugin/ files, before VimEnter as in Neovim
+                        if self.flag(self.cur, "loadplugins") {
+                            self.load_runtime_plugins();
+                        }
                         self.fire_autocmds("vimenter", None);
                         self.fire_autocmds("uienter", None);
                     }
@@ -902,6 +1177,12 @@ impl App {
                 }
                 self.last_mode = Some(m);
             }
+            // updatetime: no key for that long fires CursorHold (CursorHoldI typing), once a pause
+            if !self.held && self.typed_at.elapsed() >= Duration::from_millis(self.num(self.cur, "updatetime").max(1) as u64) {
+                self.held = true;
+                let ev = if self.docs[self.cur].ed.mode() == Mode::Insert && !self.docs[self.cur].ed.is_emacs() { "cursorholdi" } else { "cursorhold" };
+                self.fire_autocmds(ev, None);
+            }
             // files changed outside: every second (autoread, W11)
             if self.checked.elapsed() >= Duration::from_secs(1) {
                 self.checked = Instant::now();
@@ -910,6 +1191,11 @@ impl App {
             // title: the terminal's title, when it changed
             if self.title_want != self.title_set {
                 if let Some(t) = &self.title_want {
+                    use std::io::Write;
+                    // the first time: the terminal's own title kept (its title stack), for the way out
+                    if self.title_set.is_none() {
+                        let _ = std::io::stdout().write_all(b"\x1b[22;0t");
+                    }
                     let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle(t));
                 }
                 self.title_set = self.title_want.clone();
@@ -937,7 +1223,14 @@ impl App {
                 self.flash = None;
             }
             let wait = if self.flash.is_some() { wait.min(Duration::from_millis(60)) } else { wait };
+            // a scroll or held key resting: woken when it has, the circles drawn at once
+            let wait = if self.fx_rested() { Duration::ZERO } else { self.fx_quiet_until.map_or(wait, |t| wait.min(t.saturating_duration_since(Instant::now()).max(Duration::from_millis(5)))) };
             let wait = match self.engine.next_timer() {
+                Some(t) => wait.min(t.saturating_duration_since(Instant::now())),
+                None => wait,
+            };
+            // a help mark's turn: woken to send it then
+            let wait = match self.fx_due {
                 Some(t) => wait.min(t.saturating_duration_since(Instant::now())),
                 None => wait,
             };
@@ -964,7 +1257,13 @@ impl App {
                 continue;
             }
             match event::read()? {
-                Event::Key(k) if k.kind != KeyEventKind::Release => self.key(k),
+                Event::Key(k) if k.kind != KeyEventKind::Release => {
+                    // on a help page the circles wait while keys come (a held j scrolls without them)
+                    if self.docs[self.cur].name.starts_with("help: ") {
+                        self.fx_wait(crate::emacs::FX_KEY_QUIET);
+                    }
+                    self.key(k)
+                }
                 Event::Mouse(m) => self.mouse(m),
                 Event::Paste(s) => {
                     for c in s.chars() {
@@ -972,6 +1271,16 @@ impl App {
                     }
                 }
                 _ => {}
+            }
+        }
+        // the title zett set goes back: titleold when it is given, else the terminal's own (its stack)
+        if self.title_set.is_some() {
+            use std::io::Write;
+            let old = self.setting(self.cur, "titleold");
+            if old.is_empty() {
+                let _ = std::io::stdout().write_all(b"\x1b[23;0t");
+            } else {
+                let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle(old));
             }
         }
         Ok(())
@@ -984,7 +1293,7 @@ fn draw_help(f: &mut Frame, title: &str, rows: &[(String, String)]) {
     let w = (area.width * 6 / 10).max(40).min(area.width);
     let h = ((rows.len() as u16) + 4).min(area.height.saturating_sub(2)).max(5);
     let a = Rect { x: area.x + (area.width - w) / 2, y: area.y + (area.height.saturating_sub(h)) / 3, width: w, height: h };
-    f.render_widget(Clear, a);
+    crate::layer(f, a);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_set(crate::display::float_set())
@@ -1050,7 +1359,7 @@ impl Startup {
 }
 
 /// A terminal key in the engine's notation (`a`, `<Space>`, `<C-w>`, `<CR>`).
-fn token(k: &KeyEvent) -> String {
+pub(crate) fn token(k: &KeyEvent) -> String {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     let alt = k.modifiers.contains(KeyModifiers::ALT);
     let named = |n: &str| {
@@ -1069,6 +1378,8 @@ fn token(k: &KeyEvent) -> String {
         // inside <…> a bare < or > would end the notation: M-< is <A-lt>, M-> <A-gt>
         KeyCode::Char('<') => named("lt"),
         KeyCode::Char('>') if ctrl || alt => named("gt"),
+        // a classic terminal sends C-\ C-] C-^ C-_ as bytes 0x1c-0x1f, which crossterm reads as C-4..C-7
+        KeyCode::Char(c @ '4'..='7') if ctrl => named(&["\\", "]", "^", "_"][c as usize - '4' as usize].to_string()),
         KeyCode::Char(c) if ctrl || alt => named(&c.to_lowercase().to_string()),
         KeyCode::Char(c) => c.to_string(),
         KeyCode::Esc => named("Esc"),
@@ -1165,4 +1476,91 @@ fn sgr(c: &ratatui::buffer::Cell) -> String {
     parts.extend(col(c.fg, true));
     parts.extend(col(c.bg, false));
     format!("\x1b[{}m", parts.join(";"))
+}
+
+/// A mark's spec without its sound (`sound=`, `volume=` taken out).
+fn silent(spec: &str) -> String {
+    spec.split(';').filter(|p| !p.starts_with("sound=") && !p.starts_with("volume=")).collect::<Vec<_>>().join(";")
+}
+
+#[cfg(test)]
+mod fx_tests {
+    #[test]
+    fn silent_drops_only_the_sound() {
+        assert_eq!(super::silent("scribble;write=0;draw=450ms;sound=draw;volume=0.45"), "scribble;write=0;draw=450ms");
+        assert_eq!(super::silent("underline"), "underline");
+    }
+}
+
+thread_local! {
+    /// the floats drawn this frame (layer), told to zash after it (OSC 7733;layers)
+    static LAYERS: std::cell::RefCell<Vec<Rect>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A float: its area cleared, and its rectangle kept, so zash can draw it as a raised layer (a
+/// shadow, rounded corners), as Neovide does with Neovim's floats.
+pub(crate) fn layer(f: &mut Frame, r: Rect) {
+    f.render_widget(Clear, r);
+    LAYERS.with(|l| l.borrow_mut().push(r));
+}
+
+/// zash is the terminal (or zeit, which passes the layers on to it).
+fn zash_layers() -> bool {
+    std::env::var("TERM_PROGRAM").is_ok_and(|t| t == "zash") || std::env::var_os("ZEIT").is_some()
+}
+
+/// No floats any more (zett leaves the screen): zash and zeit drop the raised ones it sent.
+fn layers_none() {
+    if zash_layers() {
+        use std::io::Write;
+        let _ = write!(std::io::stdout(), "\x1b]7733;layers;\x07");
+        let _ = std::io::stdout().flush();
+    }
+}
+
+/// `s` with each tab turned into spaces up to the next multiple of 8 (per line).
+pub(crate) fn expand_tabs(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut col = 0;
+    for c in s.chars() {
+        match c {
+            '\t' => {
+                let n = 8 - col % 8;
+                out.extend(std::iter::repeat_n(' ', n));
+                col += n;
+            }
+            '\n' => {
+                out.push(c);
+                col = 0;
+            }
+            c => {
+                out.push(c);
+                col += 1;
+            }
+        }
+    }
+    out
+}
+
+/// syntect's languages, the ones zett brings (QML), and any `.sublime-syntax` in
+/// ~/.config/zett/syntaxes (a language added without rebuilding zett).
+fn syntax_set() -> SyntaxSet {
+    let mut b = SyntaxSet::load_defaults_newlines().into_builder();
+    if let Ok(qml) = syntect::parsing::SyntaxDefinition::load_from_str(include_str!("../syntaxes/QML.sublime-syntax"), true, None) {
+        b.add(qml);
+    }
+    let own = zett_script::config_dir().join("syntaxes");
+    if own.is_dir() {
+        let _ = b.add_from_folder(&own, true);
+    }
+    b.build()
+}
+
+#[cfg(test)]
+mod syntax_tests {
+    #[test]
+    fn qml_is_known() {
+        let ss = super::syntax_set();
+        assert_eq!(ss.find_syntax_by_extension("qml").map(|s| s.name.as_str()), Some("QML"));
+    }
 }

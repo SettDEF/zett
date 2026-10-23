@@ -16,7 +16,7 @@ impl Editor {
             self.view_stale();
         }
         let method = self.opt("foldmethod").unwrap_or("manual").to_string();
-        if !matches!(method.as_str(), "indent" | "marker") {
+        if !matches!(method.as_str(), "indent" | "marker" | "expr") {
             if self.vim.fold_auto.take().is_some() {
                 self.vim.folds.clear();
                 self.view_stale();
@@ -24,7 +24,8 @@ impl Editor {
             return;
         }
         let key = format!(
-            "{method}|{}|{}|{}|{}|{}",
+            "{method}|{}|{}|{}|{}|{}|{}",
+            self.vim.fold_expr_version,
             self.buf.rev(),
             self.opt("foldmarker").unwrap_or("{{{,}}}"),
             self.opt("foldignore").unwrap_or("#"),
@@ -41,7 +42,11 @@ impl Editor {
         let level = if first && start >= 0 { start } else { level };
         let relevel = self.vim.fold_level.is_some_and(|l| l != level);
         self.vim.fold_level = Some(self.opt_num("foldlevel", 0));
-        let ranges = if method == "indent" { self.indent_folds() } else { self.marker_folds() };
+        let ranges = match method.as_str() {
+            "indent" => self.indent_folds(),
+            "expr" => expr_folds(&self.vim.fold_expr, self.opt_num("foldnestmax", 20).max(0) as usize),
+            _ => self.marker_folds(),
+        };
         // each fold keeps its state by its first line; new ones are closed deeper than foldlevel
         let was: std::collections::HashMap<usize, bool> = self.fold_lines().into_iter().map(|(a, _, c)| (a, c)).collect();
         self.vim.folds = ranges
@@ -195,5 +200,54 @@ impl Editor {
         if changed {
             self.view_touch();
         }
+    }
+}
+
+impl Editor {
+    /// foldmethod=expr: the levels the front end worked out from foldexpr, one per line (a fold
+    /// starting at a line: Some(its level), Vim's ">N").
+    pub fn set_fold_levels(&mut self, levels: Vec<(usize, Option<usize>)>) {
+        if levels != self.vim.fold_expr {
+            self.vim.fold_expr = levels;
+            self.vim.fold_expr_version += 1;
+        }
+    }
+}
+
+/// Folds from levels: for each depth N, the runs of lines at N or deeper; a line where a fold of
+/// level N or less starts (">N") ends the run before it.
+fn expr_folds(lv: &[(usize, Option<usize>)], nest: usize) -> Vec<(usize, usize, usize)> {
+    let n = lv.len();
+    let level = |l: usize| lv[l].0.min(nest);
+    let mut out = Vec::new();
+    for d in 1..=(0..n).map(level).max().unwrap_or(0) {
+        let mut l = 0;
+        while l < n {
+            if level(l) >= d {
+                let s = l;
+                while l + 1 < n && level(l + 1) >= d && !lv[l + 1].1.is_some_and(|e| e <= d) {
+                    l += 1;
+                }
+                out.push((s, l, d));
+            }
+            l += 1;
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod expr_tests {
+    use super::expr_folds;
+
+    #[test]
+    fn levels_become_folds() {
+        // 0 1 1 >1 1 0: two folds at level 1 side by side (the > starts the second)
+        let lv = [(0, None), (1, Some(1)), (1, None), (1, Some(1)), (1, None), (0, None)];
+        assert_eq!(expr_folds(&lv, 20), vec![(1, 2, 1), (3, 4, 1)]);
+        // nested: 1 2 2 1
+        let lv = [(1, Some(1)), (2, Some(2)), (2, None), (1, None)];
+        assert_eq!(expr_folds(&lv, 20), vec![(0, 3, 1), (1, 2, 2)]);
+        assert_eq!(expr_folds(&lv, 1), vec![(0, 3, 1)], "foldnestmax");
     }
 }

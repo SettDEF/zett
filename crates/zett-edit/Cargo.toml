@@ -8,3 +8,4 @@ license.workspace = true
 [dependencies]
 zett-core.workspace = true
 regex = "1"
+fancy-regex = "0.16"

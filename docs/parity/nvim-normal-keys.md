@@ -1,6 +1,6 @@
 # Neovim's Normal-mode keys in zett
 
-Generated 2026-10-21 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 Each key is written out (`d{motion}` as `dw`) and fed into zett's Vim profile with text, a yank, a change and
 a search to act on: ✓ something happened (or zett's key map binds it), · nothing yet.

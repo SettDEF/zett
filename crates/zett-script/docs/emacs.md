@@ -70,7 +70,33 @@ command is in `:help commands`; `C-h k` says what a key runs, `C-h w` which keys
 
 - `C-x (` starts recording, `C-x )` stops, `C-x e` plays it (then each `e` again; `C-u 5 C-x e`
   five times); `F3` `F4` the same
+- the counter: `F3` (or `C-x C-k C-i`) while recording writes it and counts on, so each playback
+  writes the next number; `C-x C-k C-c` sets it, `C-x C-k C-a` adds to it, `C-x C-k C-f` its
+  format (`%d`, `%03d`, `%x`)
+- `C-x q` while recording: a query point; playing the macro stops there to ask: `y` (or `SPC`)
+  goes on, `n` skips the rest of this round, `q` stops
+- `C-x C-k n` names the last macro (an `M-x` command of its own), `C-x C-k b` binds it to a key,
+  `C-x C-k r` plays it once on each line of the region
 - `C-x z` the last command again, then each `z` again
+
+## Characters, encodings, the font
+
+- `C-\` types through an input method (`TeX` at first: `\alpha` α, `\to` →, `\in` then space ∈,
+  `x^2` x²); `C-x RET C-\` picks another (`german-prefix` `"a` ä, `german-postfix` `ae` ä,
+  `latin-1-prefix` `'e` é), `C-x \` uses it for one character, `C-h I` lists what it makes
+- `C-x RET f` the encoding and line ends to save with (`utf-8-dos`, `latin-1-unix`,
+  `utf-8-with-signature`), `C-x RET r` reads the file again in another one (a file guessed wrong),
+  `C-h C` says which the buffer has; zett reads and writes UTF-8 and Latin-1
+- `C-x C-=` `C-x C--` `C-x C-0` the font bigger, smaller, back: zash changes it when asked (also
+  through zeit); another terminal keeps its own keys for that
+- `C-x x @` reads the file again as root (sudo asks its password on the terminal), `C-x C-s` then
+  writes it as root; `M-x sudo-save` writes any buffer so
+
+## ChangeLog
+
+- `C-x 4 a` the ChangeLog (the nearest one up the folders, else a new one in the project) in
+  another window, an entry for this file and its function under today's heading
+- `C-x v a` the commits since the ChangeLog's newest day written into it as entries
 
 ## Lua, zett's Emacs Lisp
 

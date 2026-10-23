@@ -35,8 +35,21 @@ A workspace is a folder of Markdown files: --dir, $ZETT_DIR, or ~/zett.";
 #[derive(Parser)]
 #[command(name = "zett", version, about = "An editor you live in: code with Vim's keys and Doom's, pages, Lua everywhere", after_help = EXAMPLES, args_conflicts_with_subcommands = true, styles = STYLES)]
 struct Cli {
-    /// files or a folder to open (in the terminal; with --gui in the window)
+    /// files or a folder to open (in the terminal; with --gui in the window); +CMD runs CMD after
+    /// they open (Vim's +, +42, +/pattern)
+    #[arg(allow_hyphen_values = false)]
     paths: Vec<PathBuf>,
+    /// a tab for each file (Vim's -p; at most tabpagemax)
+    #[arg(short = 'p')]
+    tabs: bool,
+    /// the files in windows above each other (-o) or side by side (-O)
+    #[arg(short = 'o')]
+    split: bool,
+    #[arg(short = 'O')]
+    vsplit: bool,
+    /// an Ex command run once the files are open (Vim's -c; may be given several times)
+    #[arg(short = 'c', value_name = "CMD")]
+    command: Vec<String>,
     /// the window instead of the terminal
     #[arg(long)]
     gui: bool,
@@ -165,7 +178,23 @@ fn main() {
             return;
         }
         // no command: the editor in this terminal (files, a folder, or here)
-        if let Err(e) = zett_tui::run(cli.paths) {
+        // +CMD among the files is a command (Vim); -p -o -O lay the files out; -c commands after
+        let (cmds, paths): (Vec<PathBuf>, Vec<PathBuf>) = cli.paths.into_iter().partition(|p| p.to_string_lossy().starts_with('+'));
+        let mut start: Vec<String> = Vec::new();
+        if cli.tabs {
+            start.push("tab ball".into());
+        } else if cli.vsplit {
+            start.push("vertical ball".into());
+        } else if cli.split {
+            start.push("ball".into());
+        }
+        for c in cmds {
+            let c = c.to_string_lossy()[1..].to_string();
+            // + alone: the last line; +N line N; +/pat the first match
+            start.push(if c.is_empty() { "$".into() } else if let Some(p) = c.strip_prefix('/') { format!("normal! gg/{p}<CR>") } else { c });
+        }
+        start.extend(cli.command);
+        if let Err(e) = zett_tui::run_with(paths, start) {
             fail(&e.to_string(), 1);
         }
         // :cquit: the exit status it asked for

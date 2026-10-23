@@ -333,3 +333,30 @@ settings page.
   Never a half-drawn escape sequence, never garbage on screen. `zett --gui` plays them with Qt.
 - [ ] uses: a short clip per key on `:help KEY`, pictures for windows/folds; glow on yank, a pulse
   where a jump lands, matching brackets fading in (each off with an option)
+
+## Make zett the daily editor (picked 2026-10-23, in this order)
+
+Rule from the user: zett builds in only what Neovim builds in; the rest stays plugins (z.plug).
+
+1. **Tree-sitter, as Neovim's** (`vim.treesitter`): biggest gap.
+   - Deps already in zett-tui/Cargo.toml: tree-sitter 0.25, libloading 0.8, streaming-iterator 0.1.
+   - Parsers: `parser/<lang>.so` on the runtimepath, plus ~/.local/share/nvim/lazy/nvim-treesitter/parser
+     (44 installed: rust lua qmljs bash python …) and /usr/lib/tree_sitter. Symbol `tree_sitter_<lang>`;
+     load with `LanguageFn::from_raw(sym)` → `Language::from`.
+   - Queries: `queries/<lang>/highlights.scm` on the runtimepath + nvim-treesitter/queries; follow
+     `; inherits: a,b` (prepend parents), `; extends` from after/queries. On QueryError drop the
+     offending pattern and retry.
+   - Predicates: the crate does eq/match/any-of (+not-); zett must do `#lua-match?` (Lua pattern →
+     regex), `#has-ancestor?`, `#has-parent?` (+not-), `#set! priority`; ignore `#offset!` etc. at first.
+   - Highlight: capture → `@cap.lang`, fall back `@cap` → Neovim's default links (@keyword→Keyword,
+     @function→Function, @string→String, @comment→Comment, @type→Type, @constant→Constant, …) to add
+     in zett-script hl.rs (it has no @ groups yet). Hook: `Doc::spans()` in zett-tui lib.rs (syntect
+     today); reparse when `buf.rev()` changes, cache captures per line.
+   - Filetype → lang map as vim.treesitter.language.register: qml→qmljs, sh→bash, help→vimdoc, …
+   - `vim.treesitter.start()/stop()`, then the user's init.lua starts it on FileType (as nvim-treesitter).
+   - Then: folds (foldexpr), `vim.treesitter.get_node`, textobjects-ready API.
+2. **LSP completion + `vim.snippet`** (both built into Neovim 0.11); nvim-cmp/LuaSnip stay plugins.
+3. **Daily-use loop**: the user works in zett; every crash / slow spot / "not like nvim" goes into a
+   log, fixed with a regression test each.
+4. **Plugins through z.plug**, fixing the API gaps they hit: conform.nvim (format on save), nvim-lint,
+   gitsigns (setup works; check the gutter marks), flash, which-key, persisted (or :mksession).

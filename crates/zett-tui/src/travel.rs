@@ -5,9 +5,21 @@
 use super::*;
 use zett_edit::outline;
 
-/// Where a file's history is kept: one file per path, beside zett's other state.
+/// `undodir` when a config set it (empty: zett's own state folder), kept here for the undo files.
+pub(crate) static UNDODIR: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Where a file's history is kept: by `undodir` as Neovim reads it (its first folder that exists,
+/// "." beside the file, one ending in "//" naming it by its whole path), else beside zett's other state.
 fn history_file(path: &Path) -> PathBuf {
     let p = std::fs::canonicalize(path).unwrap_or(path.to_path_buf());
+    if let Some(f) = undodir_file(&UNDODIR.lock().unwrap(), &p) {
+        return f;
+    }
+    zett_history_file(&p)
+}
+
+/// zett's own place for it (a hash of the path, in its state folder).
+fn zett_history_file(p: &Path) -> PathBuf {
     let h = p.display().to_string().bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
     doom::state_dir().join("history").join("undo").join(format!("{h:016x}"))
 }
@@ -16,7 +28,8 @@ impl Doc {
     /// The history saved with this file, if it still fits the text (else a fresh one).
     pub(crate) fn load_history(&mut self) {
         let Some(p) = self.ed.buf.path().map(Path::to_path_buf) else { return };
-        if let Ok(bytes) = std::fs::read(history_file(&p)) {
+        // by undodir, else where zett kept it before undodir was set
+        if let Ok(bytes) = std::fs::read(history_file(&p)).or_else(|_| std::fs::read(zett_history_file(&std::fs::canonicalize(&p).unwrap_or(p.clone())))) {
             self.ed.history_load(&bytes);
         }
     }
@@ -225,7 +238,7 @@ impl App {
         let pos = if last == 0 { 0 } else { t.at * (room - 1) / last };
         let now = if last == 0 { 0 } else { t.now * (room - 1) / last };
         let bar: String = (0..room).map(|i| if i == pos { '●' } else if i == now { '┃' } else if i < pos { '━' } else { '─' }).collect();
-        f.render_widget(Clear, a);
+        crate::layer(f, a);
         f.render_widget(
             Paragraph::new(Line::from(vec![Span::styled(" ⏲ ", hl("Prompt")), Span::styled(bar, hl("PickerPrompt")), Span::styled(label, hl("Prompt")), Span::styled(keys, hl("PickerDir"))])),
             a,
@@ -246,5 +259,60 @@ mod tests {
         assert_eq!(when(now - 90_000, now), "yesterday");
         assert_eq!(when(now - 6 * 86_400, now), "14 Oct");
         assert_eq!(when(1_735_689_600, now), "1 Jan 2025");
+    }
+}
+
+/// The undo file for `p` (a canonical path) by `undodir` (Neovim's rules; zett's own format, so
+/// ".zett" ends its name and Neovim's own files beside it are left alone).
+fn undodir_file(undodir: &str, p: &Path) -> Option<PathBuf> {
+    let name = p.file_name()?.to_string_lossy().to_string();
+    undodir.split(',').map(str::trim).filter(|d| !d.is_empty()).find_map(|d| {
+        if d == "." {
+            return Some(p.parent()?.join(format!(".{name}.zett-undo")));
+        }
+        let dir = PathBuf::from(shellexpand_home(d.trim_end_matches('/')));
+        if !dir.is_dir() {
+            return None;
+        }
+        Some(if d.ends_with("//") { dir.join(format!("{}.zett", p.display().to_string().replace('/', "%"))) } else { dir.join(format!("{name}.zett")) })
+    })
+}
+
+fn shellexpand_home(d: &str) -> String {
+    match (d.strip_prefix("~"), std::env::var("HOME")) {
+        (Some(rest), Ok(h)) => format!("{h}{rest}"),
+        _ => d.to_string(),
+    }
+}
+
+impl App {
+    /// `undodir` as the config set it, for the undo files (unset: zett's own state folder; not
+    /// Neovim's default, whose undo files are another format).
+    pub(crate) fn sync_undodir(&self) {
+        let v = self.engine.opt("undodir").unwrap_or_default();
+        let mut u = UNDODIR.lock().unwrap();
+        if *u != v {
+            *u = v;
+        }
+    }
+}
+
+#[cfg(test)]
+mod undodir_tests {
+    use super::*;
+
+    #[test]
+    fn undodir_places_like_neovim() {
+        let tmp = std::env::temp_dir().join(format!("zett-udir-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let p = Path::new("/home/u/notes/a.md");
+        assert_eq!(undodir_file(".", p), Some(PathBuf::from("/home/u/notes/.a.md.zett-undo")));
+        let d = tmp.display().to_string();
+        assert_eq!(undodir_file(&format!("{d}//"), p), Some(tmp.join("%home%u%notes%a.md.zett")));
+        assert_eq!(undodir_file(&d, p), Some(tmp.join("a.md.zett")));
+        // the first folder that exists
+        assert_eq!(undodir_file(&format!("/nope/x,{d}"), p), Some(tmp.join("a.md.zett")));
+        assert_eq!(undodir_file("", p), None);
+        let _ = std::fs::remove_dir(&tmp);
     }
 }

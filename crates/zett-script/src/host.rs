@@ -20,6 +20,9 @@ pub(crate) struct Panel {
     /// a floating panel moved from the middle (cells)
     dx: i16,
     dy: i16,
+    /// a float placed as Neovim places one: (relative to "editor" | "cursor" | "win", row, col);
+    /// width and height are then in cells
+    at: Option<(String, i32, i32)>,
     on_key: Option<RegistryKey>,
     on_move: Option<RegistryKey>,
     on_close: Option<RegistryKey>,
@@ -41,6 +44,8 @@ pub struct PanelView {
     /// side "float": moved from the middle by this many cells
     pub dx: i16,
     pub dy: i16,
+    /// side "float" placed at (relative to, row, col), its size in cells (nvim_open_win)
+    pub at: Option<(String, i32, i32)>,
 }
 
 #[derive(Default)]
@@ -54,14 +59,28 @@ pub(crate) struct Host {
     /// a question for the user: (prompt, default, what gets the answer)
     pub input: Option<(String, String, RegistryKey)>,
     pub asking: Option<RegistryKey>,
-    /// the open buffers' paths (zett.buffers)
+    /// the open buffers' paths (zett.buffers; "" for one without a file), in their order
     pub buffers: Vec<String>,
+    /// the current buffer's number in that list (1-based; 0 not known)
+    pub cur_buffer: usize,
+    /// the windows: (number, buffer number, width, height, row, col), and the focused one's number
+    pub wins: Vec<(usize, usize, u16, u16, u16, u16)>,
+    pub cur_win: usize,
+    /// the quickfix list in use: (title, the item last gone to, items as (file, line, col, kind, nr, text, valid))
+    pub qf: (String, usize, Vec<(String, usize, usize, char, usize, String, bool)>),
+    /// the : line being typed (its text, the cursor in it) and the command history
+    pub cmdline: Option<(String, usize)>,
+    /// each window's first line shown (0-based), in the order of wins
+    pub tops: Vec<usize>,
+    pub hist: Vec<String>,
     /// a g waiting for its second g
     pub g: bool,
     /// floating boxes in a corner (zett.float): id, corner, lines
     pub floats: Vec<(String, String, Vec<Vec<(String, String)>>)>,
     /// zett.defer: when, and what runs then
     pub timers: Vec<(std::time::Instant, RegistryKey)>,
+    /// every option the editor has: name, short names, kind (bool, int, text), default (zett.option_info)
+    pub options: Vec<(String, Vec<String>, String, String)>,
 }
 
 /// A Nerd Font icon for a file, by its extension.
@@ -194,8 +213,40 @@ impl Engine {
     }
 
     /// The open buffers' paths, for `zett.buffers()`.
+    /// The editor's options, for vim.o and zett.option_info: (name, short names, "bool" | "int" | "text", default).
+    pub fn set_options(&mut self, options: Vec<(String, Vec<String>, String, String)>) {
+        self.st.borrow_mut().host.options = options;
+    }
+
     pub fn set_buffers(&mut self, paths: Vec<String>) {
         self.st.borrow_mut().host.buffers = paths;
+    }
+
+    /// The : line being typed (None: none) and the command history (getcmdline, histget).
+    pub fn set_cmdline(&mut self, line: Option<(String, usize)>, hist: Option<Vec<String>>) {
+        let mut st = self.st.borrow_mut();
+        st.host.cmdline = line;
+        if let Some(h) = hist {
+            st.host.hist = h;
+        }
+    }
+
+    /// The first line each window shows (line("w0"), winline, screenpos).
+    pub fn set_tops(&mut self, tops: Vec<usize>) {
+        self.st.borrow_mut().host.tops = tops;
+    }
+
+    /// The quickfix list in use (getqflist), given when it changed.
+    pub fn set_qf(&mut self, title: String, idx: usize, items: Vec<(String, usize, usize, char, usize, String, bool)>) {
+        self.st.borrow_mut().host.qf = (title, idx, items);
+    }
+
+    /// The current buffer's number (in set_buffers' list) and the windows (see Host::wins).
+    pub fn set_layout(&mut self, cur_buffer: usize, wins: Vec<(usize, usize, u16, u16, u16, u16)>, cur_win: usize) {
+        let mut st = self.st.borrow_mut();
+        st.host.cur_buffer = cur_buffer;
+        st.host.wins = wins;
+        st.host.cur_win = cur_win;
     }
 
     pub fn panels(&self) -> Vec<PanelView> {
@@ -203,7 +254,7 @@ impl Engine {
         st.host
             .panels
             .iter()
-            .map(|p| PanelView { id: p.id.clone(), side: p.side.clone(), width: p.width, height: p.height, title: p.title.clone(), lines: p.lines.clone(), cursor: p.cursor, focused: st.host.focus.as_deref() == Some(&p.id), dx: p.dx, dy: p.dy })
+            .map(|p| PanelView { id: p.id.clone(), side: p.side.clone(), width: p.width, height: p.height, title: p.title.clone(), lines: p.lines.clone(), cursor: p.cursor, focused: st.host.focus.as_deref() == Some(&p.id), dx: p.dx, dy: p.dy, at: p.at.clone() })
             .collect()
     }
 
@@ -477,7 +528,7 @@ impl Engine {
             let i = match h.panels.iter().position(|p| p.id == id) {
                 Some(i) => i,
                 None => {
-                    h.panels.push(Panel { id: id.clone(), side: "left".into(), width: 30, height: 0, title: String::new(), lines: Vec::new(), cursor: 0, dx: 0, dy: 0, on_key: None, on_move: None, on_close: None });
+                    h.panels.push(Panel { id: id.clone(), side: "left".into(), width: 30, height: 0, title: String::new(), lines: Vec::new(), cursor: 0, dx: 0, dy: 0, at: None, on_key: None, on_move: None, on_close: None });
                     h.panels.len() - 1
                 }
             };
@@ -485,12 +536,16 @@ impl Engine {
             if let Some(v) = o.get::<Option<String>>("side")? {
                 p.side = if v == "right" || v == "float" { v } else { "left".into() };
             }
-            p.width = o.get::<Option<u16>>("width")?.unwrap_or(p.width).clamp(10, 200);
+            p.width = o.get::<Option<u16>>("width")?.unwrap_or(p.width).clamp(1, 300);
             if p.side == "float" && o.get::<Option<u16>>("height")?.is_none() && p.height == 0 {
                 p.height = 70;
             }
             p.height = o.get::<Option<u16>>("height")?.unwrap_or(p.height);
             p.title = o.get::<Option<String>>("title")?.unwrap_or(p.title.clone());
+            // relative = "editor" | "cursor" | "win", row =, col =: a float where Neovim's would be
+            if let Some(rel) = o.get::<Option<String>>("relative")?.filter(|r| !r.is_empty()) {
+                p.at = Some((rel, o.get::<Option<i32>>("row")?.unwrap_or(0), o.get::<Option<i32>>("col")?.unwrap_or(0)));
+            }
             p.on_key = on_key.or(p.on_key.take());
             p.on_move = on_move.or(p.on_move.take());
             p.on_close = on_close.or(p.on_close.take());
@@ -595,10 +650,67 @@ impl Engine {
         buf.set("path", lua.create_function(move |_, ()| Ok(st.borrow().host.path.clone()))?)?;
         let get = with(self.st.clone());
         buf.set("text", lua.create_function(move |_, ()| Ok(get()?.borrow().text()))?)?;
+        // zett.buf.marks(): { a = {line, col}, … } (1-based line, 0-based col); set_mark(name, line, col); del_marks(spec)
+        let get = with(self.st.clone());
+        buf.set("marks", lua.create_function(move |lua, ()| {
+            let t = lua.create_table()?;
+            for (c, l, col) in get()?.borrow().marks() {
+                t.set(c.to_string(), lua.create_sequence_from([l + 1, col])?)?;
+            }
+            Ok(t)
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("set_mark", lua.create_function(move |_, (name, line, col): (String, usize, usize)| {
+            let e = get()?;
+            let mut e = e.borrow_mut();
+            let at = e.buf.to_char(zett_core::Pos { line: line.saturating_sub(1), col });
+            if let Some(c) = name.chars().next() {
+                e.set_vim_mark(c, at);
+            }
+            Ok(())
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("del_marks", lua.create_function(move |_, spec: String| {
+            get()?.borrow_mut().del_marks(&spec);
+            Ok(())
+        })?)?;
+        // zett.buf.register(r): text, "V" (lines) or "v"; set_register(r, text); recording(): the register or ""
+        let get = with(self.st.clone());
+        buf.set("register", lua.create_function(move |_, r: String| {
+            let c = r.chars().next().unwrap_or('"');
+            Ok(get()?.borrow().register(c).map(|(t, l)| vec![t, if l { "V" } else { "v" }.to_string()]))
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("set_register", lua.create_function(move |_, (r, text): (String, String)| {
+            get()?.borrow_mut().set_register(r.chars().next().unwrap_or('"'), &text);
+            Ok(())
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("recording", lua.create_function(move |_, ()| Ok(get()?.borrow().recording().map(|c| c.to_string()).unwrap_or_default()))?)?;
+        // zett.buf.tick(): changes when the text does (b:changedtick)
+        let get = with(self.st.clone());
+        buf.set("tick", lua.create_function(move |_, ()| Ok(get()?.borrow().buf.rev()))?)?;
         let get = with(self.st.clone());
         buf.set("cursor", lua.create_function(move |_, ()| {
             let c = get()?.borrow().cursor();
             Ok((c.line + 1, c.col))
+        })?)?;
+        // zett.buf.jumps(): { {line, col}, … } (1-based line, 0-based col) and where CTRL-O stands;
+        // zett.buf.changes(): the change list the same way
+        let get = with(self.st.clone());
+        buf.set("jumps", lua.create_function(move |_, ()| {
+            let e = get()?;
+            let e = e.borrow();
+            let (j, at) = e.jump_list();
+            let n = e.buf.len_chars();
+            Ok((j.into_iter().map(|c| { let p = e.buf.to_pos(c.min(n)); vec![p.line + 1, p.col] }).collect::<Vec<_>>(), at))
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("changes", lua.create_function(move |_, ()| {
+            let e = get()?;
+            let e = e.borrow();
+            let n = e.buf.len_chars();
+            Ok(e.change_list().into_iter().map(|c| { let p = e.buf.to_pos(c.min(n)); vec![p.line + 1, p.col] }).collect::<Vec<_>>())
         })?)?;
         // zett.buf.undo_states(): { {seq=, parent=, time=}, … } (seq 0 is the text as opened)
         let get = with(self.st.clone());
@@ -632,7 +744,67 @@ impl Engine {
         })?)?;
         let get = with(self.st.clone());
         buf.set("text_at", lua.create_function(move |_, n: usize| Ok(get()?.borrow_mut().text_at(n)))?)?;
+        // zett.buf.lines(a, b) / set_lines(a, b, lines): Neovim's indexing (from 0, b not included,
+        // -1 the end), what vim.api.nvim_buf_get_lines / set_lines are built on
+        let get = with(self.st.clone());
+        buf.set("lines", lua.create_function(move |_, (a, b): (i64, i64)| {
+            let e = get()?;
+            let e = e.borrow();
+            let n = e.buf.len_lines();
+            let (a, b) = (line_index(a, n), line_index(b, n));
+            Ok((a..b.max(a)).map(|i| e.buf.line(i)).collect::<Vec<_>>())
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("set_lines", lua.create_function(move |_, (a, b, lines): (i64, i64, Vec<String>)| {
+            let e = get()?;
+            let mut e = e.borrow_mut();
+            let n = e.buf.len_lines();
+            let (a, b) = (line_index(a, n), line_index(b, n));
+            let b = b.max(a);
+            let len = e.buf.len_chars();
+            let nl = len > 0 && e.buf.text().ends_with('\n');
+            let at = |e: &Editor, l: usize| e.buf.to_char(zett_core::Pos { line: l, col: 0 });
+            let (mut start, end, rep) = if b < n {
+                (at(&e, a), at(&e, b), lines.iter().map(|l| format!("{l}\n")).collect::<String>())
+            } else if a < n {
+                let rep = format!("{}{}", lines.join("\n"), if nl && !lines.is_empty() { "\n" } else { "" });
+                (at(&e, a), len, rep)
+            } else {
+                let rep = format!("{}{}{}", if !nl && len > 0 { "\n" } else { "" }, lines.join("\n"), if nl { "\n" } else { "" });
+                (len, len, rep)
+            };
+            // the last lines gone from a file without a last line break: the break before them goes too
+            if lines.is_empty() && b >= n && a > 0 && !nl {
+                start -= 1;
+            }
+            let cur = e.cursor();
+            e.replace_text(start, end, &rep);
+            e.set_cursor(cur);
+            Ok(())
+        })?)?;
+        let get = with(self.st.clone());
+        buf.set("line_count", lua.create_function(move |_, ()| Ok(get()?.borrow().buf.len_lines()))?)?;
+        // zett.buf.set_cursor(row, col): row from 1, col from 0 (as nvim_win_set_cursor)
+        let get = with(self.st.clone());
+        buf.set("set_cursor", lua.create_function(move |_, (row, col): (usize, usize)| {
+            get()?.borrow_mut().set_cursor(zett_core::Pos { line: row.saturating_sub(1), col });
+            Ok(())
+        })?)?;
         z.set("buf", buf)?;
+        // zett.option_names(): every option zett knows (nvim_get_all_options_info)
+        let st = self.st.clone();
+        z.set("option_names", lua.create_function(move |_, ()| Ok(st.borrow().host.options.iter().map(|o| o.0.clone()).collect::<Vec<String>>()))?)?;
+        // zett.option_info("ts") → { name = "tabstop", kind = "int", default = "8" } (nil: no such option)
+        let st = self.st.clone();
+        z.set("option_info", lua.create_function(move |lua, name: String| {
+            let s = st.borrow();
+            let Some((n, _, kind, default)) = s.host.options.iter().find(|o| o.0 == name || o.1.contains(&name)) else { return Ok(Value::Nil) };
+            let t = lua.create_table()?;
+            t.set("name", n.as_str())?;
+            t.set("kind", kind.as_str())?;
+            t.set("default", default.as_str())?;
+            Ok(Value::Table(t))
+        })?)?;
 
         let st = self.st.clone();
         z.set("root", lua.create_function(move |_, ()| Ok(st.borrow().host.root.display().to_string()))?)?;
@@ -657,8 +829,154 @@ impl Engine {
         })?)?;
         // zett.key_name("<cr>") == "<Enter>": one spelling per key
         z.set("key_name", lua.create_function(|_, k: String| Ok(super::keys(&k).concat()))?)?;
+        // zett.maps(mode): its mappings, { {lhs=, rhs=, desc=, noremap=, lua=}, … } (Neovim's keymap queries)
+        let st = self.st.clone();
+        z.set("maps", lua.create_function(move |lua, mode: String| {
+            let t = lua.create_table()?;
+            let st = st.borrow();
+            for (i, m) in st.maps.get(&mode).map(|l| l.as_slice()).unwrap_or(&[]).iter().enumerate() {
+                let e = lua.create_table()?;
+                e.set("lhs", m.keys.concat())?;
+                let (rhs, noremap, is_lua) = match &m.action {
+                    super::Action::Keys(k, remap) => (k.clone(), !remap, false),
+                    super::Action::Command(c) => (format!("<Cmd>{c}<CR>"), true, false),
+                    super::Action::Lua(_) => (String::new(), true, true),
+                };
+                e.set("rhs", rhs)?;
+                e.set("noremap", noremap)?;
+                e.set("lua", is_lua)?;
+                e.set("desc", m.desc.clone())?;
+                t.set(i + 1, e)?;
+            }
+            Ok(t)
+        })?)?;
         let st = self.st.clone();
         z.set("buffers", lua.create_function(move |_, ()| Ok(st.borrow().host.buffers.clone()))?)?;
+        // zett.hl_get(name, links): a group as Neovim reports it ({ fg = 0xRRGGBB, bg =, ctermfg =, bold = true, link = … }),
+        // links followed unless links is false; nil for a group nobody defined. zett.hl_names(): every group
+        let st = self.st.clone();
+        z.set("hl_get", lua.create_function(move |lua, (name, links): (String, Option<bool>)| {
+            let st = st.borrow();
+            let mut n = name.clone();
+            let mut h = None;
+            for _ in 0..10 {
+                let Some(x) = st.hl.get(&n) else { break };
+                match (&x.link, links.unwrap_or(true)) {
+                    (Some(l), true) => n = l.clone(),
+                    _ => {
+                        h = Some(x.clone());
+                        break;
+                    }
+                }
+            }
+            let Some(h) = h else { return Ok(None) };
+            let t = lua.create_table()?;
+            let put = |key: &str, cterm: &str, c: &Option<super::hl::HlColor>| -> mlua::Result<()> {
+                match c {
+                    Some(super::hl::HlColor::Rgb(r, g, b)) => t.set(key, (*r as u32) << 16 | (*g as u32) << 8 | *b as u32),
+                    Some(super::hl::HlColor::Index(i)) => t.set(cterm, *i),
+                    _ => Ok(()),
+                }
+            };
+            put("fg", "ctermfg", &h.fg)?;
+            put("bg", "ctermbg", &h.bg)?;
+            for (k, v) in [("bold", h.bold), ("italic", h.italic), ("underline", h.underline), ("reverse", h.reverse), ("strikethrough", h.strikethrough)] {
+                if v {
+                    t.set(k, true)?;
+                }
+            }
+            if let Some(l) = &h.link {
+                t.set("link", l.clone())?;
+            }
+            Ok(Some(t))
+        })?)?;
+        let st = self.st.clone();
+        z.set("hl_names", lua.create_function(move |_, ()| {
+            let mut v: Vec<String> = st.borrow().hl.keys().cloned().collect();
+            v.sort();
+            Ok(v)
+        })?)?;
+        // zett.qflist(): { title =, idx =, items = { {file=, lnum=, col=, type=, nr=, text=, valid=}, … } }
+        let st = self.st.clone();
+        z.set("qflist", lua.create_function(move |lua, ()| {
+            let st = st.borrow();
+            let (title, idx, items) = &st.host.qf;
+            let t = lua.create_table()?;
+            t.set("title", title.clone())?;
+            t.set("idx", *idx + 1)?;
+            let l = lua.create_table()?;
+            for (i, (file, line, col, kind, nr, text, valid)) in items.iter().enumerate() {
+                let e = lua.create_table()?;
+                e.set("file", file.clone())?;
+                e.set("lnum", *line)?;
+                e.set("col", *col)?;
+                e.set("type", if *kind == ' ' { String::new() } else { kind.to_string() })?;
+                e.set("nr", *nr)?;
+                e.set("text", text.clone())?;
+                e.set("valid", *valid)?;
+                l.set(i + 1, e)?;
+            }
+            t.set("items", l)?;
+            Ok(t)
+        })?)?;
+        // zett.cmdline(): text, pos (nil when no : line is open); zett.history(): the : lines typed
+        let st = self.st.clone();
+        z.set("cmdline", lua.create_function(move |_, ()| Ok(st.borrow().host.cmdline.clone().map(|(t, p)| vec![t, p.to_string()])))?)?;
+        let st = self.st.clone();
+        z.set("history", lua.create_function(move |_, ()| Ok(st.borrow().host.hist.clone()))?)?;
+        // zett.regex(pattern, text, start, icase): the first match of a Vim pattern from byte start:
+        // { s, e, cap1 … cap9 } (bytes, 0-based, end past the match; \zs \ze applied), nil when none
+        z.set("regex", lua.create_function(|lua, (pat, text, start, icase): (String, String, Option<usize>, Option<bool>)| {
+            thread_local! {
+                static CACHE: std::cell::RefCell<Vec<((String, bool), std::rc::Rc<zett_edit::vimre::VimRegex>)>> = const { std::cell::RefCell::new(Vec::new()) };
+            }
+            let ic = icase.unwrap_or(false);
+            let re = CACHE.with(|c| -> Result<std::rc::Rc<zett_edit::vimre::VimRegex>, String> {
+                let mut c = c.borrow_mut();
+                if let Some((_, r)) = c.iter().find(|(k, _)| k.0 == pat && k.1 == ic) {
+                    return Ok(r.clone());
+                }
+                let r = std::rc::Rc::new(zett_edit::vimre::compile(&pat, ic, false)?);
+                c.push(((pat.clone(), ic), r.clone()));
+                if c.len() > 64 {
+                    c.remove(0);
+                }
+                Ok(r)
+            }).map_err(mlua::Error::runtime)?;
+            let from = start.unwrap_or(0).min(text.len());
+            let Some((s, e)) = re.find_at(&text, from) else { return Ok(None) };
+            let t = lua.create_table()?;
+            t.set(1, s)?;
+            t.set(2, e)?;
+            // the groups (Vim's numbers), from the match found again at its start
+            if let Ok(Some(c)) = re.re.captures_from_pos(&text, text[..s].rfind('\n').map_or(0, |n| n + 1)) {
+                for g in 1..=9 {
+                    t.set(g + 2, c.get(re.group(g)).map(|m| m.as_str().to_string()).unwrap_or_default())?;
+                }
+            }
+            Ok(Some(t))
+        })?)?;
+        let st = self.st.clone();
+        z.set("cur_buffer", lua.create_function(move |_, ()| Ok(st.borrow().host.cur_buffer))?)?;
+        // zett.windows(): { {nr=, buf=, width=, height=, row=, col=}, … } and zett.cur_window()
+        let st = self.st.clone();
+        z.set("windows", lua.create_function(move |lua, ()| {
+            let t = lua.create_table()?;
+            for (i, (nr, buf, w, h, row, col)) in st.borrow().host.wins.iter().enumerate() {
+                let e = lua.create_table()?;
+                e.set("top", st.borrow().host.tops.get(i).copied().unwrap_or(0) + 1)?;
+                e.set("nr", *nr)?;
+                e.set("buf", *buf)?;
+                e.set("width", *w)?;
+                e.set("height", *h)?;
+                e.set("row", *row)?;
+                e.set("col", *col)?;
+                t.set(i + 1, e)?;
+            }
+            Ok(t)
+        })?)?;
+        let st = self.st.clone();
+        z.set("cur_window", lua.create_function(move |_, ()| Ok(st.borrow().host.cur_win))?)?;
         z.set("icon", lua.create_function(|_, name: String| Ok(file_icon(&name)))?)?;
         // zett.diff(a, b): { {"+", line}, {"-", line}, {" ", line}, … }
         z.set("diff", lua.create_function(|lua, (a, b): (String, String)| {
@@ -756,4 +1074,9 @@ mod tests {
         let ops: String = d.iter().map(|(o, _)| *o).collect();
         assert_eq!(ops, " -+ +");
     }
+}
+
+/// A Neovim line index (from 0; negative from the end, -1 just past the last line) in 0..=n.
+fn line_index(i: i64, n: usize) -> usize {
+    if i < 0 { (n as i64 + 1 + i).max(0) as usize } else { (i as usize).min(n) }
 }

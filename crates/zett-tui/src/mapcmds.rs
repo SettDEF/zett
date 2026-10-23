@@ -338,6 +338,11 @@ impl App {
         if self.autocmds.is_empty() || self.au_depth > 10 {
             return;
         }
+        // eventignore / eventignorewin: events that run nothing ("all" for every one)
+        let ignored = |list: String| list.split(',').any(|e| e.eq_ignore_ascii_case(event) || e == "all");
+        if ignored(self.setting(self.cur, "eventignore")) || ignored(self.setting(self.cur, "eventignorewin")) {
+            return;
+        }
         let file = self.docs[self.cur].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
         let ft = self.setting(self.cur, "filetype");
         let subject = target.map(str::to_string).unwrap_or_else(|| if event == "filetype" { ft } else { file.clone() });
@@ -346,6 +351,12 @@ impl App {
         let run: Vec<(usize, AutoCmd)> = self.autocmds.iter().cloned().enumerate().filter(|(_, a)| a.events.iter().any(|e| e == event) && fits(&a.pat)).collect();
         if run.is_empty() {
             return;
+        }
+        // verbose 8 and up: each autocommand that runs is said, as Vim does
+        if self.num(self.cur, "verbose") >= 8 {
+            for (_, a) in &run {
+                self.say(format!("Executing {event} Autocommands for \"{}\": {}", a.pat, a.cmd));
+            }
         }
         self.au_depth += 1;
         for (_, a) in &run {

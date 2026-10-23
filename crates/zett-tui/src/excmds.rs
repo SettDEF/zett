@@ -221,6 +221,15 @@ impl App {
                             self.vim_window("|", r.parse().ok());
                         }
                     }
+                    // every buffer in a window, side by side
+                    "ba" | "ball" | "sba" | "sball" => {
+                        self.vim_window("o", None);
+                        let first = self.cur;
+                        for i in (0..self.docs.len()).filter(|&i| i != first) {
+                            self.doom_ui("split", "right");
+                            self.show_doc(i);
+                        }
+                    }
                     "sb" | "sbuffer" => {
                         self.doom_ui("split", "right");
                         if !rest.trim().is_empty() {
@@ -267,19 +276,40 @@ impl App {
                 }
             }
             "winsize" => self.say("E319: :winsize is not supported in a terminal (use :resize)"),
-            "sview" | "sfind" | "pedit" => {
-                self.doom_ui("split", "below");
-                self.command(&format!("e {}", arg.trim()));
+            "sview" | "sfind" | "pedit" | "pbuffer" => {
+                // the preview window: one at a time (the last one's place is taken), previewheight tall
+                if cmd.starts_with('p') {
+                    self.ex_more("pclose", "", false, None);
+                    // as :split does it (splitbelow decides the side)
+                    self.command("split");
+                } else {
+                    self.doom_ui("split", "below");
+                }
+                self.command(&format!("{} {}", if cmd == "pbuffer" { "b" } else { "e" }, arg.trim()));
+                let i = self.cur;
                 if cmd == "sview" {
-                    let i = self.cur;
                     self.docs[i].local.insert("readonly".into(), "true".into());
                 }
+                if cmd.starts_with('p') {
+                    self.docs[i].local.insert("previewwindow".into(), "true".into());
+                    self.preview_win = Some(self.focus);
+                    let h = self.num(i, "previewheight").max(1);
+                    self.command(&format!("resize {h}"));
+                }
             }
-            "pbuffer" => {
-                self.doom_ui("split", "below");
-                self.command(&format!("b {}", arg.trim()));
+            // the preview window closed, the focus staying where it is
+            "pclose" => {
+                if let Some(w) = self.preview_win.take().filter(|w| self.wins.get(*w).is_some_and(|w| w.is_some())) {
+                    let back = self.focus;
+                    self.focus_win(w);
+                    let i = self.cur;
+                    self.docs[i].local.remove("previewwindow");
+                    self.close_win();
+                    if back != w && self.wins.get(back).is_some_and(|w| w.is_some()) {
+                        self.focus_win(back);
+                    }
+                }
             }
-            "pclose" => {}
             "drop" => {
                 let p = self.root.join(arg.trim());
                 let shown = self.tree.ids().into_iter().find(|&w| self.wins.get(w).and_then(|w| w.as_ref()).is_some_and(|w| self.docs.get(w.doc).and_then(|d| d.abs_path()).is_some_and(|a| a == p)));
@@ -298,6 +328,15 @@ impl App {
                 }
             }
             // :tab {cmd}: what it opens, in a new tab (:tab split, :tab help)
+            // :tab ball, :tab all: a tab for each buffer (Vim), no more than tabpagemax
+            "tab" if matches!(arg.trim(), "ball" | "ba" | "sball" | "sba" | "all" | "al" | "sall" | "sal") => {
+                let max = self.num(self.cur, "tabpagemax").max(1);
+                let first = self.cur;
+                let others: Vec<usize> = (0..self.docs.len()).filter(|&i| i != first).collect();
+                for i in others.into_iter().take(max.saturating_sub(self.tab_count())) {
+                    self.tab_new(Some(i), None);
+                }
+            }
             "tab" => {
                 self.tab_new(None, None);
                 self.command(arg);
@@ -875,6 +914,27 @@ mod tests {
 
     fn text(app: &crate::App) -> String {
         app.docs[app.cur].ed.buf.text()
+    }
+
+    #[test]
+    fn set_keeps_an_escaped_space_at_the_end() {
+        let mut app = app_with("x\n");
+        app.command(r"set stc=%s%=%l\ ");
+        assert_eq!(app.setting(app.cur, "statuscolumn"), "%s%=%l ");
+    }
+
+    #[test]
+    fn substitute_speaks_vims_patterns() {
+        // magic: ( is itself; \( \) a group; \zs \ze keep the rest; & is the \zs part
+        let mut app = app_with("f(x) foobar a1b2\n");
+        app.command(r"s/f(x)/g(y)/");
+        assert_eq!(text(&app), "g(y) foobar a1b2\n");
+        app.command(r"s/foo\zsbar/[&]/");
+        assert_eq!(text(&app), "g(y) foo[bar] a1b2\n");
+        app.command(r"s/\(a\)\zs\(\d\)/<\2>/");
+        assert_eq!(text(&app), "g(y) foo[bar] a<1>b2\n", "\\2 is the second Vim group though \\zs adds one");
+        app.command(r"s/\v(\a)(\d)$/\2\1/");
+        assert_eq!(text(&app), "g(y) foo[bar] a<1>2b\n");
     }
 
     #[test]

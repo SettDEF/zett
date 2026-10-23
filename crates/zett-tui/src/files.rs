@@ -15,13 +15,21 @@ impl App {
         local.insert("fileencoding".into(), disk.encoding);
         local.insert("bomb".into(), disk.bom.to_string());
         local.insert("endofline".into(), disk.eol.to_string());
+        local.insert("endoffile".into(), disk.eof.to_string());
         self.docs[di].mtime = self.disk_time(di);
     }
 
     /// Saves buffer `di` as the file options say; Err is the message when it cannot.
     pub(crate) fn write_buffer(&mut self, di: usize) -> Result<(), String> {
+        if self.secure_now {
+            return Err("E523: Not allowed here (secure: the folder's config writes no files)".into());
+        }
         if !self.flag(di, "write") {
             return Err("E142: File not written: Writing is disabled by 'write' option".into());
+        }
+        // buftype: a scratch, help or list buffer (a plugin's) is not a file to write
+        if matches!(self.setting(di, "buftype").as_str(), "nofile" | "nowrite" | "help" | "quickfix" | "terminal" | "prompt") {
+            return Err("E382: Cannot write, 'buftype' option is set".into());
         }
         let encoding = match self.setting(di, "fileencoding").to_lowercase().as_str() {
             "" | "utf-8" | "utf8" => "utf-8",
@@ -34,6 +42,7 @@ impl App {
         };
         let bom = self.flag(di, "bomb");
         let (fixeol, eol) = (self.flag(di, "final_newline") && !self.flag(di, "binary"), self.flag(di, "endofline"));
+        let eof_z = self.flag(di, "endoffile");
         let path = self.docs[di].ed.buf.path().map(Path::to_path_buf).ok_or("no file name: :w name")?;
         // backup / writebackup: the old file kept aside while writing (and after, with backup)
         let backup = if (self.flag(di, "backup") || self.flag(di, "writebackup")) && path.is_file() && !self.backup_skipped(di, &path) {
@@ -51,12 +60,22 @@ impl App {
             _ => std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink() || std::os::unix::fs::MetadataExt::nlink(&m) > 1),
         };
         let fsync = self.flag(di, "fsync");
+        // patchmode (".orig"): the file as it first was, kept beside it on the first write
+        let patch = self.setting(di, "patchmode");
+        if !patch.is_empty() && path.is_file() {
+            let orig = PathBuf::from(format!("{}{patch}", path.display()));
+            if !orig.exists() {
+                std::fs::copy(&path, &orig).map_err(|e| format!("E206: patchmode: can't create the original file: {e}"))?;
+            }
+        }
         let b = &mut self.docs[di].ed.buf;
         b.disk.format = format;
         b.disk.encoding = encoding.into();
         b.disk.bom = bom;
         // the last line break: fixendofline adds it (not for binary), else endofline keeps what the file had
         b.disk.eol = fixeol || eol;
+        // endoffile: the CTRL-Z the file ended with goes back, unless fixendofline tidies the end
+        b.disk.eof = eof_z && !fixeol;
         let r = b.save_with(in_place, fsync).map_err(|e| format!("could not save: {e}"));
         if let Some(to) = backup.filter(|_| r.is_ok() && !self.flag(di, "backup")) {
             let _ = std::fs::remove_file(to);
@@ -94,8 +113,13 @@ impl App {
     /// The file as it is on disk again (:e!, autoread), the buffer's changes dropped; the cursor,
     /// the scroll position and the buffer's settings stay, its file's format is read anew.
     pub(crate) fn reload_doc(&mut self, i: usize) -> Result<PathBuf, String> {
+        self.reload_doc_as(i, None)
+    }
+
+    /// As [`App::reload_doc`], in the encoding given (C-x RET r, :e ++enc).
+    pub(crate) fn reload_doc_as(&mut self, i: usize, encoding: Option<&str>) -> Result<PathBuf, String> {
         let p = self.docs[i].abs_path().ok_or("no file to reload")?;
-        let mut nd = Doc::open(&p, &self.ss).map_err(|e| e.to_string())?;
+        let mut nd = Doc::open_as(&p, &self.ss, encoding).map_err(|e| e.to_string())?;
         let old = &self.docs[i];
         nd.name = old.name.clone();
         nd.top = old.top;
@@ -257,5 +281,129 @@ impl App {
             .take(200)
             .map(|(_, file, n)| crate::cmdline::Suggestion { fill: format!("{head} {dir_part}{n}"), name: n, args: String::new(), about: if file { "file".into() } else { "folder".into() }, example: String::new() })
             .collect()
+    }
+}
+
+/// An Emacs coding system (utf-8-dos, latin-1-unix, utf-8-with-signature, dos) as zett's
+/// fileencoding, fileformat and bomb, each None when the name leaves it as it is; Err for an
+/// encoding zett cannot write.
+pub(crate) fn coding_system(name: &str) -> Result<(Option<&'static str>, Option<&'static str>, Option<bool>), String> {
+    let n = name.trim().to_lowercase();
+    let (base, format) = match ["unix", "dos", "mac"].iter().find(|f| n == **f || n.ends_with(&format!("-{f}"))) {
+        Some(f) => (n.strip_suffix(*f).unwrap_or("").trim_end_matches('-').to_string(), Some(*f)),
+        None => (n.clone(), None),
+    };
+    let (enc, bom) = match base.as_str() {
+        "" | "undecided" => (None, None),
+        "utf-8" | "utf8" | "mule-utf-8" | "prefer-utf-8" => (Some("utf-8"), Some(false)),
+        "utf-8-with-signature" | "utf-8-auto" => (Some("utf-8"), Some(true)),
+        "latin-1" | "latin1" | "iso-latin-1" | "iso-8859-1" | "iso8859-1" => (Some("latin1"), Some(false)),
+        e => return Err(format!("zett reads and writes utf-8 and latin-1, not {e}")),
+    };
+    Ok((enc, format, bom))
+}
+
+impl App {
+    /// C-x RET f: the encoding and line ends the buffer is saved with.
+    pub(crate) fn set_coding(&mut self, name: &str) {
+        match coding_system(name) {
+            Ok((enc, ff, bom)) => {
+                let local = &mut self.docs[self.cur].local;
+                enc.map(|e| local.insert("fileencoding".into(), e.into()));
+                ff.map(|f| local.insert("fileformat".into(), f.into()));
+                bom.map(|b| local.insert("bomb".into(), b.to_string()));
+                self.say(format!("{}: saved as {}", self.docs[self.cur].name, self.coding_name(self.cur)));
+            }
+            Err(e) => self.say(e),
+        }
+    }
+
+    /// C-x RET r: the file read again in that encoding (a file guessed wrong).
+    pub(crate) fn revert_coding(&mut self, name: &str) {
+        let (enc, ff, bom) = match coding_system(name) {
+            Ok(c) => c,
+            Err(e) => return self.say(e),
+        };
+        let i = self.cur;
+        if let Err(e) = self.reload_doc_as(i, enc) {
+            return self.say(e);
+        }
+        let disk = self.docs[i].ed.buf.disk.clone();
+        let local = &mut self.docs[i].local;
+        local.insert("fileencoding".into(), disk.encoding);
+        local.insert("fileformat".into(), ff.map(String::from).unwrap_or(disk.format));
+        local.insert("bomb".into(), bom.unwrap_or(disk.bom).to_string());
+        self.say(format!("Read as {}", self.coding_name(i)));
+    }
+
+    /// The buffer's coding system by Emacs's name (utf-8-unix, latin-1-dos, utf-8-with-signature-unix).
+    pub(crate) fn coding_name(&self, di: usize) -> String {
+        let enc = match self.setting(di, "fileencoding").as_str() {
+            "latin1" => "latin-1",
+            _ if self.flag(di, "bomb") => "utf-8-with-signature",
+            _ => "utf-8",
+        };
+        let ff = self.setting(di, "fileformat");
+        format!("{enc}-{}", if ff.is_empty() { "unix" } else { &ff })
+    }
+}
+
+#[cfg(test)]
+mod coding_tests {
+    use super::coding_system;
+
+    #[test]
+    fn emacs_coding_names() {
+        assert_eq!(coding_system("utf-8-dos"), Ok((Some("utf-8"), Some("dos"), Some(false))));
+        assert_eq!(coding_system("latin-1-unix"), Ok((Some("latin1"), Some("unix"), Some(false))));
+        assert_eq!(coding_system("utf-8-with-signature"), Ok((Some("utf-8"), None, Some(true))));
+        assert_eq!(coding_system("dos"), Ok((None, Some("dos"), None)));
+        assert!(coding_system("shift_jis").is_err());
+    }
+}
+
+impl App {
+    /// C-x x @ (tramp-revert-buffer-with-sudo) reads the file as root, sudo-save writes it so; the
+    /// screen is left for sudo's password (the run loop calls this).
+    pub(crate) fn sudo_run(&mut self, write: bool) {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let i = self.cur;
+        let Some(path) = self.docs[i].abs_path() else { return self.say("no file: sudo needs one") };
+        println!("zett: sudo {} {}", if write { "writes" } else { "reads" }, path.display());
+        if write {
+            let bytes = self.docs[i].ed.buf.encoded();
+            let child = Command::new("sudo").arg("tee").arg("--").arg(&path).stdin(Stdio::piped()).stdout(Stdio::null()).spawn();
+            let ok = child.and_then(|mut c| {
+                // sudo asks for the password on the terminal (/dev/tty), not on this pipe
+                c.stdin.take().map(|mut s| s.write_all(&bytes)).transpose()?;
+                c.wait()
+            });
+            match ok {
+                Ok(s) if s.success() => {
+                    self.docs[i].ed.buf.mark_saved();
+                    self.docs[i].mtime = self.disk_time(i);
+                    self.say(format!("\"{}\" written as root", self.docs[i].name));
+                }
+                Ok(_) => self.say("sudo: not written"),
+                Err(e) => self.say(format!("sudo: {e}")),
+            }
+        } else {
+            match Command::new("sudo").arg("cat").arg("--").arg(&path).stderr(Stdio::inherit()).output() {
+                Ok(o) if o.status.success() => {
+                    let mut nd = Doc::with_buffer(&path, Buffer::from_bytes(&path, &o.stdout), &self.ss);
+                    let old = &self.docs[i];
+                    nd.name = old.name.clone();
+                    nd.top = old.top;
+                    nd.local = old.local.clone();
+                    nd.local.insert("sudo".into(), "true".into());
+                    nd.ed.set_cursor(old.ed.cursor());
+                    self.docs[i] = nd;
+                    self.say("Read as root: C-x C-s writes it with sudo");
+                }
+                Ok(_) => self.say("sudo: not read"),
+                Err(e) => self.say(format!("sudo: {e}")),
+            }
+        }
     }
 }

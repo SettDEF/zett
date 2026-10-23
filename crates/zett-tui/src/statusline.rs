@@ -26,6 +26,18 @@ pub(crate) struct Ctx {
     pub offset: usize,
     /// showcmd with showcmdloc=statusline: the keys under way (%S)
     pub showcmd: String,
+    /// statuscolumn: the line being drawn (%l %r %s %C)
+    pub stc: Option<Stc>,
+}
+
+/// statuscolumn's line: its number as number and relativenumber show it, its relative number, its
+/// sign and its fold column.
+#[derive(Default, Clone)]
+pub(crate) struct Stc {
+    pub num: String,
+    pub relnum: usize,
+    pub signs: String,
+    pub folds: String,
 }
 
 /// A piece of the line: its text and the highlight group it is drawn in (None: the line's own).
@@ -34,6 +46,11 @@ pub(crate) type Piece = (String, Option<String>);
 /// The format laid out `width` columns wide: `%=` shares the free space, too long is cut at the end.
 /// `eval` answers %{expr}.
 pub(crate) fn render(fmt: &str, c: &Ctx, width: usize, eval: &mut dyn FnMut(&str) -> String) -> Vec<Piece> {
+    lay_out(sections(fmt, c, eval), width)
+}
+
+/// The format's sections (between %= marks), not laid out yet (statuscolumn sizes them first).
+pub(crate) fn sections(fmt: &str, c: &Ctx, eval: &mut dyn FnMut(&str) -> String) -> Vec<Vec<Piece>> {
     // sections between %= marks; each a list of pieces
     let mut sections: Vec<Vec<Piece>> = vec![Vec::new()];
     let mut group: Option<String> = None;
@@ -122,6 +139,10 @@ pub(crate) fn render(fmt: &str, c: &Ctx, width: usize, eval: &mut dyn FnMut(&str
                 i = end + 1;
                 Some(eval(&expr))
             }
+            'l' if c.stc.is_some() => c.stc.as_ref().map(|s| s.num.clone()),
+            'r' if c.stc.is_some() => c.stc.as_ref().map(|s| s.relnum.to_string()),
+            's' if c.stc.is_some() => c.stc.as_ref().map(|s| s.signs.clone()),
+            'C' if c.stc.is_some() => c.stc.as_ref().map(|s| s.folds.clone()),
             'f' => Some(c.name.clone()),
             'F' => Some(c.full.clone()),
             't' => Some(std::path::Path::new(&c.full).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| c.name.clone())),
@@ -169,11 +190,11 @@ pub(crate) fn render(fmt: &str, c: &Ctx, width: usize, eval: &mut dyn FnMut(&str
         lit.push_str(&t);
     }
     flush(&mut lit, &mut sections, &group);
-    lay_out(sections, width)
+    sections
 }
 
 /// Sections side by side in `width` columns: the free space spread over the %= gaps.
-fn lay_out(sections: Vec<Vec<Piece>>, width: usize) -> Vec<Piece> {
+pub(crate) fn lay_out(sections: Vec<Vec<Piece>>, width: usize) -> Vec<Piece> {
     let used: usize = sections.iter().flatten().map(|p| p.0.chars().count()).sum();
     let gaps = sections.len().saturating_sub(1);
     let free = width.saturating_sub(used);
@@ -271,15 +292,16 @@ impl crate::App {
             ch: line_text.chars().nth(c.col).filter(|&ch| ch != '\n'),
             offset: d.ed.buf.to_char(c) + 1,
             showcmd: if self.flag(di, "showcmd") && self.setting(di, "showcmdloc") == "statusline" { d.ed.pending_keys() } else { String::new() },
+            stc: None,
         }
     }
 
     /// A format (statusline, rulerformat, tabline, winbar, titlestring) for buffer `di`, `width`
-    /// columns wide; %{expr} is a Lua expression.
+    /// columns wide; %{expr} is Vimscript, as in Neovim (Lua when it is not Vimscript).
     pub(crate) fn fmt_line(&mut self, fmt: &str, di: usize, height: usize, width: usize) -> Vec<Piece> {
         let c = self.status_ctx(di, height);
         let engine = &mut self.engine;
-        render(fmt, &c, width, &mut |e| engine.eval(&format!("return {e}")).map(|r| r.0).unwrap_or_default())
+        render(fmt, &c, width, &mut |e| engine.eval(&format!("return vim._vimscript.eval_str({e:?})")).map(|r| r.0).unwrap_or_default())
     }
 }
 
@@ -288,4 +310,57 @@ pub(crate) fn draw_pieces(f: &mut ratatui::Frame, a: ratatui::layout::Rect, piec
     use ratatui::text::{Line, Span};
     let spans: Vec<Span> = pieces.into_iter().map(|(t, g)| Span::styled(t, g.map_or(base, |g| base.patch(crate::hl::hl(&g))))).collect();
     f.render_widget(ratatui::widgets::Paragraph::new(Line::from(spans)).style(base), a);
+}
+
+impl crate::App {
+    /// statuscolumn for buffer `di`'s lines `from..to`: each line's pieces, laid out as wide as the
+    /// widest (Neovim sizes the column so); worked out again when the text, the cursor line, the
+    /// view or the format change. Nothing when statuscolumn is empty.
+    pub(crate) fn stc_lines(&mut self, di: usize, from: usize, to: usize) {
+        let fmt = self.setting(di, "statuscolumn");
+        if fmt.is_empty() {
+            self.stc.remove(&di);
+            return;
+        }
+        let d = &self.docs[di];
+        let cur = d.ed.cursor().line;
+        let to = to.min(d.ed.buf.len_lines());
+        let key = format!("{}|{fmt}|{cur}|{from}|{to}|{}", d.ed.buf.rev(), d.diags.len());
+        if self.stc.get(&di).is_some_and(|s| s.0 == key) {
+            return;
+        }
+        let (number, relative) = (self.numbers, self.relative);
+        let fcw = self.num(di, "foldcolumn");
+        let fill = crate::display::fillchars(&self.setting(di, "fillchars"));
+        let mut parts = Vec::new();
+        for ln in from..to {
+            let d = &self.docs[di];
+            let rel = ln.abs_diff(cur);
+            let num = match (number, relative) {
+                (_, true) if ln != cur => rel.to_string(),
+                (true, _) | (_, true) => (ln + 1).to_string(),
+                _ => String::new(),
+            };
+            let signs = match d.diags.iter().filter(|x| x.line == ln).map(|x| x.severity).min() {
+                Some(_) => "● ".to_string(),
+                None => String::new(),
+            };
+            let (depth, start) = d.ed.fold_mark(ln);
+            let folds = crate::display::fold_cells(fcw, depth, start, &fill);
+            let mut c = self.status_ctx(di, to - from);
+            c.stc = Some(Stc { num, relnum: rel, signs, folds });
+            let engine = &mut self.engine;
+            let _ = engine.eval(&format!("vim.v.lnum = {}; vim.v.relnum = {rel}; vim.v.virtnum = 0", ln + 1));
+            let mut ev = |e: &str| engine.eval(&format!("return vim._vimscript.eval_str({e:?})")).map(|r| r.0).unwrap_or_default();
+            // %!expr: the expression gives the format
+            let line_fmt = match fmt.strip_prefix("%!") {
+                Some(e) => ev(e),
+                None => fmt.clone(),
+            };
+            parts.push((ln, sections(&line_fmt, &c, &mut ev)));
+        }
+        let w = parts.iter().map(|(_, s)| s.iter().flatten().map(|p| p.0.chars().count()).sum::<usize>()).max().unwrap_or(0);
+        let lines = parts.into_iter().map(|(ln, s)| (ln, lay_out(s, w))).collect();
+        self.stc.insert(di, (key, w, lines));
+    }
 }

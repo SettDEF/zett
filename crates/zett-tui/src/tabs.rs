@@ -15,6 +15,8 @@ pub(crate) struct TabPage {
     win_match: std::collections::HashMap<(usize, u8), (String, String)>,
     /// tab-rename's name (else the focused window's buffer)
     pub name: Option<String>,
+    /// tab-group's group (C-x t G), shown before the name
+    pub group: Option<String>,
 }
 
 impl App {
@@ -37,6 +39,7 @@ impl App {
             cur: self.cur,
             win_match: self.win_match.clone(),
             name: self.tab_pages.get(self.tab).and_then(|t| t.name.clone()),
+            group: self.tab_pages.get(self.tab).and_then(|t| t.group.clone()),
         };
         if self.tab_pages.is_empty() {
             self.tab_pages.push(page);
@@ -48,6 +51,9 @@ impl App {
 
     fn tab_load(&mut self, i: usize) {
         let Some(t) = self.tab_pages.get(i).cloned() else { return };
+        if i != self.tab {
+            self.last_tab = Some(self.tab);
+        }
         self.tab = i;
         self.wins = t.wins;
         self.tree = t.tree;
@@ -71,7 +77,7 @@ impl App {
         self.tab_save();
         let doc = doc.unwrap_or(self.cur);
         let w = Win { doc, lcd: self.wins.get(self.focus).and_then(|w| w.as_ref()).and_then(|w| w.lcd.clone()), ..Default::default() };
-        let page = TabPage { wins: vec![Some(w)], tree: WTree::Leaf(0), focus: 0, last_win: None, cur: doc, win_match: Default::default(), name: None };
+        let page = TabPage { wins: vec![Some(w)], tree: WTree::Leaf(0), focus: 0, last_win: None, cur: doc, win_match: Default::default(), name: None, group: None };
         let i = at.unwrap_or(self.tab + 1).min(self.tab_pages.len());
         self.tab_pages.insert(i, page);
         self.tab_load(i);
@@ -105,7 +111,19 @@ impl App {
         self.tab_save();
         let closed = self.tab_pages.remove(i);
         self.closed_tabs.push(closed);
-        let next = if i < self.tab { self.tab - 1 } else if i == self.tab { i.min(self.tab_pages.len() - 1) } else { self.tab };
+        // tabclose: closing the shown tab goes to the one on the left, or the one used before (uselast)
+        let how = self.setting(self.cur, "tabclose");
+        let next = if i < self.tab {
+            self.tab - 1
+        } else if i == self.tab {
+            match (how.split(',').any(|w| w == "uselast"), self.last_tab) {
+                (true, Some(l)) if l != i => if l > i { l - 1 } else { l },
+                _ if how.split(',').any(|w| w == "left") => i.saturating_sub(1),
+                _ => i.min(self.tab_pages.len() - 1),
+            }
+        } else {
+            self.tab
+        };
         self.tab_load(next);
         if self.tab_pages.len() == 1 {
             self.tab_pages.clear();
@@ -214,7 +232,9 @@ impl App {
         let mut spans = Vec::new();
         for i in 0..self.tab_count() {
             let st = if i == self.tab { hl("TabLineSel") } else { hl("TabLine") };
-            spans.push(Span::styled(format!(" {} {} ", i + 1, self.tab_label(i)), st));
+            // a group (C-x t G) before the name
+            let group = self.tab_pages.get(i).and_then(|t| t.group.clone()).map(|g| format!("{g}: ")).unwrap_or_default();
+            spans.push(Span::styled(format!(" {} {group}{} ", i + 1, self.tab_label(i)), st));
             spans.push(Span::raw(" "));
         }
         f.render_widget(Paragraph::new(Line::from(spans)), a);
@@ -247,5 +267,102 @@ mod tests {
         assert_eq!(a.tab_count(), 1);
         a.tab_undo();
         assert_eq!(a.tab_count(), 2, "tab-undo brings one back");
+    }
+
+    #[test]
+    fn tabclose_picks_the_next_tab() {
+        // four tabs, shown: the third; before it the first was used
+        let tabs = |how: &str| {
+            let mut a = App::new(Vec::new());
+            a.command(&format!("set tabclose={how}"));
+            for _ in 0..3 {
+                a.command("tabnew");
+            }
+            a.command("tabfirst");
+            a.command("tabnext 3");
+            assert_eq!(a.tab, 2);
+            a.command("tabclose");
+            a.tab
+        };
+        assert_eq!(tabs(""), 2, "by default: the one that took its place (the next)");
+        assert_eq!(tabs("left"), 1);
+        assert_eq!(tabs("uselast"), 0);
+    }
+}
+
+impl App {
+    /// Buffer `i` is in some window, in any tab.
+    pub(crate) fn doc_shown(&self, i: usize) -> bool {
+        self.wins.iter().flatten().any(|w| w.doc == i) || self.tab_pages.iter().enumerate().any(|(t, p)| t != self.tab && p.wins.iter().flatten().any(|w| w.doc == i))
+    }
+
+    /// bufhidden: buffer `i` was left and no window shows it any more; "wipe" and "delete" take
+    /// it away (a scratch buffer a plugin made), "hide" / "unload" / "" keep it.
+    pub(crate) fn bufhidden(&mut self, i: usize) {
+        if i >= self.docs.len() || self.docs.len() < 2 || self.doc_shown(i) {
+            return;
+        }
+        if !matches!(self.setting(i, "bufhidden").as_str(), "wipe" | "delete") {
+            return;
+        }
+        self.docs.remove(i);
+        self.doc_removed(i);
+        if self.cur > i {
+            self.cur -= 1;
+        }
+        self.cur = self.cur.min(self.docs.len() - 1);
+        if self.last_doc.is_some_and(|l| l >= i) {
+            self.last_doc = self.last_doc.and_then(|l| if l == i { None } else { Some(l - 1) });
+        }
+    }
+}
+
+#[cfg(test)]
+mod bufhidden_tests {
+    #[test]
+    fn wipe_takes_a_left_buffer_away_hide_keeps_it() {
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str("main\n");
+        app.command("enew");
+        let scratch = app.cur;
+        app.docs[scratch].ed = zett_edit::Editor::from_str("scratch\n");
+        app.command("setlocal bufhidden=wipe");
+        let n = app.docs.len();
+        app.show_doc(0);
+        assert_eq!(app.docs.len(), n - 1, "wipe: gone once no window shows it");
+        assert!(app.docs.iter().all(|d| d.ed.buf.line(0) != "scratch\n"));
+        // hide (the default): kept
+        app.command("enew");
+        let n = app.docs.len();
+        app.show_doc(0);
+        assert_eq!(app.docs.len(), n);
+    }
+}
+
+impl App {
+    /// C-x t G: the current tab joins group `name` (empty: no group).
+    pub(crate) fn tab_group(&mut self, name: &str) {
+        self.tab_save();
+        let name = name.trim();
+        if let Some(t) = self.tab_pages.get_mut(self.tab) {
+            t.group = (!name.is_empty()).then(|| name.to_string());
+        }
+        self.say(if name.is_empty() { "tab: no group".to_string() } else { format!("tab: group {name}") });
+    }
+}
+
+#[cfg(test)]
+mod emacs_window_keys {
+    #[test]
+    fn dedicated_window_and_tab_group() {
+        let mut a = crate::App::new(Vec::new());
+        a.command("setlocal winfixbuf!");
+        assert!(a.flag(a.cur, "winfixbuf"), "C-x w d: the window keeps its buffer");
+        a.command("setlocal winfixbuf!");
+        assert!(!a.flag(a.cur, "winfixbuf"), "again: it may change");
+        a.emacs_tab("group work");
+        assert_eq!(a.tab_pages[a.tab].group.as_deref(), Some("work"));
+        a.emacs_tab("group ");
+        assert_eq!(a.tab_pages[a.tab].group, None);
     }
 }

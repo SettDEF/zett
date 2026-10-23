@@ -27,7 +27,11 @@ impl App {
         text.push('\n');
         self.docs.push(Doc::new(Editor::from_str(&text), title, "Plain Text".into()));
         let i = self.docs.len() - 1;
+        // a window of its own below, cmdwinheight lines (Vim opens it at the bottom)
+        self.command("belowright split");
         self.show_doc(i);
+        let h = self.num(i, "cmdwinheight").max(1);
+        self.command(&format!("resize {h}"));
         self.goto_line(lines.len().max(1));
     }
 }
@@ -300,6 +304,13 @@ impl App {
     pub(crate) fn open_help(&mut self, topic: &str) {
         let t = topic.trim().trim_matches('\'').trim_start_matches(':');
         let t = if t.is_empty() { "index" } else { t };
+        // a line of the reference: an Ex command (`:sort`) or an Emacs key (`C-x C-f`)
+        let row = |page: &str, cell: &str| zett_script::docs::get(page).and_then(|(n, text)| text.lines().position(|l| l.contains(&format!("| `{cell}` |"))).map(|at| (n, text, at)));
+        if topic.trim().starts_with(':') {
+            if let Some((n, text, at)) = row("ex-commands", &format!(":{t}")) {
+                return self.show_help(n, text.to_string(), Some((at, 1)));
+            }
+        }
         // a topic by its name
         if t.len() >= 3 && "commands".starts_with(t) {
             let text = zett_script::docs::commands_topic(&self.engine);
@@ -326,6 +337,9 @@ impl App {
             let text = zett_script::docs::commands_topic(&self.engine);
             let at = text.lines().position(|l| l.starts_with(&format!("- `{t}`")));
             return self.show_help("commands", text, at.map(|l| (l, 1)));
+        }
+        if let Some((n, text, at)) = row("ex-commands", &format!(":{t}")).or_else(|| row("emacs-keys", t)) {
+            return self.show_help(n, text.to_string(), Some((at, 1)));
         }
         // a heading in any topic: the whole section
         let want = t.to_lowercase();
@@ -377,39 +391,36 @@ impl App {
         }
     }
 
-    /// Enter in a help buffer: a topic name opens it, a command name its entry in `commands`.
+    /// Enter or CTRL-] in a help buffer: the name under the cursor (a `key`, an 'option', a
+    /// :command, a topic) followed as :help finds it; where it was goes on the stack for CTRL-T.
     pub(crate) fn follow_help(&mut self) -> bool {
         let d = &self.docs[self.cur];
         if !d.name.starts_with("help: ") {
             return false;
         }
         let c = d.ed.cursor();
-        let line: Vec<char> = d.ed.buf.line(c.line).chars().collect();
-        let word_char = |ch: char| ch.is_alphanumeric() || ch == '-' || ch == '_';
-        let (mut a, mut b) = (c.col.min(line.len()), c.col.min(line.len()));
-        while a > 0 && word_char(line[a - 1]) {
-            a -= 1;
+        let Some(w) = help_word(&d.ed.buf.line(c.line), c.col) else { return false };
+        let from = (self.cur, c);
+        let msg = self.msg.clone();
+        self.open_help(&w);
+        // found: a help page in front (it may be the same page, further on); not: nothing moved
+        if self.docs[self.cur].name.starts_with("help: ") && (self.cur, self.docs[self.cur].ed.cursor()) != from {
+            self.help_stack.push(from);
+            return true;
         }
-        while b < line.len() && word_char(line[b]) {
-            b += 1;
-        }
-        let w: String = line[a..b].iter().collect();
-        if w.is_empty() {
+        self.msg = msg;
+        false
+    }
+
+    /// CTRL-T (CTRL-O) in help: back to where the last link was followed from.
+    pub(crate) fn help_back(&mut self) -> bool {
+        let Some((doc, at)) = self.help_stack.pop() else { return false };
+        if doc >= self.docs.len() {
             return false;
         }
-        if w == "commands" || zett_script::docs::TOPICS.iter().any(|(n, _, _)| *n == w) {
-            self.open_help(&w);
-            return true;
-        }
-        if self.engine.commands().iter().any(|(n, _, _)| *n == w) {
-            self.open_help("commands");
-            let at = (0..self.docs[self.cur].ed.buf.len_lines()).find(|&l| self.docs[self.cur].ed.buf.line(l).starts_with(&format!("- `{w}`")));
-            if let Some(l) = at {
-                self.goto_line(l + 1);
-            }
-            return true;
-        }
-        false
+        self.show_doc(doc);
+        self.doc().ed.set_cursor(at);
+        true
     }
 
     // ── windows ──
@@ -449,8 +460,19 @@ impl App {
                 "ver" => Some(false),
                 _ => None,
             };
-            self.tree.equalize_dir(only);
+            self.equalize_windows(only);
         }
+    }
+
+    /// Every window the same size (CTRL-W =, equalalways), but those with winfixheight / winfixwidth.
+    pub(crate) fn equalize_windows(&mut self, only: Option<bool>) {
+        let fixed: Vec<(bool, bool)> = (0..self.wins.len())
+            .map(|i| match self.wins.get(i).and_then(|w| w.as_ref()) {
+                Some(w) => (self.flag(w.doc, "winfixwidth"), self.flag(w.doc, "winfixheight")),
+                None => (false, false),
+            })
+            .collect();
+        self.tree.equalize_kept(only, &|i, widths| fixed.get(i).is_some_and(|f| if widths { f.0 } else { f.1 }));
     }
 
     pub(crate) fn close_win(&mut self) -> bool {
@@ -459,10 +481,15 @@ impl App {
         }
         let old = std::mem::replace(&mut self.tree, WTree::Leaf(0));
         self.tree = old.remove(self.focus).unwrap_or(WTree::Leaf(0));
+        let shown = self.wins[self.focus].as_ref().map(|w| w.doc);
         self.wins[self.focus] = None;
         let next = self.tree.ids()[0];
         self.focus_win(next);
         self.equal_always();
+        // bufhidden: its buffer goes too when no other window shows it (wipe, delete)
+        if let Some(d) = shown {
+            self.bufhidden(d);
+        }
         true
     }
 
@@ -818,9 +845,13 @@ impl App {
             }
             self.last_doc = Some(self.cur);
         }
+        let left = self.cur;
         self.cur = i;
         if let Some(Some(w)) = self.wins.get_mut(self.focus) {
             w.doc = i;
+        }
+        if left != i {
+            self.bufhidden(left);
         }
         self.dash = false;
         // autochdir: the current folder follows the file
@@ -909,6 +940,36 @@ impl App {
             "focusWin" => self.focus_dir(arg),
             "moveToWin" => self.move_to_win(arg),
             "layer" => self.layer_toggle(),
+            // C-x w s: the side panels (explorer, outline …) hidden and shown again
+            // setqflist / setloclist: "q|l", action (" " a r), title, then items "file\x1fline\x1fcol\x1ftype\x1fnr\x1ftext" by \x1e
+            "qfSet" => {
+                let mut parts = arg.splitn(4, '\u{1d}');
+                let (which, action, title, body) = (parts.next().unwrap_or("q"), parts.next().unwrap_or(" "), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+                let items: Vec<crate::quickfix::QfItem> = body.split('\u{1e}').filter(|l| !l.is_empty()).map(|l| {
+                    let f: Vec<&str> = l.split('\u{1f}').collect();
+                    let n = |i: usize| f.get(i).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+                    let file = f.first().copied().unwrap_or("").to_string();
+                    crate::quickfix::QfItem { valid: !file.is_empty() && n(1) > 0, file, line: n(1), col: n(2), kind: f.get(3).and_then(|k| k.chars().next()).unwrap_or(' '), nr: n(4), text: f.get(5).copied().unwrap_or("").to_string() }
+                }).collect();
+                self.qf_set(which == "l", items, title, action == "a", false);
+            }
+            // setcmdline(text): the : line (open) holds this; histadd(":", line): the history gets it
+            "setCmdline" => self.cmdline = Some(arg.to_string()),
+            "histAdd" => self.remember_cmd(arg.to_string()),
+            "toggleSides" => {
+                self.sides_hidden = !self.sides_hidden;
+                if self.sides_hidden {
+                    self.engine.focus_panel(None);
+                }
+                self.say(if self.sides_hidden { "side windows hidden" } else { "side windows shown" });
+            }
+            // C-x t G: the current tab's group, shown before its name in the tab line
+            "tabGroup" => self.tab_group(arg),
+            // C-x v !: the next VC command's git line comes to the : line to be edited first
+            "vcEditNext" => {
+                self.vc_edit_next = true;
+                self.say("the next VC command can be edited before it runs");
+            }
             "closeWin" => {
                 if !self.close_win() {
                     self.say("the last window: SPC q q quits");
@@ -937,6 +998,20 @@ impl App {
                 }
             }
             "comment" => self.comment(),
+            "commentDwim" => self.comment_dwim(),
+            // C-x C-= / C-x C-- / C-x C-0: the font, which belongs to the terminal: zash (also through
+            // zeit) changes it when asked (OSC 7733;zoom); another terminal keeps its own
+            "zoom" => {
+                let zash = std::env::var("TERM_PROGRAM").is_ok_and(|t| t == "zash") || std::env::var_os("ZEIT").is_some();
+                if zash {
+                    use std::io::Write;
+                    let _ = write!(std::io::stdout(), "\x1b]7733;zoom;{arg}\x07");
+                    let _ = std::io::stdout().flush();
+                } else {
+                    self.say("the font belongs to the terminal: zash changes it with C-x C-= / C-x C-- / C-x C-0, other terminals by their own keys".to_string());
+                }
+            }
+            "commentSetColumn" => self.comment_set_column(),
             "docs" => {
                 let mut rows: Vec<Cand> = zett_script::docs::TOPICS.iter().map(|(n, about, _)| Cand::noted(*n, *about)).collect();
                 rows.push(Cand::noted("commands", "every command and its keys"));
@@ -1158,6 +1233,64 @@ impl App {
         d.ed.toggle_comment_with(from, to, &prefix, &suffix);
         d.touched(before.min(from));
     }
+
+    /// The comment's opening and closing for this buffer (commentstring, else by the file's extension).
+    fn comment_parts(&self) -> (String, String) {
+        let cs = self.setting(self.cur, "commentstring");
+        match cs.split_once("%s") {
+            Some((p, s)) if !p.trim().is_empty() => (p.trim().to_string(), s.trim().to_string()),
+            _ => (comment_prefix(&self.docs[self.cur].name).to_string(), String::new()),
+        }
+    }
+
+    /// Emacs's M-; (comment-dwim): a region's lines (un)commented; on a blank line a comment begun
+    /// at its indent; on a line with a comment, to just after its opening; on a line of code, a
+    /// comment at its end, at the comment column (C-x ;) or one space after the code.
+    pub(crate) fn comment_dwim(&mut self) {
+        let d = &self.docs[self.cur];
+        if d.ed.region().is_some() || d.ed.selection_range().is_some() {
+            return self.comment();
+        }
+        let (open, close) = self.comment_parts();
+        let line = d.ed.cursor().line;
+        let text: String = d.ed.buf.line(line).chars().filter(|c| *c != '\n').collect();
+        let start = d.ed.buf.to_char(zett_core::Pos { line, col: 0 });
+        let col_of = |n: usize| start + n;
+        let ins = |gap: String| if close.is_empty() { format!("{gap}{open} ") } else { format!("{gap}{open}  {close}") };
+        let back = if close.is_empty() { 0 } else { close.chars().count() + 1 };
+        let (at, put) = if text.trim().is_empty() {
+            // a blank line: the comment at its indent
+            (col_of(text.chars().count()), ins(String::new()))
+        } else if let Some(i) = text.find(&open) {
+            // already one: after its opening (and its space)
+            let after = text[..i].chars().count() + open.chars().count();
+            let sp = usize::from(text[i + open.len()..].starts_with(' '));
+            let d = &mut self.docs[self.cur];
+            d.ed.set_cursor(zett_core::Pos { line, col: after + sp });
+            return;
+        } else {
+            let end = text.trim_end().chars().count();
+            let want = self.comment_cols.get(&self.docs[self.cur].name).copied().unwrap_or(32);
+            let gap = if end + 1 <= want { want - end } else { 1 };
+            (col_of(end), ins(" ".repeat(gap)))
+        };
+        let d = &mut self.docs[self.cur];
+        let len = text.chars().count();
+        // what was after the code (trailing blanks) goes; the comment takes its place
+        let tail_end = if text.trim().is_empty() { at } else { col_of(len) };
+        d.ed.replace_text(at, tail_end, &put);
+        let c = d.ed.buf.to_pos(at + put.chars().count() - back);
+        d.ed.set_cursor(c);
+        d.touched(line);
+    }
+
+    /// C-x ;: this buffer's comment column is the cursor's column now.
+    pub(crate) fn comment_set_column(&mut self) {
+        let col = self.docs[self.cur].ed.cursor().col;
+        let name = self.docs[self.cur].name.clone();
+        self.comment_cols.insert(name, col);
+        self.say(format!("comment-column set to {col}"));
+    }
 }
 
 
@@ -1194,7 +1327,20 @@ impl App {
                     } else if path.exists() {
                         self.command(&format!("e {p}"));
                     } else {
-                        self.say(format!("E447: Can't find file \"{p}\" in path"));
+                        // gF's line (name:42); the name beside this file too; then includeexpr's version of it
+                        let (name, line) = match p.rsplit_once(':') {
+                            Some((n, l)) if !n.is_empty() && !l.is_empty() && l.chars().all(|c| c.is_ascii_digit()) => (n.to_string(), l.parse::<usize>().ok()),
+                            _ => (p.clone(), None),
+                        };
+                        match self.gf_file(&name) {
+                            Some(f) => {
+                                self.command(&format!("e {}", f.display()));
+                                if let Some(l) = line {
+                                    self.command(&l.to_string());
+                                }
+                            }
+                            None => self.say(format!("E447: Can't find file \"{name}\" in path")),
+                        }
                     }
                 }
                 Request::Keyword(w) => self.keyword(&w),
@@ -1317,6 +1463,8 @@ impl App {
                 Request::Redraw => self.clear = true,
                 Request::Suspend => self.suspend = true,
                 Request::CmdWindow(c) => self.cmd_window(c, None),
+                Request::FormatExpr(l1, l2) => self.format_expr(l1, l2),
+                Request::IndentExpr(l1, l2) => self.indent_expr(l1, l2),
             }
         }
     }
@@ -1349,19 +1497,28 @@ impl WTree {
     }
 
     /// Every window the same size (CTRL-W =).
+    #[cfg(test)]
     pub(crate) fn equalize(&mut self) {
         self.equalize_dir(None);
     }
 
     /// As equalize, only the splits of one kind (Some(true): widths, Some(false): heights; eadirection).
+    #[cfg(test)]
     pub(crate) fn equalize_dir(&mut self, only: Option<bool>) {
+        self.equalize_kept(only, &|_, _| false);
+    }
+
+    /// As equalize_dir, leaving a split be where one side is a window whose size that way is fixed
+    /// (`fixed(window, widths)`: winfixwidth, winfixheight).
+    pub(crate) fn equalize_kept(&mut self, only: Option<bool>, fixed: &dyn Fn(usize, bool) -> bool) {
         if let WTree::Split(s, a, b, ratio) = self {
-            if only.is_none_or(|o| o == *s) {
+            let pinned = [&**a, &**b].iter().any(|t| matches!(t, WTree::Leaf(i) if fixed(*i, *s)));
+            if only.is_none_or(|o| o == *s) && !pinned {
                 let (ua, ub) = (a.units(*s), b.units(*s));
                 *ratio = ua as f32 / (ua + ub) as f32;
             }
-            a.equalize_dir(only);
-            b.equalize_dir(only);
+            a.equalize_kept(only, fixed);
+            b.equalize_kept(only, fixed);
         }
     }
 
@@ -1405,7 +1562,11 @@ impl App {
         let ids = self.tree.ids();
         let pos = ids.iter().position(|&i| i == self.focus).unwrap_or(0);
         let area = self.win_rects.iter().fold(None::<Rect>, |acc, (_, r)| Some(acc.map_or(*r, |a| a.union(*r)))).unwrap_or_default();
-        let focus_rect = self.win_rects.iter().find(|(i, _)| *i == self.focus).map(|(_, r)| *r).unwrap_or_default();
+        // the windows as the tree lays them out now (a split just made has not been drawn yet:
+        // `split | resize 5` in a script, :pedit)
+        let mut placed = Vec::new();
+        self.tree.place(area, &mut placed, &mut Vec::new());
+        let focus_rect = placed.iter().find(|(i, _)| *i == self.focus).map(|(_, r)| *r).unwrap_or_default();
         let c = cmd.trim_start_matches("C-");
         let prev = self.focus;
         match c {
@@ -1457,7 +1618,7 @@ impl App {
                     }
                 }
             }
-            "=" => self.tree.equalize(),
+            "=" => self.equalize_windows(None),
             "+" | "-" | ">" | "<" => {
                 let side = matches!(c, ">" | "<");
                 let by = n.unwrap_or(1) as i32 * if matches!(c, "+" | ">") { 1 } else { -1 };
@@ -1510,9 +1671,15 @@ impl App {
         }
         let d = &self.docs[self.cur];
         let line = d.ed.buf.line(d.ed.cursor().line).trim().to_string();
+        // its window closes first (the line runs where it was asked from), then its buffer goes
         let i = self.cur;
+        self.command("close");
         self.docs.remove(i);
         self.doc_removed(i);
+        if self.cur > i {
+            self.cur -= 1;
+        }
+        self.cur = self.cur.min(self.docs.len() - 1);
         if !line.is_empty() {
             self.remember_cmd(line.clone());
             self.command(&line);
@@ -1568,5 +1735,108 @@ mod win_tests {
         t.equalize_dir(Some(false));
         let WTree::Split(_, _, _, r) = &t else { panic!() };
         assert!((r - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_window_with_a_fixed_height_keeps_it() {
+        // a above b, b winfixheight: the split stays as it was; widths are not held by it
+        let mut t = WTree::Split(false, Box::new(WTree::Leaf(0)), Box::new(WTree::Leaf(1)), 0.8);
+        t.equalize_kept(None, &|i, widths| i == 1 && !widths);
+        let WTree::Split(_, _, _, r) = &t else { panic!() };
+        assert!((r - 0.8).abs() < 1e-6, "{r}");
+        let mut t = WTree::Split(true, Box::new(WTree::Leaf(0)), Box::new(WTree::Leaf(1)), 0.8);
+        t.equalize_kept(None, &|i, widths| i == 1 && !widths);
+        let WTree::Split(_, _, _, r) = &t else { panic!() };
+        assert!((r - 0.5).abs() < 1e-6, "{r}");
+    }
+}
+
+impl App {
+    /// gf's file for a name: as it is, beside this buffer's file, in 'path''s folders; else what
+    /// includeexpr makes of it (v:fname), looked for the same way.
+    pub(crate) fn gf_file(&mut self, name: &str) -> Option<PathBuf> {
+        let find = |app: &App, n: &str| -> Option<PathBuf> {
+            let here = app.docs[app.cur].abs_path().and_then(|p| p.parent().map(Path::to_path_buf));
+            let mut dirs = vec![app.root.clone()];
+            dirs.extend(here.clone());
+            for d in app.setting(app.cur, "path").split(',') {
+                match d {
+                    "" | "." => dirs.extend(here.clone()),
+                    d if d.contains('*') => {}
+                    d => dirs.push(app.root.join(d)),
+                }
+            }
+            let p = Path::new(n);
+            if p.is_absolute() {
+                return p.exists().then(|| p.to_path_buf());
+            }
+            dirs.into_iter().map(|d| d.join(n)).find(|c| c.exists())
+        };
+        if let Some(f) = find(self, name) {
+            return Some(f);
+        }
+        let expr = self.setting(self.cur, "includeexpr");
+        if expr.is_empty() {
+            return None;
+        }
+        let code = format!("vim.v.fname = {name:?} return vim._vimscript.V.str(vim._vimscript.eval({expr:?}))");
+        let other = self.with_lua(|e| e.eval(&code)).ok()?.0;
+        find(self, &other)
+    }
+}
+
+/// The name a help link is at `col` of `line`: a `backticked` span whole (`C-x C-f`, `:set wrap`
+/// gives :set), an 'option', else the word (letters, digits, - _ : < > !).
+pub(crate) fn help_word(line: &str, col: usize) -> Option<String> {
+    let cs: Vec<char> = line.chars().collect();
+    let col = col.min(cs.len().saturating_sub(1));
+    let inside = |q: char| -> Option<String> {
+        let before = cs[..=col.min(cs.len() - 1)].iter().rposition(|&c| c == q)?;
+        // an odd number of quotes before the cursor: it is inside a pair
+        if cs[..before].iter().filter(|&&c| c == q).count() % 2 == 1 {
+            return None;
+        }
+        let after = cs[before + 1..].iter().position(|&c| c == q)? + before + 1;
+        (after > before + 1 && col <= after).then(|| cs[before + 1..after].iter().collect())
+    };
+    if cs.is_empty() {
+        return None;
+    }
+    if let Some(s) = inside('`') {
+        let s = s.trim().to_string();
+        // a command with its argument: the command
+        return Some(if s.starts_with(':') { s.split_whitespace().next().unwrap_or(&s).to_string() } else { s });
+    }
+    if let Some(s) = inside('\'').filter(|s| s.chars().all(|c| c.is_ascii_alphanumeric())) {
+        return Some(format!("'{s}'"));
+    }
+    let word = |c: char| c.is_alphanumeric() || "-_:<>!".contains(c);
+    let (mut a, mut b) = (col, col);
+    if !cs.get(col).is_some_and(|&c| word(c)) {
+        return None;
+    }
+    while a > 0 && word(cs[a - 1]) {
+        a -= 1;
+    }
+    while b < cs.len() && word(cs[b]) {
+        b += 1;
+    }
+    let w: String = cs[a..b].iter().collect();
+    let w = w.trim_matches(|c| c == ':' || c == '-').to_string();
+    (!w.is_empty()).then_some(w)
+}
+
+#[cfg(test)]
+mod help_word_tests {
+    use super::help_word;
+
+    #[test]
+    fn the_name_under_the_cursor() {
+        let l = "- `C-x C-f` find a file, `:set wrap` wraps, 'ts' is the tab, see editor.";
+        assert_eq!(help_word(l, 5).as_deref(), Some("C-x C-f"), "a backticked key, whole");
+        assert_eq!(help_word(l, 28).as_deref(), Some(":set"), "a command, without its argument");
+        assert_eq!(help_word(l, 44).as_deref(), Some("'ts'"));
+        assert_eq!(help_word(l, 67).as_deref(), Some("editor"));
+        assert_eq!(help_word(l, 11), None, "on a space between names: nothing");
     }
 }

@@ -5,6 +5,11 @@
 use super::*;
 use zett_edit::search::emacs_regex;
 
+/// A query point in a recorded macro (C-x q while recording): playback stops there to ask.
+pub(crate) const KMACRO_QUERY: &str = "\u{1}kmacro-query";
+/// The macro counter written there (F3 or C-x C-k C-i while recording).
+pub(crate) const KMACRO_COUNTER: &str = "\u{1}kmacro-counter";
+
 /// A query-replace in progress: the next match is shown as the region.
 pub(crate) struct QueryReplace {
     re: fancy_regex::Regex,
@@ -105,6 +110,9 @@ impl App {
                 return (t.to_string(), self.char_items(src));
             }
         }
+        if let Some(t) = title.strip_suffix(" @inputmethods") {
+            return (t.to_string(), crate::inputmethod::METHODS.iter().map(|(n, about)| Cand::noted(*n, *about)).collect());
+        }
         if let Some(t) = title.strip_suffix(" @tabs") {
             return (t.to_string(), self.tab_items());
         }
@@ -172,6 +180,84 @@ impl App {
                     None => self.say(format!("Search failed: \"{body}\"")),
                 }
             }
+            // the macro counter: set (C-x C-k C-c), added to (C-x C-k C-a), its format (C-x C-k C-f)
+            "kmcset" | "kmcadd" => match body.trim().parse::<i64>() {
+                Ok(n) if kind == "kmcset" => self.kmacro_counter = n,
+                Ok(n) => self.kmacro_counter += n,
+                Err(_) => self.say(format!("not a number: {body}")),
+            },
+            // C-x RET f / C-x RET r: the coding system to save with, or to read the file again in
+            "coding" => self.set_coding(body),
+            "codingrev" => self.revert_coding(body),
+            // C-x RET C-\: the input method, chosen
+            "imset" => {
+                let m = body.split_whitespace().next().unwrap_or("").to_string();
+                if crate::inputmethod::METHODS.iter().any(|(n, _)| *n == m) {
+                    self.last_input_method = m.clone();
+                    self.input_method = Some(m.clone());
+                    self.say(format!("Input method: {m}"));
+                } else {
+                    self.say(format!("No input method {m}"));
+                }
+            }
+            "kmcfmt" => self.kmacro_format = if body.is_empty() { "%d".into() } else { body.to_string() },
+            // C-x C-k n: the last macro under a name, an M-x command of its own
+            "kmname" => {
+                let name = body.trim();
+                if self.last_kmacro.is_empty() {
+                    return self.say("No keyboard macro defined");
+                }
+                if name.is_empty() || name.contains(['"', '\\', '\n']) {
+                    return self.say(format!("not a command name: {name}"));
+                }
+                self.named_kmacros.insert(name.to_string(), self.last_kmacro.clone());
+                let code = format!("zett.command(\"{name}\", function() zett.ui(\"kmacroNamed\", \"{name}\") end, {{ desc = \"A keyboard macro (C-x C-k n)\" }})");
+                match self.engine.eval(&code) {
+                    Ok(_) => self.say(format!("Keyboard macro named {name}: M-x {name}")),
+                    Err(e) => self.say(e),
+                }
+            }
+            // C-x C-k b: a key runs the last macro (named for it: kmacro-KEY)
+            "kmbind" => {
+                let key = body.trim();
+                if self.last_kmacro.is_empty() || key.is_empty() {
+                    return self.say("No keyboard macro defined");
+                }
+                let name = format!("kmacro-{}", key.chars().filter(|c| c.is_alphanumeric()).collect::<String>());
+                self.named_kmacros.insert(name.clone(), self.last_kmacro.clone());
+                let code = format!("zett.command(\"{name}\", function() zett.ui(\"kmacroNamed\", \"{name}\") end, {{ desc = \"A keyboard macro bound to {key}\" }})");
+                if let Err(e) = self.engine.eval(&code) {
+                    return self.say(e);
+                }
+                let lhs: String = zett_script::keys(key).concat();
+                self.engine.map_keys("e", &lhs, &name, false);
+                self.say(format!("Keyboard macro bound to {key}"));
+            }
+            // M-|: the region through a shell command; its output shown, or with C-u put in its place
+            "shreg" => {
+                let ed = &self.docs[self.cur].ed;
+                let Some((a, b)) = ed.region() else {
+                    return self.say("The mark is not set now, so there is no region".to_string());
+                };
+                let input: String = ed.text().chars().skip(a).take(b - a).collect();
+                let replace = self.arg.take().is_some();
+                let dir = self.root.clone();
+                match self.run_shell(body, Some(&input), &dir) {
+                    Ok(out) if replace => {
+                        self.doc().ed.replace_text(a, b, &out);
+                        self.editor_requests();
+                    }
+                    Ok(out) => {
+                        let lines: Vec<&str> = out.trim_end_matches('\n').lines().collect();
+                        match lines.len() {
+                            0 => self.say("(Shell command succeeded with no output)".to_string()),
+                            1 => self.say(lines[0].to_string()),
+                            _ => self.popup = Some(Popup::Help(format!("| {body}"), lines.iter().map(|l| (String::new(), l.to_string())).collect())),
+                        }
+                    }
+                    Err(e) => self.say(e),
+                }
+            }
             "display" => {
                 let Some(i) = self.docs.iter().position(|d| self.buffer_label(d) == body) else { return self.say(format!("No buffer {body}")) };
                 self.doom_ui("split", "right");
@@ -202,6 +288,10 @@ impl App {
             "qr" | "qrx" | "rs" | "rx" => {
                 let (Some(from), Some(to)) = (got.first(), got.get(1)) else { return };
                 self.query_replace(from, to, matches!(kind, "qrx" | "rx"), matches!(kind, "rs" | "rx"));
+            }
+            "pqrx" => {
+                let (Some(from), Some(to)) = (got.first(), got.get(1)) else { return };
+                self.project_query_replace(from, to);
             }
             other => self.say(format!("{other}: no such prompt action")),
         }
@@ -248,8 +338,45 @@ impl App {
                 let m = format!("Query replacing {} with {}: (y, n, !, ., q; ? for help)", q.from, q.to);
                 self.say(m);
             }
-            _ => self.qr_finish(),
+            _ => self.qr_file_done(),
         }
+    }
+
+    /// This buffer has no match left: done, or (C-x p r) on to the next file that has one.
+    fn qr_file_done(&mut self) {
+        let done = self.qr.as_ref().map_or(0, |q| q.done);
+        if self.project_qr.is_none() {
+            return self.qr_finish();
+        }
+        if let Some(q) = self.qr.take() {
+            self.docs[self.cur].ed.exec("keyboard-quit", 1);
+            let _ = q;
+        }
+        let Some((mut files, from, to, total)) = self.project_qr.take() else { return };
+        let total = total + done;
+        match files.pop_front() {
+            Some(next) => {
+                self.open(&next);
+                self.doc().ed.set_cursor(zett_core::Pos { line: 0, col: 0 });
+                self.project_qr = Some((files, from.clone(), to.clone(), total));
+                self.query_replace(&from, &to, true, false);
+            }
+            None => self.say(format!("Replaced {total} occurrence{} in the project", if total == 1 { "" } else { "s" })),
+        }
+    }
+
+    /// C-x p r: query-replace a regexp in every file of the project that has it, one after another.
+    pub(crate) fn project_query_replace(&mut self, from: &str, to: &str) {
+        let out = std::process::Command::new("rg").args(["-l", "--sort", "path", "-e", &emacs_regex(from)]).current_dir(&self.root).output();
+        let files: std::collections::VecDeque<std::path::PathBuf> = match out {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).lines().map(|l| self.root.join(l)).collect(),
+            Err(e) => return self.say(format!("rg: {e} (ripgrep finds the files)")),
+        };
+        if files.is_empty() {
+            return self.say(format!("No matches for {from} in the project"));
+        }
+        self.project_qr = Some((files, from.to_string(), to.to_string(), 0));
+        self.qr_file_done();
     }
 
     /// The match shown, replaced; the search goes on after it.
@@ -296,6 +423,8 @@ impl App {
     }
 
     fn qr_finish(&mut self) {
+        // stopped (q, RET, C-g): the rest of the project's files too
+        self.project_qr = None;
         if let Some(q) = self.qr.take() {
             let ed = &mut self.docs[self.cur].ed;
             ed.exec("keyboard-quit", 1);
@@ -490,6 +619,75 @@ impl App {
                 self.kmacro_call(n);
                 self.kmacro_again = true;
             }
+            // F3: start recording, or while recording write the counter (kept in the macro as the
+            // counter, not as F3: played back, it writes the counter of then)
+            "kmacroStartOrCounter" | "kmacroInsertCounter" => {
+                if let Some(m) = self.kmacro.as_mut() {
+                    m.truncate(m.len().saturating_sub(self.ran_keys));
+                    m.push(KMACRO_COUNTER.to_string());
+                    self.kmacro_insert_counter();
+                } else if name == "kmacroStartOrCounter" {
+                    self.kmacro = Some(Vec::new());
+                    self.say("Defining keyboard macro...");
+                } else {
+                    self.kmacro_insert_counter();
+                }
+            }
+            // C-x q while recording: playback stops here to ask
+            "kmacroQuery" => match self.kmacro.as_mut() {
+                Some(m) => {
+                    m.truncate(m.len().saturating_sub(self.ran_keys));
+                    m.push(KMACRO_QUERY.to_string());
+                    self.say("Query point set: playback asks here");
+                }
+                None => self.say("Not defining or executing kbd macro"),
+            },
+            "kmacroRegionLines" => self.kmacro_region_lines(),
+            // C-\: the input method on or off (the last one chosen, TeX at first); C-x \: for one character
+            "inputMethodToggle" | "inputMethodOnce" => {
+                if self.input_method.is_some() && name == "inputMethodToggle" {
+                    self.input_method = None;
+                    self.say("Input method off");
+                } else {
+                    self.input_method = Some(self.last_input_method.clone());
+                    self.input_method_once = name == "inputMethodOnce";
+                    self.say(format!("Input method: {}{}", self.last_input_method, if self.input_method_once { " (one character)" } else { "" }));
+                }
+            }
+            // C-x x @ / sudo-save: sudo needs the terminal for its password, so the run loop does it
+            "changelogEntry" => self.changelog_entry(),
+            "changelogUpdate" => self.changelog_update(),
+            "sudoRead" => self.sudo = Some(false),
+            "sudoWrite" => self.sudo = Some(true),
+            // C-h C: the buffer's coding system and what zett can read and write
+            "describeCoding" => {
+                let i = self.cur;
+                let rows = vec![
+                    ("buffer".to_string(), self.coding_name(i)),
+                    ("fileencoding".to_string(), self.setting(i, "fileencoding")),
+                    ("fileformat".to_string(), self.setting(i, "fileformat")),
+                    ("bomb".to_string(), self.setting(i, "bomb")),
+                    ("keyboard, terminal".to_string(), "utf-8".to_string()),
+                    ("can save as".to_string(), "utf-8, utf-8-with-signature, latin-1; each -unix -dos -mac".to_string()),
+                ];
+                self.popup = Some(Popup::Help("Coding system".into(), rows));
+            }
+            // C-h I: what the method turns into what
+            "inputMethodDescribe" => {
+                let m = self.input_method.clone().unwrap_or_else(|| self.last_input_method.clone());
+                let rows: Vec<(String, String)> = crate::inputmethod::describe(&m);
+                self.popup = Some(Popup::Help(format!("Input method {m}"), rows));
+            }
+            // a named macro (C-x C-k n), played
+            "kmacroNamed" => match self.named_kmacros.get(arg).cloned() {
+                Some(m) => {
+                    let n = self.arg.take().unwrap_or(1).max(1) as usize;
+                    let last = std::mem::replace(&mut self.last_kmacro, m.clone());
+                    self.kmacro_run(m, n - 1);
+                    self.last_kmacro = last;
+                }
+                None => self.say(format!("No keyboard macro named {arg}")),
+            },
             _ => return false,
         }
         true
@@ -500,13 +698,106 @@ impl App {
         if self.last_kmacro.is_empty() {
             return self.say("No keyboard macro defined");
         }
-        let keys = self.last_kmacro.concat();
-        for _ in 0..n {
-            for k in zett_edit::keys::parse(&keys) {
+        let m = self.last_kmacro.clone();
+        self.kmacro_run(m, n.saturating_sub(1));
+        self.kmacro_again = true;
+    }
+
+    /// Plays `keys`, then the last macro `reps` times more; a query point (C-x q) stops it to ask.
+    fn kmacro_run(&mut self, keys: Vec<String>, reps: usize) {
+        let mut it = keys.into_iter();
+        while let Some(chunk) = it.next() {
+            if chunk == KMACRO_COUNTER {
+                self.kmacro_insert_counter();
+                continue;
+            }
+            if chunk == KMACRO_QUERY {
+                self.kmacro_paused = Some((it.collect(), reps));
+                return self.say("Proceed with macro? (y, n, q)");
+            }
+            for k in zett_edit::keys::parse(&chunk) {
                 self.key(input::key_event(&k));
             }
         }
-        self.kmacro_again = true;
+        if reps > 0 {
+            let m = self.last_kmacro.clone();
+            self.kmacro_run(m, reps - 1);
+        }
+    }
+
+    /// The answer at a query point: y (or SPC) goes on, n (or DEL) skips the rest of this repetition,
+    /// q (or RET, C-g) stops.
+    pub(crate) fn kmacro_answer(&mut self, k: KeyEvent, rest: Vec<String>, reps: usize) {
+        match k.code {
+            KeyCode::Char('y') | KeyCode::Char(' ') => self.kmacro_run(rest, reps),
+            KeyCode::Char('n') | KeyCode::Backspace | KeyCode::Delete => {
+                if reps > 0 {
+                    let m = self.last_kmacro.clone();
+                    self.kmacro_run(m, reps - 1);
+                }
+            }
+            KeyCode::Char('q') | KeyCode::Enter | KeyCode::Esc => self.say("Keyboard macro stopped"),
+            KeyCode::Char('g') if k.modifiers.contains(KeyModifiers::CONTROL) => self.say("Keyboard macro stopped"),
+            // anything else: asked again
+            _ => {
+                self.kmacro_paused = Some((rest, reps));
+                self.say("Proceed with macro? (y, n, q)");
+            }
+        }
+    }
+
+    /// The counter as its format writes it ("%d", "%03d", "%x", "%X", "%o"), then counted on.
+    fn kmacro_counter_text(&mut self) -> String {
+        let n = self.kmacro_counter;
+        let f = self.kmacro_format.clone();
+        let text = match f.find('%') {
+            Some(i) => {
+                let spec: String = f[i + 1..].chars().take_while(|c| c.is_ascii_digit()).collect();
+                let kind = f[i + 1 + spec.len()..].chars().next().unwrap_or('d');
+                let width: usize = spec.trim_start_matches('0').parse().unwrap_or(0);
+                let zero = spec.starts_with('0');
+                let body = match kind {
+                    'x' => format!("{n:x}"),
+                    'X' => format!("{n:X}"),
+                    'o' => format!("{n:o}"),
+                    _ => n.to_string(),
+                };
+                let body = if body.len() < width { format!("{}{body}", if zero { "0" } else { " " }.repeat(width - body.len())) } else { body };
+                format!("{}{body}{}", &f[..i], &f[i + 1 + spec.len() + kind.len_utf8()..])
+            }
+            None => f,
+        };
+        text
+    }
+
+    /// The counter written at the cursor (C-x C-k C-i, F3 while recording), then up by the argument (1).
+    fn kmacro_insert_counter(&mut self) {
+        let by = self.arg.take().unwrap_or(1);
+        let text = self.kmacro_counter_text();
+        let ed = &self.docs[self.cur].ed;
+        let at = ed.buf.to_char(ed.cursor());
+        let line = ed.cursor().line;
+        self.doc().ed.replace_text(at, at, &text);
+        self.doc().touched(line);
+        self.kmacro_counter += by;
+    }
+
+    /// C-x C-k r: the last macro once on each line of the region, from the line's start.
+    fn kmacro_region_lines(&mut self) {
+        let ed = &self.docs[self.cur].ed;
+        let Some((a, b)) = ed.region() else { return self.say("The mark is not set now, so there is no region") };
+        if self.last_kmacro.is_empty() {
+            return self.say("No keyboard macro defined");
+        }
+        let (l1, l2) = (ed.buf.to_pos(a).line, ed.buf.to_pos(b.saturating_sub(1).max(a)).line);
+        let m = self.last_kmacro.clone();
+        for l in l1..=l2 {
+            if l >= self.docs[self.cur].ed.buf.len_lines() {
+                break;
+            }
+            self.doc().ed.set_cursor(zett_core::Pos { line: l, col: 0 });
+            self.kmacro_run(m.clone(), 0);
+        }
     }
 
     /// C-h k: a key of the sequence being described; a whole one says what it runs.
@@ -751,6 +1042,7 @@ impl App {
         let n = self.arg.take().unwrap_or(1);
         match what {
             "new" => self.tab_new(None, None),
+            "group" => self.tab_group(arg),
             "new-to" => {
                 // C-x t N: at a place (the argument; 0 or none: after this one)
                 let at = (n > 0).then(|| (n as usize).saturating_sub(1)).filter(|_| n != 1);
@@ -892,17 +1184,17 @@ impl App {
 }
 
 impl App {
-    /// The mouse over a help page: a `key` or `name` (in backticks) under it gets zash's quick
-    /// underline, gone again when the mouse leaves it.
+    /// The mouse over a help page: a `key` or `name` (in backticks) under it gets a big loop
+    /// drawn round it by zash, gone again when the mouse leaves it.
     pub(crate) fn help_hover(&mut self, p: Option<zett_core::Pos>, row: u16) {
+        if self.fx_quiet() {
+            self.fx_hover = None;
+            return;
+        }
         let d = &self.docs[self.cur];
         let span = p.filter(|_| crate::draw::fx_draws() && d.name.starts_with("help: ") && d.left == 0).and_then(|p| {
             let line: Vec<char> = d.ed.buf.line(p.line).chars().filter(|c| *c != '\n').collect();
-            let open = (0..p.col.min(line.len())).rev().find(|&i| line[i] == '`')?;
-            let close = (p.col..line.len()).find(|&i| line[i] == '`')?;
-            // inside one pair: an even number of backticks before the opening one
-            let before = line[..open].iter().filter(|c| **c == '`').count();
-            (before % 2 == 0 && close > open + 1 && !line[open + 1..close].iter().any(|c| *c == '\t')).then(|| (p.line, open + 1, line[open + 1..close].iter().collect::<String>()))
+            tick_span(&line, p.col).map(|(start, text)| (p.line, start, text))
         });
         self.fx_hover = span.map(|(line, start, text)| crate::draw::FxMark {
             x: self.area.x + self.gutter + start as u16,
@@ -910,9 +1202,53 @@ impl App {
             key: format!("hover:{}:{line}:{start}", self.docs[self.cur].name),
             text,
             since: Instant::now(),
-            spec: "underline;color=accent;draw=250ms",
+            spec: CIRCLE,
+            transient: true,
         });
     }
+}
+
+impl App {
+    /// A button held, or still inside the wait after a scroll, release or key: no circles yet.
+    pub(crate) fn fx_quiet(&self) -> bool {
+        self.mouse_held || self.fx_quiet_until.is_some_and(|t| Instant::now() < t)
+    }
+
+    /// The circles wait at least `d` from now.
+    pub(crate) fn fx_wait(&mut self, d: std::time::Duration) {
+        let until = Instant::now() + d;
+        self.fx_quiet_until = Some(self.fx_quiet_until.map_or(until, |t| t.max(until)));
+    }
+
+    /// The scroll has rested: the circle under the mouse again, where the text is now.
+    pub(crate) fn fx_rested(&mut self) -> bool {
+        let Some(t) = self.fx_quiet_until else { return false };
+        if Instant::now() < t {
+            return false;
+        }
+        self.fx_quiet_until = None;
+        if !self.mouse_held {
+            use ratatui::crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind};
+            self.mouse(MouseEvent { kind: MouseEventKind::Moved, column: self.mouse_at.0, row: self.mouse_at.1, modifiers: KeyModifiers::empty() });
+        }
+        true
+    }
+}
+
+pub(crate) const FX_QUIET: std::time::Duration = std::time::Duration::from_millis(350);
+/// After a key: longer than the keyboard's repeat delay (250 ms here), so a held key never draws.
+pub(crate) const FX_KEY_QUIET: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// zash's big hand-drawn loop: round what the mouse or the cursor is on in a help page.
+pub(crate) const CIRCLE: &str = "scribble;write=0;color=accent;turns=1.5;wobble=0.1;pad=0.5;draw=450ms;sound=draw;volume=0.45";
+
+/// The `name` in backticks round column `col` of `line`: where its text starts, and the text.
+pub(crate) fn tick_span(line: &[char], col: usize) -> Option<(usize, String)> {
+    let open = (0..col.min(line.len())).rev().find(|&i| line[i] == '`')?;
+    let close = (col..line.len()).find(|&i| line[i] == '`')?;
+    // inside one pair: an even number of backticks before the opening one
+    let before = line[..open].iter().filter(|c| **c == '`').count();
+    (before % 2 == 0 && close > open + 1 && !line[open + 1..close].iter().any(|c| *c == '\t')).then(|| (open + 1, line[open + 1..close].iter().collect()))
 }
 
 /// What an Emacs register holds besides text and a place in the buffer (those are Vim's).
@@ -1084,6 +1420,39 @@ mod tests {
     }
     fn press(app: &mut App, c: char) {
         app.qr_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+
+    #[test]
+    fn comment_dwim_adds_at_the_column_goes_to_one_and_begins_on_blank() {
+        let mut a = app("let x = 1;\n\n");
+        a.comment_dwim();
+        let l0: String = a.docs[a.cur].ed.buf.line(0).chars().filter(|c| *c != '\n').collect();
+        assert_eq!(l0, format!("let x = 1;{}// ", " ".repeat(22)), "at column 32");
+        assert_eq!(a.docs[a.cur].ed.cursor().col, 35);
+        // again: to just after the opening, nothing added
+        a.docs[a.cur].ed.set_cursor(zett_core::Pos { line: 0, col: 0 });
+        a.comment_dwim();
+        assert_eq!(a.docs[a.cur].ed.cursor().col, 35);
+        // C-x ; at column 12, then on another code line
+        a.docs[a.cur].ed.set_cursor(zett_core::Pos { line: 0, col: 12 });
+        a.comment_set_column();
+        a.docs[a.cur].ed.set_cursor(zett_core::Pos { line: 1, col: 0 });
+        a.comment_dwim();
+        let l1: String = a.docs[a.cur].ed.buf.line(1).chars().filter(|c| *c != '\n').collect();
+        assert_eq!(l1, "// ", "a blank line: begun at its indent");
+    }
+
+    #[test]
+    fn shell_command_on_region_replaces_it_with_c_u() {
+        let mut a = app("hello world");
+        a.docs[a.cur].ed.set_region(0, 5);
+        a.arg.universal();
+        a.prompt_done("shreg:tr a-z A-Z", &[]);
+        assert_eq!(a.docs[a.cur].ed.text(), "HELLO world");
+        // without C-u the region stays as it was
+        a.docs[a.cur].ed.set_region(6, 11);
+        a.prompt_done("shreg:tr a-z A-Z", &[]);
+        assert_eq!(a.docs[a.cur].ed.text(), "HELLO world");
     }
 
     #[test]

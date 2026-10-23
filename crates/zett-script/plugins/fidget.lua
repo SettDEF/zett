@@ -36,7 +36,8 @@ default_hl("FidgetNotify", { link = "MsgArea" })
 
 local M = { servers = {}, order = {}, notes = {}, frame = 1, ticking = false }
 
-local function cfg() return z.config("fidget", defaults) end
+-- off when fidget.nvim itself is installed (zett.plug): the real one draws instead
+local function cfg() if (z._replaced or {}).fidget then return nil end return z.config("fidget", defaults) end
 local function now() return os.time() end
 
 local function cut(s, n)
@@ -137,4 +138,5 @@ function z.fidget(text)
   wake()
 end
 
+M.zett_builtin = true
 package.loaded["fidget"] = M

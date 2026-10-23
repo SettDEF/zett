@@ -288,6 +288,11 @@ impl Editor {
         self.view.hidden.iter().any(|&(a, _)| a == line + 1)
     }
 
+    /// The last line of the folded section `line` starts (foldtext's v:foldend).
+    pub fn fold_end(&self, line: usize) -> Option<usize> {
+        self.view.hidden.iter().filter(|&&(a, _)| a == line + 1).map(|&(_, b)| b.saturating_sub(1)).max()
+    }
+
     /// The narrowed lines, if narrowed.
     pub fn narrowed(&self) -> Option<(usize, usize)> {
         self.view.range

@@ -68,6 +68,7 @@ impl Editor {
                 let ind = self.next_indent(l, true, Some(self.cursor - self.line_start(l)));
                 self.ins(self.cursor, &format!("\n{ind}"));
                 self.cursor += 1 + ind.chars().count();
+                self.indent_expr_line(l + 1);
             }
             Code::Tab => self.insert_tab(),
             Code::Backspace => {

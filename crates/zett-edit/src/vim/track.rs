@@ -137,6 +137,8 @@ impl Editor {
             if dir < 0 {
                 if j.jump_at == j.jumps.len() {
                     j.jumps.push(self.cursor);
+                    j.jump_tops.resize(j.jumps.len() - 1, 0);
+                    j.jump_tops.push(j.screen.0);
                 }
                 if j.jump_at == 0 {
                     return;
@@ -151,6 +153,12 @@ impl Editor {
             self.cursor = self.vim.jumps[self.vim.jump_at].min(self.buf.len_chars());
             self.clamp();
             self.want_col = self.cursor().col;
+            // jumpoptions "view": the window as it was there
+            if self.opt_has("jumpoptions", "view", "clean") {
+                if let Some(&t) = self.vim.jump_tops.get(self.vim.jump_at) {
+                    self.vim_top(t);
+                }
+            }
         }
     }
 
@@ -171,12 +179,24 @@ impl Editor {
             || (first == Some('g') && matches!(second, Some('g' | 'd' | 'D' | '*' | '#')));
         let from = self.vim.typing_pos;
         if jump && self.buf.to_pos(from.min(self.buf.len_chars())).line != self.cur_line() {
+            // jumpoptions "stack": a jump from back in the list drops the ones ahead (as a browser's
+            // history); without it they stay and the new one goes on the end, as Neovim keeps them
+            let stack = self.opt_has("jumpoptions", "stack", "clean");
             let j = &mut self.vim;
-            j.jumps.truncate(j.jump_at);
-            j.jumps.retain(|p| *p != from);
+            j.jump_tops.resize(j.jumps.len(), 0);
+            if stack {
+                j.jumps.truncate(j.jump_at);
+                j.jump_tops.truncate(j.jump_at);
+            }
+            if let Some(i) = j.jumps.iter().position(|p| *p == from) {
+                j.jumps.remove(i);
+                j.jump_tops.remove(i);
+            }
             j.jumps.push(from);
+            j.jump_tops.push(j.screen.0);
             if j.jumps.len() > 100 {
                 j.jumps.remove(0);
+                j.jump_tops.remove(0);
             }
             j.jump_at = j.jumps.len();
             j.marks.insert('\'', from);

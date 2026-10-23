@@ -27,7 +27,7 @@ awk "/\*option-list\*/{f=1} f && /^'[a-z]/" "$RT/doc/quickref.txt" | sed "s/^'\(
 "$ZETT" doc commands 2>/dev/null | grep -o '^- `[^`]*`' | sed 's/^- `//; s/`$//' | sort -u > "$tmp/zett-cmds.txt"
 grep -oh '^            "[a-z!&<>=]*"\( | "[a-z!&<>=]*"\)* =>' crates/zett-tui/src/ex.rs crates/zett-tui/src/lib.rs crates/zett-tui/src/commands.rs | grep -o '"[^"]*"' | tr -d '"' | sort -u > "$tmp/zett-ex.txt"
 # the quickfix, location and other Ex commands kept as tables (qfcmd.rs, excmds.rs NAMES): full names and shortest forms
-grep -oh '("[A-Za-z0-9~@*#]*", "[A-Za-z0-9~@*#]*")' crates/zett-tui/src/qfcmd.rs crates/zett-tui/src/excmds.rs crates/zett-tui/src/mapcmds.rs crates/zett-tui/src/tagcmd.rs crates/zett-tui/src/dircmd.rs crates/zett-tui/src/defsearch.rs crates/zett-tui/src/diff.rs crates/zett-tui/src/runtime.rs | grep -o '"[A-Za-z0-9~@*#!]*"' | tr -d '"' >> "$tmp/zett-ex.txt"
+grep -oh '("[A-Za-z0-9~@*#]*", "[A-Za-z0-9~@*#]*")' crates/zett-tui/src/qfcmd.rs crates/zett-tui/src/excmds.rs crates/zett-tui/src/mapcmds.rs crates/zett-tui/src/tagcmd.rs crates/zett-tui/src/dircmd.rs crates/zett-tui/src/defsearch.rs crates/zett-tui/src/diff.rs crates/zett-tui/src/runtime.rs crates/zett-tui/src/vimscript.rs | grep -o '"[A-Za-z0-9~@*#!]*"' | tr -d '"' >> "$tmp/zett-ex.txt"
 # a range alone goes to its line (:42); :!! and :@@ are the ! and @ commands again
 printf '{range}\n!!\n@@\n' >> "$tmp/zett-ex.txt"
 "$ZETT" options --working > "$tmp/zett-opts.txt"
@@ -37,32 +37,44 @@ stamp="Generated $(date +%Y-%m-%d) by scripts/parity.sh from $(nvim --version | 
 
 # ── Neovim's options ──
 {
-    n=$(wc -l < "$tmp/opts.tsv"); have=0; kept=0
+    # decided (scripts/options-decided.tsv): what a terminal editor does another way, with why
+    cut -f1 scripts/options-decided.tsv > "$tmp/opt-decided.txt"
+    n=$(wc -l < "$tmp/opts.tsv"); have=0; kept=0; decided=0
     while IFS=$'\t' read -r name short _ _ _; do
-        if { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; }; then have=$((have + 1)); elif has "$name" "$tmp/zett-kept.txt"; then kept=$((kept + 1)); fi
+        if { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; }; then have=$((have + 1)); elif has "$name" "$tmp/opt-decided.txt"; then decided=$((decided + 1)); elif has "$name" "$tmp/zett-kept.txt"; then kept=$((kept + 1)); fi
     done < "$tmp/opts.tsv"
     echo "# Neovim's options in zett"; echo; echo "$stamp"; echo
-    echo "$have ✓ do something in zett, $kept ◐ are kept by :set but do nothing yet, of $n (\`:set\`, \`zett.opt\`, \`zett.ft.<type>\`; \`:help settings\`)."; echo
-    echo "| | option | short | type | scope | default | what it does |"; echo "|---|---|---|---|---|---|---|"
+    echo "$have ✓ do something in zett, $decided — decided against (why in the last column), $kept ◐ are kept by :set but do nothing yet, of $n (\`:set\`, \`zett.opt\`, \`zett.ft.<type>\`; \`:help settings\`)."; echo
+    echo "| | option | short | type | scope | default | what it does | |"; echo "|---|---|---|---|---|---|---|---|"
     while IFS=$'\t' read -r name short type scope def; do
-        mark="·"; if { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; }; then mark="✓"; elif has "$name" "$tmp/zett-kept.txt"; then mark="◐"; fi
+        mark="·"; why=""
+        if { has "$name" "$tmp/zett-opts.txt" || has "$short" "$tmp/zett-opts.txt"; }; then mark="✓"; elif has "$name" "$tmp/opt-decided.txt"; then mark="—"; why=$(awk -F'\t' -v c="$name" '$1==c{print $2; exit}' scripts/options-decided.tsv); elif has "$name" "$tmp/zett-kept.txt"; then mark="◐"; fi
         desc=$(awk -F'\t' -v n="$name" '$1==n{print $2; exit}' "$tmp/optdesc.tsv")
         [ "$short" = - ] && short=""
-        printf '| %s | `%s` | %s | %s | %s | `%s` | %s |\n' "$mark" "$name" "$short" "$type" "$scope" "${def//|/\\|}" "${desc//|/\\|}"
+        printf '| %s | `%s` | %s | %s | %s | `%s` | %s | %s |\n' "$mark" "$name" "$short" "$type" "$scope" "${def//|/\\|}" "${desc//|/\\|}" "${why//|/\\|}"
     done < "$tmp/opts.tsv"
 } > "$out/nvim-options.md"
 
 # ── Neovim's Ex commands ──
 {
+    # decided (scripts/ex-decided.tsv): what zett does another way, with why
+    cut -f1 scripts/ex-decided.tsv > "$tmp/ex-decided.txt"
+    have=0; decided=0; n=0
+    while IFS=$'\t' read -r tag written desc; do
+        name=${written%% *}; full=${name#:}; full=${full//[\[\]]/}; short=${name#:}; short=${short%%\[*}
+        n=$((n + 1))
+        if has "$full" "$tmp/zett-ex.txt" || has "$short" "$tmp/zett-ex.txt"; then have=$((have + 1)); elif has "$full" "$tmp/ex-decided.txt"; then decided=$((decided + 1)); fi
+    done < "$tmp/ex.tsv"
     echo "# Neovim's Ex commands in zett"; echo; echo "$stamp"; echo
-    echo "✓ zett's \`:\` line has it (by its full or short name), · not yet."; echo
-    echo "| | command | written | what it does |"; echo "|---|---|---|---|"
+    echo "$have of $n ✓ zett's \`:\` line has it (by its full or short name), $decided — decided against (why in the last column), $((n - have - decided)) · not yet."; echo
+    echo "| | command | written | what it does | |"; echo "|---|---|---|---|---|"
     while IFS=$'\t' read -r tag written desc; do
         # the name alone (some index lines carry their description in the same field)
         name=${written%% *}
         full=${name#:}; full=${full//[\[\]]/}; short=${name#:}; short=${short%%\[*}
-        mark="·"; { has "$full" "$tmp/zett-ex.txt" || has "$short" "$tmp/zett-ex.txt"; } && mark="✓"
-        printf '| %s | `%s` | `%s` | %s |\n' "$mark" "${tag//|/\\|}" "${written//|/\\|}" "${desc//|/\\|}"
+        mark="·"; why=""
+        if has "$full" "$tmp/zett-ex.txt" || has "$short" "$tmp/zett-ex.txt"; then mark="✓"; elif has "$full" "$tmp/ex-decided.txt"; then mark="—"; why=$(awk -F'\t' -v c="$full" '$1==c{print $2; exit}' scripts/ex-decided.tsv); fi
+        printf '| %s | `%s` | `%s` | %s | %s |\n' "$mark" "${tag//|/\\|}" "${written//|/\\|}" "${desc//|/\\|}" "${why//|/\\|}"
     done < "$tmp/ex.tsv"
 } > "$out/nvim-ex-commands.md"
 
@@ -105,12 +117,18 @@ cut -f1,2 "$tmp/normal.tsv" | XDG_DATA_HOME="$tmp" "$ZETT" probe-keys > "$tmp/pr
 
 # ── Emacs's keys and commands ──
 {
-    n=$(wc -l < "$tmp/emacs-keys.tsv"); have=0
-    while IFS=$'\t' read -r k cmd; do has "$cmd" "$tmp/zett-cmds.txt" && have=$((have + 1)); done < "$tmp/emacs-keys.tsv"
+    # decided (scripts/emacs-decided.tsv): GUI-only, or a package that is a plugin's job, with why
+    cut -f1 scripts/emacs-decided.tsv > "$tmp/emacs-decided.txt"
+    n=$(wc -l < "$tmp/emacs-keys.tsv"); have=0; decided=0
+    while IFS=$'\t' read -r k cmd; do if has "$cmd" "$tmp/zett-cmds.txt"; then have=$((have + 1)); elif has "$cmd" "$tmp/emacs-decided.txt"; then decided=$((decided + 1)); fi; done < "$tmp/emacs-keys.tsv"
     echo "# Emacs's default keys in zett"; echo; echo "$stamp"; echo
-    echo "$have of $n bound commands. ✓ zett has the command under the same name (\`M-x\`), · not yet."; echo
-    echo "| | key | command |"; echo "|---|---|---|"
-    while IFS=$'\t' read -r k cmd; do mark="·"; has "$cmd" "$tmp/zett-cmds.txt" && mark="✓"; printf '| %s | `%s` | `%s` |\n' "$mark" "${k//|/\\|}" "$cmd"; done < "$tmp/emacs-keys.tsv"
+    echo "$have of $n bound commands, $decided — decided against (why in the last column), $((n - have - decided)) · not yet. ✓ zett has the command under the same name (\`M-x\`)."; echo
+    echo "| | key | command | |"; echo "|---|---|---|---|"
+    while IFS=$'\t' read -r k cmd; do
+        mark="·"; why=""
+        if has "$cmd" "$tmp/zett-cmds.txt"; then mark="✓"; elif has "$cmd" "$tmp/emacs-decided.txt"; then mark="—"; why=$(awk -F'\t' -v c="$cmd" '$1==c{print $2; exit}' scripts/emacs-decided.tsv); fi
+        printf '| %s | `%s` | `%s` | %s |\n' "$mark" "${k//|/\\|}" "$cmd" "${why//|/\\|}"
+    done < "$tmp/emacs-keys.tsv"
 } > "$out/emacs-keys.md"
 {
     n=$(wc -l < "$tmp/emacs-cmds.tsv")

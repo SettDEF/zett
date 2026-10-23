@@ -29,17 +29,7 @@ impl Editor {
         if q.is_empty() || self.vim.hl_off {
             return Vec::new();
         }
-        let (n, fold) = (q.chars().count(), self.folds_for(q));
-        let mut out = Vec::new();
-        let mut at = from;
-        while let Some(i) = self.buf.find(q, at, true, fold) {
-            if i >= to || out.len() >= 1000 {
-                break;
-            }
-            out.push((i, i + n));
-            at = i + 1;
-        }
-        out
+        self.vim_find_all(q, self.folds_for(q), from, to)
     }
 
     /// showmatch: the bracket a closing one just typed (before the cursor) pairs with (matchpairs).
@@ -62,6 +52,12 @@ impl Editor {
     /// An operator waits for its motion (guicursor's o mode).
     pub fn pending_op(&self) -> bool {
         self.op.is_some()
+    }
+
+    /// The first key of a two-key command waits for its second (q: g? z t ]c …): that key is the
+    /// command's, so no mapping takes it (as Vim).
+    pub fn prefix_pending(&self) -> bool {
+        self.prefix.is_some()
     }
 
     /// showcmd: the keys of a command not finished yet ("2d", "\"a", "g"), empty when none waits.
@@ -126,6 +122,7 @@ impl Editor {
     /// :clearjumps.
     pub fn clear_jumps(&mut self) {
         self.vim.jumps.clear();
+        self.vim.jump_tops.clear();
         self.vim.jump_at = 0;
     }
 

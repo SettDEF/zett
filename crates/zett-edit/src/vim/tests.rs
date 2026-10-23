@@ -138,6 +138,54 @@ mod batch2 {
         e.feed("<Tab>");
         assert_eq!(e.cursor().line, 79);
     }
+
+    #[test]
+    fn q_colon_asks_for_the_command_window() {
+        let mut e = lines(5);
+        e.feed("q:");
+        assert_eq!(e.take_requests(), vec![crate::vim::Request::CmdWindow(':')]);
+    }
+
+    #[test]
+    fn jumpoptions_view_brings_the_window_back() {
+        // at line 40 with the window showing from 30; G jumps (the window follows to 80); CTRL-O
+        // asks for top 30 again with "view", and nothing without it
+        for (jop, want) in [("view", vec![crate::vim::Request::Top(30)]), ("clean", vec![])] {
+            let mut e = lines(100);
+            e.set_opt("jumpoptions", jop);
+            e.set_screen(30, 20, 80);
+            e.feed("41G");
+            e.set_screen(30, 20, 80);
+            e.take_requests();
+            e.feed("G");
+            e.set_screen(80, 20, 80);
+            e.take_requests();
+            e.feed("<C-o>");
+            assert_eq!(e.cursor().line, 40);
+            assert_eq!(e.take_requests(), want, "{jop}");
+        }
+    }
+
+    #[test]
+    fn jumpoptions_stack_drops_the_jumps_ahead() {
+        // back twice from 30, then a new jump from 10: Neovim keeps 20 and 30 (the new one goes on
+        // the end); with "stack" they are gone
+        for (jop, after) in [("clean", 29), ("stack", 0)] {
+            let mut e = lines(100);
+            e.set_opt("jumpoptions", jop);
+            e.feed("10G");
+            e.feed("20G");
+            e.feed("30G");
+            e.feed("<C-o>");
+            e.feed("<C-o>");
+            assert_eq!(e.cursor().line, 9);
+            e.feed("50G");
+            e.feed("<C-o>");
+            assert_eq!(e.cursor().line, 9, "{jop}");
+            e.feed("<C-o>");
+            assert_eq!(e.cursor().line, after, "{jop}");
+        }
+    }
 }
 
 mod objects {

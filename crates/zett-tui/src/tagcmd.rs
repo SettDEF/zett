@@ -9,7 +9,7 @@ use crate::quickfix::QfItem;
 /// The commands by Vim's full names and shortest forms.
 const NAMES: &[(&str, &str)] = &[
     ("tag", "ta"), ("tags", "tags"), ("tjump", "tj"), ("tselect", "ts"), ("tnext", "tn"), ("tNext", "tN"),
-    ("tprevious", "tp"), ("trewind", "tr"), ("tfirst", "tf"), ("tlast", "tl"), ("pop", "po"),
+    ("tprevious", "tp"), ("trewind", "tr"), ("tfirst", "tf"), ("tlast", "tl"), ("pop", "po"), ("ppop", "pp"),
     ("stag", "sta"), ("stjump", "stj"), ("stselect", "sts"), ("ptag", "pt"), ("ptjump", "ptj"), ("ptselect", "pts"),
     ("ptnext", "ptn"), ("ptNext", "ptN"), ("ptprevious", "ptp"), ("ptrewind", "ptr"), ("ptfirst", "ptf"), ("ptlast", "ptl"),
     ("ltag", "lt"),
@@ -329,6 +329,14 @@ impl App {
             }
             "pop" => {
                 self.tag_pop(n);
+            }
+            // :ppop: :pop in the preview window (the focus comes back)
+            "ppop" => {
+                let Some(pw) = self.preview_win.filter(|&w| self.wins.get(w).is_some_and(|x| x.is_some())) else { return self.say("E441: There is no preview window") };
+                let back = self.focus;
+                self.focus_win(pw);
+                self.tag_pop(n);
+                self.focus_win(back);
             }
             "tags" => {
                 let mut out = String::from("  # TO tag         FROM line  in file/text\n");

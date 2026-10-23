@@ -36,11 +36,17 @@ pub struct Disk {
     pub bom: bool,
     /// the file ended with a line break
     pub eol: bool,
+    /// a CTRL-Z ended it (Vim's endoffile, old DOS files)
+    pub eof: bool,
 }
+
+/// Vim's fileformats and fileencodings: how a file being opened is read (set from the options).
+pub static FILEFORMATS: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+pub static FILEENCODINGS: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
 impl Default for Disk {
     fn default() -> Self {
-        Disk { format: "unix".into(), encoding: "utf-8".into(), bom: false, eol: true }
+        Disk { format: "unix".into(), encoding: "utf-8".into(), bom: false, eol: true, eof: false }
     }
 }
 
@@ -48,29 +54,87 @@ impl Disk {
     /// A file's bytes as text: a UTF-8 byte-order mark taken off, UTF-8 else Latin-1, DOS line ends
     /// made plain (Vim's fileencodings ucs-bom,utf-8,latin1 and fileformats unix,dos).
     pub fn decode(bytes: &[u8]) -> (String, Disk) {
+        Disk::decode_as(bytes, None)
+    }
+
+    /// As [`Disk::decode`], with the encoding given rather than guessed (Emacs's C-x RET r, Vim's ++enc).
+    pub fn decode_as(bytes: &[u8], encoding: Option<&str>) -> (String, Disk) {
+        let list = |m: &std::sync::Mutex<String>, default: &str| -> Vec<String> {
+            let v = m.lock().map(|s| s.clone()).unwrap_or_default();
+            let v = if v.is_empty() { default.to_string() } else { v };
+            v.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()
+        };
         let mut d = Disk::default();
+        // fileencodings: ucs-bom takes a byte-order mark off; then the first that reads it
+        // (utf-8 / default only when it is valid, latin1 always)
+        let encs = list(&FILEENCODINGS, "ucs-bom,utf-8,default,latin1");
         let bytes = match bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
-            Some(b) => {
+            Some(b) if encoding.is_some() || encs.iter().any(|e| e == "ucs-bom") => {
                 d.bom = true;
                 b
             }
-            None => bytes,
+            _ => bytes,
         };
-        let text = match std::str::from_utf8(bytes) {
-            Ok(s) => s.to_string(),
-            Err(_) => {
-                d.encoding = "latin1".into();
-                bytes.iter().map(|&b| b as char).collect()
+        let latin1 = |d: &mut Disk| -> String {
+            d.encoding = "latin1".into();
+            bytes.iter().map(|&b| b as char).collect()
+        };
+        let text = match encoding {
+            Some("latin1") => latin1(&mut d),
+            Some(_) => String::from_utf8_lossy(bytes).into_owned(),
+            None => {
+                let mut found = None;
+                for e in &encs {
+                    match e.as_str() {
+                        "utf-8" | "utf8" | "default" => {
+                            if let Ok(s) = std::str::from_utf8(bytes) {
+                                found = Some(s.to_string());
+                            }
+                        }
+                        "latin1" | "iso-8859-1" | "iso8859-1" | "cp1252" => found = Some(latin1(&mut d)),
+                        _ => {}
+                    }
+                    if found.is_some() {
+                        break;
+                    }
+                }
+                found.unwrap_or_else(|| String::from_utf8_lossy(bytes).into_owned())
             }
         };
-        // dos when every line break has its \r
-        let lf = text.matches('\n').count();
-        let text = if lf > 0 && text.matches("\r\n").count() == lf {
-            d.format = "dos".into();
-            text.replace("\r\n", "\n")
-        } else {
-            text
+        // endoffile: a CTRL-Z at the very end is taken off and written back
+        let text = match text.strip_suffix('\u{1a}') {
+            Some(t) => {
+                d.eof = true;
+                t.to_string()
+            }
+            None => text,
         };
+        // fileformats: one given is used; else dos when every line break has its \r, mac when
+        // there are only \r, else the first listed
+        let formats = list(&FILEFORMATS, "unix,dos");
+        let lf = text.matches('\n').count();
+        let format = match formats.as_slice() {
+            [] => "unix".to_string(),
+            [one] => one.clone(),
+            many => {
+                let has = |f: &str| many.iter().any(|m| m == f);
+                if has("dos") && lf > 0 && text.matches("\r\n").count() == lf {
+                    "dos".into()
+                } else if has("mac") && lf == 0 && text.contains('\r') {
+                    "mac".into()
+                } else if has("unix") && lf > 0 {
+                    "unix".into()
+                } else {
+                    many[0].clone()
+                }
+            }
+        };
+        let text = match format.as_str() {
+            "dos" => text.replace("\r\n", "\n"),
+            "mac" => text.replace('\r', "\n"),
+            _ => text,
+        };
+        d.format = format;
         d.eol = text.is_empty() || text.ends_with('\n');
         (text, d)
     }
@@ -92,6 +156,9 @@ impl Disk {
             out.extend(text.chars().map(|c| if (c as u32) < 256 { c as u8 } else { b'?' }));
         } else {
             out.extend_from_slice(text.as_bytes());
+        }
+        if self.eof {
+            out.push(0x1a);
         }
         out
     }
@@ -121,9 +188,15 @@ impl Buffer {
     #[cfg(feature = "fs")]
     /// Opens a file; a path that does not exist yet is an empty buffer for it.
     pub fn open(path: impl AsRef<Path>) -> std::io::Result<Self> {
+        Self::open_as(path, None)
+    }
+
+    #[cfg(feature = "fs")]
+    /// As [`Buffer::open`], read in the encoding given ("utf-8", "latin1") rather than a guessed one.
+    pub fn open_as(path: impl AsRef<Path>, encoding: Option<&str>) -> std::io::Result<Self> {
         let path = path.as_ref();
         let (text, disk) = match std::fs::read(path) {
-            Ok(b) => Disk::decode(&b),
+            Ok(b) => Disk::decode_as(&b, encoding),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), Disk::default()),
             Err(e) => return Err(e),
         };
@@ -171,6 +244,22 @@ impl Buffer {
         }
         self.dirty = false;
         Ok(())
+    }
+
+    /// The text as its file's bytes (what a save writes), for writing some other way (sudo tee).
+    pub fn encoded(&self) -> Vec<u8> {
+        self.disk.encode(&self.text.to_string())
+    }
+
+    /// Written some other way: no changes left to save.
+    pub fn mark_saved(&mut self) {
+        self.dirty = false;
+    }
+
+    /// A file's bytes read some other way (sudo cat), as the buffer for that path.
+    pub fn from_bytes(path: impl AsRef<Path>, bytes: &[u8]) -> Self {
+        let (text, disk) = Disk::decode(bytes);
+        Self { text: Rope::from_str(&text), path: Some(path.as_ref().to_path_buf()), dirty: false, rev: 0, disk }
     }
 
     pub fn path(&self) -> Option<&Path> {
@@ -406,5 +495,36 @@ mod tests {
         b.save().unwrap();
         assert_eq!(Buffer::open(&p).unwrap().text(), "# hi\n");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod disk_option_tests {
+    use super::*;
+
+    #[test]
+    fn fileformats_fileencodings_and_endoffile() {
+        // defaults: unix,dos and ucs-bom,utf-8,default,latin1
+        let (t, d) = Disk::decode(b"a\r\nb\r\n\x1a");
+        assert_eq!((t.as_str(), d.format.as_str(), d.eof), ("a\nb\n", "dos", true));
+        assert_eq!(d.encode(&t), b"a\r\nb\r\n\x1a");
+        // mac only when listed
+        assert_eq!(Disk::decode(b"a\rb\r").1.format, "unix");
+        *FILEFORMATS.lock().unwrap() = "unix,dos,mac".into();
+        let (t, d) = Disk::decode(b"a\rb\r");
+        assert_eq!((t.as_str(), d.format.as_str()), ("a\nb\n", "mac"));
+        // one format: always that one
+        *FILEFORMATS.lock().unwrap() = "unix".into();
+        assert_eq!(Disk::decode(b"a\r\nb\r\n").1.format, "unix");
+        *FILEFORMATS.lock().unwrap() = String::new();
+        // no latin1 in fileencodings: invalid UTF-8 is read as UTF-8 anyway (replaced)
+        assert_eq!(Disk::decode(b"caf\xe9").1.encoding, "latin1");
+        *FILEENCODINGS.lock().unwrap() = "utf-8".into();
+        let (t, d) = Disk::decode(b"caf\xe9");
+        assert_eq!((d.encoding.as_str(), t.contains('\u{fffd}')), ("utf-8", true));
+        // no ucs-bom: the mark stays in the text
+        assert!(Disk::decode(b"\xef\xbb\xbfhi").0.starts_with('\u{feff}'));
+        *FILEENCODINGS.lock().unwrap() = String::new();
+        assert!(Disk::decode(b"\xef\xbb\xbfhi").1.bom);
     }
 }

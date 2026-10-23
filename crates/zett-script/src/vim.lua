@@ -1,0 +1,2982 @@
+-- Neovim's Lua API (vim.*) on zett's own: what a Neovim config or plugin calls works unchanged
+-- where zett has the thing. Options are zett.opt (global) and :setlocal (buffer, window); Ex commands
+-- run after the Lua that asked for them returns; the buffer is zett.buf, the one being edited.
+local z = zett
+vim = vim or {}
+local unpack = table.unpack or unpack
+-- LuaJIT's (Lua 5.1) globals that Neovim plugins use: unpack, loadstring, math.pow, the bit library
+_G.unpack = _G.unpack or table.unpack
+_G.loadstring = _G.loadstring or load
+math.pow = math.pow or function(a, b) return a ^ b end
+table.getn = table.getn or function(t) return #t end
+if not package.loaded.bit then
+  local function u(x) x = math.tointeger(x) or math.floor(x) return x & 0xffffffff end
+  local function s(x) x = u(x) return x >= 0x80000000 and x - 0x100000000 or x end
+  local function fold(op) return function(a, ...) a = u(a) for _, b in ipairs({ ... }) do a = op(a, u(b)) end return s(a) end end
+  package.loaded.bit = {
+    band = fold(function(a, b) return a & b end),
+    bor = fold(function(a, b) return a | b end),
+    bxor = fold(function(a, b) return a ~ b end),
+    bnot = function(a) return s(~u(a)) end,
+    lshift = function(a, n) return s(u(a) << n) end,
+    rshift = function(a, n) return s(u(a) >> n) end,
+    arshift = function(a, n) return s(s(a) >> n | (s(a) < 0 and ~(0xffffffff >> n) or 0)) end,
+    tobit = function(a) return s(a) end,
+    tohex = function(a, n) return string.format("%0" .. (n or 8) .. "x", u(a)) end,
+  }
+  _G.bit = package.loaded.bit
+end
+
+-- ── tables and strings (vim.tbl_*, vim.split, …): plain Lua, as Neovim's shared.lua ──
+
+function vim.deepcopy(o)
+  if type(o) ~= "table" then return o end
+  local r = {}
+  for k, v in pairs(o) do r[vim.deepcopy(k)] = vim.deepcopy(v) end
+  return setmetatable(r, getmetatable(o))
+end
+function vim.tbl_keys(t) local r = {} for k in pairs(t) do r[#r + 1] = k end return r end
+function vim.tbl_values(t) local r = {} for _, v in pairs(t) do r[#r + 1] = v end return r end
+function vim.tbl_contains(t, v) for _, x in pairs(t) do if x == v then return true end end return false end
+function vim.tbl_isempty(t) return next(t) == nil end
+function vim.tbl_count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+function vim.tbl_map(f, t) local r = {} for k, v in pairs(t) do r[k] = f(v) end return r end
+function vim.tbl_filter(f, t) local r = {} for _, v in ipairs(t) do if f(v) then r[#r + 1] = v end end return r end
+function vim.islist(t)
+  if type(t) ~= "table" then return false end
+  local n = 0
+  for k in pairs(t) do
+    if type(k) ~= "number" then return false end
+    n = n + 1
+  end
+  return n == #t
+end
+vim.tbl_islist = vim.islist
+local function extend(how, deep, ...)
+  local r = {}
+  for _, t in ipairs({ ... }) do
+    for k, v in pairs(t or {}) do
+      if deep and type(v) == "table" and type(r[k]) == "table" and not vim.islist(v) then
+        r[k] = extend(how, true, r[k], v)
+      elseif r[k] == nil or how == "force" then
+        r[k] = deep and vim.deepcopy(v) or v
+      elseif how == "error" then
+        error("key found in more than one map: " .. tostring(k))
+      end
+    end
+  end
+  return r
+end
+function vim.tbl_extend(how, ...) return extend(how, false, ...) end
+function vim.tbl_deep_extend(how, ...) return extend(how, true, ...) end
+function vim.tbl_get(t, ...)
+  for _, k in ipairs({ ... }) do
+    if type(t) ~= "table" then return nil end
+    t = t[k]
+  end
+  return t
+end
+function vim.tbl_flatten(t)
+  local r = {}
+  local function go(x) for _, v in ipairs(x) do if type(v) == "table" then go(v) else r[#r + 1] = v end end end
+  go(t)
+  return r
+end
+function vim.list_extend(dst, src, a, b) for i = a or 1, b or #src do dst[#dst + 1] = src[i] end return dst end
+function vim.list_slice(t, a, b) local r = {} for i = a or 1, b or #t do r[#r + 1] = t[i] end return r end
+function vim.pesc(s) return (s:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0")) end
+function vim.trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+function vim.startswith(s, p) return s:sub(1, #p) == p end
+function vim.endswith(s, p) return p == "" or s:sub(-#p) == p end
+function vim.gsplit(s, sep, opts)
+  local plain = type(opts) == "table" and opts.plain or opts == true
+  local parts = {}
+  local at = 1
+  while true do
+    local a, b = s:find(sep, at, plain)
+    if not a or sep == "" then parts[#parts + 1] = s:sub(at) break end
+    parts[#parts + 1] = s:sub(at, a - 1)
+    at = b + 1
+  end
+  if type(opts) == "table" and opts.trimempty then
+    while parts[1] == "" do table.remove(parts, 1) end
+    while parts[#parts] == "" do table.remove(parts) end
+  end
+  local i = 0
+  return function() i = i + 1 return parts[i] end
+end
+function vim.split(s, sep, opts) local r = {} for p in vim.gsplit(s, sep, opts) do r[#r + 1] = p end return r end
+function vim.is_callable(f)
+  if type(f) == "function" then return true end
+  local m = getmetatable(f)
+  return m ~= nil and type(m.__call) == "function"
+end
+function vim.validate() end
+vim.F = { if_nil = function(...) for _, v in ipairs({ ... }) do if v ~= nil then return v end end end }
+
+function vim.inspect(v, _, depth)
+  depth = depth or 0
+  if type(v) == "string" then return string.format("%q", v) end
+  if type(v) ~= "table" then return tostring(v) end
+  if depth > 8 then return "{...}" end
+  local parts, n = {}, #v
+  for i = 1, n do parts[#parts + 1] = vim.inspect(v[i], nil, depth + 1) end
+  local keys = {}
+  for k in pairs(v) do if not (type(k) == "number" and k >= 1 and k <= n and k % 1 == 0) then keys[#keys + 1] = k end end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  for _, k in ipairs(keys) do
+    local key = type(k) == "string" and k:match("^[%a_][%w_]*$") and k or "[" .. vim.inspect(k, nil, depth + 1) .. "]"
+    parts[#parts + 1] = key .. " = " .. vim.inspect(v[k], nil, depth + 1)
+  end
+  return "{ " .. table.concat(parts, ", ") .. " }"
+end
+function vim.print(...)
+  local out = {}
+  for _, v in ipairs({ ... }) do out[#out + 1] = type(v) == "string" and v or vim.inspect(v) end
+  z.notify(table.concat(out, " "))
+  return ...
+end
+
+-- ── JSON (vim.json, vim.fn.json_encode / json_decode) ──
+vim.NIL = setmetatable({}, { __tostring = function() return "vim.NIL" end })
+local function json_encode(v)
+  local t = type(v)
+  if v == nil or v == vim.NIL then return "null" end
+  if t == "boolean" or t == "number" then return tostring(v) end
+  if t == "string" then
+    return '"' .. v:gsub('[%c"\\]', function(c)
+      local m = { ['"'] = '\\"', ["\\"] = "\\\\", ["\n"] = "\\n", ["\t"] = "\\t", ["\r"] = "\\r" }
+      return m[c] or string.format("\\u%04x", c:byte())
+    end) .. '"'
+  end
+  if t == "table" then
+    local parts = {}
+    if vim.islist(v) and (next(v) ~= nil or getmetatable(v) ~= vim._empty_dict_mt) then
+      for _, x in ipairs(v) do parts[#parts + 1] = json_encode(x) end
+      return "[" .. table.concat(parts, ",") .. "]"
+    end
+    local keys = vim.tbl_keys(v)
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    for _, k in ipairs(keys) do parts[#parts + 1] = json_encode(tostring(k)) .. ":" .. json_encode(v[k]) end
+    return "{" .. table.concat(parts, ",") .. "}"
+  end
+  error("json: cannot encode a " .. t)
+end
+local function json_decode(s)
+  local i = 1
+  local function ws() i = s:find("[^ \t\r\n]", i) or #s + 1 end
+  local value
+  local function str()
+    local out = {}
+    i = i + 1
+    while true do
+      local c = s:sub(i, i)
+      if c == "" then error("json: unterminated string") end
+      if c == '"' then i = i + 1 break end
+      if c == "\\" then
+        local e = s:sub(i + 1, i + 1)
+        local m = { n = "\n", t = "\t", r = "\r", b = "\b", f = "\f", ["/"] = "/", ["\\"] = "\\", ['"'] = '"' }
+        if e == "u" then
+          out[#out + 1] = utf8.char(tonumber(s:sub(i + 2, i + 5), 16))
+          i = i + 6
+        else
+          out[#out + 1] = m[e] or e
+          i = i + 2
+        end
+      else
+        out[#out + 1] = c
+        i = i + 1
+      end
+    end
+    return table.concat(out)
+  end
+  function value()
+    ws()
+    local c = s:sub(i, i)
+    if c == "{" then
+      local r = {}
+      i = i + 1
+      ws()
+      if s:sub(i, i) == "}" then i = i + 1 return r end
+      while true do
+        ws()
+        local k = str()
+        ws()
+        i = i + 1 -- :
+        r[k] = value()
+        ws()
+        local d = s:sub(i, i)
+        i = i + 1
+        if d == "}" then return r end
+      end
+    elseif c == "[" then
+      local r = {}
+      i = i + 1
+      ws()
+      if s:sub(i, i) == "]" then i = i + 1 return r end
+      while true do
+        r[#r + 1] = value()
+        ws()
+        local d = s:sub(i, i)
+        i = i + 1
+        if d == "]" then return r end
+      end
+    elseif c == '"' then
+      return str()
+    elseif s:sub(i, i + 3) == "true" then i = i + 4 return true
+    elseif s:sub(i, i + 4) == "false" then i = i + 5 return false
+    elseif s:sub(i, i + 3) == "null" then i = i + 4 return vim.NIL
+    else
+      local n = s:match("^-?%d+%.?%d*[eE]?[-+]?%d*", i)
+      if not n or n == "" then error("json: unexpected " .. c .. " at " .. i) end
+      i = i + #n
+      return tonumber(n)
+    end
+  end
+  return value()
+end
+vim._empty_dict_mt = {}
+function vim.empty_dict() return setmetatable({}, vim._empty_dict_mt) end
+vim.json = { encode = json_encode, decode = json_decode }
+
+-- ── messages, timers ──
+vim.log = { levels = { TRACE = 0, DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4, OFF = 5 } }
+function vim.notify(msg, level)
+  local tag = ({ [3] = "W: ", [4] = "E: " })[level or 2] or ""
+  z.notify(tag .. tostring(msg))
+end
+function vim.notify_once(msg, level)
+  vim._notified = vim._notified or {}
+  if vim._notified[msg] then return false end
+  vim._notified[msg] = true
+  vim.notify(msg, level)
+  return true
+end
+function vim.schedule(f) z.defer(0, f) end
+function vim.defer_fn(f, ms) z.defer(ms, f) end
+function vim.schedule_wrap(f) return function(...) local a = { ... } vim.schedule(function() f(unpack(a)) end) end end
+function vim.in_fast_event() return false end
+vim.uv = vim.uv or {}
+function vim.uv.hrtime() return math.floor(os.clock() * 1e9) end
+function vim.uv.now() return math.floor(os.time() * 1000) end
+function vim.uv.cwd() return z.root() end
+function vim.uv.os_homedir() return os.getenv("HOME") end
+function vim.uv.os_getenv(n) return os.getenv(n) end
+function vim.uv.fs_stat(p)
+  if not z.fs.exists(p) then return nil end
+  return { type = z.fs.is_dir(p) and "directory" or "file", size = z.fs.size and z.fs.size(p) or 0, mtime = { sec = z.fs.mtime and z.fs.mtime(p) or 0 } }
+end
+function vim.uv.new_timer()
+  local t = { on = false }
+  function t:start(ms, rep, f)
+    self.on = true
+    local function tick()
+      if not self.on then return end
+      f()
+      if rep and rep > 0 then z.defer(rep, tick) else self.on = false end
+    end
+    z.defer(ms, tick)
+  end
+  function t:stop() self.on = false end
+  function t:close() self.on = false end
+  function t:is_active() return self.on end
+  return t
+end
+vim.loop = vim.uv
+
+-- ── variables: vim.g, vim.b, vim.w, vim.t, vim.v, vim.env ──
+-- vim.g.mapleader is zett's leader (zett.opt.leader)
+vim.g = vim.g or setmetatable({}, {
+  __newindex = function(t, k, v)
+    if k == "mapleader" then z.opt.leader = v end
+    rawset(t, k, v)
+  end,
+})
+vim.b = vim.b or setmetatable({}, { __index = function(t, k) if type(k) == "number" then return t end end })
+vim.w = vim.w or setmetatable({}, { __index = function(t, k) if type(k) == "number" then return t end end })
+vim.t = vim.t or {}
+vim.v = vim.v or { shell_error = 0, ["true"] = true, ["false"] = false, null = vim.NIL, count = 0, count1 = 1, errmsg = "", version = 1000, progpath = "zett" }
+vim.env = setmetatable({}, {
+  __index = function(_, k) return rawget(vim._env, k) or os.getenv(k) end,
+  __newindex = function(_, k, v) vim._env[k] = v end,
+})
+vim._env = {}
+
+-- ── Ex commands: vim.cmd("set ts=4"), vim.cmd.set("ts=4"), vim.cmd({ cmd = "edit", args = { "x" } }) ──
+local function ex(line) z.ui("ex", line) end
+local function cmd_string(c)
+  if type(c) == "string" then return c end
+  local s = c.cmd .. (c.bang and "!" or "")
+  if c.args and #c.args > 0 then s = s .. " " .. table.concat(c.args, " ") end
+  if c.range then s = table.concat(c.range, ",") .. s end
+  return s
+end
+vim.cmd = setmetatable({}, {
+  __call = function(_, c)
+    if type(c) == "table" then return ex(cmd_string(c)) end
+    -- several lines: Vimscript (if/for/let/function) goes through the translator (vimscript.lua)
+    if vim._vimscript and c:find("\n") then return vim._vimscript.run(c) end
+    for line in c:gmatch("[^\n]+") do
+      if vim._vimscript and vim._vimscript.handles(line) then vim._vimscript.run(line) else ex(line) end
+    end
+  end,
+  __index = function(_, name)
+    return function(...)
+      local a = { ... }
+      if type(a[1]) == "table" then return ex(cmd_string(vim.tbl_extend("force", { cmd = name }, a[1]))) end
+      ex(name .. (#a > 0 and (" " .. table.concat(vim.tbl_map(tostring, a), " ")) or ""))
+    end
+  end,
+})
+
+-- ── options: vim.o / vim.go global (zett.opt), vim.bo / vim.wo through :setlocal, vim.opt ──
+local function info(name)
+  local i = z.option_info and z.option_info(name)
+  return i
+end
+local function typed(i, v)
+  if v == nil then return nil end
+  if i and i.kind == "bool" then return v == true or v == "true" or v == 1 or v == "1" end
+  if i and i.kind == "int" then return tonumber(v) or 0 end
+  return v
+end
+local function opt_get(name)
+  local i = info(name)
+  local key = i and i.name or name
+  local v = z.opt[key]
+  if v == nil then v = i and i.default end
+  return typed(i, v)
+end
+local function as_text(v)
+  if type(v) == "table" then return table.concat(vim.islist(v) and v or vim.tbl_map(function(x) return x end, vim.tbl_keys(v)), ",") end
+  return v
+end
+local function opt_set(name, v, scope)
+  local i = info(name)
+  local key = i and i.name or name
+  v = as_text(v)
+  if scope == "local" then
+    if type(v) == "boolean" then ex("setlocal " .. (v and "" or "no") .. key) else ex("setlocal " .. key .. "=" .. tostring(v):gsub(" ", "\\ ")) end
+  else
+    z.opt[key] = typed(i, v)
+    -- the window drawn and buffers already open take it up as :set would
+    if type(v) == "boolean" then ex("set " .. (v and "" or "no") .. key) else ex("set " .. key .. "=" .. tostring(v):gsub(" ", "\\ ")) end
+  end
+end
+local function opt_table(scope)
+  return setmetatable({}, {
+    __index = function(t, k) if type(k) == "number" then return t end return opt_get(k) end,
+    __newindex = function(_, k, v) opt_set(k, v, scope) end,
+  })
+end
+vim.o = opt_table("global")
+vim.go = vim.o
+vim.bo = opt_table("local")
+vim.wo = opt_table("local")
+local function opt_object(scope)
+  return setmetatable({}, {
+    __index = function(_, name)
+      local o = {}
+      function o:get()
+        local v = opt_get(name)
+        local i = info(name)
+        if i and i.kind == "text" and type(v) == "string" and v:find(",") then return vim.split(v, ",", { trimempty = true }) end
+        if i and i.kind == "text" and type(v) == "string" and (name == "shortmess" or name == "formatoptions" or name == "cpoptions") then
+          local r = {}
+          for c in v:gmatch(".") do r[c] = true end
+          return r
+        end
+        return v
+      end
+      function o:append(x) opt_set(name, (opt_get(name) or "") .. (tostring(opt_get(name) or "") ~= "" and "," or "") .. as_text(x), scope) end
+      function o:prepend(x) opt_set(name, as_text(x) .. "," .. (opt_get(name) or ""), scope) end
+      function o:remove(x)
+        local parts = vim.tbl_filter(function(p) return p ~= x end, vim.split(tostring(opt_get(name) or ""), ",", { trimempty = true }))
+        opt_set(name, table.concat(parts, ","), scope)
+      end
+      return setmetatable(o, { __add = function(a, b) a:append(b) return a end, __sub = function(a, b) a:remove(b) return a end, __pow = function(a, b) a:prepend(b) return a end })
+    end,
+    __newindex = function(_, k, v) opt_set(k, v, scope) end,
+  })
+end
+vim.opt = opt_object("global")
+vim.opt_global = vim.opt
+vim.opt_local = opt_object("local")
+
+-- ── keymaps: vim.keymap.set / del ──
+local zett_mode = { n = "n", v = "v", x = "v", s = "v", i = "i", c = "c", o = "n", t = nil, [""] = "n", ["!"] = "i" }
+vim.keymap = {}
+function vim.keymap.set(modes, lhs, rhs, opts)
+  opts = opts or {}
+  if type(modes) == "string" then modes = { modes } end
+  for _, m in ipairs(modes) do
+    if type(rhs) == "function" then
+      local zm = zett_mode[m]
+      if zm then z.map(zm, lhs, rhs, { desc = opts.desc }) end
+    else
+      local flags = (opts.silent and "<silent>" or "") .. (opts.buffer and "<buffer>" or "") .. (opts.expr and "<expr>" or "") .. (opts.nowait and "<nowait>" or "")
+      ex(m .. (opts.remap and "map " or "noremap ") .. (flags ~= "" and flags .. " " or "") .. lhs .. " " .. rhs)
+    end
+  end
+end
+function vim.keymap.del(modes, lhs)
+  if type(modes) == "string" then modes = { modes } end
+  for _, m in ipairs(modes) do
+    local zm = zett_mode[m]
+    if zm then pcall(z.unmap, zm, lhs) end
+    ex(m .. "unmap " .. lhs)
+  end
+end
+
+-- ── callbacks Ex commands call back (:command, :autocmd, :lua) ──
+vim._cb = vim._cb or {}
+local function keep(f)
+  vim._cb[#vim._cb + 1] = f
+  return #vim._cb
+end
+
+-- ── buffers and windows: the one being edited (handle 0, or its number) ──
+local function cur_buf()
+  -- the host says which one (its place in zett.buffers); else found by path
+  local n = z.cur_buffer and z.cur_buffer() or 0
+  if n > 0 then return n end
+  local p = z.buf.path()
+  for i, b in ipairs(z.buffers()) do if b == p then return i end end
+  return 1
+end
+local function lines(a, b) local ok, r = pcall(z.buf.lines, a, b) return ok and r or {} end
+
+-- ── vim.api ──
+local api = vim.api or {}
+vim.api = api
+api.nvim_command = ex
+api.nvim_exec = function(src, output) vim.cmd(src) return output and "" or nil end
+api.nvim_exec2 = function(src, _) vim.cmd(src) return { output = "" } end
+api.nvim_cmd = function(c, _) ex(cmd_string(c)) return "" end
+api.nvim_get_current_buf = cur_buf
+api.nvim_get_current_win = function() return 1000 end
+api.nvim_get_current_tabpage = function() return 1 end
+api.nvim_list_bufs = function() local r = {} for i in ipairs(z.buffers()) do r[i] = i end return r end
+api.nvim_list_wins = function() return { 1000 } end
+api.nvim_list_tabpages = function() return { 1 } end
+api.nvim_buf_is_valid = function(b) return b == 0 or (b >= 1 and b <= #z.buffers()) end
+api.nvim_buf_is_loaded = api.nvim_buf_is_valid
+api.nvim_win_is_valid = function(w) return w == 0 or w == 1000 end
+api.nvim_win_get_buf = function() return cur_buf() end
+api.nvim_buf_get_name = function(b)
+  if b == 0 or b == cur_buf() then return z.buf.path() end
+  return z.buffers()[b] or ""
+end
+api.nvim_buf_set_name = function(_, name) ex("file " .. name) end
+api.nvim_buf_line_count = function() return z.buf.line_count() end
+api.nvim_buf_get_lines = function(_, a, b, _) return lines(a, b) end
+api.nvim_buf_set_lines = function(_, a, b, _, l) z.buf.set_lines(a, b, l) end
+api.nvim_buf_get_text = function(_, sr, sc, er, ec, _)
+  local l = lines(sr, er + 1)
+  if #l == 0 then return {} end
+  if #l == 1 then return { l[1]:sub(sc + 1, ec) } end
+  l[1] = l[1]:sub(sc + 1)
+  l[#l] = l[#l]:sub(1, ec)
+  return l
+end
+api.nvim_buf_set_text = function(_, sr, sc, er, ec, repl)
+  local l = lines(sr, er + 1)
+  local head, tail = (l[1] or ""):sub(1, sc), (l[#l] or ""):sub(ec + 1)
+  local new = vim.deepcopy(repl)
+  if #new == 0 then new = { "" } end
+  new[1] = head .. new[1]
+  new[#new] = new[#new] .. tail
+  z.buf.set_lines(sr, er + 1, new)
+end
+api.nvim_get_current_line = function() local r, _ = z.buf.cursor() return lines(r - 1, r)[1] or "" end
+api.nvim_set_current_line = function(s) local r, _ = z.buf.cursor() z.buf.set_lines(r - 1, r, { s }) end
+api.nvim_del_current_line = function() local r, _ = z.buf.cursor() z.buf.set_lines(r - 1, r, {}) end
+api.nvim_win_get_cursor = function() local r, c = z.buf.cursor() return { r, c } end
+api.nvim_win_set_cursor = function(_, pos) z.buf.set_cursor(pos[1], pos[2]) end
+api.nvim_put = function(l, _, after, _)
+  local r, _ = z.buf.cursor()
+  local at = after and r or r - 1
+  z.buf.set_lines(at, at, l)
+end
+api.nvim_get_var = function(k) return vim.g[k] end
+api.nvim_set_var = function(k, v) vim.g[k] = v end
+api.nvim_del_var = function(k) vim.g[k] = nil end
+api.nvim_buf_get_var = function(_, k) return vim.b[k] end
+api.nvim_buf_set_var = function(_, k, v) vim.b[k] = v end
+api.nvim_buf_del_var = function(_, k) vim.b[k] = nil end
+api.nvim_win_get_var = function(_, k) return vim.w[k] end
+api.nvim_win_set_var = function(_, k, v) vim.w[k] = v end
+api.nvim_get_vvar = function(k) return vim.v[k] end
+api.nvim_set_vvar = function(k, v) vim.v[k] = v end
+api.nvim_get_option_value = function(name, _) return opt_get(name) end
+api.nvim_set_option_value = function(name, v, o) opt_set(name, v, o and (o.scope == "local" or o.buf or o.win) and "local" or "global") end
+api.nvim_get_option = function(name) return opt_get(name) end
+api.nvim_set_option = function(name, v) opt_set(name, v, "global") end
+api.nvim_buf_get_option = function(_, name) return opt_get(name) end
+api.nvim_buf_set_option = function(_, name, v) opt_set(name, v, "local") end
+api.nvim_win_get_option = function(_, name) return opt_get(name) end
+api.nvim_win_set_option = function(_, name, v) opt_set(name, v, "local") end
+api.nvim_get_option_info2 = function(name, _)
+  local i = info(name)
+  if not i then error("Invalid option name: '" .. name .. "'") end
+  return { name = i.name, type = ({ bool = "boolean", int = "number", text = "string" })[i.kind], default = typed(i, i.default) }
+end
+api.nvim_set_keymap = function(m, lhs, rhs, o)
+  o = o or {}
+  if o.callback then return vim.keymap.set(m, lhs, o.callback, o) end
+  vim.keymap.set(m, lhs, rhs, vim.tbl_extend("force", o, { remap = not o.noremap }))
+end
+api.nvim_buf_set_keymap = function(_, m, lhs, rhs, o) api.nvim_set_keymap(m, lhs, rhs, vim.tbl_extend("force", o or {}, { buffer = true })) end
+api.nvim_del_keymap = function(m, lhs) vim.keymap.del(m, lhs) end
+api.nvim_buf_del_keymap = function(_, m, lhs) vim.keymap.del(m, lhs) end
+api.nvim_create_user_command = function(name, run, o)
+  o = o or {}
+  local nargs = o.nargs and ("-nargs=" .. tostring(o.nargs) .. " ") or ""
+  local flags = nargs .. (o.bang and "-bang " or "") .. (o.range and "-range " or "") .. (o.count and "-count " or "")
+  if type(run) == "string" then return ex("command! " .. flags .. name .. " " .. run) end
+  local n = keep(run)
+  ex("command! " .. flags .. name .. " lua vim._cb[" .. n .. "]({ name = '" .. name .. "', args = <q-args>, fargs = vim.split(<q-args>, '%s+', { trimempty = true }), bang = ('<bang>' == '!'), line1 = <line1>, line2 = <line2>, range = <range>, count = <count> })")
+  -- an M-x / command-palette name of its own, as zett's commands have
+  pcall(z.command, name, function() run({ name = name, args = "", fargs = {}, bang = false }) end, { desc = o.desc or name })
+end
+api.nvim_buf_create_user_command = function(_, name, run, o) api.nvim_create_user_command(name, run, o) end
+api.nvim_del_user_command = function(name) ex("delcommand " .. name) end
+api.nvim_buf_del_user_command = function(_, name) ex("delcommand " .. name) end
+local groups, group_names = {}, {}
+api.nvim_create_augroup = function(name, o)
+  if not groups[name] then
+    group_names[#group_names + 1] = name
+    groups[name] = #group_names
+  end
+  if not o or o.clear ~= false then ex("autocmd! " .. name) end
+  ex("augroup " .. name .. " | augroup END")
+  return groups[name]
+end
+api.nvim_del_augroup_by_name = function(name) ex("augroup! " .. name) end
+api.nvim_del_augroup_by_id = function(id) if group_names[id] then ex("augroup! " .. group_names[id]) end end
+local autocmds = {}
+api.nvim_create_autocmd = function(events, o)
+  o = o or {}
+  if type(events) == "string" then events = { events } end
+  local group = type(o.group) == "number" and group_names[o.group] or o.group
+  local pattern = o.pattern or (o.buffer and "<buffer>") or "*"
+  if type(pattern) == "table" then pattern = table.concat(pattern, ",") end
+  local id = #autocmds + 1
+  local run
+  if o.callback then
+    local cb = o.callback
+    if type(cb) == "string" then local name = cb cb = function(a) return vim.fn[name](a) end end
+    local n = keep(function(ev)
+      if autocmds[id] == false then return end
+      if o.once then autocmds[id] = false end
+      ev.id, ev.group = id, o.group
+      if cb(ev) == true then autocmds[id] = false end
+    end)
+    run = "lua vim._cb[" .. n .. "]({ event = '%s', match = vim.fn.expand('<amatch>'), file = vim.fn.expand('<afile>'), buf = vim.api.nvim_get_current_buf() })"
+  else
+    run = o.command
+  end
+  autocmds[id] = true
+  for _, e in ipairs(events) do
+    ex("autocmd " .. (group and group .. " " or "") .. e .. " " .. pattern .. " " .. (o.callback and run:format(e) or run))
+  end
+  return id
+end
+api.nvim_del_autocmd = function(id) autocmds[id] = false end
+api.nvim_clear_autocmds = function(o)
+  o = o or {}
+  local group = type(o.group) == "number" and group_names[o.group] or o.group
+  local ev = type(o.event) == "table" and table.concat(o.event, ",") or o.event
+  ex("autocmd! " .. (group or "") .. (ev and (" " .. ev) or ""))
+end
+api.nvim_exec_autocmds = function(events, o)
+  if type(events) == "string" then events = { events } end
+  for _, e in ipairs(events) do ex("doautocmd " .. ((o or {}).group and (o.group .. " ") or "") .. e) end
+end
+api.nvim_echo = function(chunks, _, _)
+  z.notify(table.concat(vim.tbl_map(function(c) return c[1] end, chunks), ""))
+end
+api.nvim_out_write = function(s) z.notify((s:gsub("\n$", ""))) end
+api.nvim_err_write = function(s) z.notify("E: " .. s:gsub("\n$", "")) end
+api.nvim_err_writeln = function(s) z.notify("E: " .. s) end
+api.nvim_notify = function(msg, level, _) vim.notify(msg, level) end
+api.nvim_set_hl = function(_, name, v)
+  if v.link then return ex("highlight! link " .. name .. " " .. v.link) end
+  local attrs = {}
+  for _, a in ipairs({ "bold", "italic", "underline", "undercurl", "strikethrough", "reverse" }) do if v[a] then attrs[#attrs + 1] = a end end
+  local function col(c) return type(c) == "number" and string.format("#%06x", c) or c end
+  local parts = { "highlight", name }
+  if v.fg or v.foreground then parts[#parts + 1] = "guifg=" .. col(v.fg or v.foreground) end
+  if v.bg or v.background then parts[#parts + 1] = "guibg=" .. col(v.bg or v.background) end
+  if v.sp or v.special then parts[#parts + 1] = "guisp=" .. col(v.sp or v.special) end
+  if #attrs > 0 then parts[#parts + 1] = "gui=" .. table.concat(attrs, ",") end
+  if v.ctermfg then parts[#parts + 1] = "ctermfg=" .. v.ctermfg end
+  if v.ctermbg then parts[#parts + 1] = "ctermbg=" .. v.ctermbg end
+  if #parts == 2 then parts[#parts + 1] = "NONE" end
+  ex(table.concat(parts, " "))
+end
+api.nvim_create_namespace = function(name)
+  vim._ns = vim._ns or {}
+  if not vim._ns[name] then vim._ns[name] = vim.tbl_count(vim._ns) + 1 end
+  return vim._ns[name]
+end
+api.nvim_get_namespaces = function() return vim._ns or {} end
+api.nvim_replace_termcodes = function(s, _, _, _) return s end
+api.nvim_feedkeys = function(keys, _, _) ex("normal " .. keys) end
+api.nvim_input = function(keys) ex("normal " .. keys) return #keys end
+api.nvim_get_mode = function() return { mode = vim.fn.mode(), blocking = false } end
+api.nvim_eval = function(e) return vim._vimscript and vim._vimscript.eval(e) or nil end
+api.nvim_call_function = function(f, args) return vim.fn[f](unpack(args or {})) end
+api.nvim_strwidth = function(s) return utf8.len(s) or #s end
+api.nvim_set_current_dir = function(d) ex("cd " .. d) end
+api.nvim_list_runtime_paths = function() return { z.config_dir() } end
+api.nvim_get_runtime_file = function(name, all)
+  local p = z.config_dir() .. "/" .. name
+  if z.fs.exists(p) then return { p } end
+  return {}
+end
+api.nvim_get_chan_info = function() return {} end
+api.nvim_list_uis = function() return { { width = 80, height = 24, rgb = true } } end
+api.nvim_get_color_by_name = function(n)
+  local h = n:match("^#(%x%x%x%x%x%x)$")
+  return h and tonumber(h, 16) or -1
+end
+
+-- ── vim.fn: Vimscript's functions ──
+local fn = {}
+local function bool(b) return b and 1 or 0 end
+local function home(p) return (p:gsub("^~", os.getenv("HOME") or "~")) end
+local function modify(p, mods)
+  for m in mods:gmatch(":(%a)") do
+    if m == "p" then p = p:sub(1, 1) == "/" and p or (z.root() .. "/" .. p)
+    elseif m == "h" then p = p:match("^(.*)/[^/]*$") or "."
+    elseif m == "t" then p = p:match("([^/]*)$")
+    elseif m == "r" then p = p:match("^(.*)%.[^./]*$") or p
+    elseif m == "e" then p = p:match("%.([^./]*)$") or ""
+    elseif m == "~" then local h = os.getenv("HOME") or "" if vim.startswith(p, h) then p = "~" .. p:sub(#h + 1) end
+    end
+  end
+  return p
+end
+function fn.fnamemodify(p, mods) return modify(home(p), mods) end
+function fn.expand(s, _, list)
+  local r
+  local base, mods = s:match("^([%%#]<?%a*)(.*)$")
+  if s:match("^<cword>") or s:match("^<cWORD>") then
+    local row, col = z.buf.cursor()
+    local l = lines(row - 1, row)[1] or ""
+    local pat = s:match("^<cword>") and "[%w_]" or "%S"
+    local a, b = col + 1, col + 1
+    while a > 1 and l:sub(a - 1, a - 1):match(pat) do a = a - 1 end
+    while b <= #l and l:sub(b, b):match(pat) do b = b + 1 end
+    r = l:sub(a, b - 1)
+  elseif s:match("^<sfile>") or s:match("^<script>") then r = ""
+  elseif s:match("^<amatch>") or s:match("^<afile>") then r = z.buf.path()
+  elseif base then
+    r = base:sub(1, 1) == "%" and z.buf.path() or ""
+    r = modify(r, (s:match("^[%%#](.*)$")))
+  else
+    r = home(s):gsub("%$(%w+)", function(v) return os.getenv(v) or "" end)
+    if r:find("[*?]") then return fn.glob(r, false, list) end
+  end
+  if list then return { r } end
+  return r
+end
+function fn.glob(pat, _, list)
+  local out = {}
+  local p = io.popen("for f in " .. pat:gsub("([^%w*?./~_-])", "\\%1") .. "; do [ -e \"$f\" ] && echo \"$f\"; done 2>/dev/null")
+  if p then for l in p:lines() do out[#out + 1] = l end p:close() end
+  if list then return out end
+  return table.concat(out, "\n")
+end
+function fn.globpath(dirs, pat, _, list)
+  local out = {}
+  for d in tostring(dirs):gmatch("[^,]+") do vim.list_extend(out, fn.glob(d .. "/" .. pat, false, true)) end
+  if list then return out end
+  return table.concat(out, "\n")
+end
+function fn.filereadable(p) p = home(p) local f = io.open(p, "r") if f then f:close() return bool(not z.fs.is_dir(p)) end return 0 end
+function fn.filewritable(p) return bool(z.fs.exists(home(p)) and not z.fs.is_dir(home(p))) end
+function fn.isdirectory(p) return bool(z.fs.is_dir(home(p))) end
+function fn.mkdir(p, _, _) z.fs.mkdir(home(p)) return 1 end
+function fn.delete(p, _) local ok = pcall(z.fs.remove, home(p)) return ok and 0 or -1 end
+function fn.rename(a, b) local ok = pcall(z.fs.rename, home(a), home(b)) return ok and 0 or -1 end
+function fn.readfile(p, _, max)
+  local out = {}
+  local f = io.open(home(p), "r")
+  if not f then error("E484: Can't open file " .. p) end
+  for l in f:lines() do
+    out[#out + 1] = l
+    if max and max > 0 and #out >= max then break end
+  end
+  f:close()
+  return out
+end
+function fn.writefile(l, p, flags)
+  local f = io.open(home(p), (flags or ""):find("a") and "a" or "w")
+  if not f then return -1 end
+  if type(l) == "string" then l = { l } end
+  f:write(table.concat(l, "\n") .. (((flags or ""):find("b")) and "" or "\n"))
+  f:close()
+  return 0
+end
+function fn.getcwd() return z.root() end
+function fn.chdir(d) local old = z.root() ex("cd " .. d) return old end
+function fn.executable(name)
+  if name:find("/") then return bool(z.fs.exists(name)) end
+  for d in (os.getenv("PATH") or ""):gmatch("[^:]+") do if z.fs.exists(d .. "/" .. name) and not z.fs.is_dir(d .. "/" .. name) then return 1 end end
+  return 0
+end
+function fn.exepath(name)
+  for d in (os.getenv("PATH") or ""):gmatch("[^:]+") do if z.fs.exists(d .. "/" .. name) then return d .. "/" .. name end end
+  return ""
+end
+function fn.resolve(p) return p end
+function fn.simplify(p) return (p:gsub("/%./", "/"):gsub("//+", "/")) end
+function fn.tempname() return os.tmpname() end
+function fn.getftime(p) return z.fs.mtime and (z.fs.mtime(home(p)) or -1) or -1 end
+function fn.getfsize(p) if not z.fs.exists(home(p)) then return -1 end return z.fs.size and z.fs.size(home(p)) or 0 end
+function fn.stdpath(what)
+  local h = os.getenv("HOME") or ""
+  local x = function(v, d) return (os.getenv(v) or (h .. d)) .. "/zett" end
+  local cfg = type(z.config_dir) == "function" and z.config_dir() or z.config_dir
+  local m = { config = cfg, data = x("XDG_DATA_HOME", "/.local/share"), state = x("XDG_STATE_HOME", "/.local/state"), cache = x("XDG_CACHE_HOME", "/.cache"), run = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/zett" }
+  if what == "config_dirs" or what == "data_dirs" then return {} end
+  return m[what] or ""
+end
+function fn.getenv(n) local v = vim.env[n] if v == nil then return vim.NIL end return v end
+function fn.setenv(n, v) vim.env[n] = v end
+function fn.environ()
+  local r = {}
+  local p = io.popen("env")
+  if p then for l in p:lines() do local k, v = l:match("^([^=]+)=(.*)$") if k then r[k] = v end end p:close() end
+  return r
+end
+function fn.hostname() local p = io.popen("hostname") local h = p and p:read("l") or "" if p then p:close() end return h end
+function fn.system(cmd, input)
+  if type(cmd) == "table" then cmd = table.concat(vim.tbl_map(fn.shellescape, cmd), " ") end
+  local tmp
+  if input then
+    tmp = os.tmpname()
+    local f = io.open(tmp, "w")
+    f:write(type(input) == "table" and table.concat(input, "\n") or input)
+    f:close()
+    cmd = cmd .. " < " .. tmp
+  end
+  local p = io.popen(cmd .. " 2>&1")
+  local out = p and p:read("a") or ""
+  local _, _, code = p:close()
+  vim.v.shell_error = code or 0
+  if tmp then os.remove(tmp) end
+  return out
+end
+function fn.systemlist(cmd, input) return vim.split(fn.system(cmd, input):gsub("\n$", ""), "\n", { plain = true }) end
+function fn.shellescape(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
+function fn.fnameescape(s) return (tostring(s):gsub("([ \\%%#|\"'*?%[{}])", "\\%1")) end
+function fn.escape(s, chars) return (s:gsub("[" .. vim.pesc(chars) .. "]", "\\%0")) end
+
+-- buffer and cursor
+function fn.line(what)
+  local r, _ = z.buf.cursor()
+  if what == "." then return r end
+  if what == "$" then return z.buf.line_count() end
+  if what == "w0" then return 1 end
+  if what == "w$" then return z.buf.line_count() end
+  return 0
+end
+function fn.col(what)
+  local r, c = z.buf.cursor()
+  if what == "." then return c + 1 end
+  if what == "$" then return #(lines(r - 1, r)[1] or "") + 1 end
+  return 0
+end
+fn.virtcol = fn.col
+function fn.getline(a, b)
+  local function n(x) if type(x) == "string" then return fn.line(x) end return x end
+  if b == nil then return lines(n(a) - 1, n(a))[1] or "" end
+  return lines(n(a) - 1, n(b))
+end
+function fn.setline(a, t)
+  if type(a) == "string" then a = fn.line(a) end
+  if type(t) ~= "table" then t = { t } end
+  local count = z.buf.line_count()
+  for i, s in ipairs(t) do
+    local l = a + i - 1
+    if l <= count then z.buf.set_lines(l - 1, l, { s }) else z.buf.set_lines(-1, -1, { s }) end
+  end
+  return 0
+end
+function fn.append(a, t)
+  if type(a) == "string" then a = fn.line(a) end
+  if type(t) ~= "table" then t = { t } end
+  z.buf.set_lines(a, a, t)
+  return 0
+end
+function fn.cursor(l, c) if type(l) == "table" then l, c = l[1], l[2] end z.buf.set_cursor(l, math.max((c or 1) - 1, 0)) return 0 end
+function fn.getpos(what)
+  local r, c = z.buf.cursor()
+  if what == "." then return { 0, r, c + 1, 0 } end
+  return { 0, 0, 0, 0 }
+end
+fn.getcurpos = function() local p = fn.getpos(".") p[5] = p[3] return p end
+function fn.setpos(what, p) if what == "." then z.buf.set_cursor(p[2], math.max(p[3] - 1, 0)) return 0 end return -1 end
+function fn.bufnr(_) return cur_buf() end
+function fn.bufname(b) if b == nil or b == "%" or b == "" then return z.buf.path() end return z.buffers()[tonumber(b) or 0] or "" end
+function fn.bufexists(b) return bool(api.nvim_buf_is_valid(tonumber(b) or 0)) end
+function fn.buflisted(b) return fn.bufexists(b) end
+function fn.winnr() return 1 end
+function fn.winheight() return 24 end
+function fn.winwidth() return 80 end
+function fn.win_getid() return 1000 end
+function fn.tabpagenr() return 1 end
+function fn.mode() return z.mode and z.mode() or "n" end
+function fn.wordcount()
+  local text = table.concat(lines(0, -1), "\n")
+  local w = 0
+  for _ in text:gmatch("%S+") do w = w + 1 end
+  return { words = w, chars = utf8.len(text) or #text, bytes = #text }
+end
+function fn.search(pat, _)
+  local l = lines(0, -1)
+  local r, _ = z.buf.cursor()
+  local lp = vim._lua_pattern(pat)
+  for i = r + 1, #l do if l[i]:find(lp) then z.buf.set_cursor(i, (l[i]:find(lp)) - 1) return i end end
+  for i = 1, r do if l[i]:find(lp) then z.buf.set_cursor(i, (l[i]:find(lp)) - 1) return i end end
+  return 0
+end
+
+-- strings
+-- A Vim pattern (magic) as a Lua pattern: . * ^ $ [..] \s \d \w \a \l \u \x \+ \= \? \< \>, \(..\)
+-- groups; what Lua patterns cannot say (\| \{n,m}) is kept literally
+function vim._lua_pattern(p)
+  local out, i = {}, 1
+  local classes = { s = "%s", S = "%S", d = "%d", D = "%D", w = "[%w_]", W = "[^%w_]", a = "%a", A = "%A", l = "%l", L = "%L", u = "%u", U = "%U", x = "%x", X = "%X", h = "[%a_]", k = "[%w_]", i = "[%w_]", f = "[%w_./-]", t = "\t", e = "\27", r = "\r", n = "\n" }
+  while i <= #p do
+    local c = p:sub(i, i)
+    if c == "\\" then
+      local n = p:sub(i + 1, i + 1)
+      i = i + 2
+      if classes[n] then out[#out + 1] = classes[n]
+      elseif n == "+" then out[#out + 1] = "+"
+      elseif n == "=" or n == "?" then out[#out + 1] = "?"
+      elseif n == "(" then out[#out + 1] = "("
+      elseif n == ")" then out[#out + 1] = ")"
+      elseif n == "<" then out[#out + 1] = "%f[%w_]"
+      elseif n == ">" then out[#out + 1] = "%f[^%w_]"
+      elseif n == "{" then
+        -- \{-} is Vim's lazy *: Lua's -
+        local close = p:find("}", i, true)
+        if close and p:sub(i, close - 1) == "-" then out[#out + 1] = "-" i = close + 1 else out[#out + 1] = "{" end
+      elseif n:match("%p") then out[#out + 1] = "%" .. n
+      else out[#out + 1] = n end
+    elseif c == "[" then
+      local close = p:find("]", i + 2, true)
+      if not close then out[#out + 1] = "%[" i = i + 1
+      else
+        local body = p:sub(i + 1, close - 1):gsub("%%", "%%%%")
+        out[#out + 1] = "[" .. body .. "]"
+        i = close + 1
+      end
+    elseif c == "~" then out[#out + 1] = "~" i = i + 1
+    elseif c:match("[%(%)%%%+%-%?]") then out[#out + 1] = "%" .. c i = i + 1
+    else out[#out + 1] = c i = i + 1 end
+  end
+  return table.concat(out)
+end
+local function vpat(p) return vim._lua_pattern(p) end
+function fn.len(v) if type(v) == "table" then return vim.tbl_count(v) end return #tostring(v) end
+fn.strlen = function(s) return #s end
+fn.strchars = function(s) return utf8.len(s) or #s end
+fn.strwidth = fn.strchars
+fn.strdisplaywidth = fn.strchars
+fn.toupper = string.upper
+fn.tolower = string.lower
+function fn.trim(s, mask, dir)
+  if mask and mask ~= "" then
+    local m = "[" .. vim.pesc(mask) .. "]"
+    if dir ~= 2 then s = s:gsub("^" .. m .. "+", "") end
+    if dir ~= 1 then s = s:gsub(m .. "+$", "") end
+    return s
+  end
+  if dir == 1 then return (s:gsub("^%s+", "")) end
+  if dir == 2 then return (s:gsub("%s+$", "")) end
+  return vim.trim(s)
+end
+function fn.split(s, pat, keep)
+  local r = {}
+  if not pat or pat == "" then for w in s:gmatch("%S+") do r[#r + 1] = w end return r end
+  r = vim.split(s, vpat(pat))
+  if not keep then r = vim.tbl_filter(function(x) return x ~= "" end, r) end
+  return r
+end
+function fn.join(l, sep) return table.concat(vim.tbl_map(tostring, l), sep == nil and " " or sep) end
+function fn.substitute(s, pat, rep, flags)
+  local lp = vpat(pat)
+  local lr = rep:gsub("%%", "%%%%"):gsub("\\(%d)", "%%%1"):gsub("\\&", "\1"):gsub("&", "%%0"):gsub("\1", "&")
+  if (flags or ""):find("g") then return (s:gsub(lp, lr)) end
+  return (s:gsub(lp, lr, 1))
+end
+function fn.matchstr(s, pat) return s:match(vpat(pat)) or "" end
+function fn.match(s, pat) local a = s:find(vpat(pat)) return a and a - 1 or -1 end
+function fn.matchend(s, pat) local _, b = s:find(vpat(pat)) return b or -1 end
+function fn.matchlist(s, pat)
+  local caps = { s:match("(" .. vpat(pat) .. ")") }
+  if #caps == 0 then return {} end
+  for i = #caps + 1, 10 do caps[i] = "" end
+  return caps
+end
+function fn.stridx(s, x, start) local a = s:find(x, (start or 0) + 1, true) return a and a - 1 or -1 end
+function fn.strridx(s, x)
+  local last = -1
+  local at = 1
+  while true do local a = s:find(x, at, true) if not a then break end last = a - 1 at = a + 1 end
+  return last
+end
+function fn.strpart(s, a, n) return n and s:sub(a + 1, a + n) or s:sub(a + 1) end
+function fn.strcharpart(s, a, n)
+  local chars = {}
+  for _, c in utf8.codes(s) do chars[#chars + 1] = utf8.char(c) end
+  return table.concat(chars, "", a + 1, math.min(#chars, n and a + n or #chars))
+end
+fn["repeat"] = function(s, n)
+  if type(s) == "table" then local r = {} for _ = 1, n do vim.list_extend(r, s) end return r end
+  return s:rep(n)
+end
+fn.printf = function(f, ...) return string.format(f, ...) end
+function fn.string(v) return vim._vimscript.V.str(v, true) end
+function fn.str2nr(s, base) return tonumber(s:match("^%s*([-+]?%w+)") or "", base or 10) or 0 end
+function fn.str2float(s) return tonumber(s:match("^%s*([-+]?[%d.eE+-]+)") or "") or 0.0 end
+function fn.nr2char(n) return utf8.char(n) end
+function fn.char2nr(s) return utf8.codepoint(s, 1) end
+function fn.tr(s, from, to)
+  local m = {}
+  local f, t = {}, {}
+  for _, c in utf8.codes(from) do f[#f + 1] = utf8.char(c) end
+  for _, c in utf8.codes(to) do t[#t + 1] = utf8.char(c) end
+  for i, c in ipairs(f) do m[c] = t[i] end
+  return (s:gsub(utf8.charpattern, function(c) return m[c] end))
+end
+function fn.count(v, x)
+  local n = 0
+  if type(v) == "string" then local at = 1 while true do local a, b = v:find(x, at, true) if not a then break end n = n + 1 at = b + 1 end return n end
+  for _, y in pairs(v) do if y == x then n = n + 1 end end
+  return n
+end
+function fn.toupper(s) return s:upper() end
+function fn.tolower(s) return s:lower() end
+fn.strtrans = function(s) return s end
+fn.iconv = function(s) return s end
+
+-- lists and dictionaries
+function fn.empty(v)
+  if v == nil or v == vim.NIL or v == false or v == 0 or v == "" then return 1 end
+  if type(v) == "table" then return bool(next(v) == nil) end
+  return 0
+end
+function fn.has_key(d, k) return bool(d[k] ~= nil) end
+fn.keys = vim.tbl_keys
+fn.values = vim.tbl_values
+function fn.items(d) local r = {} for k, v in pairs(d) do r[#r + 1] = { k, v } end return r end
+function fn.get(t, k, default)
+  if type(t) == "table" and vim.islist(t) and type(k) == "number" then k = k + 1 end
+  local v = t[k]
+  if v == nil then return default end
+  return v
+end
+function fn.add(l, x) l[#l + 1] = x return l end
+function fn.insert(l, x, at) table.insert(l, (at or 0) + 1, x) return l end
+function fn.remove(l, i, e)
+  if not vim.islist(l) then local v = l[i] l[i] = nil return v end
+  if e then local r = {} for _ = i, e do r[#r + 1] = table.remove(l, i + 1) end return r end
+  return table.remove(l, i + 1)
+end
+function fn.extend(a, b)
+  if vim.islist(a) then return vim.list_extend(a, b) end
+  for k, v in pairs(b) do a[k] = v end
+  return a
+end
+fn.copy = function(v) if type(v) ~= "table" then return v end local r = {} for k, x in pairs(v) do r[k] = x end return r end
+fn.deepcopy = vim.deepcopy
+function fn.filter(l, f)
+  if type(f) ~= "function" then error("vim.fn.filter: zett takes a Lua function") end
+  if vim.islist(l) then
+    local r = {}
+    for i, v in ipairs(l) do if f(i - 1, v) then r[#r + 1] = v end end
+    for i = #l, 1, -1 do l[i] = nil end
+    for i, v in ipairs(r) do l[i] = v end
+  else
+    for k, v in pairs(l) do if not f(k, v) then l[k] = nil end end
+  end
+  return l
+end
+function fn.map(l, f)
+  if type(f) ~= "function" then error("vim.fn.map: zett takes a Lua function") end
+  for k, v in pairs(l) do l[k] = f(vim.islist(l) and k - 1 or k, v) end
+  return l
+end
+function fn.sort(l, how)
+  if type(how) == "function" then table.sort(l, function(a, b) return how(a, b) < 0 end)
+  elseif how == "n" or how == "N" then table.sort(l, function(a, b) return tonumber(a) < tonumber(b) end)
+  elseif how == "i" or how == 1 then table.sort(l, function(a, b) return tostring(a):lower() < tostring(b):lower() end)
+  else table.sort(l, function(a, b) return tostring(a) < tostring(b) end) end
+  return l
+end
+function fn.uniq(l)
+  local r = {}
+  for _, v in ipairs(l) do if r[#r] ~= v then r[#r + 1] = v end end
+  for i = #l, 1, -1 do l[i] = nil end
+  for i, v in ipairs(r) do l[i] = v end
+  return l
+end
+function fn.reverse(l) local n = #l for i = 1, math.floor(n / 2) do l[i], l[n - i + 1] = l[n - i + 1], l[i] end return l end
+function fn.index(l, x) for i, v in ipairs(l) do if v == x then return i - 1 end end return -1 end
+function fn.range(a, b, step)
+  if b == nil then a, b = 0, a - 1 end
+  local r = {}
+  for i = a, b, step or 1 do r[#r + 1] = i end
+  return r
+end
+function fn.min(l) local m for _, v in pairs(l) do if m == nil or v < m then m = v end end return m or 0 end
+function fn.max(l) local m for _, v in pairs(l) do if m == nil or v > m then m = v end end return m or 0 end
+fn.abs = math.abs
+fn.floor = math.floor
+fn.ceil = math.ceil
+function fn.round(x) return x >= 0 and math.floor(x + 0.5) or math.ceil(x - 0.5) end
+fn.sqrt = math.sqrt
+fn.pow = function(a, b) return a ^ b end
+function fn.float2nr(x) return math.tointeger(x >= 0 and math.floor(x) or math.ceil(x)) or 0 end
+function fn.type(v)
+  local t = type(v)
+  if t == "number" then return math.type(v) == "integer" and 0 or 5 end
+  return ({ string = 1, ["function"] = 2, table = vim.islist(v) and 3 or 4, boolean = 6 })[t] or 7
+end
+function fn.flatten(l) return vim.tbl_flatten(l) end
+
+-- time
+function fn.localtime() return os.time() end
+function fn.strftime(f, t) return os.date(f, t) end
+function fn.reltime() return { os.clock() } end
+function fn.reltimestr(t) return string.format("%.6f", os.clock() - (t[1] or 0)) end
+function fn.reltimefloat(t) return os.clock() - (t[1] or 0) end
+
+-- the editor itself
+local features = { nvim = 1, zett = 1, unix = 1, linux = 1, termguicolors = 1, lua = 1, ["nvim-0.10"] = 1, ["nvim-0.9"] = 1, ["nvim-0.8"] = 1, ["nvim-0.7"] = 1, ["nvim-0.5"] = 1, syntax = 1, autocmd = 1, clipboard = 1, ["patch-8.1.0000"] = 1, folding = 1, timers = 1, ["vim_starting"] = 0, ttyin = 1, ttyout = 1 }
+function fn.has(f) return features[f] or 0 end
+function fn.exists(e)
+  local kind, name = e:sub(1, 1), e:sub(2)
+  if kind == "&" or kind == "+" then return bool(info(name) ~= nil) end
+  if kind == "*" then return bool(rawget(fn, name) ~= nil or (vim._vimfn or {})[name] ~= nil) end
+  if kind == ":" then return 2 end
+  local scope, var = e:match("^([gbwtv]):(.+)$")
+  if scope then return bool(vim[scope][var] ~= nil) end
+  if kind == "$" then return bool(os.getenv(name) ~= nil) end
+  return 0
+end
+function fn.json_encode(v) return json_encode(v) end
+function fn.json_decode(s) return json_decode(s) end
+function fn.input(prompt, default) return default or "" end
+function fn.confirm() return 1 end
+function fn.inputlist() return 0 end
+function fn.getchar() return 0 end
+function fn.visualmode() return "" end
+function fn.function_(name) return function(...) return vim.fn[name](...) end end
+fn["function"] = fn.function_
+fn.funcref = fn.function_
+function fn.call(f, args) if type(f) == "string" then return vim.fn[f](unpack(args)) end return f(unpack(args)) end
+function fn.execute(c) if type(c) == "table" then for _, x in ipairs(c) do vim.cmd(x) end else vim.cmd(c) end return "" end
+function fn.eval(e) return api.nvim_eval(e) end
+function fn.luaeval(e) return load("return " .. e)() end
+function fn.timer_start(ms, f, o)
+  local t = vim.uv.new_timer()
+  local rep = o and o["repeat"] or 0
+  local n = 0
+  t:start(ms, rep ~= 0 and ms or 0, function()
+    n = n + 1
+    f(1)
+    if rep > 0 and n >= rep then t:stop() end
+  end)
+  vim._timers = vim._timers or {}
+  vim._timers[#vim._timers + 1] = t
+  return #vim._timers
+end
+function fn.timer_stop(id) if vim._timers and vim._timers[id] then vim._timers[id]:stop() end end
+function fn.hlexists(_) return 1 end
+function fn.hlID(_) return 1 end
+function fn.synID() return 0 end
+function fn.foldlevel() return 0 end
+function fn.foldclosed() return -1 end
+-- foldtext(): Vim's own, "+--  N lines: the first line" (blanks, comment marks and {{{ taken off)
+function fn.foldtext()
+  local s, e = vim.v.foldstart or 1, vim.v.foldend or 1
+  local t = (fn.getline(s) or ""):gsub("{{{%d*", ""):gsub("^%s*/?%*+%s*", ""):gsub("%s*%*+/%s*$", ""):gsub("^%s*%-%-%s*", ""):gsub("^%s*#%s*", ""):gsub("^%s+", "")
+  return string.format("+-%s%3d lines: %s", vim.v.folddashes or "", e - s + 1, t)
+end
+function fn.indent(l) local s = fn.getline(l) return #(s:match("^%s*")) end
+function fn.shiftwidth() local sw = opt_get("shiftwidth") if sw == 0 then return opt_get("tabstop") end return sw end
+function fn.pumvisible() return 0 end
+function fn.getreg(_) return "" end
+function fn.setreg() return 0 end
+function fn.serverlist() return {} end
+function fn.jobstart() return -1 end
+function fn.argv() return {} end
+function fn.argc() return 0 end
+
+vim.fn = setmetatable(vim.fn or {}, {
+  __index = function(_, name)
+    local f = fn[name]
+    if f then return f end
+    -- a Vimscript function defined with :function (vimscript.lua)
+    local user = vim._vimfn and vim._vimfn[name]
+    if user then return user end
+    return function() error("zett: vim.fn." .. name .. " is not there yet (:help vim-api)") end
+  end,
+})
+-- for listing (pairs over vim.fn names what zett has)
+for k, v in pairs(fn) do rawset(vim.fn, k, v) end
+
+-- ── vim.fs ──
+vim.fs = vim.fs or {}
+function vim.fs.normalize(p) return (home(p):gsub("//+", "/"):gsub("(.)/$", "%1")) end
+function vim.fs.basename(p) return p:match("([^/]*)/*$") end
+function vim.fs.dirname(p) return p:match("^(.*)/[^/]*$") or "." end
+function vim.fs.joinpath(...) return (table.concat({ ... }, "/"):gsub("//+", "/")) end
+function vim.fs.root(_, markers)
+  if type(markers) == "string" then markers = { markers } end
+  local d = z.root()
+  while d and d ~= "" do
+    for _, m in ipairs(markers or {}) do if z.fs.exists(d .. "/" .. m) then return d end end
+    d = d:match("^(.*)/[^/]*$")
+  end
+  return nil
+end
+
+-- ── the rest ──
+function vim.version() return { major = 0, minor = 10, patch = 0, api_level = 12, prerelease = false } end
+vim.has = function(f) return fn.has(f) == 1 end
+function vim.region() return {} end
+vim.lsp = vim.lsp or { buf = {}, util = {}, protocol = {}, handlers = {}, config = function() end, enable = function() end }
+vim.diagnostic = vim.diagnostic or { config = function() end, severity = { ERROR = 1, WARN = 2, INFO = 3, HINT = 4 }, get = function() return {} end }
+vim.treesitter = vim.treesitter or { start = function() end, stop = function() end }
+vim.filetype = vim.filetype or { add = function() end, match = function() return nil end }
+vim.ui = vim.ui or {}
+function vim.ui.select(items, o, on_choice)
+  o = o or {}
+  local fmt = o.format_item or tostring
+  local by = {}
+  for i, it in ipairs(items) do by[i .. ": " .. fmt(it)] = it end
+  z.input({ prompt = (o.prompt or "Select") .. " (" .. #items .. "): " }, function(answer)
+    local n = tonumber((answer or ""):match("^%s*(%d+)"))
+    if n and items[n] then on_choice(items[n], n) else on_choice(nil, nil) end
+  end)
+end
+function vim.ui.input(o, on_confirm)
+  o = o or {}
+  z.input({ prompt = o.prompt or "", default = o.default or "" }, function(a) on_confirm(a) end)
+end
+function vim.ui.open(p) return fn.system({ "xdg-open", p }) end
+
+-- every vim.api function is a vim.fn one too (Neovim: vim.fn.nvim_buf_get_lines), the same function
+for k, v in pairs(vim.api) do
+  if type(v) == "function" and rawget(vim.fn, k) == nil then rawset(vim.fn, k, v) end
+end
+
+-- ── extmarks: highlights, signs and virtual text plugins put on a buffer (zett draws them) ──
+-- marks[buf][ns][id] = { row, col, opts } (0-based, columns in bytes, as Neovim); they stay where
+-- they were put (a plugin that wants them to follow the text sets them again after a change)
+local marks, mark_ids, mark_seq = {}, {}, 0
+local function mbuf(b) if b == nil or b == 0 then return cur_buf() end return b end
+local function bump() mark_seq = mark_seq + 1 end
+
+api.nvim_buf_set_extmark = function(b, ns, row, col, o)
+  o = o or {}
+  b = mbuf(b)
+  marks[b] = marks[b] or {}
+  marks[b][ns] = marks[b][ns] or {}
+  local id = o.id
+  if not id then mark_ids[ns] = (mark_ids[ns] or 0) + 1 id = mark_ids[ns] end
+  marks[b][ns][id] = { row = row, col = col, o = o }
+  bump()
+  return id
+end
+
+local function details(m, ns)
+  local d = {}
+  for k, v in pairs(m.o) do if k ~= "id" then d[k] = v end end
+  d.ns_id = ns
+  d.end_row = m.o.end_row or m.o.end_line
+  return d
+end
+
+api.nvim_buf_get_extmark_by_id = function(b, ns, id, o)
+  local m = ((marks[mbuf(b)] or {})[ns] or {})[id]
+  if not m then return {} end
+  if o and o.details then return { m.row, m.col, details(m, ns) } end
+  return { m.row, m.col }
+end
+
+-- start / end: a row, or { row, col }; -1 the end. ns -1: every namespace
+api.nvim_buf_get_extmarks = function(b, ns, s, e, o)
+  o = o or {}
+  local function pos(p, last)
+    if type(p) == "table" then return p[1], p[2] or 0 end
+    if p == -1 then return math.huge, math.huge end
+    return p, last and math.huge or 0
+  end
+  local sr, sc = pos(s, false)
+  local er, ec = pos(e, true)
+  local out = {}
+  for n, list in pairs(marks[mbuf(b)] or {}) do
+    if ns == -1 or n == ns then
+      for id, m in pairs(list) do
+        local after = m.row > sr or (m.row == sr and m.col >= sc)
+        local before = m.row < er or (m.row == er and m.col <= ec)
+        if after and before and (not o.type or (o.type == "highlight" and m.o.hl_group) or (o.type == "sign" and m.o.sign_text) or (o.type == "virt_text" and m.o.virt_text)) then
+          out[#out + 1] = o.details and { id, m.row, m.col, details(m, n) } or { id, m.row, m.col }
+        end
+      end
+    end
+  end
+  table.sort(out, function(x, y) return x[2] < y[2] or (x[2] == y[2] and (x[3] < y[3] or (x[3] == y[3] and x[1] < y[1]))) end)
+  if o.limit and o.limit >= 0 then while #out > o.limit do table.remove(out) end end
+  return out
+end
+
+api.nvim_buf_del_extmark = function(b, ns, id)
+  local list = (marks[mbuf(b)] or {})[ns]
+  if not (list and list[id]) then return false end
+  list[id] = nil
+  bump()
+  return true
+end
+
+-- the namespace's marks on lines l1..l2 (l2 -1: to the end); ns -1: every namespace
+api.nvim_buf_clear_namespace = function(b, ns, l1, l2)
+  l1, l2 = l1 or 0, (l2 == nil or l2 < 0) and math.huge or l2
+  for n, list in pairs(marks[mbuf(b)] or {}) do
+    if ns == -1 or n == ns then
+      for id, m in pairs(list) do
+        if m.row >= l1 and m.row < l2 then list[id] = nil end
+      end
+    end
+  end
+  bump()
+end
+api.nvim_buf_clear_highlight = api.nvim_buf_clear_namespace
+
+-- the old way to highlight a range (col_end -1: to the end of the line); ns 0: a new namespace
+api.nvim_buf_add_highlight = function(b, ns, group, line, cs, ce)
+  if ns == 0 or ns == nil then ns = api.nvim_create_namespace("") end
+  api.nvim_buf_set_extmark(b, ns, line, cs, { end_row = line, end_col = (ce == nil or ce < 0) and 2147483647 or ce, hl_group = group })
+  return ns
+end
+
+api.nvim_buf_set_virtual_text = function(b, ns, line, chunks, _)
+  if ns == 0 or ns == nil then ns = api.nvim_create_namespace("") end
+  api.nvim_buf_set_extmark(b, ns, line, 0, { virt_text = chunks })
+  return ns
+end
+
+-- for the window: how often marks changed, and buffer b's marks on rows a..e as lines of
+-- row col end_row end_col priority hl line_hl sign_text sign_hl num_hl virt_pos virt (text\31hl\31…)
+function vim._marks_seq() return mark_seq end
+function vim._marks_for(b, a, e)
+  local out = {}
+  for _, list in pairs(marks[b] or {}) do
+    for _, m in pairs(list) do
+      local o = m.o
+      local er = o.end_row or o.end_line or m.row
+      if er >= a and m.row <= e then
+        local vt = {}
+        for _, c in ipairs(o.virt_text or {}) do
+          local hl = type(c[2]) == "table" and c[2][#c[2]] or c[2]
+          vt[#vt + 1] = tostring(c[1] or "") .. "\31" .. tostring(hl or "")
+        end
+        out[#out + 1] = table.concat({ m.row, m.col, er, o.end_col or (o.end_row and 0) or -1, o.priority or (o.sign_text and 10 or 4096), o.hl_group or "", o.line_hl_group or "", o.sign_text or "", o.sign_hl_group or "", o.number_hl_group or "", o.virt_text_pos or "eol", table.concat(vt, "\31"), o.conceal and ("=" .. o.conceal) or "" }, "\t")
+      end
+    end
+  end
+  return table.concat(out, "\30")
+end
+
+-- vim.highlight.range / vim.hl.range: a range in a group, through an extmark
+vim.hl = vim.hl or {}
+vim.hl.range = vim.hl.range or function(b, ns, group, s, e, o)
+  o = o or {}
+  return api.nvim_buf_set_extmark(b, ns, s[1], s[2], { end_row = e[1], end_col = e[2] < 0 and 2147483647 or e[2], hl_group = group, priority = o.priority })
+end
+vim.highlight = vim.highlight or vim.hl
+
+for _, k in ipairs({ "nvim_buf_set_extmark", "nvim_buf_get_extmark_by_id", "nvim_buf_get_extmarks", "nvim_buf_del_extmark", "nvim_buf_clear_namespace", "nvim_buf_clear_highlight", "nvim_buf_add_highlight", "nvim_buf_set_virtual_text" }) do
+  rawset(vim.fn, k, api[k])
+end
+
+-- ── more of vim.fn: arithmetic, bits, lists, buffers and lines (only what is not there yet) ──
+local function def(name, f)
+  if rawget(vim.fn, name) == nil then
+    fn[name] = f
+    rawset(vim.fn, name, f)
+  end
+end
+for _, n in ipairs({ "acos", "asin", "atan", "cos", "cosh", "exp", "log", "log10", "sin", "sinh", "tan", "tanh", "sqrt" }) do
+  local m = math[n] or (n == "cosh" and function(x) return (math.exp(x) + math.exp(-x)) / 2 end)
+    or (n == "sinh" and function(x) return (math.exp(x) - math.exp(-x)) / 2 end)
+    or (n == "tanh" and function(x) local a, b = math.exp(x), math.exp(-x) return (a - b) / (a + b) end)
+  if m then def(n, function(x) return m(tonumber(x) or 0) end) end
+end
+def("atan2", function(y, x) return math.atan(tonumber(y) or 0, tonumber(x) or 0) end)
+def("fmod", function(a, b) return math.fmod(tonumber(a) or 0, tonumber(b) or 1) end)
+def("isinf", function(x) return (x == math.huge and 1) or (x == -math.huge and -1) or 0 end)
+def("isnan", function(x) return x ~= x and 1 or 0 end)
+def("and", function(a, b) return (math.tointeger(a) or 0) & (math.tointeger(b) or 0) end)
+def("or", function(a, b) return (math.tointeger(a) or 0) | (math.tointeger(b) or 0) end)
+def("xor", function(a, b) return (math.tointeger(a) or 0) ~ (math.tointeger(b) or 0) end)
+def("invert", function(a) return ~(math.tointeger(a) or 0) end)
+def("list2str", function(l) local t = {} for i, c in ipairs(l or {}) do t[i] = utf8.char(c) end return table.concat(t) end)
+def("str2list", function(s) local t = {} for _, c in utf8.codes(s or "") do t[#t + 1] = c end return t end)
+def("indexof", function(l, expr) for i, v in ipairs(l or {}) do if (type(expr) == "function" and expr(i - 1, v)) or v == expr then return i - 1 end end return -1 end)
+def("foreach", function(l, f) for i, v in ipairs(l or {}) do f(i - 1, v) end return l end)
+def("mapnew", function(l, f) local t = {} for i, v in ipairs(l or {}) do t[i] = f(i - 1, v) end return t end)
+def("extendnew", function(a, b) local t = {} for k, v in pairs(a or {}) do t[k] = v end if #(a or {}) > 0 then for _, v in ipairs(b or {}) do t[#t + 1] = v end else for k, v in pairs(b or {}) do t[k] = v end end return t end)
+def("flattennew", function(l, depth)
+  local out = {}
+  local function go(x, d) for _, v in ipairs(x) do if type(v) == "table" and (depth == nil or d < depth) then go(v, d + 1) else out[#out + 1] = v end end end
+  go(l or {}, 0)
+  return out
+end)
+local next_id = 0
+def("id", function(_) next_id = next_id + 1 return string.format("0x%x", next_id) end)
+def("getpid", function() local f = io.open("/proc/self/stat") local s = f and f:read("*l") or "" if f then f:close() end return tonumber(s:match("^(%d+)")) or 0 end)
+def("isabsolutepath", function(p) return (p or ""):sub(1, 1) == "/" and 1 or 0 end)
+def("glob2regpat", function(g)
+  local r = (g or ""):gsub("[%.%^%$%[%]\\~]", "\\%0"):gsub("%*%*", "\1"):gsub("%*", "[^/]*"):gsub("\1", ".*"):gsub("%?", ".")
+  return "^" .. r .. "$"
+end)
+def("garbagecollect", function() collectgarbage() return 0 end)
+def("foreground", function() return 0 end)
+def("keytrans", function(s) return s end)
+def("buffer_exists", function(b) return vim.fn.bufexists(b) end)
+def("buffer_name", function(b) return vim.fn.bufname(b) end)
+def("buffer_number", function(b) return vim.fn.bufnr(b) end)
+def("file_readable", function(f) return vim.fn.filereadable(f) end)
+def("last_buffer_nr", function() return #z.buffers() end)
+def("bufloaded", function(b) return api.nvim_buf_is_valid(type(b) == "number" and b or vim.fn.bufnr(b)) and 1 or 0 end)
+def("bufwinnr", function(b) return (vim.fn.bufnr(b) == cur_buf()) and 1 or -1 end)
+def("bufwinid", function(b) return (vim.fn.bufnr(b) == cur_buf()) and 1000 or -1 end)
+-- the first / last line from lnum on (back) that is not blank, 0 when none
+def("nextnonblank", function(l)
+  l = vim.fn.line(l) > 0 and vim.fn.line(l) or tonumber(l) or 1
+  for n = l, api.nvim_buf_line_count(0) do if (vim.fn.getline(n) or ""):match("%S") then return n end end
+  return 0
+end)
+-- lines and bytes: line2byte (the byte where a line starts, 1-based) and byte2line
+def("line2byte", function(l)
+  l = tonumber(l) or vim.fn.line(l)
+  local n = api.nvim_buf_line_count(0)
+  if l < 1 or l > n + 1 then return -1 end
+  local b = 1
+  for i, s in ipairs(api.nvim_buf_get_lines(0, 0, l - 1, false)) do b = b + #s + 1 end
+  return b
+end)
+def("byte2line", function(byte)
+  byte = tonumber(byte) or 0
+  local b = 1
+  for i, s in ipairs(api.nvim_buf_get_lines(0, 0, -1, false)) do
+    if byte < b + #s + 1 then return i end
+    b = b + #s + 1
+  end
+  return -1
+end)
+-- buffer `b`'s lines a..e (the current buffer's; another's when zett can read it)
+def("getbufline", function(b, a, e)
+  if vim.fn.bufnr(b) ~= cur_buf() and b ~= "%" and b ~= 0 then return {} end
+  local n = api.nvim_buf_line_count(0)
+  a = a == "$" and n or tonumber(a) or 1
+  e = e == nil and a or (e == "$" and n or tonumber(e) or a)
+  return api.nvim_buf_get_lines(0, a - 1, e, false)
+end)
+def("getbufoneline", function(b, l) return (vim.fn.getbufline(b, l)[1]) or "" end)
+def("deletebufline", function(b, a, e)
+  local n = api.nvim_buf_line_count(0)
+  a = a == "$" and n or tonumber(a) or 1
+  e = e == nil and a or (e == "$" and n or tonumber(e) or a)
+  api.nvim_buf_set_lines(0, a - 1, e, false, {})
+  return 0
+end)
+def("appendbufline", function(b, l, text)
+  l = l == "$" and api.nvim_buf_line_count(0) or tonumber(l) or 0
+  api.nvim_buf_set_lines(0, l, l, false, type(text) == "table" and text or { text })
+  return 0
+end)
+def("getbufvar", function(b, name, default)
+  if name == "" then return vim.b end
+  if name:sub(1, 1) == "&" then local ok, v = pcall(function() return vim.bo[name:sub(2)] end) return ok and v or default end
+  local v = vim.b[name]
+  if v == nil then return default == nil and "" or default end
+  return v
+end)
+def("getwinvar", function(w, name, default)
+  if name:sub(1, 1) == "&" then local ok, v = pcall(function() return vim.wo[name:sub(2)] end) return ok and v or default end
+  local v = vim.w and vim.w[name]
+  if v == nil then return default == nil and "" or default end
+  return v
+end)
+def("gettabvar", function(_, name, default) local v = vim.t and vim.t[name] if v == nil then return default == nil and "" or default end return v end)
+def("gettabwinvar", function(_, w, name, default) return vim.fn.getwinvar(w, name, default) end)
+-- assert_*: the results go to v:errors (as in Vim), 0 when it held, 1 when not
+vim.v.errors = vim.v.errors or {}
+local function fail(msg) table.insert(vim.v.errors, msg) return 1 end
+def("assert_equal", function(a, b, msg) if vim.deep_equal and vim.deep_equal(a, b) or a == b then return 0 end return fail(msg or ("Expected " .. vim.inspect(a) .. " but got " .. vim.inspect(b))) end)
+def("assert_notequal", function(a, b, msg) if not (vim.deep_equal and vim.deep_equal(a, b) or a == b) then return 0 end return fail(msg or ("Expected not equal to " .. vim.inspect(a))) end)
+def("assert_true", function(v, msg) if v == true or (type(v) == "number" and v ~= 0) then return 0 end return fail(msg or "Expected True but got " .. vim.inspect(v)) end)
+def("assert_false", function(v, msg) if v == false or v == 0 then return 0 end return fail(msg or "Expected False but got " .. vim.inspect(v)) end)
+def("assert_match", function(p, s, msg) if vim.fn.match(s, p) >= 0 then return 0 end return fail(msg or ("Pattern '" .. p .. "' does not match '" .. s .. "'")) end)
+def("assert_notmatch", function(p, s, msg) if vim.fn.match(s, p) < 0 then return 0 end return fail(msg or ("Pattern '" .. p .. "' does match '" .. s .. "'")) end)
+def("assert_inrange", function(lo, hi, v, msg) if v >= lo and v <= hi then return 0 end return fail(msg or ("Expected range " .. lo .. " - " .. hi .. ", but got " .. v)) end)
+def("assert_report", function(msg) return fail(msg) end)
+def("assert_fails", function(cmd, err) local ok, e = pcall(vim.cmd, cmd) if not ok and (not err or tostring(e):find(err, 1, true)) then return 0 end return fail("command did not fail: " .. tostring(cmd)) end)
+def("assert_exception", function(_) return 0 end)
+def("assert_beeps", function(_) return 0 end)
+def("assert_nobeep", function(_) return 0 end)
+def("assert_equalfile", function(a, b, msg) local function rd(p) local f = io.open(p) local s = f and f:read("*a") if f then f:close() end return s end if rd(a) == rd(b) and rd(a) ~= nil then return 0 end return fail(msg or ("files differ: " .. a .. " " .. b)) end)
+
+-- ── mappings as Neovim reports them (zett.maps) ──
+local function modes_of(m) if m == nil or m == "" or m == " " then return { "n", "v", "o" } end return { m } end
+local function map_dict(e, mode)
+  return { lhs = e.lhs, lhsraw = e.lhs, rhs = e.rhs, desc = e.desc ~= "" and e.desc or nil, noremap = e.noremap and 1 or 0, mode = mode, buffer = 0, silent = 0, expr = 0, nowait = 0, script = 0, sid = 0, callback = e.lua and function() end or nil }
+end
+api.nvim_get_keymap = function(mode)
+  local out = {}
+  for _, m in ipairs(modes_of(mode)) do
+    for _, e in ipairs(z.maps(m)) do out[#out + 1] = map_dict(e, m) end
+  end
+  return out
+end
+api.nvim_buf_get_keymap = function(_, mode) return api.nvim_get_keymap(mode) end
+rawset(vim.fn, "nvim_get_keymap", api.nvim_get_keymap)
+rawset(vim.fn, "nvim_buf_get_keymap", api.nvim_buf_get_keymap)
+local function same_keys(a, b) return z.key_name(a) == z.key_name(b) end
+-- maparg(lhs, mode, abbr, dict): the rhs ("" none), or the mapping as a dict
+def("maparg", function(lhs, mode, _, dict)
+  for _, m in ipairs(modes_of(mode)) do
+    for _, e in ipairs(z.maps(m)) do
+      if same_keys(e.lhs, lhs) then return (dict == 1 or dict == true) and map_dict(e, m) or e.rhs end
+    end
+  end
+  return (dict == 1 or dict == true) and {} or ""
+end)
+-- mapcheck(name, mode): a mapping that name starts or that starts with name (its rhs)
+def("mapcheck", function(name, mode)
+  local k = z.key_name(name)
+  for _, m in ipairs(modes_of(mode)) do
+    for _, e in ipairs(z.maps(m)) do
+      local l = z.key_name(e.lhs)
+      if l:sub(1, #k) == k or k:sub(1, #l) == l then return e.rhs end
+    end
+  end
+  return ""
+end)
+-- hasmapto(what, mode): some mapping's rhs has what in it
+def("hasmapto", function(what, mode)
+  for _, m in ipairs(modes_of(mode or "nvo")) do
+    for _, e in ipairs(z.maps(m == "nvo" and "n" or m)) do
+      if (e.rhs or ""):find(what, 1, true) then return 1 end
+    end
+  end
+  return 0
+end)
+def("maplist", function()
+  local out = {}
+  for _, m in ipairs({ "n", "v", "o", "i", "c", "x", "s", "t" }) do
+    for _, e in ipairs(z.maps(m)) do out[#out + 1] = map_dict(e, m) end
+  end
+  return out
+end)
+
+-- ── windows as zett has them (zett.windows: as last drawn); handles from 1000 as Neovim's ──
+local function wins() return z.windows and z.windows() or {} end
+local function cur_nr() local n = z.cur_window and z.cur_window() or 0 return n > 0 and n or 1 end
+local function handle(nr) return 999 + nr end
+local function win_of(w)
+  local nr = (w == nil or w == 0) and cur_nr() or (w - 999)
+  for i, x in ipairs(wins()) do if x.nr == nr then return x, i end end
+  if nr == cur_nr() then return { nr = nr, buf = cur_buf(), width = 80, height = 24, row = 0, col = 0 }, 1 end
+end
+api.nvim_get_current_win = function() return handle(cur_nr()) end
+api.nvim_list_wins = function()
+  local r = {}
+  for _, x in ipairs(wins()) do r[#r + 1] = handle(x.nr) end
+  if #r == 0 then r[1] = handle(cur_nr()) end
+  return r
+end
+api.nvim_win_is_valid = function(w) return win_of(w) ~= nil end
+api.nvim_win_get_buf = function(w) local x = win_of(w) return x and x.buf or cur_buf() end
+api.nvim_win_get_width = function(w) local x = win_of(w) return x and x.width or 0 end
+api.nvim_win_get_height = function(w) local x = win_of(w) return x and x.height or 0 end
+api.nvim_win_get_position = function(w) local x = win_of(w) return x and { x.row, x.col } or { 0, 0 } end
+api.nvim_win_get_number = function(w) local _, i = win_of(w) return i or 0 end
+api.nvim_win_get_tabpage = function() return 1 end
+-- the focus to window w (a command after this Lua returns, as the others)
+local function focus(w) local _, i = win_of(w) if i then ex(i .. "wincmd w") end end
+api.nvim_set_current_win = function(w) focus(w) end
+api.nvim_set_current_buf = function(b) ex("buffer " .. b) end
+api.nvim_win_set_buf = function(w, b) focus(w) ex("buffer " .. b) end
+api.nvim_win_close = function(w, force) focus(w) ex(force and "close!" or "close") end
+api.nvim_win_hide = function(w) focus(w) ex("hide") end
+api.nvim_win_set_height = function(w, h) focus(w) ex("resize " .. h) end
+api.nvim_win_set_width = function(w, n) focus(w) ex("vertical resize " .. n) end
+-- f run with window w current: the focus goes there and comes back around it
+api.nvim_win_call = function(w, f)
+  local back = api.nvim_get_current_win()
+  focus(w)
+  local r = f()
+  focus(back)
+  return r
+end
+api.nvim_buf_call = function(_, f) return f() end
+api.nvim_buf_delete = function(b, o) o = o or {} ex((o.unload and "bunload" or "bdelete") .. (o.force and "!" or "") .. " " .. (b == 0 and cur_buf() or b)) end
+api.nvim_buf_get_number = function(b) return (b == nil or b == 0) and cur_buf() or b end
+api.nvim_tabpage_list_wins = function() return api.nvim_list_wins() end
+api.nvim_tabpage_get_win = function() return api.nvim_get_current_win() end
+api.nvim_tabpage_is_valid = function(t) return t == 0 or t == 1 end
+api.nvim_tabpage_get_number = function() return 1 end
+api.nvim_tabpage_set_win = function(_, w) focus(w) end
+for _, k in ipairs({ "nvim_get_current_win", "nvim_list_wins", "nvim_win_is_valid", "nvim_win_get_buf", "nvim_win_get_width", "nvim_win_get_height", "nvim_win_get_position", "nvim_win_get_number", "nvim_win_get_tabpage", "nvim_set_current_win", "nvim_set_current_buf", "nvim_win_set_buf", "nvim_win_close", "nvim_win_hide", "nvim_win_set_height", "nvim_win_set_width", "nvim_win_call", "nvim_buf_call", "nvim_buf_delete", "nvim_buf_get_number", "nvim_tabpage_list_wins", "nvim_tabpage_get_win", "nvim_tabpage_is_valid", "nvim_tabpage_get_number", "nvim_tabpage_set_win" }) do
+  rawset(vim.fn, k, api[k])
+end
+-- winnr(), winwidth(), winheight(), win_getid() as these
+def("winwidth", function(n) local x = win_of(n == 0 and 0 or (n and handle(n))) return x and x.width or -1 end)
+def("winheight", function(n) local x = win_of(n == 0 and 0 or (n and handle(n))) return x and x.height or -1 end)
+-- the stubs these were (one window of 80 x 24) replaced by the real windows
+local function by_index(n) local l = wins() return n and l[n] end
+local function set(name, f) fn[name] = f rawset(vim.fn, name, f) end
+set("winnr", function(a)
+  if a == "$" then return math.max(#wins(), 1) end
+  local _, i = win_of(0)
+  return i or 1
+end)
+set("win_getid", function(n) local x = n and n > 0 and by_index(n) or win_of(0) return x and handle(x.nr) or 0 end)
+set("winwidth", function(n) local x = (n == nil or n == 0) and win_of(0) or by_index(n) return x and x.width or -1 end)
+set("winheight", function(n) local x = (n == nil or n == 0) and win_of(0) or by_index(n) return x and x.height or -1 end)
+set("winbufnr", function(n) local x = (n == nil or n == 0) and win_of(0) or (n >= 1000 and win_of(n) or by_index(n)) return x and x.buf or -1 end)
+set("win_id2win", function(w) local _, i = win_of(w) return i or 0 end)
+
+-- ── highlight groups as Neovim reports them (zett.hl_get); ids are places in the sorted names ──
+local function hl_id(name)
+  for i, n in ipairs(z.hl_names()) do if n == name then return i end end
+  return 0
+end
+local function hl_name(id) return z.hl_names()[id] end
+-- nvim_get_hl(ns, { name =, id =, link = }): one group, or every group by name
+api.nvim_get_hl = function(_, o)
+  o = o or {}
+  local name = o.name or (o.id and hl_name(o.id))
+  if name then return z.hl_get(name, o.link == false) or {} end
+  local all = {}
+  for _, n in ipairs(z.hl_names()) do all[n] = z.hl_get(n, o.link == false) or {} end
+  return all
+end
+-- the old ones: foreground / background, links followed
+local function old(h)
+  local r = {}
+  for k, v in pairs(h or {}) do
+    if k == "fg" then r.foreground = v elseif k == "bg" then r.background = v elseif k ~= "link" then r[k] = v end
+  end
+  return r
+end
+api.nvim_get_hl_by_name = function(name, _) return old(z.hl_get(name, true)) end
+api.nvim_get_hl_by_id = function(id, _) return old(z.hl_get(hl_name(id) or "", true)) end
+api.nvim_get_hl_id_by_name = function(name)
+  local id = hl_id(name)
+  if id == 0 then ex("highlight " .. name .. " NONE") return #z.hl_names() + 1 end
+  return id
+end
+for _, k in ipairs({ "nvim_get_hl", "nvim_get_hl_by_name", "nvim_get_hl_by_id", "nvim_get_hl_id_by_name" }) do rawset(vim.fn, k, api[k]) end
+set("hlexists", function(name) return z.hl_get(name, false) and 1 or 0 end)
+set("hlID", function(name) return hl_id(name) end)
+def("highlightID", function(name) return hl_id(name) end)
+def("highlight_exists", function(name) return z.hl_get(name, false) and 1 or 0 end)
+
+-- ── scratch buffers and floating windows (nvim_create_buf, nvim_open_win) ──
+-- a scratch buffer lives here (its lines, name, options, its own mappings); a float shows one in
+-- a zett float panel placed as Neovim places it. Handles: buffers from 10000, floats from 20000.
+local vbufs, vnext, floats, fnext = {}, 0, {}, 0
+vim._cur_float = nil
+local function is_vbuf(b) return type(b) == "number" and vbufs[b] ~= nil end
+local function is_float(w) return type(w) == "number" and floats[w] ~= nil end
+local function vlines(b) return vbufs[b].lines end
+-- what a float shows: its buffer's lines (a real buffer's as they are now)
+-- a float's lines with its buffer's extmarks: hl_group ranges and virtual text (eol, right
+-- aligned, overlay), as styled pieces { {text, group}, … } for the panel
+local function vt_text(vt) local s = {} for _, c in ipairs(vt) do s[#s + 1] = c[1] or "" end return table.concat(s) end
+local function vt_group(c) local g = c[2] if type(g) == "table" then g = g[#g] end return g end
+local function styled(text, row, list, width)
+  local cuts = {}
+  local eol, right, over = {}, {}, {}
+  for _, ns in pairs(list) do
+    for _, m in pairs(ns) do
+      if m.row == row then
+        local o = m.o
+        if o.hl_group and (o.end_col or o.end_row) then
+          local e = (o.end_row and o.end_row > row) and #text or (o.end_col or #text)
+          cuts[#cuts + 1] = { m.col, e, o.hl_group, o.priority or 4096 }
+        end
+        if o.virt_text then
+          local pos = o.virt_text_pos or "eol"
+          if pos == "overlay" then over[#over + 1] = { m.col, o.virt_text }
+          elseif pos == "right_align" or pos == "eol_right_align" then right[#right + 1] = o.virt_text
+          else eol[#eol + 1] = o.virt_text end
+        end
+      end
+    end
+  end
+  if #cuts == 0 and #eol == 0 and #right == 0 and #over == 0 then return text end
+  -- per byte: the group of the highest-priority range over it
+  local grp = {}
+  table.sort(cuts, function(a, b) return a[4] < b[4] end)
+  for _, c in ipairs(cuts) do for i = c[1] + 1, math.min(c[2], #text) do grp[i] = c[3] end end
+  -- overlays replace the text under them
+  for _, ov in ipairs(over) do
+    local at = ov[1]
+    for _, c in ipairs(ov[2]) do
+      local s = c[1] or ""
+      if #text < at then text = text .. string.rep(" ", at - #text) end
+      text = text:sub(1, at) .. s .. text:sub(at + #s + 1)
+      for i = at + 1, at + #s do grp[i] = vt_group(c) end
+      at = at + #s
+    end
+  end
+  local out, start = {}, 1
+  for i = 2, #text + 1 do
+    if i > #text or grp[i] ~= grp[start] then
+      out[#out + 1] = { text:sub(start, i - 1), grp[start] or "" }
+      start = i
+    end
+  end
+  local used = vim.fn.strdisplaywidth(text)
+  for _, vt in ipairs(eol) do
+    out[#out + 1] = { " ", "" }
+    used = used + 1
+    for _, c in ipairs(vt) do out[#out + 1] = { c[1] or "", vt_group(c) or "" } used = used + vim.fn.strdisplaywidth(c[1] or "") end
+  end
+  for _, vt in ipairs(right) do
+    local w = vim.fn.strdisplaywidth(vt_text(vt))
+    local pad = (width or 0) - used - w
+    if pad > 0 then out[#out + 1] = { string.rep(" ", pad), "" } used = used + pad end
+    for _, c in ipairs(vt) do out[#out + 1] = { c[1] or "", vt_group(c) or "" } end
+    used = used + w
+  end
+  return out
+end
+local function float_lines(h)
+  local b = floats[h].buf
+  local l
+  if is_vbuf(b) then l = vlines(b) else
+    local ok, r = pcall(api.nvim_buf_get_lines, b, 0, -1, false)
+    l = ok and r or {}
+  end
+  local list = marks[b]
+  if not list or next(list) == nil then return l end
+  local width = tonumber(floats[h].config.width) or 40
+  local out = {}
+  for i, text in ipairs(l) do out[i] = styled(text, i - 1, list, width) end
+  return out
+end
+local function refresh(b)
+  for h, f in pairs(floats) do if f.buf == b then z.panel.set_lines(f.panel, float_lines(h)) end end
+end
+-- extmarks on a buffer a float shows: the float drawn again
+for _, name in ipairs({ "nvim_buf_set_extmark", "nvim_buf_del_extmark", "nvim_buf_clear_namespace" }) do
+  local f = api[name]
+  api[name] = function(b, ...)
+    local r = f(b, ...)
+    for _, fl in pairs(floats) do if fl.buf == b then refresh(b) break end end
+    return r
+  end
+end
+local function range(n, s, e)
+  s = s < 0 and n + s + 1 or s
+  e = e < 0 and n + e + 1 or e
+  return math.max(s, 0), math.min(e, n)
+end
+
+api.nvim_create_buf = function(_, _)
+  vnext = vnext + 1
+  local h = 10000 + vnext
+  vbufs[h] = { lines = { "" }, name = "", opts = {}, vars = {}, maps = {} }
+  return h
+end
+
+local orig = {}
+for _, k in ipairs({ "nvim_buf_get_lines", "nvim_buf_set_lines", "nvim_buf_line_count", "nvim_buf_get_name", "nvim_buf_set_name", "nvim_buf_is_valid", "nvim_buf_is_loaded", "nvim_buf_delete", "nvim_buf_set_option", "nvim_buf_get_option", "nvim_buf_set_var", "nvim_buf_get_var", "nvim_get_current_win", "nvim_get_current_buf", "nvim_win_close", "nvim_win_is_valid", "nvim_win_get_buf", "nvim_win_hide" }) do orig[k] = api[k] end
+local function cur(b) if (b == 0 or b == nil) and vim._cur_float then return floats[vim._cur_float].buf end return b end
+
+api.nvim_buf_get_lines = function(b, s, e, strict)
+  b = cur(b)
+  if not is_vbuf(b) then return orig.nvim_buf_get_lines(b, s, e, strict) end
+  local L = vlines(b)
+  s, e = range(#L, s, e)
+  local out = {}
+  for i = s + 1, e do out[#out + 1] = L[i] end
+  return out
+end
+api.nvim_buf_set_lines = function(b, s, e, strict, repl)
+  b = cur(b)
+  if not is_vbuf(b) then return orig.nvim_buf_set_lines(b, s, e, strict, repl) end
+  local L = vlines(b)
+  s, e = range(#L, s, e)
+  local new = {}
+  for i = 1, s do new[#new + 1] = L[i] end
+  for _, l in ipairs(repl or {}) do new[#new + 1] = l end
+  for i = e + 1, #L do new[#new + 1] = L[i] end
+  if #new == 0 then new = { "" } end
+  vbufs[b].lines = new
+  refresh(b)
+end
+api.nvim_buf_line_count = function(b) b = cur(b) if is_vbuf(b) then return #vlines(b) end return orig.nvim_buf_line_count(b) end
+api.nvim_buf_get_name = function(b) b = cur(b) if is_vbuf(b) then return vbufs[b].name end return orig.nvim_buf_get_name(b) end
+api.nvim_buf_set_name = function(b, n) b = cur(b) if is_vbuf(b) then vbufs[b].name = n return end return orig.nvim_buf_set_name(b, n) end
+api.nvim_buf_is_valid = function(b) if is_vbuf(b) then return true end return orig.nvim_buf_is_valid(b) end
+api.nvim_buf_is_loaded = function(b) if is_vbuf(b) then return true end return orig.nvim_buf_is_loaded(b) end
+api.nvim_buf_set_option = function(b, k, v) b = cur(b) if is_vbuf(b) then vbufs[b].opts[k] = v return end return orig.nvim_buf_set_option(b, k, v) end
+api.nvim_buf_get_option = function(b, k) b = cur(b) if is_vbuf(b) then return vbufs[b].opts[k] end return orig.nvim_buf_get_option(b, k) end
+api.nvim_buf_set_var = function(b, k, v) b = cur(b) if is_vbuf(b) then vbufs[b].vars[k] = v return end return orig.nvim_buf_set_var(b, k, v) end
+api.nvim_buf_get_var = function(b, k) b = cur(b) if is_vbuf(b) then return vbufs[b].vars[k] end return orig.nvim_buf_get_var(b, k) end
+
+local function close_float(h)
+  local f = floats[h]
+  if not f then return end
+  floats[h] = nil
+  pcall(z.panel.close, f.panel)
+  if vim._cur_float == h then vim._cur_float = nil end
+end
+api.nvim_buf_delete = function(b, o)
+  b = cur(b)
+  if not is_vbuf(b) then return orig.nvim_buf_delete(b, o) end
+  for h, f in pairs(floats) do if f.buf == b then close_float(h) end end
+  vbufs[b] = nil
+end
+
+-- a key in a focused float: its buffer's own mapping (a function, or <Cmd>…<CR> / :…<CR>)
+local function float_key(h, key)
+  local f = floats[h]
+  if not f or not is_vbuf(f.buf) then return false end
+  for lhs, rhs in pairs(vbufs[f.buf].maps.n or {}) do
+    if z.key_name(lhs) == z.key_name(key) then
+      vim._cur_float = h
+      local ok, err
+      if type(rhs) == "function" then
+        ok, err = pcall(rhs)
+      else
+        local cmd = rhs:match("^<[Cc][Mm][Dd]>(.-)<[Cc][Rr]>$") or rhs:match("^:(.-)<[Cc][Rr]>$")
+        if cmd and (cmd == "q" or cmd == "quit" or cmd == "close" or cmd == "bd" or cmd == "bdelete") then close_float(h) ok = true
+        elseif cmd then ok, err = pcall(vim.cmd, cmd) end
+      end
+      vim._cur_float = nil
+      if ok == false then vim.notify(tostring(err)) end
+      return true
+    end
+  end
+  return false
+end
+
+local function place(h)
+  local f = floats[h]
+  local c = f.config
+  local L = float_lines(h)
+  local title = c.title
+  if type(title) == "table" then local t = {} for _, x in ipairs(title) do t[#t + 1] = type(x) == "table" and x[1] or tostring(x) end title = table.concat(t) end
+  z.panel.open({
+    id = f.panel, side = "float",
+    relative = (c.relative and c.relative ~= "") and c.relative or "editor",
+    row = math.floor(tonumber(c.row) or 0), col = math.floor(tonumber(c.col) or 0),
+    width = math.floor(tonumber(c.width) or 40), height = math.floor(tonumber(c.height) or #L),
+    title = title or "", focus = f.enter and true or false,
+    on_key = function(key) return float_key(h, key) end,
+    on_close = function() floats[h] = nil end,
+  })
+  z.panel.set_lines(f.panel, L)
+end
+api.nvim_open_win = function(b, enter, config)
+  b = (b == 0) and cur_buf() or b
+  config = config or {}
+  -- a split (relative empty, split = / vertical =): a real window next to this one
+  if (not config.relative or config.relative == "") and (config.split or config.vertical ~= nil) and not is_vbuf(b) then
+    ex((config.vertical or config.split == "left" or config.split == "right") and "vsplit" or "split")
+    ex("buffer " .. b)
+    return api.nvim_get_current_win()
+  end
+  fnext = fnext + 1
+  local h = 20000 + fnext
+  floats[h] = { buf = b, config = config, enter = enter, panel = "nvim-float-" .. h }
+  place(h)
+  return h
+end
+api.nvim_win_set_config = function(w, config)
+  if not is_float(w) then return end
+  for k, v in pairs(config or {}) do floats[w].config[k] = v end
+  place(w)
+end
+api.nvim_win_get_config = function(w)
+  w = (w == 0 or w == nil) and (vim._cur_float or api.nvim_get_current_win()) or w
+  if is_float(w) then local c = vim.deepcopy and vim.deepcopy(floats[w].config) or floats[w].config c.relative = c.relative or "editor" return c end
+  return { relative = "", focusable = true, external = false }
+end
+api.nvim_win_close = function(w, force) w = (w == 0 and vim._cur_float) or w if is_float(w) then return close_float(w) end return orig.nvim_win_close(w, force) end
+api.nvim_win_hide = function(w) w = (w == 0 and vim._cur_float) or w if is_float(w) then return close_float(w) end return orig.nvim_win_hide(w) end
+api.nvim_win_is_valid = function(w) if is_float(w) then return true end return orig.nvim_win_is_valid(w) end
+api.nvim_win_get_buf = function(w) w = (w == 0 and vim._cur_float) or w if is_float(w) then return floats[w].buf end return orig.nvim_win_get_buf(w) end
+api.nvim_get_current_win = function() return vim._cur_float or orig.nvim_get_current_win() end
+api.nvim_get_current_buf = function() if vim._cur_float then return floats[vim._cur_float].buf end return orig.nvim_get_current_buf() end
+for _, k in ipairs({ "nvim_create_buf", "nvim_buf_get_lines", "nvim_buf_set_lines", "nvim_buf_line_count", "nvim_buf_get_name", "nvim_buf_set_name", "nvim_buf_is_valid", "nvim_buf_is_loaded", "nvim_buf_set_option", "nvim_buf_get_option", "nvim_buf_set_var", "nvim_buf_get_var", "nvim_buf_delete", "nvim_open_win", "nvim_win_set_config", "nvim_win_get_config", "nvim_win_close", "nvim_win_hide", "nvim_win_is_valid", "nvim_win_get_buf", "nvim_get_current_win", "nvim_get_current_buf" }) do rawset(vim.fn, k, api[k]) end
+
+-- vim.keymap.set(…, { buffer = a scratch buffer }): that buffer's own mapping (its float runs it)
+local keymap_set = vim.keymap.set
+function vim.keymap.set(modes, lhs, rhs, opts)
+  local b = opts and opts.buffer
+  if b == true or b == 0 then b = vim._cur_float and floats[vim._cur_float].buf or nil end
+  if is_vbuf(b) then
+    for _, m in ipairs(type(modes) == "string" and { modes } or modes) do
+      vbufs[b].maps[m] = vbufs[b].maps[m] or {}
+      vbufs[b].maps[m][lhs] = rhs
+    end
+    return
+  end
+  return keymap_set(modes, lhs, rhs, opts)
+end
+api.nvim_buf_set_keymap = (function(old)
+  return function(b, mode, lhs, rhs, o)
+    if is_vbuf(b) then
+      o = o or {}
+      vbufs[b].maps[mode] = vbufs[b].maps[mode] or {}
+      vbufs[b].maps[mode][lhs] = o.callback or rhs
+      return
+    end
+    if old then return old(b, mode, lhs, rhs, o) end
+  end
+end)(api.nvim_buf_set_keymap)
+rawset(vim.fn, "nvim_buf_set_keymap", api.nvim_buf_set_keymap)
+
+-- ── marks, ticks, offsets ──
+-- a mark's place: { row (1-based), col (0-based) }; {0, 0} when not set
+local function mark_of(name)
+  if name == "." then local r, c = z.buf.cursor() return { r, c } end
+  local m = z.buf.marks()[name]
+  return m and { m[1], m[2] } or { 0, 0 }
+end
+api.nvim_buf_get_mark = function(_, name) return mark_of(name) end
+api.nvim_buf_set_mark = function(_, name, line, col, _) z.buf.set_mark(name, line, col) return true end
+api.nvim_buf_del_mark = function(_, name) z.buf.del_marks(name) return true end
+api.nvim_del_mark = function(name) z.buf.del_marks(name) return true end
+api.nvim_get_mark = function(name, _) local m = mark_of(name) return { m[1], m[2], m[1] > 0 and cur_buf() or 0, m[1] > 0 and z.buf.path() or "" } end
+api.nvim_buf_get_changedtick = function(_) return z.buf.tick() end
+api.nvim_buf_get_offset = function(_, line)
+  local b = 0
+  for _, s in ipairs(api.nvim_buf_get_lines(0, 0, line, false)) do b = b + #s + 1 end
+  return b
+end
+-- getpos / setpos with marks too ('a, '<, '>, …)
+set("getpos", function(what)
+  if what == "." then local r, c = z.buf.cursor() return { 0, r, c + 1, 0 } end
+  local name = what:match("^'(.)$")
+  if name then local m = mark_of(name) return { 0, m[1], m[1] > 0 and m[2] + 1 or 0, 0 } end
+  return { 0, 0, 0, 0 }
+end)
+set("setpos", function(what, p)
+  if what == "." then z.buf.set_cursor(p[2], math.max(p[3] - 1, 0)) return 0 end
+  local name = what:match("^'(.)$")
+  if name then z.buf.set_mark(name, p[2], math.max(p[3] - 1, 0)) return 0 end
+  return -1
+end)
+
+-- ── tab and window variables, tab pages ──
+local tvars, wvars = {}, {}
+api.nvim_tabpage_get_var = function(t, k) local v = (tvars[t == 0 and 1 or t] or {})[k] if v == nil then error("Key not found: " .. k) end return v end
+api.nvim_tabpage_set_var = function(t, k, v) t = t == 0 and 1 or t tvars[t] = tvars[t] or {} tvars[t][k] = v end
+api.nvim_tabpage_del_var = function(t, k) t = t == 0 and 1 or t if tvars[t] then tvars[t][k] = nil end end
+api.nvim_win_del_var = function(w, k) local ok = pcall(api.nvim_win_set_var, w, k, nil) if not ok and wvars[w] then wvars[w][k] = nil end end
+api.nvim_set_current_tabpage = function(t) ex(t .. "tabnext") end
+api.nvim_open_tabpage = function(b, enter, _) ex("tabnew") if b and b ~= 0 then ex("buffer " .. b) end if enter == false then ex("tabprevious") end return 1 end
+
+-- ── processes (from /proc) ──
+local function proc_stat(pid)
+  local f = io.open("/proc/" .. pid .. "/stat")
+  if not f then return nil end
+  local s = f:read("*l") or ""
+  f:close()
+  local name, rest = s:match("^%d+ %((.*)%) (.*)$")
+  if not name then return nil end
+  local ppid = tonumber(rest:match("^%S+ (%d+)"))
+  return { name = name, pid = tonumber(pid), ppid = ppid }
+end
+api.nvim_get_proc = function(pid) return proc_stat(pid) end
+api.nvim_get_proc_children = function(pid)
+  local out = {}
+  local p = io.popen("ls /proc 2>/dev/null")
+  for d in (p and p:read("*a") or ""):gmatch("%d+") do
+    local s = proc_stat(d)
+    if s and s.ppid == pid then out[#out + 1] = s.pid end
+  end
+  if p then p:close() end
+  return out
+end
+
+-- ── pasting, commands parsed, options described, colours named ──
+api.nvim_paste = function(data, _, _)
+  local lines = vim.split(data:gsub("\r\n", "\n"), "\n", { plain = true })
+  api.nvim_put(lines, "c", false, true)
+  return true
+end
+-- nvim_parse_cmd: the command's name, bang, args and range (what a plugin most reads of it)
+api.nvim_parse_cmd = function(str, _)
+  local s = str:gsub("^%s*:*", "")
+  local range, rest = s:match("^([%d%.%$%%,;'<>+%-]*)(.*)$")
+  local name, bang, args = rest:match("^(%a[%w_]*)(!?)%s*(.*)$")
+  if not name then error("E492: Not an editor command: " .. str) end
+  local r = {}
+  for n in (range or ""):gmatch("%d+") do r[#r + 1] = tonumber(n) end
+  return { cmd = name, bang = bang == "!", args = args ~= "" and vim.split(args, "%s+", { trimempty = true }) or {}, range = r, count = -1, reg = "", addr = "line", nargs = "*", nextcmd = "", magic = { file = false, bar = false }, mods = {} }
+end
+api.nvim_get_option_info = function(name) return api.nvim_get_option_info2(name, {}) end
+api.nvim_get_all_options_info = function()
+  local out = {}
+  for _, n in ipairs(z.option_names and z.option_names() or {}) do out[n] = api.nvim_get_option_info2(n, {}) end
+  return out
+end
+local color_names = { Black = 0x000000, White = 0xffffff, Red = 0xff0000, Green = 0x00ff00, Blue = 0x0000ff, Yellow = 0xffff00, Cyan = 0x00ffff, Magenta = 0xff00ff, Gray = 0xbebebe, Grey = 0xbebebe, DarkGray = 0xa9a9a9, DarkGrey = 0xa9a9a9, LightGray = 0xd3d3d3, LightGrey = 0xd3d3d3, DarkRed = 0x8b0000, DarkGreen = 0x006400, DarkBlue = 0x00008b, DarkYellow = 0xbbbb00, DarkCyan = 0x008b8b, DarkMagenta = 0x8b008b, Brown = 0xa52a2a, Orange = 0xffa500, Purple = 0xa020f0, Pink = 0xffc0cb, LightRed = 0xffbbbb, LightGreen = 0x90ee90, LightBlue = 0xadd8e6, LightYellow = 0xffffe0, LightCyan = 0xe0ffff, LightMagenta = 0xffbbff, SeaGreen = 0x2e8b57, SlateBlue = 0x6a5acd }
+api.nvim_get_color_map = function() return vim.deepcopy and vim.deepcopy(color_names) or color_names end
+
+-- ── user commands and autocmds as made (nvim_get_commands, nvim_get_autocmds) ──
+local made_cmds, made_au = {}, {}
+local create_cmd = api.nvim_create_user_command
+api.nvim_create_user_command = function(name, run, o)
+  o = o or {}
+  made_cmds[name] = { name = name, definition = type(run) == "string" and run or (o.desc or ""), nargs = tostring(o.nargs or 0), bang = o.bang and true or false, range = o.range and tostring(o.range) or nil, bar = o.bar and true or false, callback = type(run) == "function" and run or nil }
+  return create_cmd(name, run, o)
+end
+api.nvim_buf_create_user_command = function(_, name, run, o) return api.nvim_create_user_command(name, run, o) end
+local del_cmd = api.nvim_del_user_command
+api.nvim_del_user_command = function(name) made_cmds[name] = nil return del_cmd(name) end
+api.nvim_get_commands = function(_) return vim.deepcopy and vim.deepcopy(made_cmds) or made_cmds end
+api.nvim_buf_get_commands = function(_, o) return api.nvim_get_commands(o) end
+local create_au, del_au = api.nvim_create_autocmd, api.nvim_del_autocmd
+api.nvim_create_autocmd = function(events, o)
+  o = o or {}
+  local id = create_au(events, o)
+  for _, e in ipairs(type(events) == "string" and { events } or events) do
+    local pats = type(o.pattern) == "table" and o.pattern or { o.pattern or "*" }
+    for _, p in ipairs(pats) do
+      made_au[#made_au + 1] = { id = id, event = e, pattern = p, group = type(o.group) == "number" and o.group or nil, group_name = type(o.group) == "string" and o.group or nil, desc = o.desc, callback = o.callback, command = o.command or "", once = o.once and true or false, buffer = o.buffer }
+    end
+  end
+  return id
+end
+api.nvim_del_autocmd = function(id)
+  for i = #made_au, 1, -1 do if made_au[i].id == id then table.remove(made_au, i) end end
+  return del_au(id)
+end
+-- nvim_get_autocmds({ event =, group =, pattern =, id = }): the matching ones
+api.nvim_get_autocmds = function(o)
+  o = o or {}
+  local evs = type(o.event) == "string" and { o.event } or o.event
+  local out = {}
+  for _, a in ipairs(made_au) do
+    local ok = true
+    if evs then ok = false for _, e in ipairs(evs) do if e:lower() == a.event:lower() then ok = true end end end
+    if ok and o.group then ok = (a.group == o.group) or (a.group_name == o.group) end
+    if ok and o.pattern then ok = a.pattern == o.pattern end
+    if ok and o.id then ok = a.id == o.id end
+    if ok then out[#out + 1] = vim.deepcopy and vim.deepcopy(a) or a end
+  end
+  return out
+end
+
+-- nvim_buf_attach(buf, _, { on_lines = function("lines", buf, tick, first, last, new_last) }):
+-- told after each change (the whole text as the range: zett does not say which lines changed)
+api.nvim_buf_attach = function(b, _, cbs)
+  cbs = cbs or {}
+  b = (b == 0 or b == nil) and cur_buf() or b
+  local id
+  id = api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    callback = function()
+      if api.nvim_get_current_buf() ~= b then return end
+      local n = api.nvim_buf_line_count(0)
+      if cbs.on_lines and cbs.on_lines("lines", b, z.buf.tick(), 0, n, n, 0) == true then api.nvim_del_autocmd(id) end
+      if cbs.on_changedtick then cbs.on_changedtick("changedtick", b, z.buf.tick()) end
+    end,
+  })
+  if cbs.on_detach then api.nvim_create_autocmd("BufUnload", { once = true, callback = function() cbs.on_detach("detach", b) end }) end
+  return true
+end
+-- the screen lines text takes (no wrapping counted: zett draws long lines on one row by default)
+api.nvim_win_text_height = function(_, o)
+  o = o or {}
+  local n = api.nvim_buf_line_count(0)
+  local s, e = o.start_row or 0, o.end_row or (n - 1)
+  return { all = math.max(e - s + 1, 0), fill = 0 }
+end
+
+for _, k in ipairs({ "nvim_buf_get_mark", "nvim_buf_set_mark", "nvim_buf_del_mark", "nvim_del_mark", "nvim_get_mark", "nvim_buf_get_changedtick", "nvim_buf_get_offset", "nvim_tabpage_get_var", "nvim_tabpage_set_var", "nvim_tabpage_del_var", "nvim_win_del_var", "nvim_set_current_tabpage", "nvim_open_tabpage", "nvim_get_proc", "nvim_get_proc_children", "nvim_paste", "nvim_parse_cmd", "nvim_get_option_info", "nvim_get_all_options_info", "nvim_get_color_map", "nvim_create_user_command", "nvim_buf_create_user_command", "nvim_del_user_command", "nvim_get_commands", "nvim_buf_get_commands", "nvim_create_autocmd", "nvim_del_autocmd", "nvim_get_autocmds", "nvim_buf_attach", "nvim_win_text_height" }) do rawset(vim.fn, k, api[k]) end
+
+-- ── more of vim.fn: lines, lists, text indexes, files, windows and buffers described ──
+def("prevnonblank", function(l)
+  l = tonumber(l) or vim.fn.line(l)
+  for n = math.min(l, api.nvim_buf_line_count(0)), 1, -1 do if (vim.fn.getline(n) or ""):match("%S") then return n end end
+  return 0
+end)
+def("reduce", function(l, f, init)
+  local acc, start = init, 1
+  if acc == nil then acc, start = l[1], 2 end
+  for i = start, #(l or {}) do acc = f(acc, l[i]) end
+  return acc
+end)
+def("slice", function(l, s, e)
+  if type(l) == "string" then local cs = vim.fn.str2list(l) local r = vim.fn.slice(cs, s, e) return vim.fn.list2str(r) end
+  local n = #l
+  s = s < 0 and n + s or s
+  e = e == nil and n or (e < 0 and n + e or e)
+  local out = {}
+  for i = s + 1, math.min(e, n) do out[#out + 1] = l[i] end
+  return out
+end)
+def("trunc", function(x) x = tonumber(x) or 0 return x < 0 and math.ceil(x) or math.floor(x) end)
+local seed = os.time()
+def("srand", function(s) seed = tonumber(s) or os.time() return { seed, 0, 0, 0 } end)
+def("rand", function(_) seed = (seed * 1103515245 + 12345) % 2147483648 return seed end)
+def("sha256", function(s)
+  local tmp = os.tmpname()
+  local f = io.open(tmp, "wb") if f then f:write(s or "") f:close() end
+  local p = io.popen("sha256sum " .. vim.fn.shellescape(tmp))
+  local out = p and p:read("*l") or ""
+  if p then p:close() end
+  os.remove(tmp)
+  return out:match("^(%x+)") or ""
+end)
+-- character, byte and UTF-16 indexes of a string
+def("strcharlen", function(s) return utf8.len(s or "") or #(s or "") end)
+def("strgetchar", function(s, i) local n = 0 for _, c in utf8.codes(s or "") do if n == i then return c end n = n + 1 end return -1 end)
+def("byteidx", function(s, n) if n < 0 then return -1 end local b = utf8.offset(s or "", n + 1) return b and b - 1 or -1 end)
+def("byteidxcomp", function(s, n) return vim.fn.byteidx(s, n) end)
+def("charidx", function(s, b) if b < 0 or b >= #(s or "") then return -1 end return (utf8.len(s:sub(1, b)) or b) end)
+def("utf16idx", function(s, b) local n = 0 for p, c in utf8.codes(s or "") do if p > b then break end n = n + (c > 0xFFFF and 2 or 1) end return n - 1 end)
+def("strutf16len", function(s) local n = 0 for _, c in utf8.codes(s or "") do n = n + (c > 0xFFFF and 2 or 1) end return n end)
+def("charcol", function(e) local c = vim.fn.col(e) local l = vim.fn.getline(".") return (utf8.len(l:sub(1, c - 1)) or c - 1) + 1 end)
+def("pathshorten", function(p, len)
+  len = len or 1
+  local parts = vim.split(p or "", "/", { plain = true })
+  for i = 1, #parts - 1 do
+    local s = parts[i]
+    local dot = s:sub(1, 1) == "." and 1 or 0
+    parts[i] = s:sub(1, len + dot)
+  end
+  return table.concat(parts, "/")
+end)
+-- files: readdir, type and permissions, copies, finding upward
+def("readdir", function(d)
+  local out = {}
+  local p = io.popen("ls -A " .. vim.fn.shellescape(vim.fn.expand(d)) .. " 2>/dev/null")
+  for n in (p and p:read("*a") or ""):gmatch("[^\n]+") do out[#out + 1] = n end
+  if p then p:close() end
+  return out
+end)
+local function stat(f, fmt)
+  local p = io.popen("stat -c " .. fmt .. " " .. vim.fn.shellescape(vim.fn.expand(f)) .. " 2>/dev/null")
+  local s = p and p:read("*l") or ""
+  if p then p:close() end
+  return s
+end
+def("getftype", function(f)
+  local t = stat(f, "%F")
+  return ({ ["regular file"] = "file", ["regular empty file"] = "file", directory = "dir", ["symbolic link"] = "link", fifo = "fifo", socket = "socket", ["character special file"] = "cdev", ["block special file"] = "bdev" })[t] or ""
+end)
+def("getfperm", function(f) local s = stat(f, "%A") return s ~= "" and s:sub(2) or "" end)
+def("setfperm", function(f, perm)
+  local n = 0
+  for i = 1, 9 do if perm:sub(i, i) ~= "-" then n = n + 2 ^ (9 - i) end end
+  return os.execute(string.format("chmod %o %s", math.floor(n), vim.fn.shellescape(vim.fn.expand(f)))) and 1 or 0
+end)
+def("filecopy", function(a, b)
+  if vim.fn.filereadable(b) == 1 then return 0 end
+  return os.execute("cp -- " .. vim.fn.shellescape(a) .. " " .. vim.fn.shellescape(b)) and 1 or 0
+end)
+-- finddir / findfile: in path (a list of folders; ";" upward to the root)
+local function find_up(name, path, want_dir)
+  path = (path == nil or path == "") and "." or path
+  for _, d in ipairs(vim.split(path, ",", { trimempty = true })) do
+    local up = d:find(";")
+    local dir = vim.fn.fnamemodify(up and d:sub(1, up - 1) ~= "" and d:sub(1, up - 1) or (up and "." or d), ":p"):gsub("/$", "")
+    while dir and dir ~= "" do
+      local p = dir .. "/" .. name
+      local t = vim.fn.getftype(p)
+      if (want_dir and t == "dir") or (not want_dir and t ~= "" and t ~= "dir") then return p end
+      if not up then break end
+      local parent = dir:match("^(.*)/[^/]*$")
+      if parent == dir then break end
+      dir = parent
+    end
+  end
+  return ""
+end
+def("finddir", function(name, path) return find_up(name, path, true) end)
+def("findfile", function(name, path) return find_up(name, path, false) end)
+
+-- windows and buffers described (getwininfo / getbufinfo), and moved between
+def("getwininfo", function(w)
+  local out = {}
+  for i, x in ipairs(wins()) do
+    local h = handle(x.nr)
+    if w == nil or w == h then
+      out[#out + 1] = { winid = h, winnr = i, bufnr = x.buf, width = x.width, height = x.height, wincol = x.col + 1, winrow = x.row + 1, tabnr = 1, topline = x.top or 1, botline = (x.top or 1) + x.height - 2, textoff = vim.fn._textoff and vim.fn._textoff() or 0, terminal = 0, quickfix = 0, loclist = 0, variables = {} }
+    end
+  end
+  return out
+end)
+def("getbufinfo", function(b)
+  local out = {}
+  local cur = cur_buf()
+  for i, name in ipairs(z.buffers()) do
+    if b == nil or type(b) == "table" or b == i then
+      local wins_of = {}
+      for _, x in ipairs(wins()) do if x.buf == i then wins_of[#wins_of + 1] = handle(x.nr) end end
+      out[#out + 1] = { bufnr = i, name = name, listed = 1, loaded = 1, hidden = #wins_of == 0 and 1 or 0, changed = (i == cur and vim.bo.modified) and 1 or 0, lnum = i == cur and vim.fn.line(".") or 1, linecount = i == cur and api.nvim_buf_line_count(0) or 0, windows = wins_of, variables = {}, lastused = 0 }
+    end
+  end
+  return out
+end)
+def("win_gotoid", function(w) if api.nvim_win_is_valid(w) then api.nvim_set_current_win(w) return 1 end return 0 end)
+def("win_findbuf", function(b) local out = {} for _, x in ipairs(wins()) do if x.buf == b then out[#out + 1] = handle(x.nr) end end return out end)
+-- a float (nvim_open_win's handles from 20000) is a "popup", any other window ""
+def("win_gettype", function(w) w = w or 0 return (w >= 20000) and "popup" or "" end)
+def("win_screenpos", function(w) local x = win_of(w) return x and { x.row + 1, x.col + 1 } or { 0, 0 } end)
+def("tabpagebuflist", function(_) local out = {} for _, x in ipairs(wins()) do out[#out + 1] = x.buf end return out end)
+def("tabpagewinnr", function(_, a) if a == "$" then return #wins() end return vim.fn.winnr() end)
+def("winsaveview", function() local r, c = z.buf.cursor() return { lnum = r, col = c, coladd = 0, curswant = c, topline = r, topfill = 0, leftcol = 0, skipcol = 0 } end)
+def("winrestview", function(v) if v and v.lnum then z.buf.set_cursor(v.lnum, v.col or 0) end return 0 end)
+def("winlayout", function() local l = {} for _, x in ipairs(wins()) do l[#l + 1] = { "leaf", handle(x.nr) } end if #l == 1 then return l[1] end return { "row", l } end)
+-- variables in other places, lines of other buffers, buffers added
+def("setbufvar", function(b, name, v) if name:sub(1, 1) == "&" then pcall(api.nvim_buf_set_option, b == "%" and 0 or b, name:sub(2), v) else pcall(api.nvim_buf_set_var, b == "%" and 0 or b, name, v) end end)
+def("setwinvar", function(w, name, v) if name:sub(1, 1) == "&" then pcall(function() vim.wo[name:sub(2)] = v end) elseif vim.w then vim.w[name] = v end end)
+def("settabvar", function(t, name, v) api.nvim_tabpage_set_var(t, name, v) end)
+def("settabwinvar", function(_, w, name, v) vim.fn.setwinvar(w, name, v) end)
+def("setbufline", function(b, l, text)
+  l = l == "$" and api.nvim_buf_line_count(0) or tonumber(l) or 1
+  local t = type(text) == "table" and text or { text }
+  api.nvim_buf_set_lines(b == "%" and 0 or b, l - 1, l - 1 + #t, false, t)
+  return 0
+end)
+def("bufadd", function(name) ex("badd " .. name) return vim.fn.bufnr(name) end)
+def("bufload", function(_) return 0 end)
+def("feedkeys", function(keys, mode) api.nvim_feedkeys(keys, mode or "m", false) return 0 end)
+def("getmarklist", function(_)
+  local out = {}
+  for name, m in pairs(z.buf.marks()) do out[#out + 1] = { mark = "'" .. name, pos = { cur_buf(), m[1], m[2] + 1, 0 }, file = z.buf.path() } end
+  table.sort(out, function(a, b) return a.mark < b.mark end)
+  return out
+end)
+
+-- ── the quickfix list (getqflist / setqflist; setloclist sets the window's list) ──
+local function qf_items(file_too)
+  local q = z.qflist()
+  local out = {}
+  for i, it in ipairs(q.items) do
+    out[i] = { bufnr = (function() for n, b in ipairs(z.buffers()) do if b == it.file then return n end end return 0 end)(), filename = it.file, lnum = it.lnum, end_lnum = 0, col = it.col, end_col = 0, vcol = 0, nr = it.nr, pattern = "", text = it.text, type = it.type, valid = it.valid and 1 or 0, module = "" }
+  end
+  return out, q
+end
+local function getqf(what)
+  local items, q = qf_items()
+  if type(what) ~= "table" then return items end
+  local r = {}
+  if what.items then r.items = items end
+  if what.title then r.title = q.title end
+  if what.idx then r.idx = q.idx end
+  if what.size then r.size = #items end
+  if what.nr then r.nr = 1 end
+  if what.id then r.id = 1 end
+  if what.context then r.context = "" end
+  if what.winid then r.winid = 0 end
+  return r
+end
+local function setqf(which, list, action, what)
+  if type(action) == "table" then what, action = action, " " end
+  what = what or {}
+  list = list or what.items or {}
+  local enc = {}
+  for _, e in ipairs(list) do
+    local file = e.filename or (e.bufnr and z.buffers()[e.bufnr]) or ""
+    enc[#enc + 1] = table.concat({ file, tostring(e.lnum or 0), tostring(e.col or 0), e.type or "", tostring(e.nr or 0), (e.text or ""):gsub("[\30\31\29]", " ") }, "\31")
+  end
+  z.ui("qfSet", table.concat({ which, (action == nil or action == "") and " " or action, what.title or "setqflist()", table.concat(enc, "\30") }, "\29"))
+  return 0
+end
+set("getqflist", getqf)
+set("setqflist", function(list, action, what) return setqf("q", list, action, what) end)
+set("setloclist", function(_, list, action, what) return setqf("l", list, action, what) end)
+
+-- ── registers, the : line and its history ──
+set("getreg", function(r, _, list)
+  local t = z.buf.register((r == nil or r == "") and '"' or r)
+  local text = t and t[1] or ""
+  if list == 1 or list == true then return vim.split(text:gsub("\n$", ""), "\n", { plain = true }) end
+  return text
+end)
+set("setreg", function(r, v, opts)
+  local text = type(v) == "table" and (table.concat(v, "\n") .. "\n") or tostring(v or "")
+  if type(opts) == "string" and opts:find("V") and not text:find("\n$") then text = text .. "\n" end
+  z.buf.set_register((r == nil or r == "") and '"' or r, text)
+  return 0
+end)
+def("getregtype", function(r) local t = z.buf.register((r == nil or r == "") and '"' or r) return t and t[2] or "" end)
+def("getreginfo", function(r)
+  r = (r == nil or r == "") and '"' or r
+  local t = z.buf.register(r)
+  if not t then return {} end
+  return { regcontents = vim.split(t[1]:gsub("\n$", ""), "\n", { plain = true }), regtype = t[2], isunnamed = r == '"' }
+end)
+def("reg_recording", function() return z.buf.recording() end)
+def("reg_executing", function() return "" end)
+def("getcmdline", function() local c = z.cmdline() return c and c[1] or "" end)
+def("getcmdpos", function() local c = z.cmdline() return c and (tonumber(c[2]) + 1) or 0 end)
+def("getcmdtype", function() return z.cmdline() and ":" or "" end)
+def("getcmdwintype", function() return "" end)
+def("setcmdline", function(s, _) z.ui("setCmdline", s) return 0 end)
+def("setcmdpos", function(_) return 0 end)
+-- history of : lines (the only one zett keeps): index from 1, negative from the end
+local function hist_ok(t) return t == nil or t == ":" or t == "cmd" end
+def("histnr", function(t) if not hist_ok(t) then return -1 end return #z.history() end)
+def("histget", function(t, i)
+  if not hist_ok(t) then return "" end
+  local h = z.history()
+  i = tonumber(i) or -1
+  if i < 0 then i = #h + i + 1 end
+  return h[i] or ""
+end)
+def("histadd", function(t, line) if not hist_ok(t) or (line or "") == "" then return 0 end z.ui("histAdd", line) return 1 end)
+def("histdel", function(_, _) return 0 end)
+
+-- ── Vim patterns for real (zett.regex: the editor's own engine, as /, :s and :g use) ──
+local function icase(pat) return vim.o.ignorecase and not (vim.o.smartcase and pat:find("%u")) end
+local function rx(s, pat, start) local ok, r = pcall(z.regex, pat, s, start or 0, icase(pat)) return ok and r or nil end
+-- the count-th match from start (match / matchend / matchstr / matchstrpos)
+local function nth(s, pat, start, count)
+  s = tostring(s or "")
+  local at = math.max(start or 0, 0)
+  local r
+  for _ = 1, math.max(count or 1, 1) do
+    r = rx(s, pat, at)
+    if not r then return nil end
+    at = r[2] > r[1] and r[2] or r[2] + 1
+  end
+  return r
+end
+set("match", function(s, pat, start, count) if type(s) == "table" then for i, l in ipairs(s) do if rx(l, pat) then return i - 1 end end return -1 end local r = nth(s, pat, start, count) return r and r[1] or -1 end)
+set("matchend", function(s, pat, start, count) local r = nth(s, pat, start, count) return r and r[2] or -1 end)
+set("matchstr", function(s, pat, start, count) local r = nth(s, pat, start, count) return r and tostring(s):sub(r[1] + 1, r[2]) or "" end)
+set("matchstrpos", function(s, pat, start, count) local r = nth(s, pat, start, count) if not r then return { "", -1, -1 } end return { tostring(s):sub(r[1] + 1, r[2]), r[1], r[2] } end)
+set("matchlist", function(s, pat, start, count)
+  local r = nth(s, pat, start, count)
+  if not r then return {} end
+  local out = { tostring(s):sub(r[1] + 1, r[2]) }
+  for g = 1, 9 do out[g + 1] = r[g + 2] or "" end
+  return out
+end)
+-- substitute(s, pat, rep, flags): \0 & \1…\9 \n \t \\ in rep (a function rep gets the matchlist)
+set("substitute", function(s, pat, rep, flags)
+  s = tostring(s or "")
+  local all = (flags or ""):find("g") ~= nil
+  local out, at = {}, 0
+  while at <= #s do
+    local r = rx(s, pat, at)
+    if not r then break end
+    local whole = s:sub(r[1] + 1, r[2])
+    local new
+    if type(rep) == "function" then
+      local m = { whole } for g = 1, 9 do m[g + 1] = r[g + 2] or "" end
+      new = tostring(rep(m))
+    else
+      new = rep:gsub("\\(.)", function(c)
+        if c:match("%d") then return c == "0" and whole or (r[tonumber(c) + 2] or "") end
+        return ({ n = "\n", t = "\t", r = "\r", ["&"] = "&", ["\\"] = "\\" })[c] or c
+      end)
+      new = new:gsub("&", whole)
+    end
+    out[#out + 1] = s:sub(at + 1, r[1])
+    out[#out + 1] = new
+    at = r[2] > r[1] and r[2] or r[2] + 1
+    if r[2] == r[1] and r[1] < #s then out[#out + 1] = s:sub(r[1] + 1, r[1] + 1) end
+    if not all then break end
+  end
+  out[#out + 1] = s:sub(at + 1)
+  return table.concat(out)
+end)
+
+-- ── matchadd and its family: patterns highlighted in the window (drawn as extmarks are) ──
+local matches, match_id = {}, 3
+set("matchadd", function(group, pat, prio, id, _)
+  if id == nil or id < 1 then match_id = match_id + 1 id = match_id end
+  matches[id] = { group = group, pattern = pat, priority = prio or 10, id = id }
+  bump()
+  return id
+end)
+set("matchaddpos", function(group, pos, prio, id)
+  if id == nil or id < 1 then match_id = match_id + 1 id = match_id end
+  matches[id] = { group = group, pos = pos, priority = prio or 10, id = id }
+  bump()
+  return id
+end)
+set("matchdelete", function(id) if not matches[id] then return -1 end matches[id] = nil bump() return 0 end)
+set("clearmatches", function() matches = {} bump() end)
+set("getmatches", function() local out = {} for _, m in pairs(matches) do out[#out + 1] = vim.deepcopy and vim.deepcopy(m) or m end table.sort(out, function(a, b) return a.id < b.id end) return out end)
+set("setmatches", function(l) matches = {} for _, m in ipairs(l or {}) do matches[m.id] = m end bump() return 0 end)
+set("matcharg", function(n) local m = matches[n] return m and { m.group, m.pattern or "" } or {} end)
+-- the matches on rows a..e of the current buffer, as extmark lines for the window
+local marks_for = vim._marks_for
+function vim._marks_for(b, a, e)
+  local base = marks_for(b, a, e)
+  if next(matches) == nil or b ~= cur_buf() then return base end
+  local out = {}
+  local lines = api.nvim_buf_get_lines(0, a, e + 1, false)
+  for _, m in pairs(matches) do
+    if m.pattern then
+      for i, l in ipairs(lines) do
+        local at = 0
+        while at <= #l do
+          local r = rx(l, m.pattern, at)
+          if not r then break end
+          if r[2] > r[1] then out[#out + 1] = table.concat({ a + i - 1, r[1], a + i - 1, r[2], m.priority, m.group, "", "", "", "", "eol", "", "" }, "\t") end
+          at = r[2] > r[1] and r[2] or r[2] + 1
+        end
+      end
+    elseif m.pos then
+      for _, p in ipairs(m.pos) do
+        local row = type(p) == "table" and p[1] or p
+        local col = type(p) == "table" and p[2] or nil
+        local len = type(p) == "table" and p[3] or 1
+        if row - 1 >= a and row - 1 <= e then
+          local s = col and col - 1 or 0
+          local en = col and (s + len) or #(lines[row - a] or "")
+          out[#out + 1] = table.concat({ row - 1, s, row - 1, en, m.priority, m.group, "", "", "", "", "eol", "", "" }, "\t")
+        end
+      end
+    end
+  end
+  if #out == 0 then return base end
+  return base == "" and table.concat(out, "\30") or (base .. "\30" .. table.concat(out, "\30"))
+end
+
+-- ── where things are on screen: the window's first line, its gutter, screen cells ──
+local function top_of(w) local x = win_of(w) return x and x.top or 1 end
+-- the gutter's width: line numbers (numberwidth, or the digits needed) and a sign column
+rawset(fn, "_textoff", function()
+  local n = 0
+  if vim.wo.number or vim.wo.relativenumber then n = math.max(tonumber(vim.wo.numberwidth) or 4, #tostring(z.buf.line_count()) + 1) end
+  local sc = tostring(vim.wo.signcolumn or "auto")
+  if sc == "yes" or sc:match("^yes:") then n = n + 2 * (tonumber(sc:match(":(%d)")) or 1) end
+  return n
+end)
+set("line", function(what, w)
+  local r, _ = z.buf.cursor()
+  if what == "." then return r end
+  if what == "$" then return z.buf.line_count() end
+  local x = win_of(w)
+  if what == "w0" then return top_of(w) end
+  if what == "w$" then return math.min(z.buf.line_count(), top_of(w) + (x and x.height or 24) - 2) end
+  if type(what) == "string" and what:sub(1, 1) == "'" then local m = z.buf.marks()[what:sub(2)] return m and m[1] or 0 end
+  if what == "v" then return r end
+  return 0
+end)
+def("winline", function() local r = z.buf.cursor() return r - top_of(0) + 1 end)
+def("wincol", function() local _, c = z.buf.cursor() return c + 1 + fn._textoff() end)
+def("screenrow", function() local x = win_of(0) return (x and x.row or 0) + fn.winline() end)
+def("screencol", function() local x = win_of(0) return (x and x.col or 0) + fn.wincol() end)
+def("screenpos", function(w, lnum, col)
+  local x = win_of(w)
+  local top = top_of(w)
+  if not x or lnum < top or lnum > top + x.height - 2 then return { row = 0, col = 0, endcol = 0, curscol = 0 } end
+  local c = x.col + fn._textoff() + col
+  return { row = x.row + lnum - top + 1, col = c, endcol = c, curscol = c }
+end)
+def("getcharpos", function(e) local p = fn.getpos(e) local l = fn.getline(p[2]) or "" p[3] = (utf8.len(l:sub(1, p[3] - 1)) or p[3] - 1) + 1 return p end)
+def("setcharpos", function(e, p) local l = fn.getline(p[2]) or "" local b = utf8.offset(l, p[3]) or (#l + 1) return fn.setpos(e, { p[1], p[2], b, p[4] or 0 }) end)
+def("getcursorcharpos", function() local r, c = z.buf.cursor() local l = fn.getline(r) or "" return { 0, r, (utf8.len(l:sub(1, c)) or c) + 1, 0, 0 } end)
+def("setcursorcharpos", function(l, c) if type(l) == "table" then l, c = l[1], l[2] end local s = fn.getline(l) or "" local b = utf8.offset(s, c) or (#s + 1) z.buf.set_cursor(l, b - 1) return 0 end)
+
+-- ── the jump and change lists ──
+def("getjumplist", function()
+  local j, at = z.buf.jumps()
+  local out = {}
+  for i, p in ipairs(j) do out[i] = { bufnr = cur_buf(), lnum = p[1], col = p[2], coladd = 0 } end
+  return { out, math.min(at, #out) }
+end)
+def("getchangelist", function()
+  local c = z.buf.changes()
+  local out = {}
+  for i, p in ipairs(c) do out[i] = { lnum = p[1], col = p[2], coladd = 0 } end
+  return { out, #out }
+end)
+
+-- ── undotree(): the states in time order; seq_cur the one the text is in ──
+def("undotree", function()
+  local states = z.buf.undo_states()
+  local cur = z.buf.undo_current()
+  local entries = {}
+  for i = 2, #states do
+    local s = states[i]
+    entries[#entries + 1] = { seq = s.seq or (i - 1), time = s.time or 0, curhead = (s.seq or (i - 1)) == cur and 1 or nil }
+  end
+  local last = #states - 1
+  return { seq_last = last, seq_cur = cur, synced = 1, save_last = 0, save_cur = 0, time_cur = (states[cur + 1] or {}).time or 0, entries = entries }
+end)
+
+-- ── searchpos / searchcount / search with flags (b c n w W e s p), real Vim patterns ──
+local function search_pos(pat, flags, stopline)
+  flags = flags or ""
+  local back, accept, wrap = flags:find("b") ~= nil, flags:find("c") ~= nil, (flags:find("W") == nil) and (flags:find("w") ~= nil or vim.o.wrapscan)
+  local want_end = flags:find("e") ~= nil
+  local all = lines(0, -1)
+  local r, c = z.buf.cursor()
+  local n = #all
+  local function hits(i)
+    local out, at = {}, 0
+    local l = all[i] or ""
+    while at <= #l do
+      local m = rx(l, pat, at)
+      if not m then break end
+      out[#out + 1] = m
+      at = m[2] > m[1] and m[2] or m[2] + 1
+    end
+    return out
+  end
+  local order = {}
+  if back then
+    for i = r, 1, -1 do order[#order + 1] = i end
+    if wrap then for i = n, r, -1 do order[#order + 1] = i end end
+  else
+    for i = r, n do order[#order + 1] = i end
+    if wrap then for i = 1, r do order[#order + 1] = i end end
+  end
+  for k, i in ipairs(order) do
+    if stopline and stopline > 0 and ((back and i < stopline) or (not back and i > stopline)) then break end
+    local hs = hits(i)
+    local first = k == 1
+    if back then
+      for j = #hs, 1, -1 do
+        local s = want_end and math.max(hs[j][2] - 1, hs[j][1]) or hs[j][1]
+        if not first or s < c or (accept and s == c) then return i, s end
+      end
+    else
+      for _, h in ipairs(hs) do
+        local s = want_end and math.max(h[2] - 1, h[1]) or h[1]
+        if not first or s > c or (accept and s == c) or (k == #order and i == r and wrap and s <= c and k > 1) then return i, s end
+      end
+    end
+  end
+  return 0, 0
+end
+set("searchpos", function(pat, flags, stopline)
+  local l, c = search_pos(pat, flags, stopline)
+  if l > 0 and not (flags or ""):find("n") then z.buf.set_cursor(l, c) end
+  return { l, l > 0 and c + 1 or 0 }
+end)
+set("search", function(pat, flags, stopline)
+  local l, c = search_pos(pat, flags, stopline)
+  if l > 0 and not (flags or ""):find("n") then z.buf.set_cursor(l, c) end
+  return l
+end)
+def("searchcount", function(o)
+  o = o or {}
+  local pat = o.pattern or fn.getreg("/")
+  if pat == nil or pat == "" then return {} end
+  local maxcount = o.maxcount or 99
+  local r, c = z.buf.cursor()
+  if o.pos then r, c = o.pos[1], o.pos[2] - 1 end
+  local total, current = 0, 0
+  for i, l in ipairs(lines(0, -1)) do
+    local at = 0
+    while at <= #l do
+      local m = rx(l, pat, at)
+      if not m then break end
+      total = total + 1
+      if i < r or (i == r and m[1] <= c) then current = total end
+      at = m[2] > m[1] and m[2] or m[2] + 1
+    end
+  end
+  return { current = math.min(current, maxcount), total = math.min(total, maxcount), exact_match = current > 0 and 1 or 0, incomplete = total > maxcount and 2 or 0, maxcount = maxcount }
+end)
+
+-- ── timers: info, pause, stop them all ──
+local timer_meta = {}
+set("timer_start", function(ms, f, o)
+  local t = vim.uv.new_timer()
+  local rep = o and o["repeat"] or 0
+  vim._timers = vim._timers or {}
+  local id = #vim._timers + 1
+  local info = { id = id, time = ms, ["repeat"] = rep, remaining = ms, paused = 0, callback = f }
+  timer_meta[id] = info
+  local n = 0
+  t:start(ms, rep ~= 0 and ms or 0, function()
+    if info.paused == 1 then return end
+    n = n + 1
+    f(id)
+    if rep > 0 and n >= rep then t:stop() timer_meta[id] = nil end
+    if rep == 0 then timer_meta[id] = nil end
+  end)
+  vim._timers[id] = t
+  return id
+end)
+set("timer_stop", function(id) if vim._timers and vim._timers[id] then vim._timers[id]:stop() end timer_meta[id] = nil end)
+def("timer_stopall", function() for id in pairs(timer_meta) do fn.timer_stop(id) end end)
+def("timer_pause", function(id, p) if timer_meta[id] then timer_meta[id].paused = (p == true or p == 1) and 1 or 0 end end)
+def("timer_info", function(id)
+  local out = {}
+  for k, v in pairs(timer_meta) do if id == nil or id == k then out[#out + 1] = { id = v.id, time = v.time, ["repeat"] = v["repeat"], remaining = v.remaining, paused = v.paused, callback = v.callback } end end
+  return out
+end)
+
+-- ── signs (sign_define / sign_place …), drawn as extmarks with sign_text ──
+local sign_defs, sign_placed, sign_ns, sign_id = {}, {}, nil, 0
+local function sns() sign_ns = sign_ns or api.nvim_create_namespace("zett_signs") return sign_ns end
+def("sign_define", function(name, o)
+  if type(name) == "table" then for _, d in ipairs(name) do fn.sign_define(d.name, d) end return 0 end
+  sign_defs[name] = vim.tbl_extend("force", sign_defs[name] or {}, o or {}, { name = name })
+  return 0
+end)
+def("sign_undefine", function(name) if name == nil then sign_defs = {} else sign_defs[name] = nil end return 0 end)
+def("sign_getdefined", function(name) local out = {} for n, d in pairs(sign_defs) do if name == nil or name == n then out[#out + 1] = d end end return out end)
+def("sign_place", function(id, group, name, buf, o)
+  o = o or {}
+  local d = sign_defs[name]
+  if not d then return -1 end
+  if id == 0 or id == nil then sign_id = sign_id + 1 id = sign_id end
+  local b = fn.bufnr(buf)
+  local key = (group or "") .. ":" .. id
+  local old = sign_placed[key]
+  if old then pcall(api.nvim_buf_del_extmark, old.buf, sns(), old.mark) end
+  local lnum = o.lnum or (old and old.lnum) or 1
+  local mark = api.nvim_buf_set_extmark(b, sns(), lnum - 1, 0, { sign_text = d.text, sign_hl_group = d.texthl, line_hl_group = d.linehl, number_hl_group = d.numhl, priority = o.priority or 10 })
+  sign_placed[key] = { id = id, group = group or "", name = name, buf = b, lnum = lnum, priority = o.priority or 10, mark = mark }
+  return id
+end)
+def("sign_placelist", function(l) local out = {} for i, s in ipairs(l) do out[i] = fn.sign_place(s.id or 0, s.group or "", s.name, s.buffer, s) end return out end)
+def("sign_unplace", function(group, o)
+  o = o or {}
+  for k, s in pairs(sign_placed) do
+    if (group == "*" or s.group == (group or "")) and (o.id == nil or o.id == s.id) and (o.buffer == nil or fn.bufnr(o.buffer) == s.buf) then
+      pcall(api.nvim_buf_del_extmark, s.buf, sns(), s.mark)
+      sign_placed[k] = nil
+    end
+  end
+  return 0
+end)
+def("sign_unplacelist", function(l) local out = {} for i, s in ipairs(l) do out[i] = fn.sign_unplace(s.group or "", s) end return out end)
+def("sign_getplaced", function(buf, o)
+  o = o or {}
+  local by = {}
+  for _, s in pairs(sign_placed) do
+    if (buf == nil or fn.bufnr(buf) == s.buf) and (o.group == nil or o.group == "*" or o.group == s.group) and (o.lnum == nil or o.lnum == s.lnum) and (o.id == nil or o.id == s.id) then
+      by[s.buf] = by[s.buf] or {}
+      table.insert(by[s.buf], { id = s.id, group = s.group, name = s.name, lnum = s.lnum, priority = s.priority })
+    end
+  end
+  local out = {}
+  for b, signs in pairs(by) do table.sort(signs, function(x, y) return x.lnum < y.lnum end) out[#out + 1] = { bufnr = b, signs = signs } end
+  if #out == 0 and buf ~= nil then out[1] = { bufnr = fn.bufnr(buf), signs = {} } end
+  return out
+end)
+def("sign_jump", function(id, group, buf)
+  for _, s in pairs(sign_placed) do if s.id == id and s.group == (group or "") and s.buf == fn.bufnr(buf) then z.buf.set_cursor(s.lnum, 0) return s.lnum end end
+  return -1
+end)
+
+-- ── searchpair / searchpairpos: the matching end of a nested start…end (skip not evaluated) ──
+local function pair_pos(s, m, e, flags, _, stopline)
+  flags = flags or ""
+  local back = flags:find("b") ~= nil
+  local all = lines(0, -1)
+  local r, c = z.buf.cursor()
+  local depth = 0
+  local function each_hit(l, pat)
+    local out, at = {}, 0
+    while at <= #l do local h = rx(l, pat, at) if not h then break end out[#out + 1] = h[1] at = h[2] > h[1] and h[2] or h[2] + 1 end
+    return out
+  end
+  local from, to, step = r, back and 1 or #all, back and -1 or 1
+  for i = from, to, step do
+    if stopline and stopline > 0 and ((back and i < stopline) or (not back and i > stopline)) then break end
+    local l = all[i] or ""
+    local evs = {}
+    for _, p in ipairs(each_hit(l, s)) do evs[#evs + 1] = { p, "s" } end
+    for _, p in ipairs(each_hit(l, e)) do evs[#evs + 1] = { p, "e" } end
+    if m and m ~= "" then for _, p in ipairs(each_hit(l, m)) do evs[#evs + 1] = { p, "m" } end end
+    table.sort(evs, function(a, b) if back then return a[1] > b[1] end return a[1] < b[1] end)
+    for _, ev in ipairs(evs) do
+      local past = i ~= r or (back and ev[1] < c) or (not back and ev[1] > c)
+      if past then
+        local opener, closer = back and "e" or "s", back and "s" or "e"
+        if ev[2] == opener then depth = depth + 1
+        elseif ev[2] == closer then
+          if depth == 0 then return i, ev[1] end
+          depth = depth - 1
+        elseif ev[2] == "m" and depth == 0 then return i, ev[1] end
+      end
+    end
+  end
+  return 0, 0
+end
+def("searchpairpos", function(s, m, e, flags, skip, stopline)
+  local l, c = pair_pos(s, m, e, flags, skip, stopline)
+  if l > 0 and not (flags or ""):find("n") then z.buf.set_cursor(l, c) end
+  return { l, l > 0 and c + 1 or 0 }
+end)
+def("searchpair", function(...) return fn.searchpairpos(...)[1] end)
+
+-- ── getregion / getregionpos: the text between two positions (v V or block) ──
+local function region(p1, p2, o)
+  o = o or {}
+  local t = o.type or "v"
+  local a, b = p1, p2
+  if a[2] > b[2] or (a[2] == b[2] and a[3] > b[3]) then a, b = b, a end
+  local out = {}
+  for l = a[2], b[2] do
+    local s = fn.getline(l) or ""
+    local c1, c2
+    if t == "V" then c1, c2 = 1, #s
+    elseif t:sub(1, 1) == "\22" then c1, c2 = math.min(p1[3], p2[3]), math.max(p1[3], p2[3])
+    else c1 = l == a[2] and a[3] or 1 c2 = l == b[2] and b[3] or #s end
+    if o.exclusive and l == b[2] and t == "v" then c2 = c2 - 1 end
+    out[#out + 1] = { l, c1, c2, s:sub(c1, c2) }
+  end
+  return out
+end
+def("getregion", function(p1, p2, o) local out = {} for i, r in ipairs(region(p1, p2, o)) do out[i] = r[4] end return out end)
+def("getregionpos", function(p1, p2, o) local out = {} for i, r in ipairs(region(p1, p2, o)) do out[i] = { { 0, r[1], r[2], 0 }, { 0, r[1], r[3], 0 } } end return out end)
+
+-- ── fuzzy matching (matchfuzzy, matchfuzzypos): every char in order, scored like Vim ──
+local function fuzzy(text, pat)
+  local tl, pl = text:lower(), pat:lower()
+  local pos, score, at, prev = {}, 0, 1, -1
+  for i = 1, #pl do
+    local c = pl:sub(i, i)
+    if c ~= " " then
+      local f = tl:find(c, at, true)
+      if not f then return nil end
+      pos[#pos + 1] = f - 1
+      score = score + 10
+      if f - 1 == prev + 1 then score = score + 15 end
+      if f == 1 or text:sub(f - 1, f - 1):match("[%s_%-/%.]") then score = score + 30 end
+      score = score - (f - at)
+      prev, at = f - 1, f + 1
+    end
+  end
+  return score, pos
+end
+local function fuzzy_all(list, pat, o)
+  o = o or {}
+  local res = {}
+  for _, it in ipairs(list or {}) do
+    local text = type(it) == "string" and it or (o.key and it[o.key]) or (o.text_cb and o.text_cb(it)) or ""
+    local sc, pos = fuzzy(text, pat)
+    if sc then res[#res + 1] = { it, pos, sc } end
+  end
+  table.sort(res, function(a, b) return a[3] > b[3] end)
+  if o.limit and o.limit > 0 then for i = #res, o.limit + 1, -1 do res[i] = nil end end
+  return res
+end
+def("matchfuzzy", function(list, pat, o) local out = {} for i, r in ipairs(fuzzy_all(list, pat, o)) do out[i] = r[1] end return out end)
+def("matchfuzzypos", function(list, pat, o) local a, b, c = {}, {}, {} for i, r in ipairs(fuzzy_all(list, pat, o)) do a[i], b[i], c[i] = r[1], r[2], r[3] end return { a, b, c } end)
+def("matchstrlist", function(list, pat, o)
+  local out = {}
+  for i, s in ipairs(list or {}) do
+    local at = 0
+    while at <= #s do
+      local m = rx(s, pat, at)
+      if not m then break end
+      local e = { idx = i - 1, byteidx = m[1], text = s:sub(m[1] + 1, m[2]) }
+      if o and o.submatches then e.submatches = {} for g = 1, 9 do e.submatches[g] = m[g + 2] or "" end end
+      out[#out + 1] = e
+      at = m[2] > m[1] and m[2] or m[2] + 1
+    end
+  end
+  return out
+end)
+def("matchbufline", function(b, pat, l1, l2, o)
+  l1 = l1 == "$" and api.nvim_buf_line_count(b) or l1
+  l2 = l2 == "$" and api.nvim_buf_line_count(b) or l2
+  local ls = api.nvim_buf_get_lines(b == "%" and 0 or b, l1 - 1, l2, false)
+  local out = {}
+  for _, e in ipairs(fn.matchstrlist(ls, pat, o)) do e.lnum = l1 + e.idx e.idx = nil out[#out + 1] = e end
+  return out
+end)
+
+-- ── small state: char search, cell widths, digraphs, the tag stack, input save ──
+local charsearch = { char = "", forward = 1, ["until"] = 0 }
+def("getcharsearch", function() return vim.deepcopy and vim.deepcopy(charsearch) or charsearch end)
+def("setcharsearch", function(d) for k, v in pairs(d or {}) do charsearch[k] = v end end)
+local cellwidths = {}
+def("setcellwidths", function(l) cellwidths = l or {} return 0 end)
+def("getcellwidths", function() return cellwidths end)
+local digraphs = { ["a:"] = "ä", ["o:"] = "ö", ["u:"] = "ü", ["A:"] = "Ä", ["O:"] = "Ö", ["U:"] = "Ü", ss = "ß", ["e'"] = "é", ["e!"] = "è", ["a'"] = "á", ["a!"] = "à", ["n?"] = "ñ", ["c,"] = "ç", Eu = "€", Pd = "£", Ye = "¥", Co = "©", Rg = "®", ["->"] = "→", ["<-"] = "←", OK = "✓", XX = "✗", ["*X"] = "×", ["-:"] = "÷", ["+-"] = "±", ["!="] = "≠", ["=<"] = "≤", [">="] = "≥", DG = "°", My = "µ", ["p*"] = "π", ["l*"] = "λ", ["a*"] = "α", ["b*"] = "β", ["NS"] = " " }
+def("digraph_get", function(k) return digraphs[k] or digraphs[k:reverse()] or "" end)
+def("digraph_getlist", function(_) local out = {} for k, v in pairs(digraphs) do out[#out + 1] = { k, v } end table.sort(out, function(a, b) return a[1] < b[1] end) return out end)
+def("digraph_set", function(k, v) digraphs[k] = v return true end)
+def("digraph_setlist", function(l) for _, p in ipairs(l or {}) do digraphs[p[1]] = p[2] end return true end)
+local tagstacks = {}
+def("gettagstack", function(w) w = (w == nil or w == 0) and api.nvim_get_current_win() or w local s = tagstacks[w] or { items = {}, curidx = 1 } return { items = s.items, curidx = s.curidx, length = #s.items } end)
+def("settagstack", function(w, d, action)
+  w = (w == nil or w == 0) and api.nvim_get_current_win() or w
+  local s = tagstacks[w] or { items = {}, curidx = 1 }
+  if action == "a" then for _, it in ipairs(d.items or {}) do s.items[#s.items + 1] = it end
+  elseif d.items then s.items = d.items end
+  if d.curidx then s.curidx = d.curidx end
+  tagstacks[w] = s
+  return 0
+end)
+def("inputsave", function() return 0 end)
+def("inputrestore", function() return 0 end)
+def("inputsecret", function(p, d) return fn.input(p, d) end)
+def("inputdialog", function(p, d, _) return fn.input(p, d) end)
+
+-- ── windows, tabs, folders, the editor's state ──
+def("gettabinfo", function(t)
+  local out = {}
+  for i, h in ipairs(api.nvim_list_tabpages()) do
+    if t == nil or t == i then
+      local ws = {} if i == fn.tabpagenr() then for _, x in ipairs(wins()) do ws[#ws + 1] = handle(x.nr) end end
+      out[#out + 1] = { tabnr = i, windows = ws, variables = {} , id = h }
+    end
+  end
+  return out
+end)
+def("haslocaldir", function(_, _) return fn.getcwd(0) ~= fn.getcwd(-1) and 1 or 0 end)
+def("win_id2tabwin", function(w) for i, x in ipairs(wins()) do if handle(x.nr) == w then return { fn.tabpagenr(), i } end end return { 0, 0 } end)
+def("win_execute", function(w, cmd, _)
+  local cur = api.nvim_get_current_win()
+  if w ~= cur and api.nvim_win_is_valid(w) then api.nvim_set_current_win(w) end
+  local ok, out = pcall(api.nvim_exec2, type(cmd) == "table" and table.concat(cmd, "\n") or cmd, { output = true })
+  if w ~= cur then pcall(api.nvim_set_current_win, cur) end
+  return ok and out.output or ""
+end)
+def("winrestcmd", function() local s = {} for i, x in ipairs(wins()) do s[#s + 1] = i .. "resize " .. x.height s[#s + 1] = "vert " .. i .. "resize " .. x.width end return table.concat(s, "|") end)
+def("win_splitmove", function(w, target, o)
+  o = o or {}
+  if not api.nvim_win_is_valid(w) or not api.nvim_win_is_valid(target) then return -1 end
+  local b = api.nvim_win_get_buf(w)
+  api.nvim_set_current_win(target)
+  ex((o.vertical and "vertical " or "") .. (o.rightbelow and "rightbelow " or "aboveleft ") .. "sbuffer " .. b)
+  pcall(api.nvim_win_close, w, false)
+  return 0
+end)
+def("win_move_separator", function(w, off) local x = win_of(w) if not x then return false end api.nvim_win_set_width(w, x.width + off) return true end)
+def("win_move_statusline", function(w, off) local x = win_of(w) if not x then return false end api.nvim_win_set_height(w, x.height + off) return true end)
+def("changenr", function() return z.buf.undo_current() end)
+def("undofile", function(name) local d = vim.o.undodir ~= "" and vim.split(vim.o.undodir, ",")[1] or (fn.stdpath("state") .. "/undo") return d .. "/" .. fn.fnamemodify(name, ":p"):gsub("/", "%%") end)
+def("virtcol2col", function(_, lnum, vcol)
+  local s = fn.getline(lnum) or ""
+  local ts, v = vim.bo.tabstop or 8, 0
+  for i = 1, #s do
+    local ch = s:sub(i, i)
+    v = v + (ch == "\t" and (ts - v % ts) or 1)
+    if v >= vcol then return i end
+  end
+  return -1
+end)
+def("reg_recorded", function() return vim.g._zett_last_recorded or "" end)
+def("state", function(what) local s = "" if z.buf.recording() ~= "" then s = s .. "" end return what and s:gsub("[^" .. vim.pesc(what) .. "]", "") or s end)
+def("wait", function(ms, cond, interval)
+  local ok = vim.wait(ms, type(cond) == "function" and cond or function() return cond ~= 0 and cond ~= false end, interval)
+  return ok and 0 or -1
+end)
+def("interrupt", function() error("Keyboard interrupt") end)
+def("islocked", function(_) return 0 end)
+def("eventhandler", function() return 0 end)
+def("did_filetype", function() return 0 end)
+def("getmousepos", function() return { screenrow = 0, screencol = 0, winid = 0, winrow = 0, wincol = 0, line = 0, column = 0, coladd = 0 } end)
+def("pum_getpos", function() return {} end)
+def("wildmenumode", function() return 0 end)
+def("getstacktrace", function() local out = {} for l in debug.traceback("", 2):gmatch("\n%s*([^\n]+)") do out[#out + 1] = { filepath = l:match("^([^:]+)") or "", lnum = tonumber(l:match(":(%d+):")) or 0 } end return out end)
+def("getscriptinfo", function(o)
+  local out = {}
+  for i, f in ipairs(vim.g._zett_sourced or {}) do if not (o and o.name) or f:find(o.name) then out[#out + 1] = { sid = i, name = f, autoload = false, version = 1 } end end
+  return out
+end)
+def("fullcommand", function(name)
+  local ok, p = pcall(api.nvim_parse_cmd, name, {})
+  return ok and p.cmd or ""
+end)
+def("expandcmd", function(s) return (s:gsub("%%:?[%w:.~]*", function(m) return fn.expand(m) end):gsub("~/", (os.getenv("HOME") or "~") .. "/")) end)
+def("getloclist", function(_, what) return fn.getqflist(what) end)
+def("strptime", function(fmt, s)
+  local map = { Y = "(%d%d%d%d)", m = "(%d%d?)", d = "(%d%d?)", H = "(%d%d?)", M = "(%d%d?)", S = "(%d%d?)" }
+  local keys = {}
+  local pat = "^" .. fmt:gsub("([%^%$%(%)%.%[%]%*%+%-%?])", "%%%1"):gsub("%%(%a)", function(k) if map[k] then keys[#keys + 1] = k return map[k] end return ".-" end)
+  local caps = { s:match(pat) }
+  if #caps == 0 then return 0 end
+  local t = { year = 1970, month = 1, day = 1, hour = 0, min = 0, sec = 0 }
+  local names = { Y = "year", m = "month", d = "day", H = "hour", M = "min", S = "sec" }
+  for i, k in ipairs(keys) do t[names[k]] = tonumber(caps[i]) end
+  return os.time(t)
+end)
+-- soundfold: a rough phonetic key (vowels after the first letter dropped, doubles merged)
+def("soundfold", function(w) local s = w:lower() local first = s:sub(1, 1) local rest = s:sub(2):gsub("[aeiouyhw]", "") return (first .. rest):gsub("(.)%1+", "%1") end)
+def("charclass", function(s) local c = (s or ""):sub(1, 1) if c == "" or c:match("%s") then return 0 end if c:match("[%w_]") or c:byte() > 127 then return 2 end return 1 end)
+def("list2blob", function(l) local t = {} for i, b in ipairs(l or {}) do t[i] = string.char(b) end return table.concat(t) end)
+def("blob2list", function(b) local t = {} for i = 1, #(b or "") do t[i] = b:byte(i) end return t end)
+def("readblob", function(f, off, size) local h = io.open(fn.expand(f), "rb") if not h then return "" end local d = h:read("*a") h:close() off = off or 0 return d:sub(off + 1, size and (off + size) or nil) end)
+-- getcompletion(pat, type): command, option, file, dir, buffer, highlight, filetype, color, event, help (not yet)
+def("getcompletion", function(pat, kind, _)
+  local items = {}
+  local function from(list) for _, v in ipairs(list) do if v:sub(1, #pat) == pat then items[#items + 1] = v end end end
+  if kind == "file" or kind == "dir" or kind == "file_in_path" then
+    local dir, base = pat:match("^(.*/)([^/]*)$")
+    dir = dir or "" base = base or pat
+    for _, n in ipairs(fn.readdir(dir == "" and "." or dir)) do
+      if n:sub(1, #base) == base then
+        local full = dir .. n
+        local isdir = fn.isdirectory(full) == 1
+        if kind ~= "dir" or isdir then items[#items + 1] = full .. (isdir and "/" or "") end
+      end
+    end
+    table.sort(items)
+    return items
+  elseif kind == "option" then from(z.option_names and z.option_names() or {})
+  elseif kind == "buffer" then for _, b in ipairs(z.buffers()) do if b ~= "" and b:find(pat, 1, true) then items[#items + 1] = b end end
+  elseif kind == "highlight" then from(z.hl_names and z.hl_names() or {})
+  elseif kind == "command" then local cs = {} for n in pairs(api.nvim_get_commands({})) do cs[#cs + 1] = n end from(cs)
+  elseif kind == "filetype" then from({ "c", "cpp", "css", "go", "html", "javascript", "json", "lua", "markdown", "python", "qml", "rust", "sh", "toml", "typescript", "vim", "yaml", "zig" })
+  elseif kind == "event" then from({ "BufEnter", "BufLeave", "BufNewFile", "BufReadPost", "BufReadPre", "BufWinEnter", "BufWritePost", "BufWritePre", "CmdlineEnter", "CmdlineLeave", "ColorScheme", "CursorHold", "CursorMoved", "CursorMovedI", "FileType", "FocusGained", "FocusLost", "InsertEnter", "InsertLeave", "LspAttach", "ModeChanged", "TextChanged", "TextChangedI", "TextYankPost", "UIEnter", "VimEnter", "VimLeavePre", "WinEnter", "WinLeave" })
+  elseif kind == "color" then from(fn.getcompletion and {} or {})
+  end
+  table.sort(items)
+  return items
+end)
+def("nvim__id", function(x) return x end)
+def("nvim__id_array", function(x) return x end)
+def("nvim__id_dict", function(x) return x end)
+def("nvim__id_float", function(x) return x end)
+api.nvim__id = api.nvim__id or function(x) return x end
+api.nvim__id_array = api.nvim__id_array or function(x) return x end
+api.nvim__id_dict = api.nvim__id_dict or function(x) return x end
+api.nvim__id_float = api.nvim__id_float or function(x) return x end
+api.nvim_call_dict_function = api.nvim_call_dict_function or function(d, f, args) local dict = type(d) == "string" and vim.fn.eval and vim.fn.eval(d) or d return dict[f](unpack(args or {})) end
+api.nvim_command_output = api.nvim_command_output or function(c) return api.nvim_exec2(c, { output = true }).output end
+
+-- ── zett.plug("owner/repo", { opts = {…} }): a Neovim plugin from GitHub, cloned on first start
+-- into ~/.local/share/zett/site/pack/plug/start/<repo>; then require(main).setup(opts) when opts
+-- (or setup = true) is given. :PlugUpdate pulls them all, :PlugList lists them. ──
+local plug_root = (os.getenv("XDG_DATA_HOME") or ((os.getenv("HOME") or "") .. "/.local/share")) .. "/zett/site/pack/plug/start"
+local plugged = {}
+function zett.plug(repo, o)
+  o = o or {}
+  local name = o.name or repo:match("([^/]+)$"):gsub("%.git$", "")
+  local dir = plug_root .. "/" .. name
+  if vim.fn.isdirectory(dir) == 0 then
+    vim.fn.mkdir(plug_root, "p")
+    local url = repo:find("://") and repo or ("https://github.com/" .. repo .. ".git")
+    local out = vim.fn.system({ "git", "clone", "--depth", "1", "--quiet", url, dir })
+    if vim.v.shell_error ~= 0 or vim.fn.isdirectory(dir) == 0 then
+      vim.notify("plug: could not clone " .. repo .. ": " .. tostring(out), vim.log.levels.ERROR)
+      return
+    end
+  end
+  local lua_dir = dir .. "/lua"
+  local mine = lua_dir .. "/?.lua;" .. lua_dir .. "/?/init.lua;"
+  if not package.path:find(mine, 1, true) then package.path = mine .. package.path end
+  plugged[#plugged + 1] = { repo = repo, name = name, dir = dir }
+  if o.opts ~= nil or o.setup then
+    local main = o.main or name:gsub("%.nvim$", ""):gsub("%.lua$", ""):gsub("^nvim%-", "")
+    -- a built-in stand-in of the same name (zett's own fidget) steps aside for the real plugin
+    if type(package.loaded[main]) == "table" and package.loaded[main].zett_builtin then
+      zett._replaced = zett._replaced or {}
+      zett._replaced[main] = true
+      package.loaded[main] = nil
+    end
+    local ok, mod = pcall(require, main)
+    if not ok then vim.notify("plug: require('" .. main .. "'): " .. tostring(mod), vim.log.levels.ERROR) return end
+    if type(mod) == "table" and type(mod.setup) == "function" then
+      local ok2, err = pcall(mod.setup, o.opts or {})
+      if not ok2 then vim.notify("plug: " .. main .. ".setup: " .. tostring(err), vim.log.levels.ERROR) end
+    end
+  end
+  return dir
+end
+api.nvim_create_user_command("PlugUpdate", function()
+  for _, p in ipairs(plugged) do
+    local out = vim.fn.system({ "git", "-C", p.dir, "pull", "--ff-only", "--quiet" })
+    print(p.name .. ": " .. (vim.v.shell_error == 0 and "up to date" or out))
+  end
+end, {})
+api.nvim_create_user_command("PlugList", function()
+  for _, p in ipairs(plugged) do print(p.name .. "  " .. p.dir) end
+end, {})
+
+-- ── LSP progress as Neovim gives it: a client per server (vim.lsp.get_client_by_id) whose
+-- `progress` drains what came, and the LspProgress autocommand (fidget.nvim, lualine) ──
+local lsp_clients, lsp_ids, lsp_tokens = {}, {}, {}
+local function lsp_client(name)
+  local id = lsp_ids[name]
+  if not id then
+    id = #lsp_clients + 1
+    lsp_ids[name] = id
+    local q = {}
+    local prog = setmetatable({ pending = {}, push = function(_, v) q[#q + 1] = v end }, { __call = function() return table.remove(q, 1) end })
+    lsp_clients[id] = { id = id, name = name, progress = prog, config = { name = name }, server_capabilities = {}, attached_buffers = {}, initialized = true, is_stopped = function() return false end }
+  end
+  return lsp_clients[id]
+end
+vim.lsp.get_client_by_id = function(id) return lsp_clients[id] end
+vim.lsp.get_clients = function(f)
+  f = f or {}
+  local out = {}
+  for _, c in ipairs(lsp_clients) do if (f.name == nil or f.name == c.name) and (f.id == nil or f.id == c.id) then out[#out + 1] = c end end
+  return out
+end
+vim.lsp.get_active_clients = vim.lsp.get_clients
+vim.lsp.status = function()
+  local parts = {}
+  for _, c in ipairs(lsp_clients) do
+    for p in c.progress do
+      local v = p.value or {}
+      if v.kind ~= "end" then parts[#parts + 1] = (v.percentage and (v.percentage .. "%: ") or "") .. (v.title or "") .. (v.message and (" " .. v.message) or "") end
+    end
+  end
+  return table.concat(parts, ", ")
+end
+z.on("lsp_progress", function(e)
+  local c = lsp_client(e.server)
+  local key = e.server .. "\0" .. e.token
+  local kind = e.done == "true" and "end" or (lsp_tokens[key] and "report" or "begin")
+  lsp_tokens[key] = kind ~= "end" or nil
+  local value = { kind = kind, title = e.title ~= "" and e.title or nil, message = e.message ~= "" and e.message or nil, percentage = tonumber(e.percent) }
+  c.progress:push({ token = e.token, value = value })
+  local ev = { event = "LspProgress", buf = 0, match = kind, data = { client_id = c.id, params = { token = e.token, value = value } } }
+  for _, a in ipairs(made_au) do
+    if a.event == "LspProgress" and a.callback then
+      local ok, err = pcall(a.callback, ev)
+      if not ok then vim.notify("LspProgress: " .. tostring(err), vim.log.levels.ERROR) end
+    end
+  end
+end)
+
+-- ── highlight namespaces: groups set in one (fidget's Normal, FloatBorder) stay out of the
+-- editor's colours; a group only a namespace defines (FidgetNoBlend) is made global so the
+-- float can still draw it ──
+local hl_ns, win_ns, cur_ns = {}, {}, 0
+local set_hl_global = api.nvim_set_hl
+api.nvim_set_hl = function(ns, name, v)
+  if ns == nil or ns == 0 then return set_hl_global(0, name, v) end
+  hl_ns[ns] = hl_ns[ns] or {}
+  hl_ns[ns][name] = v
+  local ok, have = pcall(api.nvim_get_hl, 0, { name = name })
+  if not ok or not have or next(have) == nil then set_hl_global(0, name, v) end
+end
+api.nvim_win_set_hl_ns = function(w, ns) win_ns[w] = ns end
+api.nvim_get_hl_ns = function(o) if o and o.winid then return win_ns[o.winid] or -1 end return cur_ns end
+api.nvim_set_hl_ns = function(ns) cur_ns = ns end
+api.nvim_set_hl_ns_fast = function(ns) cur_ns = ns end
+local get_hl_global = api.nvim_get_hl
+api.nvim_get_hl = function(ns, o)
+  if ns and ns ~= 0 and hl_ns[ns] then
+    if o and o.name then return hl_ns[ns][o.name] or {} end
+    return hl_ns[ns]
+  end
+  return get_hl_global(0, o)
+end

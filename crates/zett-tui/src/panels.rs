@@ -15,8 +15,26 @@ impl App {
         let path = self.docs[cur].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
         let root = project_of(&self.root).unwrap_or(self.root.clone());
         let root = std::fs::canonicalize(&root).unwrap_or(root);
-        let open: Vec<String> = self.docs.iter().filter_map(|d| d.abs_path()).map(|p| p.display().to_string()).collect();
+        // every buffer in its place ("" for one without a file), so a buffer's number is its place
+        // here (vim.api's handles), and the windows as last drawn (nvim_list_wins, nvim_win_get_*)
+        let open: Vec<String> = self.docs.iter().map(|d| d.abs_path().map(|p| p.display().to_string()).unwrap_or_default()).collect();
         self.engine.set_buffers(open);
+        let wins: Vec<(usize, usize, u16, u16, u16, u16)> = self.win_rects.iter().filter_map(|&(id, r)| self.wins.get(id).and_then(|w| w.as_ref()).map(|w| (id + 1, w.doc + 1, r.width, r.height, r.y, r.x))).collect();
+        self.engine.set_layout(cur + 1, wins, self.focus + 1);
+        let tops = self.win_rects.iter().filter_map(|&(id, _)| self.wins.get(id).and_then(|w| w.as_ref()).map(|w| w.top)).collect();
+        self.engine.set_tops(tops);
+        // the : line and (when it grew) the command history, for getcmdline / histget
+        let line = self.cmdline.clone().map(|l| { let n = l.chars().count(); (l, n) });
+        let hist = (self.cmd_hist.len() != self.hist_sent).then(|| self.cmd_hist.clone());
+        self.hist_sent = self.cmd_hist.len();
+        self.engine.set_cmdline(line, hist);
+        // the quickfix list for getqflist, given again only when it changed
+        let qkey = self.qf.current().map(|l| (l.title.clone(), l.idx, l.items.len(), self.qf.lists.len(), self.qf.cur));
+        if qkey != self.qf_sent {
+            let (title, idx, items) = self.qf.current().map(|l| (l.title.clone(), l.idx, l.items.iter().map(|i| (i.file.clone(), i.line, i.col, i.kind, i.nr, i.text.clone(), i.valid)).collect())).unwrap_or_default();
+            self.engine.set_qf(title, idx, items);
+            self.qf_sent = qkey;
+        }
         let rev = self.docs[cur].ed.buf.rev();
         let r = self.engine.lend_buffer(&mut self.docs[cur].ed, &path, &root, f);
         if self.docs[cur].ed.buf.rev() != rev {
@@ -38,6 +56,16 @@ impl App {
     }
 
     pub(crate) fn emit(&mut self, event: &str) {
+        // a file read: its type's ftplugin/ and indent/ (Neovim's `filetype plugin indent on`)
+        if event == "buf_read" {
+            // plugin/ first, as Neovim loads it before the first file (that file is read before
+            // the first frame here)
+            if self.flag(self.cur, "loadplugins") {
+                self.load_runtime_plugins();
+            }
+            let ft = self.setting(self.cur, "filetype");
+            self.load_ftplugins(&ft);
+        }
         // Vim's autocommands for the same moment (mapcmds.rs)
         for e in crate::mapcmds::vim_events(event) {
             self.fire_autocmds(e, None);
@@ -105,7 +133,7 @@ impl App {
         }
         let mut rest = body;
         for side in ["left", "right"] {
-            let ps: Vec<&PanelView> = panels.iter().filter(|p| p.side == side).collect();
+            let ps: Vec<&PanelView> = panels.iter().filter(|p| p.side == side && !self.sides_hidden).collect();
             if ps.is_empty() || rest.width < 50 {
                 continue;
             }
@@ -264,9 +292,23 @@ impl App {
             let h = pct(if p.height == 0 { 70 } else { p.height }, body.height).max(5).min(body.height);
             let x = (((body.width - w) / 2) as i32 + p.dx as i32).clamp(0, (body.width - w) as i32) as u16;
             let y = (((body.height - h) / 2) as i32 + p.dy as i32).clamp(0, (body.height - h) as i32) as u16;
-            let outer = Rect { x: body.x + x, y: body.y + y, width: w, height: h };
-            f.render_widget(Clear, outer);
-            let title = if p.focused { format!(" {} ", p.title) } else { format!(" {} · SPC w Tab: up ", p.title) };
+            let mut outer = Rect { x: body.x + x, y: body.y + y, width: w, height: h };
+            // placed as Neovim places a float (nvim_open_win): its size in cells inside the frame, at
+            // row / col from the editor, the cursor or the focused window, kept on the screen
+            if let Some((rel, row, col)) = &p.at {
+                let (w, h) = ((p.width + 2).min(body.width), ((if p.height == 0 { p.lines.len().max(1) as u16 } else { p.height }) + 2).min(body.height));
+                let (ox, oy) = match rel.as_str() {
+                    "cursor" => (self.cursor_xy.0 as i32, self.cursor_xy.1 as i32),
+                    "win" => self.win_rects.iter().find(|(id, _)| *id == self.focus).map_or((body.x as i32, body.y as i32), |(_, r)| (r.x as i32, r.y as i32)),
+                    _ => (body.x as i32, body.y as i32),
+                };
+                let x = (ox + col).clamp(body.x as i32, (body.x + body.width - w) as i32) as u16;
+                let y = (oy + row).clamp(body.y as i32, (body.y + body.height - h) as i32) as u16;
+                outer = Rect { x, y, width: w, height: h };
+            }
+            crate::layer(f, outer);
+            // a Neovim float (nvim_open_win): its own title only, none when it has none
+            let title = if p.at.is_some() { if p.title.is_empty() { String::new() } else { format!(" {} ", p.title) } } else if p.focused { format!(" {} ", p.title) } else { format!(" {} · SPC w Tab: up ", p.title) };
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_set(crate::display::float_set())

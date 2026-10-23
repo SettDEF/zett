@@ -1,0 +1,34 @@
+breakadd	Vim's script debugger: Vimscript runs as Lua here (zett lua, :lua) and errors name the line
+breakdel	Vim's script debugger: Vimscript runs as Lua here (zett lua, :lua) and errors name the line
+breaklist	Vim's script debugger: Vimscript runs as Lua here (zett lua, :lua) and errors name the line
+debug	Vim's script debugger: Vimscript runs as Lua here (zett lua, :lua) and errors name the line
+debuggreedy	Vim's script debugger: Vimscript runs as Lua here (zett lua, :lua) and errors name the line
+profile	Vim's script profiler: Vimscript runs as Lua here; zett's own speed is measured against docs/PERFORMANCE.md
+profdel	Vim's script profiler: Vimscript runs as Lua here; zett's own speed is measured against docs/PERFORMANCE.md
+syntime	Vim's regex highlighter timing: zett highlights with syntect and tree-sitter, not syntax regexes
+detach	Neovim's remote UI: zett runs in zeit, which detaches and attaches (zeit's prefix d)
+restart	Neovim's remote UI server: zett's state lives on (history, sessions) across a quit
+gui	the GUI is its own start: zett --gui
+gvim	the GUI is its own start: zett --gui
+rshada	ShaDa: zett keeps history, marks and registers in its own state folder, read at start
+wshada	ShaDa: zett keeps history, marks and registers in its own state folder, written as it goes
+preserve	swap files: zett keeps every change in its undo history on disk (time travel), not a swap file
+recover	swap files: zett keeps every change in its undo history on disk (time travel), not a swap file
+swapname	swap files: zett keeps every change in its undo history on disk (time travel), not a swap file
+mkspell	.spl files: zett's spelling reads hunspell dictionaries
+language	the messages are in English; the locale is the environment's (LANG)
+lmap	Lang-Arg mode: zett's input methods (C-\, :help emacs) do that
+lmapclear	Lang-Arg mode: zett's input methods (C-\, :help emacs) do that
+lnoremap	Lang-Arg mode: zett's input methods (C-\, :help emacs) do that
+lunmap	Lang-Arg mode: zett's input methods (C-\, :help emacs) do that
+loadkeymap	Lang-Arg mode: zett's input methods (C-\, :help emacs) do that
+smap	Select mode: zett has none (a selection is visual)
+smapclear	Select mode: zett has none (a selection is visual)
+snoremap	Select mode: zett has none (a selection is visual)
+sunmap	Select mode: zett has none (a selection is visual)
+tmap	terminal mode: zett's terminals are zeit panes, whose keys are zeit's (zeit bind-key)
+tmapclear	terminal mode: zett's terminals are zeit panes, whose keys are zeit's (zeit bind-key)
+tnoremap	terminal mode: zett's terminals are zeit panes, whose keys are zeit's (zeit bind-key)
+tunmap	terminal mode: zett's terminals are zeit panes, whose keys are zeit's (zeit bind-key)
+tmenu	GUI menu tooltips: the F10 menu says what each item runs
+tunmenu	GUI menu tooltips: the F10 menu says what each item runs

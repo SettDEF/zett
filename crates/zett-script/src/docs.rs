@@ -14,6 +14,19 @@ pub const TOPICS: &[(&str, &str, &str)] = &[
     ("terminal", "zett with zeit and zash", include_str!("../docs/terminal.md")),
     ("cli", "zett on the command line", include_str!("../docs/cli.md")),
     ("query", "query blocks, references, backlinks, code that runs", include_str!("../docs/query.md")),
+    ("faq", "questions: getting zett, debugging, known problems, plans", include_str!("../docs/faq.md")),
+    ("news", "what is new: the latest changes", include_str!(concat!(env!("OUT_DIR"), "/news.md"))),
+    ("license", "zett's licence (MIT) and its no-warranty clause", include_str!("../docs/license.md")),
+    ("hello", "hello in many scripts: a test of the font and terminal", include_str!("../docs/hello.md")),
+    ("vim-api", "Neovim's Lua API (vim.*) and Vimscript in zett: init.vim, .vim files, :let, :function", include_str!("../docs/vim-api.md")),
+    // the reference: every command, option, key and function of Neovim and Emacs, each with what
+    // zett does with it (✓ has it, — decided otherwise and why, · not yet); scripts/parity.sh makes them
+    ("ex-commands", "reference: every Ex command (:help :sort lands on its line)", include_str!("../../../docs/parity/nvim-ex-commands.md")),
+    ("option-list", "reference: every option, its type, scope, default and zett's state", include_str!("../../../docs/parity/nvim-options.md")),
+    ("normal-keys", "reference: every normal-mode key as zett's Vim profile takes it", include_str!("../../../docs/parity/nvim-normal-keys.md")),
+    ("emacs-keys", "reference: every Emacs default key and the command it runs", include_str!("../../../docs/parity/emacs-keys.md")),
+    ("emacs-commands", "reference: every Emacs command by package", include_str!("../../../docs/parity/emacs-commands.md")),
+    ("api-list", "reference: every vim.api and vim.fn function", include_str!("../../../docs/parity/nvim-api.md")),
 ];
 
 /// A topic by name or by its start (`ls` → lsp); `index` for nothing.

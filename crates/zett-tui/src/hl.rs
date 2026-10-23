@@ -74,8 +74,20 @@ pub(crate) fn sync(e: &zett_script::Engine) -> bool {
     })
 }
 
+thread_local! {
+    /// winhighlight of the window being drawn: a group read as another (Normal:NormalFloat)
+    static REMAP: std::cell::RefCell<Vec<(String, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The window about to be drawn reads its groups through `winhl` ("From:To,…"; empty: as they are).
+pub(crate) fn set_winhighlight(winhl: &str) {
+    REMAP.with(|r| *r.borrow_mut() = winhl.split(',').filter_map(|p| p.split_once(':')).map(|(a, b)| (a.trim().to_string(), b.trim().to_string())).filter(|(a, b)| !a.is_empty() && !b.is_empty()).collect());
+}
+
 /// A group's style (the built-in look before any engine has been seen, as in tests).
 pub(crate) fn hl(name: &str) -> Style {
+    let mapped = REMAP.with(|r| r.borrow().iter().find(|(a, _)| a == name).map(|(_, b)| b.clone()));
+    let name = mapped.as_deref().unwrap_or(name);
     CACHE.with(|c| {
         let mut c = c.borrow_mut();
         if c.1.is_empty() {
@@ -172,4 +184,19 @@ fn palette(i: u8) -> (u8, u8, u8) {
     // the xterm colours when tinct has none
     const PLAIN: [(u8, u8, u8); 8] = [(0, 0, 0), (205, 49, 49), (13, 188, 121), (229, 229, 16), (36, 114, 200), (188, 63, 188), (17, 168, 205), (229, 229, 229)];
     p.get(i as usize).copied().unwrap_or(PLAIN[(i % 8) as usize])
+}
+
+#[cfg(test)]
+mod winhl_tests {
+    use super::*;
+
+    #[test]
+    fn winhighlight_reads_one_group_as_another() {
+        let (nr, err) = (hl("LineNr"), hl("ErrorMsg"));
+        assert_ne!(nr, err, "the two groups differ to begin with");
+        set_winhighlight("LineNr:ErrorMsg");
+        assert_eq!(hl("LineNr"), err);
+        set_winhighlight("");
+        assert_eq!(hl("LineNr"), nr);
+    }
 }

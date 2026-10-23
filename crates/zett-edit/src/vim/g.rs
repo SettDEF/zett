@@ -187,7 +187,12 @@ impl Editor {
             'x' | 'f' | 'F' => {
                 // the address or file name under the cursor
                 let (s, e) = (self.line_start(line), self.line_end(line));
-                let ok = |ch: char| !ch.is_whitespace() && !matches!(ch, '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']' | '`');
+                // gf gF: a file name by isfname (and any non-ASCII letter); gx: an address, so : and / too
+                let isf = if c == 'x' { None } else { self.opt("isfname").and_then(super::options::parse_iskeyword) };
+                let ok = |ch: char| match &isf {
+                    Some(t) => (ch as u32) >= 256 || t[ch as usize],
+                    None => !ch.is_whitespace() && !matches!(ch, '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']' | '`'),
+                };
                 let (mut a, mut b) = (self.cursor, self.cursor);
                 while a > s && self.char(a - 1).is_some_and(ok) {
                     a -= 1;
@@ -196,7 +201,16 @@ impl Editor {
                     b += 1;
                 }
                 if b > a {
-                    self.vim.requests.push(Request::Open(self.buf.slice(a, b)));
+                    let mut name = self.buf.slice(a, b);
+                    // gF: the line number after it (file:42, file(42), file line 42)
+                    if c == 'F' {
+                        let rest = self.buf.slice(b, e);
+                        let n: String = rest.trim_start_matches([':', '(', ' ']).trim_start_matches("line ").chars().take_while(|c| c.is_ascii_digit()).collect();
+                        if !n.is_empty() {
+                            name = format!("{name}:{n}");
+                        }
+                    }
+                    self.vim.requests.push(Request::Open(name));
                 }
             }
             'd' | 'D' => {

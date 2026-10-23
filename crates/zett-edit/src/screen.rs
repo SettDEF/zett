@@ -8,6 +8,11 @@ use crate::Editor;
 pub const COMMANDS: &[(&str, &str)] = &[
     ("scroll-up-command", "Show the next screen (two lines stay); with an argument, that many lines"),
     ("scroll-down-command", "Show the previous screen (two lines stay); with an argument, that many lines"),
+    ("scroll-up-line", "The text up a line (the argument's lines), the cursor staying on its line"),
+    ("scroll-down-line", "The text down a line (the argument's lines), the cursor staying on its line"),
+    ("scroll-lock-next-line", "The text up a line, the cursor where it is on the screen (scroll-lock-mode's C-n)"),
+    ("set-selective-display", "Hide the lines indented at least the argument's columns (none: show them all again)"),
+    ("scroll-lock-previous-line", "The text down a line, the cursor where it is on the screen (scroll-lock-mode's C-p)"),
     ("recenter-top-bottom", "The cursor's line to the middle of the window, then the top, then the bottom"),
     ("move-to-window-line-top-bottom", "The cursor to the window's middle line, then its top, then its bottom"),
     ("scroll-left", "Scroll the text left (a screen, or the argument's columns)"),
@@ -64,6 +69,65 @@ impl Editor {
                 if to != line {
                     self.vertical_to(to);
                 }
+            }
+            // by lines: the text moves; the cursor stays on its line (scroll-up/down-line) or, with
+            // scroll-lock-mode, where it is on the screen; either way it stays inside the window
+            "scroll-up-line" | "scroll-down-line" | "scroll-lock-next-line" | "scroll-lock-previous-line" => {
+                let n = arg.unwrap_or(1).max(1) as usize;
+                let up = matches!(name, "scroll-up-line" | "scroll-lock-next-line");
+                let t = if up { (top + n).min(last) } else { top.saturating_sub(n) };
+                self.vim_top(t);
+                let want = match (name.starts_with("scroll-lock"), up) {
+                    (true, true) => (line + (t - top)).min(last),
+                    (true, false) => line.saturating_sub(top - t),
+                    (false, _) => line,
+                };
+                let to = want.clamp(t, (t + height - 1).min(last));
+                if to != line {
+                    self.vertical_to(to);
+                }
+            }
+            // C-x $: each run of lines indented at least N columns folded under the line above it
+            // (Emacs shows that line with "..."); with no argument the folds it made go again
+            "set-selective-display" => {
+                let made = std::mem::take(&mut self.selective);
+                self.vim.folds.retain(|&(a, b, _)| !made.contains(&(a, b)));
+                if let Some(n) = arg.filter(|n| *n > 0).map(|n| n as usize) {
+                    let tab = self.opt_num("tabstop", 8).max(1) as usize;
+                    let indent = |l: usize| -> Option<usize> {
+                        let s: String = self.buf.line(l).chars().filter(|c| *c != '\n').collect();
+                        if s.trim().is_empty() {
+                            return None;
+                        }
+                        Some(s.chars().take_while(|c| *c == ' ' || *c == '\t').fold(0, |w, c| if c == '\t' { w / tab * tab + tab } else { w + 1 }))
+                    };
+                    let mut runs = Vec::new();
+                    let mut l = 1;
+                    while l <= last {
+                        // a run: deep lines (blank ones inside it go with it)
+                        if indent(l).is_some_and(|w| w >= n) {
+                            let start = l;
+                            let mut end = l;
+                            while end < last && indent(end + 1).map_or(true, |w| w >= n) {
+                                end += 1;
+                            }
+                            while end > start && indent(end).is_none() {
+                                end -= 1;
+                            }
+                            runs.push((start - 1, end));
+                            l = end + 1;
+                        } else {
+                            l += 1;
+                        }
+                    }
+                    for (a, b) in runs {
+                        let span = (self.line_start(a), self.line_end(b));
+                        self.vim.folds.push((span.0, span.1, true));
+                        self.selective.push(span);
+                    }
+                    self.vim.folds_off = false;
+                }
+                self.folds_changed();
             }
             "recenter-top-bottom" => {
                 self.cycle = if again { (self.cycle + 1) % 3 } else { 0 };
@@ -193,5 +257,59 @@ mod tests {
         assert!(matches!(&e.take_requests()[..], [Request::Message(m)] if m == "Buffer has 2 lines, 4 words, and 14 characters."));
         e.exec_arg("move-to-column", Some(3));
         assert_eq!(e.cursor().col, 3);
+    }
+}
+
+#[cfg(test)]
+mod line_scroll_tests {
+    use crate::vim::Request;
+    use crate::Editor;
+
+    fn ed() -> Editor {
+        let text: String = (0..100).map(|i| format!("line {i}\n")).collect();
+        let mut e = Editor::from_str(&text);
+        e.set_emacs(true);
+        e.set_screen(0, 10, 80);
+        e
+    }
+
+    #[test]
+    fn scroll_lock_keeps_the_cursor_where_it_is_on_screen() {
+        let mut e = ed();
+        e.exec_arg("goto-line", Some(4));
+        e.exec_arg("scroll-lock-next-line", None);
+        e.exec_arg("scroll-lock-next-line", None);
+        assert_eq!(e.take_requests(), vec![Request::Top(1), Request::Top(2)]);
+        assert_eq!(e.cursor().line, 5, "moved with the text: still the 4th row on screen");
+        e.exec_arg("scroll-lock-previous-line", None);
+        assert_eq!(e.cursor().line, 4);
+    }
+
+    #[test]
+    fn scroll_up_line_keeps_the_cursor_on_its_line_until_it_would_leave() {
+        let mut e = ed();
+        e.exec_arg("goto-line", Some(4));
+        e.exec_arg("scroll-up-line", Some(2));
+        assert_eq!(e.cursor().line, 3, "line 4 is still on screen");
+        e.exec_arg("scroll-up-line", Some(3));
+        assert_eq!(e.cursor().line, 5, "pushed to the new top");
+    }
+}
+
+#[cfg(test)]
+mod selective_tests {
+    use crate::Editor;
+
+    #[test]
+    fn selective_display_folds_deep_lines_under_their_parent() {
+        let mut e = Editor::from_str("fn a() {\n    let x = 1;\n    if x {\n        deep();\n    }\n}\nfn b() {}\n");
+        e.set_emacs(true);
+        e.exec_arg("set-selective-display", Some(4));
+        // lines 1-4 (the body) folded under line 0; line 5 and after shown
+        assert_eq!(e.fold_mark(0).1, Some(true));
+        assert_eq!(e.fold_mark(6).0, 0);
+        // with no argument: shown again
+        e.exec_arg("set-selective-display", None);
+        assert!(!e.has_folds());
     }
 }

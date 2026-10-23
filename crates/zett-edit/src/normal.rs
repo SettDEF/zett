@@ -258,8 +258,8 @@ impl Editor {
             'I' => self.start_insert(self.first_non_blank(line)),
             'A' => self.start_insert(self.line_end(line)),
             // autoindent (Neovim's default): the new line starts at this one's indent
-            'o' => { self.begin(); let ind = self.next_indent(line, true, None); let e = self.line_end(line); self.ins(e, &format!("\n{ind}")); self.mode = Mode::Insert; self.cursor = e + 1 + ind.chars().count(); }
-            'O' => { self.begin(); let ind = self.next_indent(line, false, None); let s = self.line_start(line); self.ins(s, &format!("{ind}\n")); self.mode = Mode::Insert; self.cursor = s + ind.chars().count(); }
+            'o' => { self.begin(); let ind = self.next_indent(line, true, None); let e = self.line_end(line); self.ins(e, &format!("\n{ind}")); self.mode = Mode::Insert; self.cursor = e + 1 + ind.chars().count(); self.indent_expr_line(line + 1); }
+            'O' => { self.begin(); let ind = self.next_indent(line, false, None); let s = self.line_start(line); self.ins(s, &format!("{ind}\n")); self.mode = Mode::Insert; self.cursor = s + ind.chars().count(); self.indent_expr_line(line); }
 
             'u' => { let n = self.take_count(); for _ in 0..n { self.undo_once(); } }
             _ if self.vim_more(c) => {}

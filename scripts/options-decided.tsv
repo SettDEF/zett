@@ -1,0 +1,51 @@
+aleph	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+allowrevins	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+arabic	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+arabicshape	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+hkmap	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+hkmapp	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+revins	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+rightleft	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+rightleftcmd	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+termbidi	right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text
+icon	the window's icon is the terminal's (zash) and the desktop's
+iconstring	the window's icon is the terminal's (zash) and the desktop's
+ambiwidth	how wide a character shows is the terminal's to say
+emoji	how wide a character shows is the terminal's to say
+lines	the terminal's size: zett follows it
+columns	the terminal's size: zett follows it
+swapfile	no swap files: every change is kept in the undo history on disk (time travel)
+directory	no swap files: every change is kept in the undo history on disk (time travel)
+updatecount	no swap files: every change is kept in the undo history on disk (time travel)
+shada	no ShaDa file: history, marks and registers live in zett's own state folder
+shadafile	no ShaDa file: history, marks and registers live in zett's own state folder
+pyxversion	no Python: zett's scripting is Lua (vim.*, and Vimscript translated to it)
+regexpengine	Vim's choice between its two regex engines: zett has one
+maxfuncdepth	Vimscript runs as Lua, whose own stack limit applies
+maxmempattern	a memory limit of Vim's regex engine
+mkspellmem	a memory limit of :mkspell (zett reads hunspell dictionaries)
+redrawdebug	Vim's redraw debugging
+writedelay	Vim's redraw debugging
+pumblend	see-through menus need a GUI: zett draws in the terminal's cells
+winblend	see-through windows need a GUI: zett draws in the terminal's cells
+selectmode	Select mode: zett has none (a selection is visual)
+keymodel	Select mode: zett has none (a selection is visual)
+imcmdline	a GUI input method (IME): zett's own input methods are C-\ (:help emacs)
+imdisable	a GUI input method (IME): zett's own input methods are C-\ (:help emacs)
+imsearch	a GUI input method (IME): zett's own input methods are C-\ (:help emacs)
+scrollback	terminal buffers: zett's terminals are zeit panes
+termpastefilter	terminal buffers: zett's terminals are zeit panes
+highlight	an old option Neovim keeps only for :help (highlights are :highlight's)
+lazyredraw	zett draws once a frame, after a whole macro or mapping has run (always lazy)
+ttimeout	the terminal's key sequences arrive whole (crossterm reads them), so there is no wait for the rest
+ttimeoutlen	the terminal's key sequences arrive whole (crossterm reads them), so there is no wait for the rest
+more	long output opens in a popup to scroll and search, not a pager
+shellpipe	zett reads a command's output through a pipe, not a redirect into a file
+shellredir	zett reads a command's output through a pipe, not a redirect into a file
+shelltemp	zett reads a command's output through a pipe, not a redirect into a file
+makeef	zett reads :make's output through a pipe, not an error file
+shellxescape	for cmd.exe (shellxquote=( on Windows)
+pastetoggle	the terminal tells a paste from typing (bracketed paste), so there is no paste mode to toggle
+helpheight	help opens in the window itself, not a split of its own
+helpfile	zett's help is built in (:help), not a file to point at
+helplang	zett's help is in English

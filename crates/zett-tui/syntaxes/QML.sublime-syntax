@@ -1,0 +1,151 @@
+%YAML 1.2
+---
+# QML (Qt Quick, Quickshell): imports, pragmas, types, ids, properties, signals, handlers,
+# and JavaScript expressions in bindings and functions.
+name: QML
+file_extensions: [qml, qmltypes]
+scope: source.qml
+
+variables:
+  ident: '[A-Za-z_$][A-Za-z0-9_$]*'
+
+contexts:
+  main:
+    - include: comments
+    - match: '^\s*(import)\b'
+      captures:
+        1: keyword.control.import.qml
+      push: import
+    - match: '^\s*(pragma)\s+({{ident}})'
+      captures:
+        1: keyword.control.directive.qml
+        2: entity.name.tag.qml
+    - include: declarations
+    - include: expressions
+
+  import:
+    - meta_scope: meta.import.qml
+    - match: '\b(as)\b'
+      scope: keyword.control.import.qml
+    - match: '"[^"]*"'
+      scope: string.quoted.double.qml
+    - match: '\d+(\.\d+)*'
+      scope: constant.numeric.qml
+    - match: '{{ident}}(\.{{ident}})*'
+      scope: entity.name.namespace.qml
+    - match: '$'
+      pop: true
+
+  declarations:
+    # property / readonly / required / default property TYPE NAME
+    - match: '\b(readonly|required|default)?\s*\b(property)\s+((?:list<)?{{ident}}>?)\s+({{ident}})'
+      captures:
+        1: storage.modifier.qml
+        2: storage.type.property.qml
+        3: storage.type.qml
+        4: variable.other.property.qml
+    - match: '\b(signal)\s+({{ident}})'
+      captures:
+        1: storage.type.signal.qml
+        2: entity.name.function.qml
+    - match: '\b(function)\s+({{ident}})'
+      captures:
+        1: storage.type.function.qml
+        2: entity.name.function.qml
+    - match: '\b(component)\s+({{ident}})'
+      captures:
+        1: storage.type.qml
+        2: entity.name.type.qml
+    - match: '\b(enum)\s+({{ident}})'
+      captures:
+        1: storage.type.qml
+        2: entity.name.type.qml
+    # id: name
+    - match: '\b(id)\s*(:)\s*({{ident}})'
+      captures:
+        1: keyword.other.id.qml
+        2: punctuation.separator.qml
+        3: entity.name.label.qml
+    # onSomething: handler
+    - match: '\b(on[A-Z][A-Za-z0-9_]*)\s*(?=:)'
+      scope: entity.name.function.handler.qml
+    # property: value (also grouped a.b:)
+    - match: '\b({{ident}}(?:\.{{ident}})*)\s*(?=:(?!:))'
+      scope: variable.other.member.qml
+    # an object: Type {
+    - match: '\b([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*)\s*(?=\{)'
+      scope: entity.name.type.qml
+
+  expressions:
+    - include: comments
+    - include: strings
+    - match: '\b(if|else|for|while|do|switch|case|break|continue|return|try|catch|finally|throw|new|delete|typeof|instanceof|in|of|async|await|yield)\b'
+      scope: keyword.control.qml
+    - match: '\b(var|let|const|function|alias)\b'
+      scope: storage.type.qml
+    - match: '\b(true|false|null|undefined|NaN|Infinity)\b'
+      scope: constant.language.qml
+    - match: '\b(this|parent|root|modelData|index|model)\b'
+      scope: variable.language.qml
+    - match: '\b(int|real|double|bool|string|var|url|color|date|point|rect|size|list|font|vector2d|vector3d|matrix4x4)\b'
+      scope: storage.type.primitive.qml
+    - match: '\b(0[xX][0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b'
+      scope: constant.numeric.qml
+    - match: '\b([A-Z][A-Za-z0-9_]*)\b'
+      scope: support.class.qml
+    - match: '\b({{ident}})\s*(?=\()'
+      scope: support.function.qml
+    - match: '=>|[-+*/%=!<>&|^~?]+'
+      scope: keyword.operator.qml
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.qml
+      push:
+        - meta_scope: string.quoted.double.qml
+        - match: '\\.'
+          scope: constant.character.escape.qml
+        - match: '"'
+          scope: punctuation.definition.string.end.qml
+          pop: true
+    - match: "'"
+      scope: punctuation.definition.string.begin.qml
+      push:
+        - meta_scope: string.quoted.single.qml
+        - match: '\\.'
+          scope: constant.character.escape.qml
+        - match: "'"
+          scope: punctuation.definition.string.end.qml
+          pop: true
+    - match: '`'
+      scope: punctuation.definition.string.begin.qml
+      push:
+        - meta_scope: string.template.qml
+        - match: '\\.'
+          scope: constant.character.escape.qml
+        - match: '\$\{'
+          scope: punctuation.section.interpolation.begin.qml
+          push:
+            - meta_scope: meta.interpolation.qml
+            - match: '\}'
+              scope: punctuation.section.interpolation.end.qml
+              pop: true
+            - include: expressions
+        - match: '`'
+          scope: punctuation.definition.string.end.qml
+          pop: true
+
+  comments:
+    - match: '//'
+      scope: punctuation.definition.comment.qml
+      push:
+        - meta_scope: comment.line.double-slash.qml
+        - match: '$\n?'
+          pop: true
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin.qml
+      push:
+        - meta_scope: comment.block.qml
+        - match: '\*/'
+          scope: punctuation.definition.comment.end.qml
+          pop: true

@@ -24,6 +24,9 @@ const fn s(name: &'static str, short: &'static [&'static str], kind: Kind, defau
 }
 
 pub(crate) const SETTINGS: &[Setting] = &[
+    // zett pops up the language server's completions while typing (Neovim's default: off)
+    s("autocomplete", &["ac"], Kind::Bool, "true", "completions come up while typing, after autocompletedelay"),
+    s("autocompletedelay", &["acl"], Kind::Int, "120", "milliseconds after typing before the completions come up"),
     s("wrap", &[], Kind::Bool, "false", "long lines go on in the next rows instead of off the side"),
     s("linebreak", &["lbr"], Kind::Bool, "true", "wrap between words, not inside one"),
     s("cursorline", &["cul"], Kind::Bool, "true", "the line with the cursor stands out"),
@@ -31,6 +34,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("list", &[], Kind::Bool, "false", "show tabs, spaces at line ends and more as listchars says"),
     s("listchars", &["lcs"], Kind::Text, "tab:→ ,trail:·,nbsp:+", "what list shows: tab:XY[Z] trail: lead: space: nbsp: eol: extends: precedes:"),
     s("signcolumn", &["scl"], Kind::Text, "number", "where error signs go: number (in the line numbers), yes, auto, no"),
+    s("foldtext", &["fdt"], Kind::Text, "", "what a closed fold shows: empty (zett's) its first line as it is, with …; an expression (foldtext(), v:lua.F()) its result"),
     s("undofile", &["udf"], Kind::Bool, "true", "every saved file keeps its undo history (time travel, undo after a restart; zett's default)"),
     s("winborder", &[], Kind::Text, "rounded", "the lines around floating boxes: rounded (zett's), single, double, bold, solid, shadow, none"),
     s("splitbelow", &["sb"], Kind::Bool, "true", ":split puts the new window below (zett's default, Doom's; off: above, Vim's)"),
@@ -72,6 +76,12 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "spell", "spellcapcheck",
     "filetype", "syntax", "guicursor", "termsync",
     "commentstring",
+    // files, shells, tabs, windows, the title (commands.rs, files.rs, ex.rs, tabs.rs, doom.rs, lib.rs)
+    "writeany", "patchmode", "warn", "tabclose", "winfixheight", "winfixwidth", "exrc", "titleold",
+    "eventignore", "eventignorewin", "buftype", "buflisted", "updatetime", "isfname", "includeexpr",
+    "confirm", "iminsert", "keymap", "verbose", "verbosefile", "secure",
+    "inccommand", "foldexpr", "previewheight", "previewwindow",
+    "undodir", "infercase", "complete", "completeopt", "dictionary", "wildchar", "wildcharm", "cmdwinheight", "winhighlight", "foldtext", "tabpagemax", "statuscolumn", "completefunc", "omnifunc", "thesaurus", "thesaurusfunc", "bufhidden", "pumborder", "packpath", "conceallevel", "concealcursor",
     "errorbells", "visualbell", "belloff", "matchtime", "showcmd", "showcmdloc", "operatorfunc",
     "pumheight", "pumwidth", "pummaxwidth",
     "cedit", "termguicolors", "messagesopt", "winfixbuf",
@@ -85,7 +95,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",
     "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
-    "bomb", "endofline", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
+    "bomb", "endofline", "endoffile", "fileformats", "fileencodings", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 
@@ -139,7 +149,8 @@ impl App {
     /// `:set NAME[=VALUE]`, `:set noNAME`, `:set NAME?`, `:setlocal …` for a core setting; false
     /// when it is not one (a plugin's setting then).
     pub(crate) fn set_core(&mut self, arg: &str, local: bool) -> bool {
-        let arg = arg.trim();
+        // the end as it is: "\ " at the end of a value is a space in it (set_args took the backslash)
+        let arg = arg.trim_start();
         let (name, value) = match arg.find(['=', ':', ' ']) {
             Some(i) => (arg[..i].trim(), Some(arg[i + 1..].trim_start())),
             None => (arg, None),
@@ -206,8 +217,8 @@ impl App {
             self.docs[cur].local.insert(setting.name.to_string(), value.clone());
         }
         self.apply_settings();
-        let note = if works(setting) { "" } else { " (kept; zett does not act on it yet)" };
-        self.say(format!("{}{} = {value}{note}", if local { "local " } else { "" }, setting.name));
+        // quiet as in Vim (plugins set options every frame); :help options says which ones act
+        let _ = works;
         true
     }
 

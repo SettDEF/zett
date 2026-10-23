@@ -26,6 +26,7 @@ pub mod balanced;
 pub mod rect;
 pub mod screen;
 pub mod vim;
+pub mod vimre;
 mod change;
 mod history;
 mod insert;
@@ -150,6 +151,8 @@ pub struct Editor {
     spacing: Option<(usize, String, usize, u8)>,
     /// C-l and M-r in a row: middle, top, bottom (screen.rs)
     cycle: u8,
+    /// the folds set-selective-display made (C-x $): taken away again by C-x $ with no argument
+    pub(crate) selective: Vec<(usize, usize)>,
     /// the marks before this one, newest last (C-u C-SPC pops them)
     mark_ring: Vec<usize>,
     /// overwrite-mode, C-x C-n's column, C-x .'s prefix
@@ -187,6 +190,7 @@ impl Editor {
             soft_tab: None,
             spacing: None,
             cycle: 0,
+            selective: Vec::new(),
             mark_ring: Vec::new(),
             overwrite: false,
             goal: None,

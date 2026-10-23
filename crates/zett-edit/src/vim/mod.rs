@@ -45,6 +45,10 @@ pub enum Request {
     Suspend,
     /// the command-line window (q: q/ q?)
     CmdWindow(char),
+    /// gq with formatexpr set: lines (first, last) for the window to format by it
+    FormatExpr(usize, usize),
+    /// indentexpr set: lines (first, last) for the window to indent by it (a new line, =)
+    IndentExpr(usize, usize),
     /// the next (+1) or previous (-1) diagnostic, the first (-2) or last (+2): [d ]d [D ]D
     Diagnostic(i32),
     /// the next (+1) or previous (-1) changed part (a git hunk): ]c [c
@@ -121,6 +125,10 @@ pub(crate) struct VimState {
     pub fold_auto: Option<String>,
     pub fold_level: Option<i64>,
     pub fold_enable: Option<bool>,
+    /// foldmethod=expr: each line's level as the front end worked it out from foldexpr (with a
+    /// fold starting there: >N), and its version (a new one works the folds out again)
+    pub fold_expr: Vec<(usize, Option<usize>)>,
+    pub fold_expr_version: u64,
     /// langmap: typed character to the command character
     pub langmap: std::collections::HashMap<char, char>,
     /// z{height}<CR>: the height typed so far
@@ -138,6 +146,8 @@ pub(crate) struct VimState {
     /// the jump list (CTRL-O, CTRL-I): places before jumps, and where in it we stand
     pub jumps: Vec<usize>,
     jump_at: usize,
+    /// each jump's window top line (jumpoptions "view" brings it back)
+    jump_tops: Vec<usize>,
     /// where the command under way started (a jump records it)
     typing_pos: usize,
 }

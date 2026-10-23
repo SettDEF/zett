@@ -55,81 +55,34 @@ pub(crate) fn parse_range(s: &str, cur: usize, last: usize, vis: Option<(usize, 
     (Some((a, a)), rest)
 }
 
-/// Vim's pattern habits into the regex syntax: \( \) \| \+ \? \< \> and \v.
+/// A Vim pattern as a regex (zett_edit::vimre: the magic levels, multis, classes, \zs \ze …).
 pub(crate) fn vim_regex(p: &str, icase: bool) -> Result<Regex, String> {
-    let p = magic_form(p);
-    let mut out = String::new();
-    let mut it = p.chars().peekable();
-    while let Some(c) = it.next() {
-        if c == '\\' {
-            match it.next() {
-                Some('(') => out.push('('),
-                Some(')') => out.push(')'),
-                Some('|') => out.push('|'),
-                Some('+') => out.push('+'),
-                Some('?') => out.push('?'),
-                Some('<') | Some('>') => out.push_str("\\b"),
-                Some('v') => {}
-                Some('c') => out.insert_str(0, "(?i)"),
-                Some(o) => {
-                    out.push('\\');
-                    out.push(o);
-                }
-                None => out.push_str("\\\\"),
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    if icase {
-        out.insert_str(0, "(?i)");
-    }
-    Regex::new(&out).map_err(|e| format!("pattern: {e}"))
-}
-
-/// \M (nomagic, :snomagic) and \m into the magic form: under \M a bare . * [ ~ is itself and the
-/// backslashed one special, as Vim reads them; \m goes back.
-fn magic_form(p: &str) -> String {
-    let mut out = String::new();
-    let mut magic = true;
-    let mut it = p.chars();
-    while let Some(c) = it.next() {
-        match (c, magic) {
-            ('\\', _) => match it.next() {
-                Some('m') => magic = true,
-                Some('M') => magic = false,
-                Some(o @ ('.' | '*' | '[' | '~')) if !magic => out.push(o),
-                Some(o) => {
-                    out.push('\\');
-                    out.push(o);
-                }
-                None => out.push('\\'),
-            },
-            ('.' | '*' | '[' | '~', false) => {
-                out.push('\\');
-                out.push(c);
-            }
-            _ => out.push(c),
-        }
-    }
-    out
+    zett_edit::vimre::compile(p, icase, false).map(|v| v.re)
 }
 
 /// A replacement in Vim's terms: \1 & \r \n \\ into the regex crate's ($1, $0, newline).
+#[cfg(test)]
 fn vim_replacement(r: &str) -> String {
+    vim_replacement_for(r, |n| n, 0)
+}
+
+/// The same for a pattern whose groups are numbered `group` (\zs shifts them) and whose match is
+/// group `whole` (& and \0: the \zs \ze part).
+fn vim_replacement_for(r: &str, group: impl Fn(usize) -> usize, whole: usize) -> String {
     let mut out = String::new();
     let mut it = r.chars();
     while let Some(c) = it.next() {
         match c {
             '\\' => match it.next() {
-                Some(d @ '0'..='9') => out.push_str(&format!("${{{d}}}")),
+                Some('0') => out.push_str(&format!("${{{whole}}}")),
+                Some(d @ '1'..='9') => out.push_str(&format!("${{{}}}", group(d as usize - '0' as usize))),
                 Some('r') | Some('n') => out.push('\n'),
                 Some('t') => out.push('\t'),
                 Some('&') => out.push('&'),
                 Some(o) => out.push(o),
                 None => out.push('\\'),
             },
-            '&' => out.push_str("${0}"),
+            '&' => out.push_str(&format!("${{{whole}}}")),
             '$' => out.push_str("$$"),
             c => out.push(c),
         }
@@ -201,6 +154,9 @@ impl App {
 
     /// A shell command (shell, shellcmdflag, shellquote, shellxquote), with `input` on its stdin.
     pub(crate) fn run_shell(&self, cmd: &str, input: Option<&str>, dir: &Path) -> Result<String, String> {
+        if self.secure_now {
+            return Err("E523: Not allowed here (secure: the folder's config runs no shell commands)".into());
+        }
         use std::io::Write;
         let (sh, flag) = (self.setting(self.cur, "shell"), self.setting(self.cur, "shellcmdflag"));
         let sh = if sh.is_empty() { std::env::var("SHELL").unwrap_or_else(|_| "sh".into()) } else { sh };
@@ -458,9 +414,14 @@ impl App {
                     }
                     None => match self.run_shell(&cmd, None, &dir) {
                         Ok(out) => {
-                            let rows: Vec<(String, String)> = out.lines().map(|l| (String::new(), l.to_string())).collect();
+                            // warn: the command saw the file on disk, not the unsaved changes
+                            let note = if self.flag(self.cur, "warn") && self.docs[self.cur].dirty() { "[No write since last change] " } else { "" };
+                            let mut rows: Vec<(String, String)> = out.lines().map(|l| (String::new(), l.to_string())).collect();
+                            if !note.is_empty() && !rows.is_empty() {
+                                rows.insert(0, (String::new(), note.trim().to_string()));
+                            }
                             if rows.is_empty() {
-                                self.say(format!("{cmd}: done"));
+                                self.say(format!("{note}{cmd}: done"));
                             } else {
                                 self.popup = Some(Popup::Help(format!("!{cmd}"), rows));
                             }
@@ -610,12 +571,17 @@ impl App {
                     d.ed.nohlsearch();
                 }
             }
+            // Lua (:echo 6 * 7), else Vimscript (:echo "a" . g:b, :echo &ts)
             "ec" | "echo" => match self.with_lua(|e| e.eval(arg)) {
                 Ok((out, fx)) => {
                     self.after_lua(fx);
                     self.say(out);
                 }
-                Err(e) => self.say(e),
+                Err(e) => {
+                    if !self.vimscript_echo(arg) {
+                        self.say(e);
+                    }
+                }
             },
             "so" | "source" | "luafile" => {
                 let p = if arg.is_empty() || arg == "%" { self.docs[self.cur].abs_path() } else { Some(PathBuf::from(arg)) };
@@ -725,16 +691,40 @@ impl App {
     }
 
     fn substitute(&mut self, a: usize, b: usize, pat: &str, rep: &str, flags: &str) {
+        let (new, n, lines) = match self.sub_lines(a, b, pat, rep, flags) {
+            Ok(r) => r,
+            Err(e) => return self.say(e),
+        };
+        if n == 0 {
+            return self.say(format!("pattern not found: {pat}"));
+        }
+        self.set_lines(a, b, new);
+        self.say(format!("{n} substitution{} on {lines} line{}", if n == 1 { "" } else { "s" }, if lines == 1 { "" } else { "s" }));
+    }
+
+    /// :s on lines a..=b without touching them: the new lines (more where the replacement has
+    /// newlines), how many substitutions, on how many lines.
+    pub(crate) fn sub_lines(&self, a: usize, b: usize, pat: &str, rep: &str, flags: &str) -> Result<(Vec<String>, usize, usize), String> {
         // the case: i and I decide, else ignorecase and smartcase
         let cur = self.cur;
         let fold = flags.contains('i') || (!flags.contains('I') && self.flag(cur, "ignorecase") && !(self.flag(cur, "smartcase") && pat.chars().any(char::is_uppercase)));
         // gdefault: every match unless g is given (g then means the first only)
         let all = (flags.matches('g').count() % 2 == 1) ^ self.flag(cur, "gdefault");
-        let re = match vim_regex(pat, fold) {
-            Ok(r) => r,
-            Err(e) => return self.say(e),
+        let v = zett_edit::vimre::compile(pat, fold, false)?;
+        let rep = vim_replacement_for(rep, |n| v.group(n), v.zs.unwrap_or(0));
+        let re = &v.re;
+        // with \zs \ze only that part of each match is replaced, the rest stays
+        let one = |c: &fancy_regex::Captures| -> String {
+            let mut s = String::new();
+            c.expand(&rep, &mut s);
+            match (v.zs.and_then(|z| c.get(z)), c.get(0)) {
+                (Some(p), Some(w)) => {
+                    let t = c.get(0).map_or("", |m| m.as_str());
+                    format!("{}{s}{}", &t[..p.start() - w.start()], &t[p.end() - w.start()..])
+                }
+                _ => s,
+            }
         };
-        let rep = vim_replacement(rep);
         let (mut n, mut lines) = (0, 0);
         let new: Vec<String> = self
             .lines_of(a, b)
@@ -747,20 +737,47 @@ impl App {
                 lines += 1;
                 if all {
                     n += count;
-                    re.replace_all(&l, rep.as_str()).to_string()
+                    re.replace_all(&l, &one).to_string()
                 } else {
                     n += 1;
-                    re.replace(&l, rep.as_str()).to_string()
+                    re.replace(&l, &one).to_string()
                 }
             })
             .collect();
-        if n == 0 {
-            return self.say(format!("pattern not found: {pat}"));
-        }
         // a replacement with newlines makes more lines
         let new: Vec<String> = new.iter().flat_map(|l| l.split('\n').map(String::from).collect::<Vec<_>>()).collect();
-        self.set_lines(a, b, new);
-        self.say(format!("{n} substitution{} on {lines} line{}", if n == 1 { "" } else { "s" }, if lines == 1 { "" } else { "s" }));
+        Ok((new, n, lines))
+    }
+
+    /// inccommand: the buffer's text as the :s being typed would leave it (None: not a :s, or
+    /// nothing changes yet).
+    pub(crate) fn sub_preview(&self, line: &str) -> Option<String> {
+        if self.setting(self.cur, "inccommand").is_empty() {
+            return None;
+        }
+        let cur = self.docs[self.cur].ed.cursor().line;
+        let last = self.last_line();
+        let (range, rest) = parse_range(line, cur, last, self.vis_range);
+        let rest = rest.trim_start();
+        let name_len = rest.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+        let (name, arg) = rest.split_at(name_len);
+        if !matches!(name, "s" | "su" | "substitute") || !arg.starts_with(|c: char| !c.is_alphanumeric() && c != ' ' && c != '"') {
+            return None;
+        }
+        let (pat, rep, flags) = split_sub(arg)?;
+        if pat.is_empty() {
+            return None;
+        }
+        let (a, b) = range.unwrap_or((cur, cur));
+        let (new, n, _) = self.sub_lines(a, b, &pat, &rep, &flags).ok()?;
+        if n == 0 {
+            return None;
+        }
+        let buf = &self.docs[self.cur].ed.buf;
+        let mut out: Vec<String> = (0..a).map(|l| buf.line(l)).collect();
+        out.extend(new);
+        out.extend((b + 1..buf.len_lines()).map(|l| buf.line(l)));
+        Some(out.join("\n") + "\n")
     }
 
     /// `:g/pat/cmd`: d (delete), p (list), s/…/…/, normal keys; `:v` the lines that do not match.
