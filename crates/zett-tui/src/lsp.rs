@@ -40,6 +40,17 @@ impl App {
     /// Each turn of the loop: what servers said, and text they have not seen yet.
     pub(crate) fn lsp_tick(&mut self) {
         for ev in self.lsp.events() {
+            self.lsp_event(ev);
+        }
+        self.comp_tick();
+        // text changed since the server last saw it, and the typing paused
+        if self.edit_at.elapsed() < Duration::from_millis(250) {
+            return;
+        }
+        self.lsp_sync();
+    }
+
+    fn lsp_event(&mut self, ev: Event) {
             match ev {
                 Event::Diagnostics(path, diags) => {
                     if let Some(d) = self.docs.iter_mut().find(|d| d.abs_path().as_deref() == Some(path.as_path())) {
@@ -79,13 +90,6 @@ impl App {
                     }
                 }
             }
-        }
-        self.comp_tick();
-        // text changed since the server last saw it, and the typing paused
-        if self.edit_at.elapsed() < Duration::from_millis(250) {
-            return;
-        }
-        self.lsp_sync();
     }
 
     /// Sends changed text to the servers.
@@ -455,6 +459,26 @@ impl App {
         }
     }
 
+    /// vim.lsp.buf.format(): formats and waits (up to `ms`), so a BufWritePre one writes the result.
+    pub(crate) fn lsp_format_wait(&mut self, ms: u64) {
+        self.lsp_sync();
+        let Some((path, _, _)) = self.lsp_ready() else { return };
+        let Some(c) = self.client_for(self.cur) else { return };
+        c.format(&path, tab());
+        let end = Instant::now() + Duration::from_millis(ms);
+        while Instant::now() < end {
+            for ev in self.lsp.events() {
+                let edits = matches!(ev, Event::Edits(_));
+                self.lsp_event(ev);
+                if edits {
+                    return;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        self.say("format: no answer in time");
+    }
+
     /// The word under the cursor (what a rename starts from).
     pub(crate) fn word_at_cursor(&self) -> String {
         let d = &self.docs[self.cur];
@@ -652,4 +676,91 @@ end)()"#;
         }
     }
     zett_lsp::configure(servers, dirs);
+}
+
+#[cfg(test)]
+mod lsp_live_tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::time::{Duration, Instant};
+
+    // a real rust-analyzer: `cargo test -p zett-tui lsp_live -- --ignored`
+    fn project(src: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("zett-lsplive-{}-{}", std::process::id(), src.len()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"t\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+        std::fs::write(dir.join("src/main.rs"), src).unwrap();
+        dir
+    }
+
+    fn wait(app: &mut crate::App, secs: u64, done: impl Fn(&crate::App) -> bool) -> bool {
+        let end = Instant::now() + Duration::from_secs(secs);
+        while Instant::now() < end {
+            app.lsp_tick();
+            if done(app) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        false
+    }
+
+    #[test]
+    #[ignore]
+    fn completion_pops_up_while_typing() {
+        let dir = project("fn main() {\n    let v: Vec<u8> = Vec::new();\n    \n}\n");
+        let mut app = crate::App::new(Vec::new());
+        app.open(&dir.join("src/main.rs"));
+        // the server indexes first
+        std::thread::sleep(Duration::from_secs(8));
+        app.lsp_tick();
+        for k in [KeyCode::Char('3'), KeyCode::Char('G'), KeyCode::Char('A')] {
+            app.key(KeyEvent::new(k, KeyModifiers::NONE));
+        }
+        for c in "v.pu".chars() {
+            app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        let ok = wait(&mut app, 20, |a| a.comp.is_some());
+        let shown: Vec<String> = app.comp.as_ref().map(|c| c.shown.iter().map(|&i| c.items[i].label.clone()).collect()).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(ok, "no popup came up");
+        assert!(shown.iter().any(|l| l.starts_with("push")), "push not offered: {shown:?}");
+    }
+
+    #[test]
+    #[ignore]
+    fn format_rewrites_the_buffer() {
+        let dir = project("fn main(){let x=1;println!(\"{}\",x);}\n");
+        let mut app = crate::App::new(Vec::new());
+        app.open(&dir.join("src/main.rs"));
+        std::thread::sleep(Duration::from_secs(5));
+        app.lsp_tick();
+        app.lsp_format();
+        let ok = wait(&mut app, 20, |a| a.docs[a.cur].text().contains("let x = 1;"));
+        let text = app.docs[app.cur].text();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(ok, "not formatted: {text:?}");
+    }
+}
+
+#[cfg(test)]
+mod lsp_format_on_save_tests {
+    // Neovim's way: a BufWritePre autocmd calling vim.lsp.buf.format(); the file on disk is formatted
+    #[test]
+    #[ignore]
+    fn buf_write_pre_format_lands_in_the_file() {
+        let dir = std::env::temp_dir().join(format!("zett-fmtsave-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"t\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+        let f = dir.join("src/main.rs");
+        std::fs::write(&f, "fn main(){let x=1;println!(\"{}\",x);}\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.open(&f);
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        app.lsp_tick();
+        app.command("lua vim.api.nvim_create_autocmd('BufWritePre', { callback = function() vim.lsp.buf.format({ timeout_ms = 5000 }) end })");
+        app.command("w");
+        let disk = std::fs::read_to_string(&f).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(disk.contains("let x = 1;"), "written unformatted: {disk:?} (msg {:?})", app.msg);
+    }
 }

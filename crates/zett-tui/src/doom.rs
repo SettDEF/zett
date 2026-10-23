@@ -1024,6 +1024,7 @@ impl App {
             "references" => self.lsp_references(),
             "symbols" => self.lsp_symbols(),
             "format" => self.lsp_format(),
+            "lspFormat" => self.lsp_format_wait(arg.parse().unwrap_or(1000)),
             "rename" => {
                 let w = self.word_at_cursor();
                 self.cmdline = Some(format!("rename {w}"));

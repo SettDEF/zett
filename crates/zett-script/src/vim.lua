@@ -1155,7 +1155,19 @@ function vim.version() return { major = 0, minor = 10, patch = 0, api_level = 12
 vim.has = function(f) return fn.has(f) == 1 end
 function vim.region() return {} end
 vim.lsp = vim.lsp or { buf = {}, util = {}, protocol = {}, handlers = {}, config = function() end, enable = function() end }
+-- vim.lsp.buf: zett's own LSP actions (format waits, so a BufWritePre format is in the write)
+vim.lsp.buf.format = function(o) z.ui("lspFormat", tostring((o or {}).timeout_ms or 1000)) end
+vim.lsp.buf.hover = function() z.ui("hover", "") end
+vim.lsp.buf.definition = function() z.ui("definition", "") end
+vim.lsp.buf.references = function() z.ui("references", "") end
+vim.lsp.buf.document_symbol = function() z.ui("symbols", "") end
+vim.lsp.buf.rename = function(name)
+  if name and name ~= "" then z.ui("ex", "rename " .. name) else z.ui("rename", "") end
+end
 vim.diagnostic = vim.diagnostic or { config = function() end, severity = { ERROR = 1, WARN = 2, INFO = 3, HINT = 4 }, get = function() return {} end }
+vim.diagnostic.goto_next = function() z.ui("diag", "next") end
+vim.diagnostic.goto_prev = function() z.ui("diag", "prev") end
+vim.diagnostic.jump = function(o) z.ui("diag", (o and (o.count or 1) < 0) and "prev" or "next") end
 vim.treesitter = vim.treesitter or { start = function() end, stop = function() end }
 vim.filetype = vim.filetype or { add = function() end, match = function() return nil end }
 vim.ui = vim.ui or {}
