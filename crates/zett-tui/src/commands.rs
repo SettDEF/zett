@@ -34,6 +34,9 @@ impl App {
             self.show_doc(i);
             return;
         }
+        // BufReadPre before a file is read, BufNewFile for one that is not there yet
+        let target = p.display().to_string();
+        self.fire_autocmds(if p.exists() { "bufreadpre" } else { "bufnewfile" }, Some(&target));
         if p.is_file() {
             doom::remember(p);
         }
@@ -215,6 +218,7 @@ impl App {
                 self.bang = false;
             }
             "q" | "quit" => {
+                self.fire_autocmds("quitpre", None);
                 if !self.close_win() {
                     self.close(false);
                 }
@@ -254,6 +258,8 @@ impl App {
             }
             "q!" | "quit!" => self.close(true),
             "qa" | "qall" => {
+                self.fire_autocmds("quitpre", None);
+                self.fire_autocmds("exitpre", None);
                 if self.docs.iter().any(|d| d.dirty()) {
                     self.say("unsaved changes: :wqa saves them, :qa! drops them");
                 } else {

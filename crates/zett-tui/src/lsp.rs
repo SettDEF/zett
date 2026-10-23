@@ -28,6 +28,7 @@ impl App {
             }
             self.docs[di].lsp = true;
             self.docs[di].lsp_rev = rev;
+            self.fire_autocmds("lspattach", None);
         }
     }
 
@@ -762,5 +763,35 @@ mod lsp_format_on_save_tests {
         let disk = std::fs::read_to_string(&f).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(disk.contains("let x = 1;"), "written unformatted: {disk:?} (msg {:?})", app.msg);
+    }
+}
+
+#[cfg(test)]
+mod last_file_tests {
+    // the config's VimEnter: no files given → the newest recent file under the folder zett started in
+    #[test]
+    fn vim_enter_opens_the_last_file_of_this_folder() {
+        let dir = std::env::temp_dir().join(format!("zett-lastfile-{}", std::process::id()));
+        let proj = dir.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("b.rs"), "fn b() {}\n").unwrap();
+        std::fs::write(dir.join("elsewhere.txt"), "x\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        assert_eq!(app.engine.eval("return vim.fn.argc()").map(|r| r.0).as_deref(), Ok("0"));
+        std::fs::create_dir_all(dir.join("state/zett")).unwrap();
+        std::fs::write(dir.join("state/zett/recent"), format!("{}\n{}\n", dir.join("elsewhere.txt").display(), proj.join("b.rs").display())).unwrap();
+        app.command(&format!("lua vim.fn.chdir({:?}); vim.env.XDG_STATE_HOME = nil", proj.display().to_string()));
+        app.command(&format!(
+            "lua _G.__state = {:?}; vim.api.nvim_create_autocmd('VimEnter', {{ callback = function() \
+             if vim.fn.argc() > 0 then return end \
+             local cwd = vim.fn.getcwd() .. '/' \
+             local f = io.open(_G.__state) local list = {{}} for l in f:lines() do list[#list+1] = l end f:close() \
+             for _, p in ipairs(list) do if p:sub(1, #cwd) == cwd then vim.cmd.edit(p) return end end end }})",
+            dir.join("state/zett/recent").display().to_string()
+        ));
+        app.fire_autocmds("vimenter", None);
+        let name = app.docs[app.cur].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(name.ends_with("proj/b.rs"), "opened {name:?} (msg {:?})", app.msg);
     }
 }

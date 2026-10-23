@@ -296,6 +296,17 @@ vim.b = vim.b or setmetatable({}, { __index = function(t, k) if type(k) == "numb
 vim.w = vim.w or setmetatable({}, { __index = function(t, k) if type(k) == "number" then return t end end })
 vim.t = vim.t or {}
 vim.v = vim.v or { shell_error = 0, ["true"] = true, ["false"] = false, null = vim.NIL, count = 0, count1 = 1, errmsg = "", version = 1000, progpath = "zett" }
+-- v:oldfiles: zett's recent files (newest first), read when asked
+setmetatable(vim.v, { __index = function(_, k)
+  if k ~= "oldfiles" then return nil end
+  local dir = (os.getenv("XDG_STATE_HOME") or ((os.getenv("HOME") or "") .. "/.local/state")) .. "/zett/recent"
+  local out, f = {}, io.open(dir)
+  if f then
+    for l in f:lines() do if l ~= "" then out[#out + 1] = l end end
+    f:close()
+  end
+  return out
+end })
 vim.env = setmetatable({}, {
   __index = function(_, k) return rawget(vim._env, k) or os.getenv(k) end,
   __newindex = function(_, k, v) vim._env[k] = v end,
@@ -1118,8 +1129,12 @@ function fn.getreg(_) return "" end
 function fn.setreg() return 0 end
 function fn.serverlist() return {} end
 function fn.jobstart() return -1 end
-function fn.argv() return {} end
-function fn.argc() return 0 end
+function fn.argv(i)
+  local a = vim.g._zett_argv or {}
+  if i == nil then return a end
+  return a[i + 1] or ""
+end
+function fn.argc() return #(vim.g._zett_argv or {}) end
 
 vim.fn = setmetatable(vim.fn or {}, {
   __index = function(_, name)

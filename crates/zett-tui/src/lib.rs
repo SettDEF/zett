@@ -1,5 +1,6 @@
 //! zett in the terminal: the code editor, Doom-style, in the terminal's own colours.
 
+mod events;
 mod commands;
 mod doom;
 mod draw;
@@ -484,6 +485,8 @@ struct App {
     augroups: std::collections::HashSet<String>,
     au_depth: usize,
     last_mode: Option<Mode>,
+    /// what the last frame saw, for the events that follow from a change (events.rs)
+    seen_ev: events::Seen,
     /// :menu entries (Neovim's PopUp first) and :menutranslate names
     menus: Vec<mapcmds::MenuEntry>,
     menu_tr: std::collections::HashMap<String, String>,
@@ -659,12 +662,12 @@ pub fn run_with(paths: Vec<PathBuf>, start: Vec<String>) -> std::io::Result<()> 
         app.command(c);
     }
     let mut term = ratatui::init();
-    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture);
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture, ratatui::crossterm::event::EnableFocusChange);
     kitty_keys_set(true);
     let r = app.main_loop(&mut term);
     layers_none();
     kitty_keys_set(false);
-    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture, SetCursorStyle::DefaultUserShape);
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture, ratatui::crossterm::event::DisableFocusChange, SetCursorStyle::DefaultUserShape);
     ratatui::restore();
     r
 }
@@ -801,6 +804,7 @@ impl App {
             augroups: Default::default(),
             au_depth: 0,
             last_mode: None,
+            seen_ev: Default::default(),
             menus: mapcmds::default_menus(),
             menu_tr: Default::default(),
             cmd_hist: Vec::new(),
@@ -919,6 +923,9 @@ impl App {
         // and what the config's start hooks asked for (zett.on("start", …))
         let fx = app.engine.take_start();
         app.after_lua(fx);
+        // Neovim's argv(), for VimEnter on the first frame
+        let argv: Vec<String> = paths.iter().map(|p| format!("{:?}", p.display().to_string())).collect();
+        app.command(&format!("lua vim.g._zett_argv = {{ {} }}", argv.join(", ")));
         app.started_ms = started.elapsed().as_millis();
         for i in 0..app.docs.len() {
             app.lsp_open(i);
@@ -1177,6 +1184,8 @@ impl App {
                 }
                 self.last_mode = Some(m);
             }
+            // CursorMoved, ModeChanged, WinEnter … (events.rs)
+            self.state_events();
             // updatetime: no key for that long fires CursorHold (CursorHoldI typing), once a pause
             if !self.held && self.typed_at.elapsed() >= Duration::from_millis(self.num(self.cur, "updatetime").max(1) as u64) {
                 self.held = true;
@@ -1265,6 +1274,8 @@ impl App {
                     self.key(k)
                 }
                 Event::Mouse(m) => self.mouse(m),
+                Event::FocusGained => self.fire_autocmds("focusgained", None),
+                Event::FocusLost => self.fire_autocmds("focuslost", None),
                 Event::Paste(s) => {
                     for c in s.chars() {
                         self.doc().ed.key(if c == '\n' { Key::code(Code::Enter) } else { Key::ch(c) });
