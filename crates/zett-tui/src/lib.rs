@@ -100,7 +100,10 @@ fn group_color(name: &str) -> Option<syntect::highlighting::Color> {
 /// terminal's 16 unless a config says otherwise.
 fn palette_theme() -> Theme {
     use syntect::highlighting::FontStyle;
-    let item = |scope: &str, group: &str| {
+    // each scope takes the first of its groups a colorscheme set: Neovim's Tree-sitter groups
+    // (@type, @variable.parameter …) first, as a Neovim theme colours those, then the classic one
+    let item = |scope: &str, groups: &[&str]| {
+        let group = groups.iter().copied().find(|g| hl::fg(g).is_some()).unwrap_or(groups[groups.len() - 1]);
         let st = hl(group);
         let mut fs = FontStyle::empty();
         if st.add_modifier.contains(Modifier::BOLD) {
@@ -119,31 +122,45 @@ fn palette_theme() -> Theme {
         author: None,
         settings: ThemeSettings { foreground: Some(syntect::highlighting::Color { r: 0, g: 0, b: 0, a: 1 }), ..Default::default() },
         scopes: vec![
-            item("comment, punctuation.definition.comment", "Comment"),
-            item("string, punctuation.definition.string", "String"),
-            item("constant.numeric, constant.language, constant.character", "Number"),
-            item("constant.other, variable.other.constant", "Constant"),
-            item("keyword, storage.modifier, storage.type.function, keyword.control", "Keyword"),
-            item("keyword.operator", "Operator"),
-            item("storage.type, entity.name.type, support.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait", "Type"),
-            item("entity.name.function, support.function, meta.function-call variable.function, variable.function", "Function"),
-            item("entity.name.tag", "Tag"),
-            item("entity.other.attribute-name", "Attribute"),
-            item("support.macro, entity.name.macro, meta.macro", "Macro"),
-            item("variable.parameter", "Parameter"),
-            item("variable.language", "Special"),
-            item("markup.heading, entity.name.section", "Heading"),
-            item("markup.bold", "Bold"),
-            item("markup.italic", "Italic"),
-            item("markup.raw, markup.inline.raw", "Raw"),
-            item("markup.underline.link, string.other.link", "Link"),
-            item("markup.list.unnumbered, markup.list.numbered, punctuation.definition.list", "ListMarker"),
-            item("markup.quote", "Quote"),
+            item("comment, punctuation.definition.comment", &["@comment", "Comment"]),
+            item("comment.block.documentation", &["@comment.documentation", "@comment", "Comment"]),
+            item("string, punctuation.definition.string", &["@string", "String"]),
+            item("constant.character.escape, string.regexp", &["@string.escape", "@string.special", "SpecialChar", "String"]),
+            item("constant.numeric", &["@number", "Number"]),
+            item("constant.language", &["@boolean", "@constant.builtin", "Boolean", "Number"]),
+            item("constant.character", &["@character", "Character", "Number"]),
+            item("constant.other, variable.other.constant", &["@constant", "Constant"]),
+            item("keyword, storage.modifier, storage.type.function, keyword.control", &["@keyword", "Keyword"]),
+            item("keyword.control.conditional, keyword.control.flow", &["@keyword.conditional", "@keyword", "Conditional", "Keyword"]),
+            item("keyword.control.import, keyword.control.directive, meta.preprocessor", &["@keyword.import", "@keyword.directive", "Include", "PreProc", "Keyword"]),
+            item("keyword.operator", &["@operator", "Operator"]),
+            item("storage.type, entity.name.type, support.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait", &["@type", "Type"]),
+            item("support.type.primitive, storage.type.primitive, storage.type.numeric", &["@type.builtin", "@type", "Type"]),
+            item("entity.name.namespace, entity.name.module", &["@module", "Include", "Type"]),
+            item("entity.name.function, support.function, meta.function-call variable.function, variable.function", &["@function", "Function"]),
+            item("meta.function-call, variable.function.call", &["@function.call", "@function", "Function"]),
+            item("support.function.builtin", &["@function.builtin", "@function", "Function"]),
+            item("variable.other.member, variable.other.property, entity.name.field", &["@variable.member", "@property", "Identifier"]),
+            item("entity.name.tag", &["@tag", "Tag"]),
+            item("entity.other.attribute-name", &["@tag.attribute", "@attribute", "Attribute"]),
+            item("support.macro, entity.name.macro, meta.macro", &["@function.macro", "Macro"]),
+            item("meta.attribute, meta.annotation", &["@attribute", "PreProc", "Attribute"]),
+            item("variable.parameter", &["@variable.parameter", "Parameter"]),
+            item("variable.language", &["@variable.builtin", "Special"]),
+            item("punctuation.separator, punctuation.terminator, punctuation.accessor", &["@punctuation.delimiter", "Delimiter"]),
+            item("punctuation.section, punctuation.definition.block, meta.brace", &["@punctuation.bracket", "Delimiter"]),
+            item("markup.heading, entity.name.section", &["@markup.heading", "Heading"]),
+            item("markup.bold", &["@markup.strong", "Bold"]),
+            item("markup.italic", &["@markup.italic", "Italic"]),
+            item("markup.raw, markup.inline.raw", &["@markup.raw", "Raw"]),
+            item("markup.underline.link, string.other.link", &["@markup.link", "Link"]),
+            item("markup.list.unnumbered, markup.list.numbered, punctuation.definition.list", &["@markup.list", "ListMarker"]),
+            item("markup.quote", &["@markup.quote", "Quote"]),
             // diffs (git, :diffpatch, C-x v =): Neovim's Added / Removed / Changed
-            item("markup.inserted", "Added"),
-            item("markup.deleted", "Removed"),
-            item("markup.changed, meta.diff.range, meta.diff.header", "Changed"),
-            item("invalid", "Invalid"),
+            item("markup.inserted", &["@diff.plus", "Added"]),
+            item("markup.deleted", &["@diff.minus", "Removed"]),
+            item("markup.changed, meta.diff.range, meta.diff.header", &["@diff.delta", "Changed"]),
+            item("invalid", &["Error", "Invalid"]),
         ],
     }
 }
