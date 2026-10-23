@@ -692,7 +692,9 @@ impl App {
             }
             "syntax" => match arg.trim() {
                 "on" | "enable" | "" => self.set_command("syntax="),
-                "off" | "clear" | "reset" => self.set_command("syntax=off"),
+                "off" | "clear" => self.set_command("syntax=off"),
+                // Vim's reset puts the colours back, it does not turn highlighting off
+                "reset" => self.engine.clear_highlights(),
                 other => self.say(format!("syntax {other}: zett highlights through its themes (:hi changes the colours)")),
             },
             "history" => {

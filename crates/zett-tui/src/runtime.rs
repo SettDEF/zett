@@ -81,6 +81,19 @@ impl App {
             }
         };
         dirs.extend(self.packs.iter().cloned());
+        // start packages added since (zett.plug clones or links them while the config runs)
+        let roots: Vec<PathBuf> = dirs.iter().map(|d| d.join("pack")).collect();
+        for root in roots {
+            for pack in std::fs::read_dir(&root).into_iter().flatten().flatten() {
+                let mut found: Vec<PathBuf> = std::fs::read_dir(pack.path().join("start")).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+                found.sort();
+                for p in found {
+                    if !dirs.contains(&p) {
+                        dirs.push(p);
+                    }
+                }
+            }
+        }
         dirs
     }
 
@@ -638,5 +651,61 @@ impl App {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod live_theme_tests {
+    // tinct.nvim as a plugin: :colorscheme tinct, then a new palette on disk shows without a restart
+    // (vim.uv.new_fs_event). Sets XDG_* for itself: run alone (--ignored).
+    #[test]
+    #[ignore]
+    fn tinct_nvim_follows_the_palette_file() {
+        let src = std::path::Path::new("/mnt/storage/dev/projects/tinct/tinct.nvim");
+        let real = std::path::PathBuf::from(std::env::var("HOME").unwrap()).join(".local/state/quickshell/user/generated/nvim_colors.lua");
+        if !src.is_dir() || !real.is_file() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("zett-tinct-{}", std::process::id()));
+        let gdir = dir.join("state/quickshell/user/generated");
+        std::fs::create_dir_all(&gdir).unwrap();
+        let palette = std::fs::read_to_string(&real).unwrap();
+        std::fs::write(gdir.join("nvim_colors.lua"), &palette).unwrap();
+        unsafe {
+            std::env::set_var("XDG_STATE_HOME", dir.join("state"));
+            std::env::set_var("XDG_DATA_HOME", dir.join("data"));
+        }
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("lua zett.plug('tinct.nvim', {{ dir = {:?}, opts = {{}} }})", src.display().to_string()));
+        app.command("colorscheme tinct");
+        let bg = |app: &crate::App| {
+            crate::hl::sync(&app.engine);
+            crate::hl::hl("Normal").bg
+        };
+        let before = bg(&app);
+        assert!(before.is_some(), "no Normal background after :colorscheme tinct ({:?})", app.msg);
+        // a new palette: every colour the same, so whichever role Normal uses, it becomes it
+        let mut same = String::new();
+        let cs: Vec<char> = palette.chars().collect();
+        let mut i = 0;
+        while i < cs.len() {
+            if cs[i] == '#' && i + 7 <= cs.len() && cs[i + 1..i + 7].iter().all(|c| c.is_ascii_hexdigit()) {
+                same.push_str("#102030");
+                i += 7;
+            } else {
+                same.push(cs[i]);
+                i += 1;
+            }
+        }
+        std::fs::write(gdir.join("nvim_colors.lua"), same).unwrap();
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < end && bg(&app) == before {
+            let fx = app.with_lua(|e| e.run_timers());
+            app.after_lua(fx);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let after = bg(&app);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(after, Some(ratatui::style::Color::Rgb(0x10, 0x20, 0x30)), "Normal did not follow the palette (was {before:?})");
     }
 }

@@ -282,6 +282,47 @@ function vim.uv.new_timer()
   function t:is_active() return self.on end
   return t
 end
+-- vim.uv.new_fs_event: a watch on a file or a folder (what changed in it), checked a few times a
+-- second; cb(err, filename, events) as libuv calls it (tinct.nvim's live palette, auto-reloaders)
+function vim.uv.new_fs_event()
+  local h = { on = false }
+  local function snap(path)
+    local st = z.fs.stat(path)
+    if not st then return {} end
+    if not st.dir then return { [""] = st.mtime_ns .. ":" .. st.size } end
+    local s = {}
+    for _, e in ipairs(z.fs.list(path)) do
+      local x = z.fs.stat(e.path)
+      s[e.name] = x and (x.mtime_ns .. ":" .. x.size) or "gone"
+    end
+    return s
+  end
+  function h:start(path, _, cb)
+    self.on, self.path = true, path
+    local last = snap(path)
+    local is_dir = z.fs.is_dir(path)
+    local base = path:match("([^/]+)/*$")
+    local function tick()
+      if not self.on then return end
+      local now = snap(path)
+      for k, v in pairs(now) do
+        if last[k] ~= v then cb(nil, k ~= "" and k or base, { change = true }) end
+      end
+      for k in pairs(last) do
+        if now[k] == nil then cb(nil, k ~= "" and k or base, { rename = true }) end
+      end
+      last = now
+      z.defer(is_dir and 400 or 300, tick)
+    end
+    z.defer(400, tick)
+    return 0
+  end
+  function h:stop() self.on = false return 0 end
+  function h:close() self.on = false end
+  function h:is_active() return self.on end
+  function h:getpath() return self.path end
+  return h
+end
 vim.loop = vim.uv
 
 -- ── variables: vim.g, vim.b, vim.w, vim.t, vim.v, vim.env ──
@@ -2912,6 +2953,16 @@ function zett.plug(repo, o)
   o = o or {}
   local name = o.name or repo:match("([^/]+)$"):gsub("%.git$", "")
   local dir = plug_root .. "/" .. name
+  -- dir = "/a/worktree" (as lazy.nvim): a plugin of my own, linked in, never cloned or pulled
+  if o.dir then
+    local src = vim.fn.expand(o.dir)
+    if vim.fn.isdirectory(src) == 0 then
+      vim.notify("plug: no folder " .. src, vim.log.levels.ERROR)
+      return
+    end
+    vim.fn.mkdir(plug_root, "p")
+    if vim.fn.isdirectory(dir) == 0 then vim.fn.system({ "ln", "-sfn", src, dir }) end
+  end
   if vim.fn.isdirectory(dir) == 0 then
     vim.fn.mkdir(plug_root, "p")
     local url = repo:find("://") and repo or ("https://github.com/" .. repo .. ".git")
@@ -2924,7 +2975,7 @@ function zett.plug(repo, o)
   local lua_dir = dir .. "/lua"
   local mine = lua_dir .. "/?.lua;" .. lua_dir .. "/?/init.lua;"
   if not package.path:find(mine, 1, true) then package.path = mine .. package.path end
-  plugged[#plugged + 1] = { repo = repo, name = name, dir = dir }
+  plugged[#plugged + 1] = { repo = repo, name = name, dir = dir, local_dir = o.dir ~= nil }
   if o.opts ~= nil or o.setup then
     local main = o.main or name:gsub("%.nvim$", ""):gsub("%.lua$", ""):gsub("^nvim%-", "")
     -- a built-in stand-in of the same name (zett's own fidget) steps aside for the real plugin
@@ -2944,8 +2995,10 @@ function zett.plug(repo, o)
 end
 api.nvim_create_user_command("PlugUpdate", function()
   for _, p in ipairs(plugged) do
+    if p.local_dir then print(p.name .. ": a local folder, not pulled") goto next end
     local out = vim.fn.system({ "git", "-C", p.dir, "pull", "--ff-only", "--quiet" })
     print(p.name .. ": " .. (vim.v.shell_error == 0 and "up to date" or out))
+    ::next::
   end
 end, {})
 api.nvim_create_user_command("PlugList", function()

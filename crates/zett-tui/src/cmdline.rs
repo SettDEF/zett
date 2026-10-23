@@ -358,6 +358,10 @@ impl App {
                 return;
             }
         }
+        if arg == "clear" {
+            self.engine.clear_highlights();
+            return;
+        }
         if let Some(group) = arg.strip_prefix("clear ") {
             if let Err(e) = self.engine.set_highlight(group.trim(), "clear") {
                 self.say(e);

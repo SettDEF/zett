@@ -326,6 +326,13 @@ impl Engine {
         v
     }
 
+    /// `:hi clear`: every group back to zett's defaults (a colorscheme starts with it).
+    pub fn clear_highlights(&mut self) {
+        let mut st = self.st.borrow_mut();
+        st.hl = defaults();
+        st.hl_rev += 1;
+    }
+
     /// `:hi NAME ARGS`: laid over the group as it is (`link=` replaces it).
     pub fn set_highlight(&mut self, name: &str, args: &str) -> Result<String, String> {
         let mut st = self.st.borrow_mut();
