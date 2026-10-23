@@ -95,6 +95,8 @@ pub(crate) struct VimState {
     pub replace: bool,
     /// where insert mode was left (`gi`), the last visual selection (`gv`)
     pub last_insert: Option<usize>,
+    /// ranges that move with the text (a snippet's stops): text typed at a start goes inside
+    pub ranges: Vec<(usize, usize)>,
     pub last_visual: Option<(usize, usize, Mode)>,
     /// where changes happened, newest last (`g;` `g,`), and where in the list `g;` stands
     pub changes: Vec<usize>,
@@ -160,6 +162,10 @@ impl VimState {
                 *p = p.saturating_sub(n).max(a);
             }
         };
+        for r in self.ranges.iter_mut() {
+            mv(&mut r.0);
+            mv(&mut r.1);
+        }
         self.marks.values_mut().for_each(mv);
         self.changes.iter_mut().for_each(mv);
         self.jumps.iter_mut().for_each(mv);
@@ -179,6 +185,12 @@ impl VimState {
                 *p = (*p as isize + delta).max(at as isize) as usize;
             }
         };
+        for r in self.ranges.iter_mut() {
+            if r.0 > at {
+                r.0 = (r.0 as isize + delta).max(at as isize) as usize;
+            }
+            mv(&mut r.1);
+        }
         self.marks.values_mut().for_each(mv);
         self.changes.iter_mut().for_each(mv);
         self.jumps.iter_mut().for_each(mv);

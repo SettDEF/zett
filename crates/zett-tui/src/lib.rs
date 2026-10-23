@@ -1,5 +1,6 @@
 //! zett in the terminal: the code editor, Doom-style, in the terminal's own colours.
 
+mod snippet;
 mod events;
 mod commands;
 mod doom;
@@ -609,6 +610,12 @@ struct App {
     lsp_status: String,
     comp: Option<lsp::Comp>,
     comp_due: Option<Instant>,
+    /// the trigger character that asked (sent to the server with the request)
+    comp_trig: Option<char>,
+    /// the buffer the last completion request was for (a late answer for another is dropped)
+    comp_doc: usize,
+    /// a snippet being filled in: its stops are the editor's moving ranges (snippet.rs)
+    snip: Option<crate::snippet::Session>,
     /// where the cursor was drawn (the completion popup sits there)
     cursor_xy: (u16, u16),
     /// the latest edit (servers hear about it once typing pauses)
@@ -880,6 +887,9 @@ impl App {
             lsp_status: String::new(),
             comp: None,
             comp_due: None,
+            comp_trig: None,
+            comp_doc: 0,
+            snip: None,
             cursor_xy: (0, 0),
             edit_at: Instant::now(),
             typed_at: Instant::now(),

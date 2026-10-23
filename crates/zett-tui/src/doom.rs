@@ -131,6 +131,9 @@ pub(crate) struct Win {
     pub doc: usize,
     pub top: usize,
     pub left: usize,
+    /// its own cursor in the buffer (line, column), as Vim's windows: a buffer shown twice
+    /// is moved through separately in each
+    pub cursor: Option<Pos>,
     /// its own folder (:lcd); a new window gets the one it was split from
     pub lcd: Option<PathBuf>,
     /// in diff mode (:diffthis, diff.rs)
@@ -429,12 +432,19 @@ impl App {
         // the window being left keeps the buffer it shows now (it learns it only when drawn otherwise:
         // `:e b | wincmd h` in a session or a mapping lost b)
         let cur = self.cur;
+        let at = self.docs[cur].ed.cursor();
         if let Some(Some(w)) = self.wins.get_mut(self.focus) {
             w.doc = cur;
+            w.cursor = Some(at);
         }
         if let Some(w) = self.wins.get(id).and_then(|w| w.as_ref()) {
+            let mine = w.cursor;
             self.focus = id;
             self.cur = w.doc.min(self.docs.len() - 1);
+            // the window's own cursor (only when it showed this buffer the last time)
+            if let Some(c) = mine.filter(|_| w.doc == self.cur) {
+                self.docs[self.cur].ed.set_cursor(c);
+            }
         }
     }
 
@@ -1025,6 +1035,18 @@ impl App {
             "symbols" => self.lsp_symbols(),
             "format" => self.lsp_format(),
             "lspFormat" => self.lsp_format_wait(arg.parse().unwrap_or(1000)),
+            "snippetExpand" => {
+                let at = self.docs[self.cur].ed.offset();
+                self.snippet_insert(at, at, arg);
+            }
+            "snippetJump" => {
+                self.snippet_jump(if arg.starts_with('-') { -1 } else { 1 });
+            }
+            "snippetStop" => self.snippet_end(),
+            "compNow" => {
+                self.comp_trig = None;
+                self.comp_due = Some(Instant::now());
+            }
             "rename" => {
                 let w = self.word_at_cursor();
                 self.cmdline = Some(format!("rename {w}"));

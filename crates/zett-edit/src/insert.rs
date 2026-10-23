@@ -78,6 +78,36 @@ impl Editor {
             Code::Delete => {
                 self.rem(self.cursor, self.cursor + 1);
             }
+            // CTRL-W: the word before the cursor (blanks first); CTRL-U: back to where typing
+            // started, or the line's indent (both stop at the line's start)
+            Code::Char(c @ ('w' | 'u')) if k.ctrl && !k.alt => {
+                let ls = self.line_start(self.cur_line());
+                let before: Vec<char> = self.buf.slice(ls, self.cursor).chars().collect();
+                let mut n = before.len();
+                if c == 'w' {
+                    while n > 0 && before[n - 1].is_whitespace() {
+                        n -= 1;
+                    }
+                    let word = |ch: char| ch.is_alphanumeric() || ch == '_';
+                    let kind = n.checked_sub(1).map(|i| word(before[i]));
+                    while n > 0 && Some(word(before[n - 1])) == kind && !before[n - 1].is_whitespace() {
+                        n -= 1;
+                    }
+                } else {
+                    let from = self.vim.insert_start.clamp(ls, self.cursor);
+                    let indent = before.iter().take_while(|ch| ch.is_whitespace()).count();
+                    n = if from < self.cursor { from - ls } else { indent.min(n) };
+                    if n == before.len() {
+                        n = 0;
+                    }
+                }
+                let a = ls + n;
+                if a < self.cursor {
+                    self.rem(a, self.cursor);
+                    self.cursor = a;
+                    self.vim.insert_start = self.vim.insert_start.min(a);
+                }
+            }
             Code::Left => self.cursor = self.cursor.saturating_sub(1).max(self.line_start(self.cur_line())),
             Code::Right => self.cursor = (self.cursor + 1).min(self.line_end(self.cur_line())),
             Code::Char(c) if !k.ctrl && !k.alt => {
@@ -152,7 +182,19 @@ impl Editor {
         if edits.is_empty() {
             return;
         }
+        self.apply_edits_in(edits, false);
+        self.mode = Mode::Normal;
+    }
+
+    /// The edits (from a server), insert mode left as it is: an import added above keeps the
+    /// cursor on its text; an edit over the cursor keeps its line and column.
+    pub fn apply_edits_in(&mut self, mut edits: Vec<(Pos, Pos, String)>, keep_mode: bool) {
+        if edits.is_empty() {
+            return;
+        }
         let keep = self.cursor();
+        let mut at = self.cursor;
+        let mut over = false;
         // last first, so earlier positions stay right
         edits.sort_by(|a, b| (b.0.line, b.0.col).cmp(&(a.0.line, a.0.col)));
         self.begin();
@@ -162,10 +204,45 @@ impl Editor {
                 self.rem(s, e);
             }
             self.ins(s, &text);
+            if e <= at {
+                at = at + text.chars().count() - (e - s).min(at);
+            } else if s < at {
+                over = true;
+            }
         }
         self.close();
-        self.mode = Mode::Normal;
-        self.set_cursor(keep);
+        if over || !keep_mode {
+            self.set_cursor(keep);
+        } else {
+            self.cursor = at.min(self.buf.len_chars());
+        }
+    }
+
+    /// The cursor and the column j/k keep, exactly (drawing another window on the buffer puts
+    /// them back as they were).
+    pub fn cursor_state(&self) -> (usize, usize) {
+        (self.cursor, self.want_col)
+    }
+    pub fn set_cursor_state(&mut self, s: (usize, usize)) {
+        self.cursor = s.0.min(self.buf.len_chars());
+        self.want_col = s.1;
+    }
+
+    /// The cursor as a character offset, and set from one.
+    pub fn offset(&self) -> usize {
+        self.cursor
+    }
+    pub fn set_offset(&mut self, at: usize) {
+        self.cursor = at.min(self.buf.len_chars());
+        self.want_col = self.cursor().col;
+    }
+
+    /// Ranges that move with edits (a snippet's stops), and setting them.
+    pub fn ranges(&self) -> &[(usize, usize)] {
+        &self.vim.ranges
+    }
+    pub fn set_ranges(&mut self, r: Vec<(usize, usize)>) {
+        self.vim.ranges = r;
     }
 
 }

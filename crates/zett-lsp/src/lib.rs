@@ -209,8 +209,11 @@ pub enum Event {
     Symbols(Vec<(String, u8, usize, usize, usize)>),
     /// edits to make (a rename, a format): per file, (start line, col, end line, col, text)
     Edits(Vec<(PathBuf, Vec<(usize, usize, usize, usize, String)>)>),
-    /// completions at a position: (line, col in chars as asked) and the items
-    Completion(usize, Vec<Item>),
+    /// completions at a position: the line asked about, the items, and whether the list is only
+    /// a start (isIncomplete: ask again as more is typed)
+    Completion(usize, Vec<Item>, bool),
+    /// an item with the rest filled in (completionItem/resolve)
+    Resolved(Item),
     /// progress and log lines worth a glance
     Status(String),
     /// a piece of work a server reports ($/progress): server, token, title, message, percent, done
@@ -226,6 +229,7 @@ enum Pending {
     Symbols,
     Edits(Option<PathBuf>),
     Completion(usize),
+    Resolve,
     Init,
 }
 
@@ -250,6 +254,9 @@ pub struct Client {
 struct Gate {
     ready: bool,
     queue: Vec<Value>,
+    /// from initialize: characters that ask for completions, and completionItem/resolve
+    triggers: Vec<String>,
+    resolve: bool,
 }
 
 fn send(w: &Arc<Mutex<ChildStdin>>, v: &Value) {
@@ -294,7 +301,7 @@ impl Client {
                     "synchronization": { "didSave": true },
                     "publishDiagnostics": { "relatedInformation": false },
                     "hover": { "contentFormat": ["plaintext", "markdown"] },
-                    "completion": { "completionItem": { "snippetSupport": false, "documentationFormat": ["plaintext"] } },
+                    "completion": { "completionItem": { "snippetSupport": true, "documentationFormat": ["markdown", "plaintext"], "labelDetailsSupport": true, "insertReplaceSupport": false, "resolveSupport": { "properties": ["documentation", "detail", "additionalTextEdits"] } }, "contextSupport": true },
                     "references": {},
                     "documentSymbol": { "hierarchicalDocumentSymbolSupport": true },
                     "rename": { "prepareSupport": false },
@@ -381,10 +388,34 @@ impl Client {
         self.pending.lock().unwrap().insert(id, Pending::Edits(Some(path.to_path_buf())));
     }
 
-    /// `line` is echoed back with the answer, so a late one can be told apart.
-    pub fn completion(&mut self, path: &Path, line: usize, col: usize) {
-        let id = self.request("textDocument/completion", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col } }));
+    /// `line` is echoed back with the answer, so a late one can be told apart; `trigger` is the
+    /// character that asked (one of the server's trigger characters), if one did.
+    pub fn completion(&mut self, path: &Path, line: usize, col: usize, trigger: Option<char>) {
+        let context = match trigger {
+            Some(c) => json!({ "triggerKind": 2, "triggerCharacter": c.to_string() }),
+            None => json!({ "triggerKind": 1 }),
+        };
+        let id = self.request("textDocument/completion", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col }, "context": context }));
         self.pending.lock().unwrap().insert(id, Pending::Completion(line));
+    }
+
+    /// The rest of an item (its documentation, the imports it adds), when the server offers that.
+    pub fn resolve(&mut self, it: &Item) -> bool {
+        if !self.can_resolve() || it.resolved || it.data.is_null() {
+            return false;
+        }
+        let id = self.request("completionItem/resolve", it.data.clone());
+        self.pending.lock().unwrap().insert(id, Pending::Resolve);
+        true
+    }
+
+    /// The characters that ask for completions by themselves (`.`, `::`'s `:`, `<`, `"` …).
+    pub fn triggers(&self) -> Vec<String> {
+        self.gate.lock().map(|g| g.triggers.clone()).unwrap_or_default()
+    }
+
+    pub fn can_resolve(&self) -> bool {
+        self.gate.lock().map(|g| g.resolve).unwrap_or(false)
     }
 
     pub fn hover(&mut self, path: &Path, line: usize, col: usize) {
@@ -512,6 +543,9 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
                         send(&stdin, &json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
                         // now what waited (didOpen and friends), in order
                         let mut g = gate.lock().unwrap();
+                        let cp = &res["capabilities"]["completionProvider"];
+                        g.triggers = cp["triggerCharacters"].as_array().map(|a| a.iter().filter_map(|t| t.as_str().map(String::from)).collect()).unwrap_or_default();
+                        g.resolve = cp["resolveProvider"].as_bool().unwrap_or(false);
                         for v in std::mem::take(&mut g.queue) {
                             send(&stdin, &v);
                         }
@@ -536,7 +570,14 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
                     Some(Pending::Completion(line)) => {
                         let list = if res.is_array() { res.clone() } else { res["items"].clone() };
                         let items = list.as_array().map(|a| a.iter().map(item).collect()).unwrap_or_default();
-                        let _ = events.send(Event::Completion(line, items));
+                        let _ = events.send(Event::Completion(line, items, res["isIncomplete"].as_bool().unwrap_or(false)));
+                    }
+                    Some(Pending::Resolve) => {
+                        if res.is_object() {
+                            let mut it = item(res);
+                            it.resolved = true;
+                            let _ = events.send(Event::Resolved(it));
+                        }
                     }
                     Some(Pending::References) => {
                         let locs = res.as_array().map(|a| a.iter().filter_map(location).collect()).unwrap_or_default();
@@ -657,24 +698,64 @@ mod tests {
 }
 
 /// A completion: what the list shows, what goes in, a hint beside it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Item {
     pub label: String,
+    /// the text that goes in, snippet stops left out (plain text when `snippet` is false)
     pub insert: String,
+    /// insertTextFormat 2: `body` is a snippet ($1, ${2:x}) for vim.snippet
+    pub snippet: bool,
+    pub body: String,
     pub detail: String,
     /// LSP's CompletionItemKind (2 method, 3 function, 5 field, 6 variable, 9 module, 14 keyword …)
     pub kind: u8,
     pub sort: String,
+    /// what typing is matched against (filterText, else the label)
+    pub filter: String,
+    /// the server's own range to replace (textEdit): start line, col, end line, col
+    pub range: Option<(usize, usize, usize, usize)>,
+    /// more edits to make with it (an import at the top)
+    pub extra: Vec<(usize, usize, usize, usize, String)>,
+    pub doc: String,
+    /// the item as the server sent it, for completionItem/resolve
+    pub data: Value,
+    pub resolved: bool,
 }
 
 fn item(v: &Value) -> Item {
     let label = v["label"].as_str().unwrap_or("").to_string();
-    let insert = v["textEdit"]["newText"].as_str().or(v["insertText"].as_str()).unwrap_or(&label).to_string();
+    let te = &v["textEdit"];
+    let body = te["newText"].as_str().or(v["insertText"].as_str()).unwrap_or(&label).to_string();
+    let snippet = v["insertTextFormat"].as_u64() == Some(2);
+    let n = |x: &Value| x.as_u64().unwrap_or(0) as usize;
+    // a TextEdit's range, or an InsertReplaceEdit's insert part
+    let r = if te["range"].is_object() { &te["range"] } else { &te["insert"] };
+    let range = r.is_object().then(|| (n(&r["start"]["line"]), n(&r["start"]["character"]), n(&r["end"]["line"]), n(&r["end"]["character"])));
+    let extra = v["additionalTextEdits"]
+        .as_array()
+        .map(|a| a.iter().map(|e| (n(&e["range"]["start"]["line"]), n(&e["range"]["start"]["character"]), n(&e["range"]["end"]["line"]), n(&e["range"]["end"]["character"]), e["newText"].as_str().unwrap_or("").to_string())).collect())
+        .unwrap_or_default();
+    let doc = match &v["documentation"] {
+        Value::String(s) => s.clone(),
+        d => d["value"].as_str().unwrap_or("").to_string(),
+    };
+    let detail = v["detail"].as_str().map(String::from).unwrap_or_else(|| {
+        let ld = &v["labelDetails"];
+        format!("{}{}", ld["detail"].as_str().unwrap_or(""), ld["description"].as_str().map(|d| format!(" {d}")).unwrap_or_default()).trim().to_string()
+    });
     Item {
-        detail: v["detail"].as_str().or(v["labelDetails"]["description"].as_str()).unwrap_or("").to_string(),
+        detail,
         kind: v["kind"].as_u64().unwrap_or(0) as u8,
         sort: v["sortText"].as_str().unwrap_or(&label).to_string(),
-        insert: strip_snippet(&insert),
+        filter: v["filterText"].as_str().unwrap_or(&label).to_string(),
+        insert: if snippet { strip_snippet(&body) } else { body.clone() },
+        snippet,
+        body,
+        range,
+        extra,
+        doc,
+        data: v.clone(),
+        resolved: false,
         label,
     }
 }

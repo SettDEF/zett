@@ -147,6 +147,13 @@ impl App {
             let focused = id == self.focus;
             let di = w.doc.min(self.docs.len() - 1);
             let in_diff = w.diff && !focused;
+            // another window on this buffer: its own cursor while it is drawn (put back after)
+            let real = self.docs[di].ed.cursor_state();
+            if !focused {
+                if let Some(c) = w.cursor {
+                    self.docs[di].ed.set_cursor(c);
+                }
+            }
             if let Some((fdoc, ftop, fline)) = follow_diff.filter(|_| in_diff) {
                 let blocks = self.diff_blocks(fdoc, di);
                 w.top = crate::diff::map_line(&blocks, ftop);
@@ -227,6 +234,10 @@ impl App {
                 if let Some(Some(w)) = self.wins.get_mut(id) {
                     w.top = self.docs[di].top;
                     w.left = self.docs[di].left;
+                    w.cursor = Some(self.docs[di].ed.cursor());
+                }
+                if !focused {
+                    self.docs[di].ed.set_cursor_state(real);
                 }
                 if focused && w.diff {
                     follow_diff = Some((di, self.docs[di].top, self.docs[di].ed.cursor().line));

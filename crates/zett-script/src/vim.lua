@@ -1183,6 +1183,23 @@ vim.diagnostic = vim.diagnostic or { config = function() end, severity = { ERROR
 vim.diagnostic.goto_next = function() z.ui("diag", "next") end
 vim.diagnostic.goto_prev = function() z.ui("diag", "prev") end
 vim.diagnostic.jump = function(o) z.ui("diag", (o and (o.count or 1) < 0) and "prev" or "next") end
+-- vim.snippet (Neovim 0.10+): zett's own snippet session; its stops move with every edit
+vim.snippet = {
+  expand = function(body) z.ui("snippetExpand", body) end,
+  jump = function(dir) z.ui("snippetJump", tostring(dir or 1)) end,
+  active = function(f)
+    if not vim.g._zett_snippet then return false end
+    return f == nil or f.direction == nil or true
+  end,
+  stop = function() z.ui("snippetStop", "") end,
+}
+-- vim.lsp.completion (0.11): zett's popup is this; enable() turns 'autocomplete' on, get() asks now
+vim.lsp.completion = {
+  enable = function(on, _, _, o)
+    if on ~= false and (o == nil or o.autotrigger ~= false) then vim.o.autocomplete = true end
+  end,
+  get = function() z.ui("compNow", "") end,
+}
 vim.treesitter = vim.treesitter or { start = function() end, stop = function() end }
 vim.filetype = vim.filetype or { add = function() end, match = function() return nil end }
 vim.ui = vim.ui or {}

@@ -231,6 +231,19 @@ impl App {
         if mode == Mode::Insert && ctrl && self.comp.is_none() && matches!(k.code, KeyCode::Char('n' | 'p')) {
             return self.keyword_complete(k.code == KeyCode::Char('p'));
         }
+        // a snippet: Tab / S-Tab to its next / previous stop (Neovim's defaults), a placeholder
+        // typed over
+        if mode == Mode::Insert && self.snip.is_some() {
+            match k.code {
+                KeyCode::Tab if self.snippet_jump(1) => return,
+                KeyCode::BackTab if self.snippet_jump(-1) => return,
+                _ => {}
+            }
+            if self.snippet_before_key(&k) {
+                self.snippet_check();
+                return self.comp_after_key(None);
+            }
+        }
         let typed = match k.code {
             KeyCode::Char(c) if !ctrl => Some(c),
             KeyCode::Backspace => None,

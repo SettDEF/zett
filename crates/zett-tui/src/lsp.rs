@@ -44,6 +44,7 @@ impl App {
             self.lsp_event(ev);
         }
         self.comp_tick();
+        self.comp_resolve_sel();
         // text changed since the server last saw it, and the typing paused
         if self.edit_at.elapsed() < Duration::from_millis(250) {
             return;
@@ -62,7 +63,8 @@ impl App {
                     Some(l) => self.goto_location(l.clone()),
                     None => self.say("no definition found"),
                 },
-                Event::Completion(line, items) => self.comp_arrived(line, items),
+                Event::Completion(line, items, more) => self.comp_arrived(line, items, more),
+                Event::Resolved(it) => self.comp_resolved(it),
                 Event::References(locs) => self.show_locations("References", locs),
                 Event::Symbols(syms) => self.show_symbols(syms),
                 Event::Edits(e) => self.apply_workspace(e),
@@ -218,6 +220,10 @@ pub(crate) struct Comp {
     pub start: usize,
     /// keyword completion (CTRL-N / CTRL-P): what was typed (CTRL-E brings it back); None from a server
     pub keyword: Option<String>,
+    /// the server's list is only a start: typing asks again
+    pub incomplete: bool,
+    /// the item whose documentation was asked for (completionItem/resolve)
+    pub resolving: Option<usize>,
 }
 
 fn ident(c: char) -> bool {
@@ -227,6 +233,7 @@ fn ident(c: char) -> bool {
 impl App {
     /// After a key in insert mode: refine the popup, ask for one, or close it.
     pub(crate) fn comp_after_key(&mut self, typed: Option<char>) {
+        self.snippet_check();
         // keyword completion ends with the next key typed (the word stays as it is)
         if self.comp.as_ref().is_some_and(|c| c.keyword.is_some()) {
             self.comp = None;
@@ -234,24 +241,56 @@ impl App {
         }
         if !self.docs[self.cur].lsp || self.docs[self.cur].ed.mode() != Mode::Insert {
             self.comp = None;
+            self.comp_due = None;
             return;
         }
         // autocomplete: the menu comes by itself after autocompletedelay ms (else C-n / C-x C-o ask)
         let auto = self.flag(self.cur, "autocomplete");
         let delay = Duration::from_millis(self.setting(self.cur, "autocompletedelay").parse().unwrap_or(120));
+        // the server's trigger characters (`.`, `:`, `<`, `"`, `/`, `@` …); `.` and `:` without a list
+        let triggers = self.client_for(self.cur).map(|c| c.triggers()).unwrap_or_default();
+        let is_trigger = |c: char| if triggers.is_empty() { c == '.' || c == ':' } else { triggers.iter().any(|t| t.ends_with(c)) };
+        let before = {
+            let d = &self.docs[self.cur];
+            let c = d.ed.cursor();
+            d.ed.buf.line(c.line).chars().take(c.col).last()
+        };
         match typed {
             Some(c) if ident(c) => {
                 if self.comp.is_some() {
                     self.comp_filter();
+                    // a list that is only a start: ask again (the menu stays until the answer)
+                    if self.comp.as_ref().is_some_and(|c| c.incomplete) {
+                        self.comp_trig = None;
+                        self.comp_due = Some(Instant::now() + delay);
+                    }
                 } else if auto {
+                    self.comp_trig = None;
                     self.comp_due = Some(Instant::now() + delay);
                 }
             }
-            Some('.') | Some(':') => {
+            Some(c) if c != '\0' && is_trigger(c) => {
                 self.comp = None;
+                self.comp_trig = Some(c);
                 self.comp_due = auto.then(|| Instant::now() + delay / 2);
             }
-            None if self.comp.is_some() => self.comp_filter(),
+            // Backspace: the menu refined, or back when the word before the cursor is still there
+            None => {
+                if self.comp.is_some() {
+                    self.comp_filter();
+                }
+                // the whole word deleted: nothing left to complete
+                if self.comp.as_ref().is_some_and(|c| self.docs[self.cur].ed.cursor().col <= c.start) {
+                    self.comp = None;
+                }
+                if self.comp.is_none() && auto && before.is_some_and(ident) {
+                    self.comp_trig = None;
+                    self.comp_due = Some(Instant::now() + delay);
+                } else if self.comp.is_none() {
+                    self.comp_due = None;
+                }
+            }
+            // anything else (a space, an arrow, Enter): the menu goes
             _ => {
                 self.comp = None;
                 self.comp_due = None;
@@ -271,12 +310,19 @@ impl App {
         self.edit_at = Instant::now() - Duration::from_secs(1);
         self.lsp_sync();
         let Some((path, line, col)) = self.lsp_pos() else { return };
+        let trig = self.comp_trig.take();
+        self.comp_doc = self.cur;
         if let Some(c) = self.client_for(self.cur) {
-            c.completion(&path, line, col);
+            c.completion(&path, line, col, trig);
         }
     }
 
-    pub(crate) fn comp_arrived(&mut self, line: usize, items: Vec<zett_lsp::Item>) {
+    pub(crate) fn comp_arrived(&mut self, line: usize, items: Vec<zett_lsp::Item>, incomplete: bool) {
+        // late answers: another buffer, another line, insert mode left
+        if self.comp_doc != self.cur {
+            return;
+        }
+        let utf16 = self.client_for(self.cur).map(|c| c.utf16()).unwrap_or(true);
         let d = &self.docs[self.cur];
         let c = d.ed.cursor();
         if d.ed.mode() != Mode::Insert || c.line != line || items.is_empty() {
@@ -287,11 +333,28 @@ impl App {
         while start > 0 && ident(text[start - 1]) {
             start -= 1;
         }
-        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start, keyword: None });
+        // the server's own range says where the word starts (`@decorator`, `#include <…`)
+        let line_text = d.ed.buf.line(c.line);
+        if let Some((l, col, ..)) = items.first().and_then(|i| i.range) {
+            let col = if utf16 { zett_lsp::from_utf16(&line_text, col) } else { col };
+            if l == line && col <= c.col {
+                start = col;
+            }
+        }
+        let keep = self.comp.as_ref().and_then(|c| c.shown.get(c.sel).map(|&i| c.items[i].label.clone()));
+        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start, keyword: None, incomplete, resolving: None });
         self.comp_filter();
+        // asked again while typing: the same item stays chosen
+        if let (Some(label), Some(comp)) = (keep, self.comp.as_mut()) {
+            if let Some(p) = comp.shown.iter().position(|&i| comp.items[i].label == label) {
+                comp.sel = p;
+            }
+        }
     }
 
     fn comp_filter(&mut self) {
+        // matching starts the word (as Neovim); completeopt=fuzzy matches anywhere too
+        let fuzzy_on = self.setting(self.cur, "completeopt").split(',').any(|o| o.trim() == "fuzzy");
         let d = &self.docs[self.cur];
         let c = d.ed.cursor();
         let Some(comp) = self.comp.as_mut() else { return };
@@ -301,14 +364,15 @@ impl App {
         }
         let prefix: String = d.ed.buf.line(c.line).chars().skip(comp.start).take(c.col - comp.start).collect::<String>().to_lowercase();
         let q: Vec<char> = prefix.chars().collect();
+        // what starts with the typed part first, then fuzzy matches; each in the server's order
         let mut scored: Vec<(bool, String, usize)> = comp
             .items
             .iter()
             .enumerate()
             .filter_map(|(i, it)| {
-                let l = it.label.to_lowercase();
+                let l = if it.filter.is_empty() { it.label.to_lowercase() } else { it.filter.to_lowercase() };
                 let starts = l.starts_with(&prefix);
-                (starts || fuzzy(&q, &l).is_some()).then(|| (!starts, it.sort.clone(), i))
+                (starts || (fuzzy_on && fuzzy(&q, &l).is_some())).then(|| (!starts, it.sort.clone(), i))
             })
             .collect();
         scored.sort();
@@ -319,19 +383,92 @@ impl App {
         }
     }
 
-    /// Enter / Tab on the popup: the typed part becomes the item.
+    /// The chosen item's documentation (and imports) from the server, asked once per item.
+    pub(crate) fn comp_resolve_sel(&mut self) {
+        let Some(comp) = &self.comp else { return };
+        let Some(&i) = comp.shown.get(comp.sel) else { return };
+        if comp.keyword.is_some() || comp.resolving == Some(i) || comp.items[i].resolved {
+            return;
+        }
+        let it = comp.items[i].clone();
+        let asked = self.client_for(self.cur).is_some_and(|c| c.resolve(&it));
+        if let Some(comp) = self.comp.as_mut() {
+            comp.resolving = Some(i);
+            if !asked {
+                comp.items[i].resolved = true;
+            }
+        }
+    }
+
+    pub(crate) fn comp_resolved(&mut self, it: zett_lsp::Item) {
+        let Some(comp) = self.comp.as_mut() else { return };
+        if let Some(old) = comp.items.iter_mut().find(|o| o.label == it.label && o.sort == it.sort) {
+            if !it.doc.is_empty() {
+                old.doc = it.doc;
+            }
+            if !it.detail.is_empty() {
+                old.detail = it.detail;
+            }
+            if !it.extra.is_empty() {
+                old.extra = it.extra;
+            }
+            old.resolved = true;
+        }
+    }
+
+    /// Enter / CTRL-Y on the popup: the item in place of what was typed (the server's range),
+    /// a snippet's stops to Tab through, and the imports it brings.
     pub(crate) fn comp_accept(&mut self) {
+        // its imports may only come with the rest of it: asked for and waited on a moment
+        self.comp_resolve_sel();
+        if let Some(i) = self.comp.as_ref().and_then(|c| c.resolving.filter(|&i| !c.items[i].resolved)) {
+            let end = Instant::now() + Duration::from_millis(300);
+            while Instant::now() < end && self.comp.as_ref().is_some_and(|c| !c.items[i].resolved) {
+                for ev in self.lsp.events() {
+                    self.lsp_event(ev);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
         let Some(comp) = self.comp.take() else { return };
         let Some(&i) = comp.shown.get(comp.sel) else { return };
-        let insert = comp.items[i].insert.clone();
-        let typed = self.docs[self.cur].ed.cursor().col.saturating_sub(comp.start);
-        for _ in 0..typed {
-            self.edit_key(Key::code(Code::Backspace));
-        }
-        for ch in insert.chars() {
-            self.edit_key(if ch == '\n' { Key::code(Code::Enter) } else { Key::ch(ch) });
-        }
+        let it = comp.items[i].clone();
         self.comp_due = None;
+        // keyword completion: the plain word, typed in (so . repeats it)
+        if comp.keyword.is_some() {
+            let typed = self.docs[self.cur].ed.cursor().col.saturating_sub(comp.start);
+            for _ in 0..typed {
+                self.edit_key(Key::code(Code::Backspace));
+            }
+            for ch in it.insert.chars() {
+                self.edit_key(Key::ch(ch));
+            }
+            return;
+        }
+        let utf16 = self.client_for(self.cur).map(|c| c.utf16()).unwrap_or(true);
+        let d = &mut self.docs[self.cur];
+        let cur = d.ed.cursor();
+        let a = d.ed.buf.to_char(Pos { line: cur.line, col: comp.start.min(cur.col) });
+        let b = d.ed.offset();
+        if it.snippet {
+            self.snippet_insert(a, b, &it.body);
+        } else {
+            d.ed.replace_text(a, b, &it.insert);
+            d.touched(cur.line);
+        }
+        // the imports, elsewhere in the file: the cursor and the snippet's stops move with them
+        if !it.extra.is_empty() {
+            let d = &mut self.docs[self.cur];
+            let conv = |ed: &zett_edit::Editor, line: usize, col: usize| {
+                let t = ed.buf.line(line.min(ed.buf.len_lines().saturating_sub(1)));
+                Pos { line, col: if utf16 { zett_lsp::from_utf16(&t, col) } else { col } }
+            };
+            let edits: Vec<(Pos, Pos, String)> = it.extra.iter().map(|(l1, c1, l2, c2, t)| (conv(&d.ed, *l1, *c1), conv(&d.ed, *l2, *c2), t.clone())).collect();
+            d.ed.apply_edits_in(edits, true);
+            d.states.clear();
+            d.touched(0);
+        }
+        self.edit_at = Instant::now();
     }
 
     pub(crate) fn draw_comp(&self, f: &mut Frame) {
@@ -415,6 +552,32 @@ impl App {
             })
             .collect();
         f.render_widget(Paragraph::new(lines), a);
+        // the chosen item's documentation beside the menu (right, else left), as completeopt=popup
+        let Some(it) = comp.shown.get(comp.sel).map(|&i| &comp.items[i]) else { return };
+        let mut text: Vec<String> = Vec::new();
+        if !it.detail.is_empty() && it.detail.chars().count() > dw {
+            text.push(it.detail.clone());
+        }
+        text.extend(it.doc.lines().filter(|l| !l.starts_with("```")).map(String::from));
+        while text.last().is_some_and(|l| l.trim().is_empty()) {
+            text.pop();
+        }
+        if text.is_empty() {
+            return;
+        }
+        let right = area.width.saturating_sub(a.right() + 1);
+        let left = a.x.saturating_sub(1);
+        let room = right.max(left).min(60);
+        if room < 16 {
+            return;
+        }
+        let dh = (text.len() as u16).min(area.height.saturating_sub(2)).min(14).max(1);
+        let dx = if right >= left { a.right() + 1 } else { a.x.saturating_sub(room + 1) };
+        let dy = a.y.min(area.height.saturating_sub(dh));
+        let da = Rect { x: dx, y: dy, width: room, height: dh }.intersection(area);
+        crate::layer(f, da);
+        let rows: Vec<Line> = text.iter().map(|l| Line::styled(format!(" {l}"), hl("Pmenu"))).collect();
+        f.render_widget(Paragraph::new(rows).wrap(ratatui::widgets::Wrap { trim: false }).style(hl("Pmenu")), da);
     }
 }
 
@@ -793,5 +956,120 @@ mod last_file_tests {
         let name = app.docs[app.cur].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(name.ends_with("proj/b.rs"), "opened {name:?} (msg {:?})", app.msg);
+    }
+}
+
+#[cfg(test)]
+mod completion_live_tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::time::{Duration, Instant};
+
+    fn project(src: &str) -> (std::path::PathBuf, crate::App) {
+        let dir = std::env::temp_dir().join(format!("zett-complive-{}-{}", std::process::id(), src.len()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"t\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+        std::fs::write(dir.join("src/main.rs"), src).unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.open(&dir.join("src/main.rs"));
+        std::thread::sleep(Duration::from_secs(8));
+        app.lsp_tick();
+        (dir, app)
+    }
+    fn keys(app: &mut crate::App, s: &str) {
+        for c in s.chars() {
+            app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+    }
+    fn popup_with(app: &mut crate::App, label: &str) -> bool {
+        let end = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < end {
+            app.lsp_tick();
+            if let Some(c) = app.comp.as_mut() {
+                if let Some(p) = c.shown.iter().position(|&i| c.items[i].label.starts_with(label)) {
+                    c.sel = p;
+                    return true;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        false
+    }
+
+    #[test]
+    #[ignore]
+    fn a_method_snippet_is_filled_in_with_tab() {
+        let (dir, mut app) = project("fn main() {\n    let mut v: Vec<u8> = Vec::new();\n    \n}\n");
+        for k in ['3', 'G', 'A'] {
+            app.key(KeyEvent::new(KeyCode::Char(k), KeyModifiers::NONE));
+        }
+        keys(&mut app, "v.pus");
+        assert!(popup_with(&mut app, "push"), "no push offered");
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        keys(&mut app, "7");
+        // rust-analyzer's snippet ends `);$0`: Tab goes past the `;` it puts in itself
+        app.key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        keys(&mut app, " ");
+        let line = app.docs[app.cur].ed.buf.line(2);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(line.trim_end(), "    v.push(7);");
+        assert!(line.trim_end_matches('\n').ends_with("; "), "Tab did not go past the end: {line:?}");
+    }
+
+    #[test]
+    #[ignore]
+    fn an_item_brings_its_import() {
+        let (dir, mut app) = project("fn main() {\n    let m: \n}\n");
+        app.key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Char('A'), KeyModifiers::NONE));
+        keys(&mut app, "HashMa");
+        assert!(popup_with(&mut app, "HashMap"), "no HashMap offered");
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        // the item is `HashMap<$0>`: the cursor waits between the brackets
+        keys(&mut app, "u8, u8");
+        let text = app.docs[app.cur].ed.text();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(text.contains("use std::collections::HashMap;"), "no import: {text}");
+        assert!(text.contains("let m: HashMap<u8, u8>"), "cursor lost after the import: {text}");
+    }
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn item(label: &str) -> zett_lsp::Item {
+        zett_lsp::Item { label: label.into(), insert: label.into(), filter: label.into(), sort: label.into(), resolved: true, ..Default::default() }
+    }
+
+    #[test]
+    fn late_answers_backspace_and_moving_away() {
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str("one\npr\n");
+        app.docs[app.cur].lsp = true;
+        for k in ['j', 'A'] {
+            app.key(KeyEvent::new(KeyCode::Char(k), KeyModifiers::NONE));
+        }
+        // an answer for another line is dropped
+        app.comp_arrived(0, vec![item("print")], false);
+        assert!(app.comp.is_none());
+        app.comp_arrived(1, vec![item("print"), item("parse"), item("prompt")], false);
+        let shown = |app: &crate::App| app.comp.as_ref().map(|c| c.shown.iter().map(|&i| c.items[i].label.clone()).collect::<Vec<_>>()).unwrap_or_default();
+        assert_eq!(shown(&app), vec!["print", "prompt"]);
+        app.key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+        assert_eq!(shown(&app), vec!["print"]);
+        // Backspace widens it again
+        app.key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert_eq!(shown(&app), vec!["print", "prompt"]);
+        // back before where the word started: gone; an arrow: gone
+        app.key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        app.key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(app.comp.is_none());
+        assert!(app.comp_due.is_none() || app.docs[app.cur].ed.cursor().col == 0);
+        app.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+        app.comp_arrived(1, vec![item("print")], false);
+        assert!(app.comp.is_some());
+        app.key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert!(app.comp.is_none());
     }
 }

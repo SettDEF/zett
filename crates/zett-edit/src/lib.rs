@@ -13,6 +13,7 @@
 pub mod digraph;
 mod digraph_table;
 pub mod emacs;
+pub mod snippet;
 pub mod keys;
 pub mod killring;
 pub mod outline;

@@ -190,3 +190,41 @@ mod tests {
         assert_eq!(ni, "n>i");
     }
 }
+
+#[cfg(test)]
+mod split_view_tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    // a buffer shown in two windows: each has its own cursor and view, as in Vim
+    #[test]
+    fn two_windows_on_one_buffer_move_separately() {
+        let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str(&text);
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 30)).unwrap();
+        let mut frame = |app: &mut crate::App| {
+            term.draw(|f| app.draw(f)).unwrap();
+        };
+        let keys = |app: &mut crate::App, s: &str| {
+            for c in s.chars() {
+                app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+            }
+        };
+        frame(&mut app);
+        app.command("split");
+        frame(&mut app);
+        let new = app.focus;
+        keys(&mut app, "150G");
+        frame(&mut app);
+        app.command("wincmd w");
+        frame(&mut app);
+        assert_ne!(app.focus, new);
+        assert_eq!(app.docs[app.cur].ed.cursor().line, 0, "the first window's cursor followed the other");
+        assert_eq!(app.wins[app.focus].as_ref().unwrap().top, 0, "the first window scrolled with the other");
+        keys(&mut app, "j");
+        frame(&mut app);
+        app.command("wincmd w");
+        frame(&mut app);
+        assert_eq!(app.docs[app.cur].ed.cursor().line, 149, "the second window lost its place");
+    }
+}
