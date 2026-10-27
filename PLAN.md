@@ -359,3 +359,27 @@ zash hints and plain text), and everything else plugs in later through hooks, no
   (completion, hover, signature, diagnostics), git gutter + diff panel, search panel, toasts, theme
   picker, minimap, pictures in the editor, agent panel.
 - Mouse (drag tabs, resize the sidebar, click the tree) waits for zash's interaction step (stage 3).
+
+### The core's four parts (all small)
+1. Places (hooks): `sidebar`, `panel`, `popup`, `statusbar`, `gutter`, `overlay`.
+2. Read-only state for hooks: `zett.ui.state()` (file, cursor, selection, mode, tabs, project),
+   updated on change; no hook reaches into zett's internals.
+3. A focus stack for keys: the top layer gets the keys, what it does not take falls to the one
+   below (Escape closes a popup, the editor gets them back); popups and editor never fight.
+4. Registries, one clean list each: commands (description + keys), options (type, default,
+   description), key bindings per mode. Palette, which-key, settings and the shell's keybinds
+   menu only show these lists.
+
+### Performance rules (many plugins must not make it slow)
+1. Registering costs nothing; a component is built the first time it opens (lazy, built in).
+2. One render path: every component, from zett, Lua or a plugin, gives the same UI tree; layout
+   and drawing once per frame, in Rust, for all together.
+3. Only what changed is redone: a component names the state it reads; unchanged, its last tree
+   is kept. Nothing changes, nothing is computed.
+4. No Lua per frame: Lua runs on events only (key, file change, popup opened).
+5. A time budget per hook (e.g. 1 ms per event), measured; over it, `:checkhealth` names it with
+   its time and it can be switched off.
+Checked with Vitals (that is what it is for): zett's CPU and memory at rest, while typing and with
+popups open, before and after each hook user is added (`vitals top`, its stream, a recorded
+history); the numbers go into this plan next to each step, and a step that costs more than its
+budget is fixed before the next one starts.
