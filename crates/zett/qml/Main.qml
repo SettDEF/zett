@@ -619,7 +619,44 @@ ApplicationWindow {
                 // a click below the last block continues the page; then the pages linking here
                 footer: Item {
                     width: list.width
-                    height: 160 + backCol.implicitHeight
+                    height: 160 + backCol.implicitHeight + (startCol.visible ? startCol.implicitHeight + 20 : 0)
+                    // an empty page: ways to begin instead of a blank card
+                    ColumnLayout {
+                        id: startCol
+                        visible: win.blocks.length === 0
+                        x: (list.width - list.column) / 2
+                        y: 12
+                        width: list.column
+                        spacing: 10
+                        Text { text: "Start with"; color: t.faint; font.family: t.sans; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Repeater {
+                                model: [
+                                    { k: "paragraph", icon: "notes", label: "Text", key: "Enter" }, { k: "h1", icon: "title", label: "Heading", key: "#" },
+                                    { k: "todo", icon: "check_box", label: "To-do", key: "[ ]" }, { k: "bullet", icon: "format_list_bulleted", label: "List", key: "-" },
+                                    { k: "quote", icon: "format_quote", label: "Quote", key: ">" }, { k: "code", icon: "code", label: "Code", key: "```" }
+                                ]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    implicitWidth: startRow.implicitWidth + 28; implicitHeight: 40; radius: t.rRow
+                                    color: startHov.hovered ? t.raised : t.card
+                                    RowLayout {
+                                        id: startRow
+                                        anchors.centerIn: parent
+                                        spacing: 8
+                                        Text { text: modelData.icon; color: t.accent; font.family: t.icons; font.pixelSize: 18 }
+                                        Text { text: modelData.label; color: t.text; font.family: t.sans; font.pixelSize: 13 }
+                                        Text { text: modelData.key; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                                    }
+                                    HoverHandler { id: startHov; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: win.focusAfter = app.addBlock(-1, modelData.k) }
+                                }
+                            }
+                        }
+                        Text { text: "or type  /  in a block for every kind,  [[  to link a page"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                    }
                     ColumnLayout {
                         id: backCol
                         x: (list.width - list.column) / 2
