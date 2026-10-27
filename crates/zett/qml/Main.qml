@@ -106,6 +106,20 @@ ApplicationWindow {
     property var whichKey: []        // what can follow them
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
+    property bool detailsShown: true
+    // the open pages (indices into pages), the focus stack's tabs
+    property var tabs: []
+    function addTab(i) { if (i >= 0 && !tabs.includes(i)) tabs = tabs.concat([i]) }
+    function closeTab(i) {
+        const at = tabs.indexOf(i)
+        tabs = tabs.filter(x => x !== i)
+        if (i === app.current && tabs.length) app.open(tabs[Math.min(at, tabs.length - 1)])
+    }
+    Connections { target: app; function onCurrentChanged() { win.addTab(app.current) } }
+    Component.onCompleted: addTab(app.current)
+    Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
+    Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) app.open(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
+    Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
     function keyToken(e) {
         const named = { [Qt.Key_Escape]: "<Esc>", [Qt.Key_Return]: "<CR>", [Qt.Key_Enter]: "<CR>", [Qt.Key_Backspace]: "<BS>", [Qt.Key_Tab]: "<Tab>", [Qt.Key_Left]: "<Left>", [Qt.Key_Right]: "<Right>", [Qt.Key_Up]: "<Up>", [Qt.Key_Down]: "<Down>", [Qt.Key_Space]: "<Space>" }
         if (named[e.key]) return named[e.key]
@@ -321,7 +335,38 @@ ApplicationWindow {
             Item {
                 Layout.fillWidth: true
                 implicitHeight: 64
+                // the open pages as pill tabs
+                ListView {
+                    anchors { left: parent.left; right: toolRow.left; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 24 }
+                    height: 34
+                    orientation: ListView.Horizontal
+                    spacing: 6
+                    clip: true
+                    model: win.tabs
+                    delegate: Rectangle {
+                        required property int modelData
+                        readonly property bool sel: modelData === app.current
+                        readonly property var pg: win.pages[modelData] ?? {}
+                        width: Math.min(200, tabRow.implicitWidth + 24); height: 32; radius: 16
+                        color: sel ? Qt.alpha(t.accent, 0.16) : tabHov.hovered ? t.raised : t.card
+                        RowLayout {
+                            id: tabRow
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                            spacing: 6
+                            Text { text: "description"; color: parent.parent.sel ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                            Text { Layout.fillWidth: true; Layout.maximumWidth: 130; text: parent.parent.pg.title || "Untitled"; elide: Text.ElideRight; color: parent.parent.sel ? t.text : t.dim; font.family: t.sans; font.pixelSize: 13; font.weight: parent.parent.sel ? Font.DemiBold : Font.Normal }
+                            Text {
+                                text: "close"; color: closeHov.hovered ? t.text : t.faint; font.family: t.icons; font.pixelSize: 14
+                                HoverHandler { id: closeHov; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: win.closeTab(modelData) }
+                            }
+                        }
+                        HoverHandler { id: tabHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: app.open(modelData) }
+                    }
+                }
                 RowLayout {
+                    id: toolRow
                     anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 28 }
                     spacing: 6
                     Rectangle {
@@ -728,8 +773,64 @@ ApplicationWindow {
                     Chip { icon: "check_circle"; label: "saved"; tint: t.accent }
                     Chip { icon: "notes"; label: `${win.blocks.length} blocks` }
                     Item { Layout.fillWidth: true }
-                    Text { text: "Ctrl P go to  ·  [[Page]] links  ·  / block kinds  ·  Esc Vim"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    Text { text: "Ctrl P go to  ·  Ctrl \\ details  ·  / block kinds  ·  Esc Vim"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    Rectangle {
+                        implicitWidth: 28; implicitHeight: 24; radius: 12
+                        color: detHov.hovered ? t.raised : t.card
+                        Text { anchors.centerIn: parent; text: win.detailsShown ? "right_panel_close" : "right_panel_open"; color: t.dim; font.family: t.icons; font.pixelSize: 16 }
+                        HoverHandler { id: detHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: win.detailsShown = !win.detailsShown }
+                    }
                 }
+            }
+        }
+
+        // ───────── details: outline, links, info ─────────
+        Rectangle {
+            visible: win.detailsShown && win.pages.length > 0
+            Layout.fillHeight: true
+            Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
+            implicitWidth: 248
+            radius: t.rCard
+            color: t.panel
+            border.width: 1; border.color: Qt.alpha(t.rule, 0.35)
+            readonly property var heads: win.blocks.map((b, i) => ({ i, b })).filter(o => /^(h[1-3]|heading)$/.test(o.b.kind) && (o.b.text ?? "").length)
+            readonly property var links: { try { return JSON.parse(app.backlinks) } catch (e) { return [] } }
+            readonly property int words: win.blocks.reduce((n, b) => n + ((b.text ?? "").match(/\S+/g)?.length ?? 0), 0)
+            component Head: Text { color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8; Layout.leftMargin: 8; Layout.topMargin: 10 }
+            component Line: Text { color: t.faint; font.family: t.sans; font.pixelSize: 12; Layout.leftMargin: 8; Layout.fillWidth: true; elide: Text.ElideRight }
+            ColumnLayout {
+                anchors { fill: parent; margins: 12 }
+                spacing: 2
+                Head { text: "OUTLINE"; Layout.topMargin: 4 }
+                Line { visible: parent.parent.heads.length === 0; text: "No headings yet" }
+                Repeater {
+                    model: parent.parent.heads
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 30; radius: t.rRow
+                        color: olHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        Text {
+                            anchors { fill: parent; leftMargin: 8 + (modelData.b.kind === "h3" ? 24 : modelData.b.kind === "h2" ? 12 : 0); rightMargin: 8 }
+                            verticalAlignment: Text.AlignVCenter
+                            text: modelData.b.text; elide: Text.ElideRight
+                            color: t.dim; font.family: t.sans; font.pixelSize: 13
+                        }
+                        HoverHandler { id: olHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: { list.positionViewAtIndex(modelData.i, ListView.Beginning); win.focusAfter = modelData.i } }
+                    }
+                }
+                Head { text: "LINKED FROM  " + parent.parent.links.length }
+                Line { visible: parent.parent.links.length === 0; text: "Nothing links here yet" }
+                Repeater {
+                    model: parent.parent.links
+                    delegate: Line { required property var modelData; text: "↳  " + (modelData.title ?? modelData.page ?? ""); color: t.dim }
+                }
+                Head { text: "INFO" }
+                Line { text: `${win.blocks.length} blocks  ·  ${parent.parent.words} words` }
+                Line { text: app.dir; elide: Text.ElideLeft }
+                Item { Layout.fillHeight: true }
             }
         }
     }

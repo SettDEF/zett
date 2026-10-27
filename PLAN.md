@@ -390,8 +390,18 @@ The window (qml/Main.qml) is restyled to the desktop's design: layered surfaces 
 content as one rounded card on the darker background, a Dotos-style sidebar (sections with headers,
 pill rows with icons, mono counts), chips in the status line. Simple core, extras via hooks.
 
-1. Frame: background, sidebar on it, the page in a card (radius 23), sections, search pill, chips.
-2. Split Main.qml into Theme / Sidebar / PageView / StatusBar / QuickOpen (cut line ranges).
-3. Tabs: the open pages as a tab strip (the focus stack), Ctrl+W closes, Ctrl+Tab cycles.
-4. Places in the sidebar: Pages, Recent, Tags, Folder (files) from the engine's state.
-5. Hooks: panels register into named slots (sidebar section, status chip, palette entry) from Lua.
+1. ✅ Frame: background, the page in a card, Dotos sidebar (search pill, PAGES + button, icon rows), status chips.
+2. ✅ Empty page offers ways to begin; open pages as pill tabs (Ctrl+W, Ctrl+Tab); details card on the
+   right (outline, linked from, info; Ctrl+\\).
+3. Home page: recent pages, today's journal, open to-dos from every page; the window is never empty.
+4. Sidebar places: Recent, Pinned, Tags, Files (the workspace folder), Journal; collapsible sections.
+5. Command palette (Ctrl+K): every command with its key; quick open stays Ctrl+P.
+6. Search everything (Ctrl+Shift+F) in the details card: results grouped by page, history too.
+7. Settings page in the same look: theme, keys (Vim/Emacs), fonts, the config folder; live.
+8. Splits: two pages side by side (drag a tab), each its own card.
+9. Bottom drawer: a zash terminal, problems/agent output; toggled like the details card.
+10. Split Main.qml into Theme / Sidebar / Tabs / PageView / Details / StatusBar / Palette (cut line ranges).
+11. Hooks: Lua adds sidebar sections, details cards, status chips, palette entries into named slots.
+
+Not VS Code: no activity rail, no square tabs or file-explorer look; pill tabs, cards, the shell's
+layers and rounding, Dotos rows. Everything reachable by key, with the key shown next to it.
