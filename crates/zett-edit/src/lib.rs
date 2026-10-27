@@ -240,6 +240,23 @@ impl Editor {
         }
     }
 
+    /// Inserts pasted text as if it were typed, with autoindent disabled (bracketed paste).
+    pub fn paste_text(&mut self, text: &str) {
+        if !self.emacs && self.mode != Mode::Insert {
+            self.start_insert(self.cursor);
+        }
+        let prev = self.opt("paste").map(|s| s.to_string()).unwrap_or_default();
+        self.set_opt("paste", "true");
+        for c in text.chars() {
+            self.key(if c == '\n' { Key::code(Code::Enter) } else { Key::ch(c) });
+        }
+        if prev.is_empty() {
+            self.set_opt("paste", "false");
+        } else {
+            self.set_opt("paste", &prev);
+        }
+    }
+
     pub fn key(&mut self, k: Key) {
         // langmap: outside insert mode another layout's characters are the commands they stand for
         let k = match k.char().and_then(|c| self.vim.langmap.get(&c).copied()) {

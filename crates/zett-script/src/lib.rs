@@ -254,7 +254,9 @@ pub fn config_dir() -> PathBuf {
 
 impl Engine {
     pub fn new(folder: Option<Rc<RefCell<Folder>>>) -> Engine {
-        let lua = Lua::new();
+        // the safe libraries and debug (traceback, getinfo: Neovim plugins use them everywhere)
+        // Safety: debug only reads frames and tracebacks here; no C modules are loaded with it
+        let lua = unsafe { Lua::unsafe_new_with(mlua::StdLib::ALL_SAFE | mlua::StdLib::DEBUG, mlua::LuaOptions::default()) };
         let st = Rc::new(RefCell::new(State { folder, leader: "<Space>".into(), loading: "zett".into(), hl: hl::defaults(), hl_rev: 1, ..Default::default() }));
         let mut e = Engine { lua, st, errors: Vec::new(), plugins: Vec::new(), loaded: Vec::new() };
         if let Err(err) = e.install_api() {
@@ -438,6 +440,22 @@ impl Engine {
             }
         };
         Ok((out, self.finish()))
+    }
+
+    /// The decoration providers (nvim_set_decoration_provider) for this frame: nothing to do (one
+    /// table read) when no plugin set one.
+    pub fn decorate(&mut self) -> Vec<Effect> {
+        let on = self.lua.globals().get::<mlua::Table>("vim").and_then(|v| v.get::<bool>("_decor_on")).unwrap_or(false);
+        if !on {
+            return Vec::new();
+        }
+        let f = self.lua.globals().get::<mlua::Table>("vim").and_then(|v| v.get::<mlua::Function>("_decor_frame"));
+        if let Ok(f) = f {
+            if let Err(e) = f.call::<()>(()) {
+                self.errors.push(format!("decoration provider: {e}"));
+            }
+        }
+        self.finish()
     }
 
     /// Runs a command by name.

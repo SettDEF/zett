@@ -682,12 +682,13 @@ impl App {
                 });
             }
             if numbers && show.signs == Signs::Number && us.is_some() {
-                // signcolumn=number: the sign's text where the number starts
-                let num = gut(&format!("{shown} "), num_w);
+                // signcolumn=number: the sign instead of the number, as Neovim draws it (no digits
+                // left over: a 2-digit line lost its first one to the sign)
                 let u = us.unwrap();
-                let rest: String = num.chars().skip(2).collect();
+                let pad = num_w.saturating_sub(u.text.chars().count());
+                spans.push(Span::styled(" ".repeat(pad.saturating_sub(1)), num_style));
                 spans.push(Span::styled(u.text.clone(), u.texthl));
-                spans.push(Span::styled(rest, num_style));
+                spans.push(Span::styled(" ", num_style));
             } else if numbers {
                 let num = gut(&format!("{shown} "), num_w);
                 spans.push(match sign.filter(|_| show.signs == Signs::Number) {

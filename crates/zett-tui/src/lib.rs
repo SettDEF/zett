@@ -686,12 +686,12 @@ pub fn run_with(paths: Vec<PathBuf>, start: Vec<String>) -> std::io::Result<()> 
         app.command(c);
     }
     let mut term = ratatui::init();
-    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture, ratatui::crossterm::event::EnableFocusChange);
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture, ratatui::crossterm::event::EnableFocusChange, ratatui::crossterm::event::EnableBracketedPaste);
     kitty_keys_set(true);
     let r = app.main_loop(&mut term);
     layers_none();
     kitty_keys_set(false);
-    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture, ratatui::crossterm::event::DisableFocusChange, SetCursorStyle::DefaultUserShape);
+    let _ = execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture, ratatui::crossterm::event::DisableFocusChange, ratatui::crossterm::event::DisableBracketedPaste, SetCursorStyle::DefaultUserShape);
     ratatui::restore();
     r
 }
@@ -1067,6 +1067,9 @@ impl App {
                 self.docs[cur].states.clear();
                 (cur, std::mem::replace(&mut self.docs[cur].ed, ed))
             });
+            // decoration providers (gitsigns' signs) place what this frame shows
+            let fx = self.with_lua(|e| e.decorate());
+            self.after_lua(fx);
             LAYERS.with(|l| l.borrow_mut().clear());
             let done = term.draw(|f| self.draw(f));
             // the floats this frame, for zash to raise (as Neovim tells Neovide where its floats are)
@@ -1304,9 +1307,7 @@ impl App {
                 Event::FocusGained => self.fire_autocmds("focusgained", None),
                 Event::FocusLost => self.fire_autocmds("focuslost", None),
                 Event::Paste(s) => {
-                    for c in s.chars() {
-                        self.doc().ed.key(if c == '\n' { Key::code(Code::Enter) } else { Key::ch(c) });
-                    }
+                    self.doc().ed.paste_text(&s);
                 }
                 _ => {}
             }

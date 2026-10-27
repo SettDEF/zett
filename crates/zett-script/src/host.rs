@@ -79,6 +79,8 @@ pub(crate) struct Host {
     pub floats: Vec<(String, String, Vec<Vec<(String, String)>>)>,
     /// zett.defer: when, and what runs then
     pub timers: Vec<(std::time::Instant, RegistryKey)>,
+    /// processes started by zett.job.spawn (vim.system): each one's result arrives on its channel
+    pub jobs: Vec<Job>,
     /// every option the editor has: name, short names, kind (bool, int, text), default (zett.option_info)
     pub options: Vec<(String, Vec<String>, String, String)>,
 }
@@ -265,11 +267,17 @@ impl Engine {
 
     /// When the next zett.defer is due.
     pub fn next_timer(&self) -> Option<std::time::Instant> {
-        self.st.borrow().host.timers.iter().map(|t| t.0).min()
+        let st = self.st.borrow();
+        let t = st.host.timers.iter().map(|t| t.0).min();
+        // a running job (vim.system) is checked every 5 ms for its end
+        if st.host.jobs.is_empty() { t } else { Some(t.unwrap_or_else(std::time::Instant::now).min(std::time::Instant::now() + std::time::Duration::from_millis(5))) }
     }
 
     /// Runs the zett.defer functions that are due.
     pub fn run_timers(&mut self) -> Vec<Effect> {
+        let mut errs = Vec::new();
+        poll_jobs(&self.lua, &self.st, &mut errs);
+        self.errors.extend(errs);
         let now = std::time::Instant::now();
         let due: Vec<RegistryKey> = {
             let mut st = self.st.borrow_mut();
@@ -642,6 +650,95 @@ impl Engine {
             st.borrow_mut().host.timers.push((std::time::Instant::now() + std::time::Duration::from_millis(ms), k));
             Ok(())
         })?)?;
+
+        // ── zett.job: processes that run beside the editor (vim.system is built on it) ──
+        let job = lua.create_table()?;
+        // spawn(argv, { cwd, env = {K = V}, clear_env, stdin = "text" }, on_exit(result)) → id, pid
+        let st = self.st.clone();
+        let next = Rc::new(std::cell::Cell::new(0u64));
+        job.set("spawn", lua.create_function(move |lua, (argv, o, cb): (Vec<String>, Option<mlua::Table>, Option<Function>)| {
+            let get = |k: &str| o.as_ref().and_then(|t| t.get::<Option<String>>(k).ok().flatten());
+            let env: Option<Vec<(String, String)>> = o.as_ref().and_then(|t| t.get::<Option<mlua::Table>>("env").ok().flatten()).map(|t| t.pairs::<String, String>().flatten().collect());
+            let clear = o.as_ref().and_then(|t| t.get::<Option<bool>>("clear_env").ok().flatten()).unwrap_or(false);
+            let (pid, rx) = start_job(&argv, get("cwd"), env, clear, get("stdin")).map_err(|e| mlua::Error::runtime(format!("{}: {e}", argv.first().cloned().unwrap_or_default())))?;
+            let id = next.get() + 1;
+            next.set(id);
+            let cb = cb.map(|f| lua.create_registry_value(f)).transpose()?;
+            st.borrow_mut().host.jobs.push(Job { id, pid, rx, cb });
+            Ok((id, pid))
+        })?)?;
+        // wait(id, ms): blocks until the job ends (its on_exit runs first), its result; nil on time out
+        let st = self.st.clone();
+        job.set("wait", lua.create_function(move |lua, (id, ms): (u64, Option<u64>)| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms.unwrap_or(u64::MAX / 4).min(24 * 3600 * 1000));
+            loop {
+                let got = {
+                    let mut s = st.borrow_mut();
+                    let Some(i) = s.host.jobs.iter().position(|j| j.id == id) else { return Ok(None) };
+                    match s.host.jobs[i].rx.recv_timeout(std::time::Duration::from_millis(5)) {
+                        Ok(out) => Some((s.host.jobs.remove(i).cb, out)),
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
+                        Err(_) => {
+                            s.host.jobs.remove(i);
+                            return Ok(None);
+                        }
+                    }
+                };
+                if let Some((cb, out)) = got {
+                    let t = out.table(lua)?;
+                    if let Some(k) = cb {
+                        call(lua, &Some(k), t.clone()).map_err(mlua::Error::runtime)?;
+                    }
+                    return Ok(Some(t));
+                }
+                if std::time::Instant::now() >= deadline {
+                    return Ok(None);
+                }
+            }
+        })?)?;
+        // kill(id, signal = 15)
+        let st = self.st.clone();
+        job.set("kill", lua.create_function(move |_, (id, sig): (u64, Option<i32>)| {
+            if let Some(j) = st.borrow().host.jobs.iter().find(|j| j.id == id) {
+                // the signal by kill(1): no libc in this crate
+                let _ = std::process::Command::new("kill").arg(format!("-{}", sig.unwrap_or(15))).arg(j.pid.to_string()).status();
+            }
+            Ok(())
+        })?)?;
+        // pump(ms): for vim.wait — ended jobs' callbacks and due timers run, for up to ms
+        let st = self.st.clone();
+        job.set("pump", lua.create_function(move |lua, ms: u64| {
+            let end = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+            let mut errors = Vec::new();
+            loop {
+                poll_jobs(lua, &st, &mut errors);
+                let due: Vec<RegistryKey> = {
+                    let mut s = st.borrow_mut();
+                    let now = std::time::Instant::now();
+                    let (due, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut s.host.timers).into_iter().partition(|t| t.0 <= now);
+                    s.host.timers = keep;
+                    due.into_iter().map(|t| t.1).collect()
+                };
+                for k in due {
+                    if let Err(e) = call(lua, &Some(k), ()) {
+                        errors.push(format!("timer: {e}"));
+                    }
+                }
+                if std::time::Instant::now() >= end {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            Ok(errors.join("\n"))
+        })?)?;
+        job.set("running", {
+            let st = self.st.clone();
+            lua.create_function(move |_, ()| Ok(st.borrow().host.jobs.len()))?
+        })?;
+        z.set("job", job)?;
+        // zett.hrtime(): nanoseconds on a monotonic clock (vim.uv.hrtime; os.clock is CPU time)
+        let t0 = std::time::Instant::now();
+        z.set("hrtime", lua.create_function(move |_, ()| Ok(t0.elapsed().as_nanos() as i64))?)?;
 
         // ── zett.buf: the buffer being edited ──
         let buf = lua.create_table()?;
@@ -1081,4 +1178,99 @@ mod tests {
 /// A Neovim line index (from 0; negative from the end, -1 just past the last line) in 0..=n.
 fn line_index(i: i64, n: usize) -> usize {
     if i < 0 { (n as i64 + 1 + i).max(0) as usize } else { (i as usize).min(n) }
+}
+
+/// A process started from Lua (zett.job.spawn, vim.system): its result arrives on `rx` from the
+/// thread that waits for it; `cb` runs on the main loop with it, once.
+pub(crate) struct Job {
+    pub id: u64,
+    pub pid: u32,
+    pub rx: std::sync::mpsc::Receiver<JobOut>,
+    pub cb: Option<RegistryKey>,
+}
+
+pub(crate) struct JobOut {
+    pub code: i32,
+    pub signal: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+impl JobOut {
+    fn table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
+        let t = lua.create_table()?;
+        t.set("code", self.code)?;
+        t.set("signal", self.signal)?;
+        t.set("stdout", self.stdout.as_str())?;
+        t.set("stderr", self.stderr.as_str())?;
+        Ok(t)
+    }
+}
+
+/// Starts `argv` in its own thread: stdin written, stdout and stderr collected, the exit sent back.
+fn start_job(argv: &[String], cwd: Option<String>, env: Option<Vec<(String, String)>>, clear_env: bool, stdin: Option<String>) -> std::io::Result<(u32, std::sync::mpsc::Receiver<JobOut>)> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let (prog, args) = argv.split_first().ok_or_else(|| std::io::Error::other("no command"))?;
+    let mut c = Command::new(prog);
+    c.args(args).stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() });
+    if let Some(d) = cwd {
+        c.current_dir(d);
+    }
+    if clear_env {
+        c.env_clear();
+    }
+    for (k, v) in env.unwrap_or_default() {
+        c.env(k, v);
+    }
+    let mut child = c.spawn()?;
+    let pid = child.id();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        if let (Some(text), Some(mut w)) = (stdin, child.stdin.take()) {
+            // a big stdin in its own thread: the child may fill stdout before it has read it all
+            std::thread::spawn(move || {
+                let _ = w.write_all(text.as_bytes());
+            });
+        }
+        let out = match child.wait_with_output() {
+            Ok(o) => {
+                use std::os::unix::process::ExitStatusExt;
+                JobOut { code: o.status.code().unwrap_or(128 + o.status.signal().unwrap_or(0)), signal: o.status.signal().unwrap_or(0), stdout: String::from_utf8_lossy(&o.stdout).into_owned(), stderr: String::from_utf8_lossy(&o.stderr).into_owned() }
+            }
+            Err(e) => JobOut { code: -1, signal: 0, stdout: String::new(), stderr: e.to_string() },
+        };
+        let _ = tx.send(out);
+    });
+    Ok((pid, rx))
+}
+
+/// Runs the callbacks of the jobs that have ended (each once); true when one ran.
+pub(crate) fn poll_jobs(lua: &mlua::Lua, st: &Rc<RefCell<super::State>>, errors: &mut Vec<String>) -> bool {
+    let done: Vec<(Option<RegistryKey>, JobOut)> = {
+        let mut s = st.borrow_mut();
+        let mut done = Vec::new();
+        s.host.jobs.retain_mut(|j| match j.rx.try_recv() {
+            Ok(out) => {
+                done.push((j.cb.take(), out));
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(_) => false,
+        });
+        done
+    };
+    let any = !done.is_empty();
+    for (cb, out) in done {
+        if let Some(k) = cb {
+            let r = match out.table(lua) {
+                Ok(t) => call(lua, &Some(k), t),
+                Err(e) => Err(e.to_string()),
+            };
+            if let Err(e) = r {
+                errors.push(format!("vim.system on_exit: {e}"));
+            }
+        }
+    }
+    any
 }

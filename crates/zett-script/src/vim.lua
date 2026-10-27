@@ -7,8 +7,16 @@ local unpack = table.unpack or unpack
 -- LuaJIT's (Lua 5.1) globals that Neovim plugins use: unpack, loadstring, math.pow, the bit library
 _G.unpack = _G.unpack or table.unpack
 _G.loadstring = _G.loadstring or load
+-- function environments (5.1): one global table here, so getfenv is _G and setfenv returns the function as is
+_G.getfenv = _G.getfenv or function() return _G end
+_G.setfenv = _G.setfenv or function(f) return f end
+-- newproxy(true): an object with its own metatable, its __gc set later (gitsigns.util.gc_proxy). Lua 5.4
+-- only marks it for finalizing when __gc exists at setmetatable, so a placeholder is there from the start
+_G.newproxy = _G.newproxy or function(mt) return mt and setmetatable({}, { __gc = function() end }) or {} end
 math.pow = math.pow or function(a, b) return a ^ b end
 table.getn = table.getn or function(t) return #t end
+-- the largest positive whole-number key (gitsigns counts varargs with it, holes included)
+table.maxn = table.maxn or function(t) local n = 0 for k in pairs(t) do if type(k) == "number" and k > n and k == math.floor(k) then n = k end end return n end
 if not package.loaded.bit then
   local function u(x) x = math.tointeger(x) or math.floor(x) return x & 0xffffffff end
   local function s(x) x = u(x) return x >= 0x80000000 and x - 0x100000000 or x end
@@ -257,7 +265,7 @@ function vim.defer_fn(f, ms) z.defer(ms, f) end
 function vim.schedule_wrap(f) return function(...) local a = { ... } vim.schedule(function() f(unpack(a)) end) end end
 function vim.in_fast_event() return false end
 vim.uv = vim.uv or {}
-function vim.uv.hrtime() return math.floor(os.clock() * 1e9) end
+function vim.uv.hrtime() return z.hrtime() end
 function vim.uv.now() return math.floor(os.time() * 1000) end
 function vim.uv.cwd() return z.root() end
 function vim.uv.os_homedir() return os.getenv("HOME") end
@@ -1113,7 +1121,21 @@ function fn.reltimefloat(t) return os.clock() - (t[1] or 0) end
 
 -- the editor itself
 local features = { nvim = 1, zett = 1, unix = 1, linux = 1, termguicolors = 1, lua = 1, ["nvim-0.10"] = 1, ["nvim-0.9"] = 1, ["nvim-0.8"] = 1, ["nvim-0.7"] = 1, ["nvim-0.5"] = 1, syntax = 1, autocmd = 1, clipboard = 1, ["patch-8.1.0000"] = 1, folding = 1, timers = 1, ["vim_starting"] = 0, ttyin = 1, ttyout = 1 }
-function fn.has(f) return features[f] or 0 end
+-- the Neovim level zett speaks (vim.system, vim.lsp.completion, vim.snippet are 0.11's):
+-- has("nvim-0.11.2") compares against it, as Neovim does
+local NVIM = { 0, 11, 2 }
+function fn.has(f)
+  if features[f] then return features[f] end
+  local a, b, c = tostring(f):match("^nvim%-(%d+)%.(%d+)%.?(%d*)$")
+  if a then
+    local want = { tonumber(a), tonumber(b), tonumber(c) or 0 }
+    for i = 1, 3 do
+      if NVIM[i] ~= want[i] then return NVIM[i] > want[i] and 1 or 0 end
+    end
+    return 1
+  end
+  return 0
+end
 function fn.exists(e)
   local kind, name = e:sub(1, 1), e:sub(2)
   if kind == "&" or kind == "+" then return bool(info(name) ~= nil) end
@@ -1207,7 +1229,7 @@ function vim.fs.root(_, markers)
 end
 
 -- ── the rest ──
-function vim.version() return { major = 0, minor = 10, patch = 0, api_level = 12, prerelease = false } end
+function vim.version() return { major = NVIM[1], minor = NVIM[2], patch = NVIM[3], api_level = 13, prerelease = false } end
 vim.has = function(f) return fn.has(f) == 1 end
 function vim.region() return {} end
 vim.lsp = vim.lsp or { buf = {}, util = {}, protocol = {}, handlers = {}, config = function() end, enable = function() end }
@@ -3077,3 +3099,320 @@ api.nvim_get_hl = function(ns, o)
   end
   return get_hl_global(0, o)
 end
+
+-- ── processes, waiting, diffs (Neovim's built-ins; gitsigns, conform, lint run on these) ──
+
+-- vim.system(cmd, opts, on_exit): the process runs beside the editor; on_exit({code, signal,
+-- stdout, stderr}) on the main loop when it ends; :wait(ms) blocks for it, :kill(sig) ends it
+function vim.system(cmd, opts, on_exit)
+  if type(opts) == "function" then opts, on_exit = nil, opts end
+  opts = opts or {}
+  local stdin = opts.stdin
+  if type(stdin) == "table" then stdin = table.concat(stdin, "\n") end
+  if stdin == true then stdin = "" end
+  local env
+  if opts.env then
+    env = {}
+    for k, v in pairs(opts.env) do env[tostring(k)] = tostring(v) end
+  end
+  local result
+  local function fix(r)
+    if opts.text then
+      r.stdout = (r.stdout or ""):gsub("\r\n", "\n")
+      r.stderr = (r.stderr or ""):gsub("\r\n", "\n")
+    end
+    -- stdout = false: not wanted (Neovim gives nil then)
+    if opts.stdout == false then r.stdout = nil end
+    if opts.stderr == false then r.stderr = nil end
+    return r
+  end
+  local id, pid = z.job.spawn(cmd, { cwd = opts.cwd, env = env, clear_env = opts.clear_env, stdin = stdin }, function(r)
+    result = fix(r)
+    if on_exit then on_exit(result) end
+  end)
+  local obj = { pid = pid }
+  function obj:wait(ms)
+    if result then return result end
+    local r = z.job.wait(id, ms)
+    if r then return result or fix(r) end
+    z.job.kill(id, 9)
+    return { code = 124, signal = 9, stdout = "", stderr = "" }
+  end
+  function obj:kill(sig)
+    local n = ({ sigterm = 15, sigkill = 9, sigint = 2, sighup = 1 })[tostring(sig or ""):lower()] or tonumber(sig) or 15
+    z.job.kill(id, n)
+  end
+  function obj:write(_) end
+  function obj:is_closing() return result ~= nil end
+  if opts.timeout then
+    z.defer(opts.timeout, function() if not result then z.job.kill(id, 15) end end)
+  end
+  return obj
+end
+
+-- vim.wait(ms, cond, interval): runs the loop (jobs ending, timers) until cond() is true or time is up
+function vim.wait(ms, cond, interval)
+  local stop = z.hrtime() + (ms or 0) * 1e6
+  interval = interval or 20
+  while true do
+    if cond then
+      local ok, v = pcall(cond)
+      if ok and v then return true end
+    end
+    if z.hrtime() >= stop then return false, cond and -1 or nil end
+    z.job.pump(math.max(1, math.min(interval, math.ceil((stop - z.hrtime()) / 1e6))))
+  end
+end
+
+-- vim.diff(a, b, opts) / vim.text.diff: lines that changed. result_type "indices" gives
+-- { {start_a, count_a, start_b, count_b}, … } as xdiff does (a count of 0 starts at the line
+-- before); "unified" (the default) the text of a unified diff with ctxlen lines around each hunk
+function vim.diff(a, b, opts)
+  opts = opts or {}
+  local ops = z.diff(a or "", b or "")
+  local hunks, ia, ib, cur = {}, 0, 0, nil
+  for _, o in ipairs(ops) do
+    local k = o[1]
+    if k == " " then
+      if cur then hunks[#hunks + 1] = cur; cur = nil end
+      ia, ib = ia + 1, ib + 1
+    else
+      cur = cur or { ia + 1, 0, ib + 1, 0, lines = {} }
+      if k == "-" then ia = ia + 1; cur[2] = cur[2] + 1 else ib = ib + 1; cur[4] = cur[4] + 1 end
+      cur.lines[#cur.lines + 1] = o
+    end
+  end
+  if cur then hunks[#hunks + 1] = cur end
+  for _, h in ipairs(hunks) do
+    if h[2] == 0 then h[1] = h[1] - 1 end
+    if h[4] == 0 then h[3] = h[3] - 1 end
+  end
+  if opts.on_hunk then
+    for _, h in ipairs(hunks) do
+      if opts.on_hunk(h[1], h[2], h[3], h[4]) == -1 then break end
+    end
+    return nil
+  end
+  if opts.result_type == "indices" then
+    local out = {}
+    for i, h in ipairs(hunks) do out[i] = { h[1], h[2], h[3], h[4] } end
+    return out
+  end
+  -- unified: the changed lines with up to ctxlen unchanged ones around them; hunks whose
+  -- context would touch are one hunk (as diff -u does)
+  local ctx = opts.ctxlen or 3
+  local changed = {}
+  for i, o in ipairs(ops) do if o[1] ~= " " then changed[#changed + 1] = i end end
+  local groups = {}
+  for _, i in ipairs(changed) do
+    local g = groups[#groups]
+    if g and i - g[2] <= 2 * ctx + 1 then g[2] = i else groups[#groups + 1] = { i, i } end
+  end
+  -- each op's line number on both sides (before it)
+  local na, nb, before = 0, 0, {}
+  for i, o in ipairs(ops) do
+    before[i] = { na, nb }
+    if o[1] ~= "+" then na = na + 1 end
+    if o[1] ~= "-" then nb = nb + 1 end
+  end
+  local out = {}
+  for _, g in ipairs(groups) do
+    local s, e = math.max(1, g[1] - ctx), math.min(#ops, g[2] + ctx)
+    local ca, cb = 0, 0
+    for i = s, e do
+      if ops[i][1] ~= "+" then ca = ca + 1 end
+      if ops[i][1] ~= "-" then cb = cb + 1 end
+    end
+    local sa, sb = before[s][1] + (ca > 0 and 1 or 0), before[s][2] + (cb > 0 and 1 or 0)
+    out[#out + 1] = string.format("@@ -%d,%d +%d,%d @@", sa, ca, sb, cb)
+    for i = s, e do out[#out + 1] = ops[i][1] .. ops[i][2] end
+  end
+  return #out > 0 and table.concat(out, "\n") .. "\n" or ""
+end
+vim.text = vim.text or {}
+vim.text.diff = vim.diff
+
+-- the rest of libuv's file calls gitsigns and others use
+function vim.uv.fs_realpath(p)
+  local out = z.fs.exec({ "realpath", "-e", p })
+  out = out and out:gsub("\n$", "")
+  return out ~= "" and out or nil
+end
+function vim.uv.fs_lstat(p) return vim.uv.fs_stat(p) end
+function vim.uv.fs_readlink(p)
+  local out = z.fs.exec({ "readlink", p })
+  out = out and out:gsub("\n$", "")
+  return out ~= "" and out or nil
+end
+-- fs_poll: as fs_event (a change on the path), at the interval asked
+function vim.uv.new_fs_poll()
+  local ev = vim.uv.new_fs_event()
+  local h = {}
+  function h:start(path, _, cb) return ev:start(path, {}, function(err) cb(err, {}, {}) end) end
+  function h:stop() return ev:stop() end
+  function h:close() return ev:stop() end
+  function h:is_active() return ev:is_active() end
+  return h
+end
+-- check handles run once per loop turn: here on every timer tick (close enough for plugins)
+function vim.uv.new_check()
+  local t = vim.uv.new_timer()
+  local h = {}
+  function h:start(cb) t:start(0, 10, cb) end
+  function h:stop() t:stop() end
+  function h:close() t:close() end
+  return h
+end
+vim.uv.loop = vim.uv.loop or vim.uv
+vim.loop = vim.loop or vim.uv
+
+-- vim.fs.parents(start): the folders above start, nearest first
+function vim.fs.parents(start)
+  local p = vim.fs.normalize(start)
+  return function()
+    local up = vim.fs.dirname(p)
+    if not up or up == p or up == "." then return nil end
+    p = up
+    return up
+  end
+end
+
+-- vim.fs.find(names, { path, upward, stop, type, limit }): paths of the matching files or folders;
+-- names a string, a list, or function(name, path) → bool
+function vim.fs.find(names, opts)
+  opts = opts or {}
+  local limit = opts.limit or 1
+  local want = type(names) == "function" and names or function(name)
+    for _, n in ipairs(type(names) == "table" and names or { names }) do if n == name then return true end end
+    return false
+  end
+  local function fits(p)
+    local st = z.fs.stat(p)
+    if not st then return false end
+    if opts.type == "directory" then return st.dir end
+    if opts.type == "file" then return not st.dir end
+    return true
+  end
+  local out = {}
+  local start = vim.fs.normalize(opts.path or z.root() or vim.uv.cwd())
+  local stop = opts.stop and vim.fs.normalize(opts.stop)
+  if opts.upward then
+    local dir = start
+    while dir do
+      for _, e in ipairs(z.fs.list(dir)) do
+        if want(e.name, dir) and fits(e.path) then
+          out[#out + 1] = e.path
+          if #out >= limit then return out end
+        end
+      end
+      if dir == stop or dir == "/" then break end
+      local up = vim.fs.dirname(dir)
+      if not up or up == dir then break end
+      dir = up ~= "" and up or "/"
+    end
+  else
+    local queue = { start }
+    while #queue > 0 do
+      local dir = table.remove(queue, 1)
+      for _, e in ipairs(z.fs.list(dir)) do
+        if want(e.name, dir) and fits(e.path) then
+          out[#out + 1] = e.path
+          if #out >= limit then return out end
+        end
+        local st = z.fs.stat(e.path)
+        if st and st.dir and e.path ~= stop then queue[#queue + 1] = e.path end
+      end
+    end
+  end
+  return out
+end
+
+-- vim.deep_equal(a, b): the same values all the way down (tables by content)
+function vim.deep_equal(a, b)
+  if a == b then return true end
+  if type(a) ~= "table" or type(b) ~= "table" then return false end
+  for k, v in pairs(a) do if not vim.deep_equal(v, b[k]) then return false end end
+  for k in pairs(b) do if a[k] == nil then return false end end
+  return true
+end
+-- (no vim.is_thread: there are no Lua worker threads here, and plugins take its presence to mean
+-- there are: gitsigns then diffs on a vim.uv.new_work thread)
+vim.hl = vim.hl or {}
+vim.hl.priorities = vim.hl.priorities or { syntax = 50, treesitter = 100, semantic_tokens = 125, diagnostics = 150, user = 200 }
+-- text in another encoding: only to and from UTF-8 itself here (nil otherwise, as Neovim gives on failure)
+function vim.iconv(s, from, to)
+  local u = function(e) e = (e or ""):lower():gsub("%-", "") return e == "utf8" or e == "" end
+  if u(from) and u(to) then return s end
+  return nil
+end
+-- vim.str_utfindex(s, encoding, index) (0.11) or (s, index): the code-point or UTF-16 index of byte index;
+-- vim.str_byteindex(s, encoding, index) (0.11) or (s, index, use_utf16): the byte index of a character index
+local function units(c, enc)
+  if enc == "utf-16" then return c >= 0x10000 and 2 or 1 end
+  if enc == "utf-8" then return #utf8.char(c) end
+  return 1
+end
+function vim.str_utfindex(s, enc, idx)
+  if type(enc) ~= "string" then enc, idx = "utf-32", enc end
+  idx = idx or #s
+  local n, pos = 0, 1
+  for p, c in utf8.codes(s) do
+    if p > idx then break end
+    n = n + units(c, enc)
+    pos = p
+  end
+  return n, (enc == "utf-16" and n or nil)
+end
+function vim.str_byteindex(s, enc, idx, _)
+  if type(enc) ~= "string" then enc, idx = (idx and "utf-16" or "utf-32"), enc end
+  local n = 0
+  for p, c in utf8.codes(s) do
+    if n >= idx then return p - 1 end
+    n = n + units(c, enc)
+  end
+  return #s
+end
+
+-- ── decoration providers (nvim_set_decoration_provider): run for each window before it is drawn ──
+-- on_start, then per window on_win("win", winid, bufnr, toprow, botrow) (0-based, as Neovim) and,
+-- unless it returned false, on_line("line", winid, bufnr, row) for each row shown, then on_end.
+-- What they set (extmarks: signs, highlights) shows in that frame. gitsigns draws its signs this way.
+local decor = {}
+local decor_err = {}
+api.nvim_set_decoration_provider = function(ns, o)
+  decor[ns] = (o and next(o)) and o or nil
+  vim._decor_on = next(decor) ~= nil
+end
+local function run(ns, name, f, ...)
+  local ok, r = pcall(f, ...)
+  if not ok and not decor_err[ns .. name] then
+    decor_err[ns .. name] = true
+    vim.notify("decoration provider " .. name .. ": " .. tostring(r), vim.log.levels.ERROR)
+  end
+  return ok and r
+end
+-- called by the editor before a frame (only when a provider exists)
+function vim._decor_frame()
+  for ns, o in pairs(decor) do
+    if o.on_start and run(ns, "on_start", o.on_start, "start", 0) == false then goto next end
+    for _, w in ipairs(wins()) do
+      local top = (w.top or 1) - 1
+      local n = api.nvim_buf_line_count(w.buf)
+      local bot = math.max(top, math.min(n, top + (w.height or 1)) - 1)
+      if o.on_buf then run(ns, "on_buf", o.on_buf, "buf", w.buf, 0) end
+      local want = true
+      if o.on_win then want = run(ns, "on_win", o.on_win, "win", handle(w.nr), w.buf, top, bot) ~= false end
+      if want and o.on_line then
+        for r = top, bot do run(ns, "on_line", o.on_line, "line", handle(w.nr), w.buf, r) end
+      end
+    end
+    if o.on_end then run(ns, "on_end", o.on_end, "end", 0) end
+    ::next::
+  end
+end
+
+-- namespace options (nvim__ns_set: the windows a namespace draws in) and a forced redraw:
+-- every namespace draws everywhere here and every frame is drawn fresh, so both only answer
+api.nvim__ns_set = api.nvim__ns_set or function() end
+api.nvim__ns_get = api.nvim__ns_get or function() return { wins = {} } end
+api.nvim__redraw = api.nvim__redraw or function() end

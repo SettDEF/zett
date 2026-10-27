@@ -733,3 +733,78 @@ impl App {
         out
     }
 }
+
+#[cfg(test)]
+mod gitsigns_live_tests {
+    // gitsigns.nvim (a clone in GITSIGNS_DIR) on a repo with a changed, added and deleted line: the
+    // signs it places must be those three kinds, on those lines. Sets XDG_* itself: run alone (--ignored).
+    #[test]
+    #[ignore]
+    fn gitsigns_marks_the_changes() {
+        let Ok(src) = std::env::var("GITSIGNS_DIR") else { return };
+        let dir = std::env::temp_dir().join(format!("zett-gs-{}", std::process::id()));
+        let repo = dir.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = |args: &[&str]| assert!(std::process::Command::new("git").arg("-C").arg(&repo).args(args).env("GIT_AUTHOR_NAME", "t").env("GIT_AUTHOR_EMAIL", "t@t").env("GIT_COMMITTER_NAME", "t").env("GIT_COMMITTER_EMAIL", "t@t").output().unwrap().status.success());
+        git(&["init", "-q"]);
+        let lines: Vec<String> = (1..=10).map(|i| format!("line {i}")).collect();
+        std::fs::write(repo.join("f.txt"), lines.join("\n") + "\n").unwrap();
+        git(&["add", "f.txt"]);
+        git(&["commit", "-q", "-m", "one"]);
+        // line 2 changed, two added after line 5, line 9 gone
+        let mut now = lines.clone();
+        now[1] = "line two".into();
+        now.insert(5, "new a".into());
+        now.insert(6, "new b".into());
+        now.remove(10);
+        std::fs::write(repo.join("f.txt"), now.join("\n") + "\n").unwrap();
+        unsafe {
+            std::env::set_var("XDG_DATA_HOME", dir.join("data"));
+            std::env::set_var("XDG_STATE_HOME", dir.join("state"));
+        }
+        let out = dir.join("signs.txt");
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("lua zett.plug('gitsigns.nvim', {{ dir = {:?}, opts = {{ debug_mode = true }} }})", src));
+        app.open(&repo.join("f.txt"));
+        let probe = format!(
+            "lua local t = {{}} for _, m in ipairs(vim.api.nvim_buf_get_extmarks(0, -1, 0, -1, {{ details = true }})) do if m[4].sign_text then t[#t + 1] = (m[2] + 1) .. ':' .. vim.trim(m[4].sign_text) .. ':' .. (m[4].sign_hl_group or '') end end local f = io.open({:?}, 'w') f:write(table.concat(t, ' ')) f:close() local g = io.open({:?} .. '.log', 'w') g:write(vim.inspect(vim.b.gitsigns_status_dict) .. string.char(10) .. vim.inspect(require('gitsigns.debug.log').get(true))) g:close()",
+            out.display().to_string(),
+            out.display().to_string()
+        );
+        // frames are drawn as the editor does: the decoration providers (gitsigns' signs) run before each
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 30)).unwrap();
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut signs = String::new();
+        while std::time::Instant::now() < end {
+            let fx = app.with_lua(|e| e.run_timers());
+            app.after_lua(fx);
+            app.sync_profile();
+            let fx = app.with_lua(|e| e.decorate());
+            app.after_lua(fx);
+            term.draw(|f| app.draw(f)).unwrap();
+            app.command(&probe);
+            signs = std::fs::read_to_string(&out).unwrap_or_default();
+            if signs.split(' ').filter(|s| !s.is_empty()).count() >= 4 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        // and drawn: the sign column of the frame shows them
+        let screen: Vec<String> = {
+            let b = term.backend().buffer();
+            (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>()).collect()
+        };
+        eprintln!("screen:\n{}", screen.iter().take(12).cloned().collect::<Vec<_>>().join("\n"));
+        let errors = app.with_lua(|e| std::mem::take(&mut e.errors)).join("\n");
+        app.command(&probe);
+        eprintln!("probe message: {:?}", app.msg);
+        eprintln!("gitsigns log:\n{}", std::fs::read_to_string(out.with_extension("txt.log")).unwrap_or_default());
+        let _ = std::fs::remove_dir_all(&dir);
+        eprintln!("signs: {signs}\nmessage: {:?}\nerrors: {errors}", app.msg);
+        // changed line 2, added lines 6 and 7, a delete marked at line 10 (after "line 8")
+        for want in ["2:", "6:", "7:"] {
+            assert!(signs.split(' ').any(|s| s.starts_with(want)), "no sign at {want} in {signs:?} ({errors})");
+        }
+        assert!(signs.contains("Delete") || signs.contains("_"), "no delete sign in {signs:?}");
+    }
+}

@@ -457,6 +457,7 @@ ApplicationWindow {
                                 // Vim normal mode: keys go to zett-edit (window.rs), the cursor is a block
                                 property bool normal: false
                                 property bool applying: false
+                                property bool pastePending: false
                                 function applyVim(json) {
                                     const s = JSON.parse(json)
                                     if (s.text === undefined) return
@@ -502,6 +503,11 @@ ApplicationWindow {
                                 Timer { id: saveLater; interval: 350; onTriggered: app.setText(blockItem.index, edit.text) }
                                 onTextChanged: {
                                     if (!activeFocus || applying) return
+                                    if (edit.pastePending) {
+                                        edit.pastePending = false
+                                        saveLater.restart()
+                                        return
+                                    }
                                     // "/word" in an empty text block: the slash menu, filtered by what follows
                                     if (blockItem.kind === "paragraph" && text.startsWith("/") && !/\s/.test(text)) {
                                         const p = edit.mapToItem(rootRow, 0, edit.height)
@@ -538,6 +544,10 @@ ApplicationWindow {
                                         win.engineKey(e, vimTok)
                                         e.accepted = true
                                         return
+                                    }
+                                    // Ctrl+V: a paste is coming; don't treat its text as typed shortcuts
+                                    if (e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier)) {
+                                        edit.pastePending = true
                                     }
                                     if (win.slashFor === blockItem.index) {
                                         if (e.key === Qt.Key_Down) { win.slashSel = Math.min(win.slashSel + 1, win.slashMatches.length - 1); e.accepted = true; return }
