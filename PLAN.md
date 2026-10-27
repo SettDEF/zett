@@ -383,3 +383,15 @@ Checked with Vitals (that is what it is for): zett's CPU and memory at rest, whi
 popups open, before and after each hook user is added (`vitals top`, its stream, a recorded
 history); the numbers go into this plan next to each step, and a step that costs more than its
 budget is fixed before the next one starts.
+
+## The window in the shell's look (planned 2026-10-28)
+
+The window (qml/Main.qml) is restyled to the desktop's design: layered surfaces from tinct, the
+content as one rounded card on the darker background, a Dotos-style sidebar (sections with headers,
+pill rows with icons, mono counts), chips in the status line. Simple core, extras via hooks.
+
+1. Frame: background, sidebar on it, the page in a card (radius 23), sections, search pill, chips.
+2. Split Main.qml into Theme / Sidebar / PageView / StatusBar / QuickOpen (cut line ranges).
+3. Tabs: the open pages as a tab strip (the focus stack), Ctrl+W closes, Ctrl+Tab cycles.
+4. Places in the sidebar: Pages, Recent, Tags, Folder (files) from the engine's state.
+5. Hooks: panels register into named slots (sidebar section, status chip, palette entry) from Lua.

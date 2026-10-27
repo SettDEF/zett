@@ -33,6 +33,9 @@ ApplicationWindow {
         readonly property color rule: pick("outline_variant", "#42474d")
         readonly property string sans: "Google Sans Flex"
         readonly property string mono: "MonaspiceNe Nerd Font"
+        readonly property string icons: "Material Symbols Rounded"
+        readonly property int rCard: 23
+        readonly property int rRow: 12
     }
 
     readonly property var pages: { try { return JSON.parse(app.pages) } catch (e) { return [] } }
@@ -199,6 +202,8 @@ ApplicationWindow {
     focus: true
     Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }
+    // the page sits in one card on the background, like the shell's panels
+    Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.width: 1; border.color: Qt.alpha(t.rule, 0.35) }
 
     RowLayout {
         anchors.fill: parent
@@ -209,7 +214,7 @@ ApplicationWindow {
             Layout.fillHeight: true
             visible: !win.sidebarHidden
             implicitWidth: 260
-            color: t.panel
+            color: "transparent"
             ColumnLayout {
                 anchors { fill: parent; margins: 12; topMargin: 16 }
                 spacing: 4
@@ -228,16 +233,38 @@ ApplicationWindow {
                         Text { text: `${win.pages.length} pages`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                     }
                 }
-                // new page
+                // search: opens quick open
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.bottomMargin: 8
-                    implicitHeight: 38
-                    radius: 19
-                    color: newHov.hovered ? Qt.lighter(t.accent, 1.08) : t.accent
-                    Text { anchors.centerIn: parent; text: "+  New page"; color: t.onAccent; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
-                    HoverHandler { id: newHov; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: { app.newPage("Untitled"); win.focusAfter = 0 } }
+                    Layout.bottomMargin: 10
+                    implicitHeight: 36
+                    radius: 18
+                    color: searchHov.hovered ? t.raised : t.card
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                        spacing: 8
+                        Text { text: "search"; color: t.dim; font.family: t.icons; font.pixelSize: 18 }
+                        Text { Layout.fillWidth: true; text: "Search pages"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+                        Text { text: "Ctrl P"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                    HoverHandler { id: searchHov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: { quickField.text = ""; quick.open(); quickField.forceActiveFocus() } }
+                }
+                // section header with the new-page button
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.bottomMargin: 2
+                    Text { text: "PAGES"; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                    Text { text: win.pages.length; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Item { Layout.fillWidth: true }
+                    Rectangle {
+                        implicitWidth: 26; implicitHeight: 26; radius: 13
+                        color: newHov.hovered ? t.raised : "transparent"
+                        Text { anchors.centerIn: parent; text: "add"; color: newHov.hovered ? t.accent : t.dim; font.family: t.icons; font.pixelSize: 18 }
+                        HoverHandler { id: newHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: { app.newPage("Untitled"); win.focusAfter = 0 } }
+                    }
                 }
                 ListView {
                     id: pageList
@@ -251,12 +278,13 @@ ApplicationWindow {
                         required property int index
                         width: ListView.view.width
                         height: 36
-                        radius: 9
+                        radius: t.rRow
                         readonly property bool sel: index === app.current
                         color: sel ? Qt.alpha(t.accent, 0.16) : rowHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
-                        Rectangle { visible: parent.sel; anchors { left: parent.left; verticalCenter: parent.verticalCenter } width: 3; height: 16; radius: 1.5; color: t.accent }
                         RowLayout {
-                            anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                            spacing: 10
+                            Text { text: "description"; color: parent.parent.sel ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 18 }
                             Text {
                                 Layout.fillWidth: true
                                 text: modelData.title || "Untitled"
@@ -279,11 +307,12 @@ ApplicationWindow {
                     font.family: t.mono; font.pixelSize: 11
                 }
             }
-            Rectangle { anchors { right: parent.right; top: parent.top; bottom: parent.bottom } width: 1; color: t.rule; opacity: 0.6 }
         }
 
         // ───────── the page ─────────
         ColumnLayout {
+            id: pageCol
+            Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
@@ -303,7 +332,6 @@ ApplicationWindow {
                         TapHandler { onTapped: win.showSource = !win.showSource }
                     }
                 }
-                Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 1; color: t.rule; opacity: 0.6 }
             }
 
             // empty workspace
@@ -639,16 +667,31 @@ ApplicationWindow {
             // status bar
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 26
-                color: t.panel
-                Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: t.rule; opacity: 0.6 }
+                implicitHeight: 40
+                color: "transparent"
+                // status chips, as in the shell's bar
+                component Chip: Rectangle {
+                    property string icon
+                    property string label
+                    property color tint: t.dim
+                    implicitWidth: chipRow.implicitWidth + 20; implicitHeight: 24; radius: 12
+                    color: t.card
+                    RowLayout {
+                        id: chipRow
+                        anchors.centerIn: parent
+                        spacing: 5
+                        Text { visible: parent.parent.icon.length > 0; text: parent.parent.icon; color: parent.parent.tint; font.family: t.icons; font.pixelSize: 14 }
+                        Text { text: parent.parent.label; color: parent.parent.tint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                }
                 RowLayout {
-                    anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
-                    Rectangle { implicitWidth: 7; implicitHeight: 7; radius: 3.5; color: "#5fb98a" }
-                    Text { text: `${win.blocks.length} blocks · saved as Markdown`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
-                    Text { visible: win.vimMode.length > 0; text: win.vimMode; color: win.vimMode === "INSERT" ? t.dim : t.accent; font.family: t.mono; font.pixelSize: 11; font.weight: Font.Bold }
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                    spacing: 6
+                    Chip { visible: win.vimMode.length > 0; label: win.vimMode; tint: win.vimMode === "INSERT" ? t.dim : t.accent }
+                    Chip { icon: "check_circle"; label: "saved"; tint: t.accent }
+                    Chip { icon: "notes"; label: `${win.blocks.length} blocks` }
                     Item { Layout.fillWidth: true }
-                    Text { text: "Ctrl+P go to · [[Page]] links · Esc Vim keys · Enter new block · Backspace on empty removes · # - [ ] - > ``` change kind"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    Text { text: "Ctrl P go to  ·  [[Page]] links  ·  / block kinds  ·  Esc Vim"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
                 }
             }
         }
