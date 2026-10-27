@@ -342,3 +342,20 @@ The Firefox extension's editing part can start early (after M1): it needs only
 - The domain for the website (zett.dev and zett.app looked free on 2026-10-16).
 - The Firefox extension id (`gecko.id`) and the add-ons store listing name.
 - The app id / desktop file name and any package names.
+
+## The terminal GUI in zash (planned 2026-10-28)
+
+Rule (the user): keep it very simple. A small core that draws the workbench from zash's layout
+library (zash `ui-panels`: tokens from the shell, layout engine, components, one description for
+zash hints and plain text), and everything else plugs in later through hooks, not built into the core.
+
+- Core first: the workbench (activity bar, Dotos-style sidebar with the tree, tabs + breadcrumb,
+  editor with gutter, optional bottom panel, status bar), from zett's state, nothing else.
+- Hooks next: a component can be added at a named place (`sidebar`, `panel`, `popup`, `statusbar`,
+  `gutter`, `overlay`) by zett itself, Lua or a plugin, e.g. `zett.ui.on('popup', fn)`. The
+  which-key popup is the first user of the popup hook; nothing in the core knows about it.
+- Then, each as its own hook user: settings menu (search, categories, typed controls, live preview,
+  writes readable lines to init.lua, changed filter + reset), command palette, which-key, code popups
+  (completion, hover, signature, diagnostics), git gutter + diff panel, search panel, toasts, theme
+  picker, minimap, pictures in the editor, agent panel.
+- Mouse (drag tabs, resize the sidebar, click the tree) waits for zash's interaction step (stage 3).
