@@ -8,6 +8,8 @@ mod draw;
 mod input;
 mod extmarks;
 mod keyword;
+/// keyword completion, shared with the window's editor (the same words, the same order as i_CTRL-N)
+pub use keyword::candidates as keyword_candidates;
 mod lsp;
 mod panels;
 mod hl;

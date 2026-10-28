@@ -27,16 +27,26 @@ Rectangle {
     Connections {
         target: doc
         function onVersionChanged() {
-            if (!cv.fv || !cv.fv.lsp || !input.activeFocus) return
+            if (!cv.fv || !input.activeFocus) return
             const s = doc.lineText(cv.carets[0][0]), c = cv.carets[0][1], prev = s[c - 1] ?? ""
-            if (prev === "." || s.slice(c - 2, c) === "::") { cv.completing = true; lspSync.stop(); cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion") }
-            else if (cv.completing && /[\w$]/.test(prev)) { lspSync.stop(); cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion") }
+            // opens after . or :: and once a word has two letters; follows the word as it grows
+            const w = cv.word()
+            if (prev === "." || s.slice(c - 2, c) === "::" || (/[\w$]/.test(prev) && w.length >= 2)) { cv.completing = true; if (cv.fv.lsp) { lspSync.stop(); cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion") } }
             else cv.completing = false
             if (prev === "(" || prev === ",") { lspSync.stop(); cv.app.lspChange(cv.file, doc.text()); cv.askHere("signature") }
             else if (prev === ")") cv.fv.sigLabel = ""
         }
     }
-    readonly property var comps: cv.completing && cv.fv ? cv.fv.comps : []
+    // the server's items for the word, then the file's own words it does not have (all there is without a server)
+    readonly property var comps: {
+        if (!cv.completing || !cv.fv) return []
+        doc.version
+        const w = word(), wl = w.toLowerCase()
+        const server = cv.fv.comps.filter(i => !wl || (i.filter || i.label).toLowerCase().includes(wl))
+        const have = new Set(server.map(i => i.label))
+        let local = []; try { local = JSON.parse(doc.words(w)) } catch (e) {}
+        return server.concat(local.filter(x => !have.has(x)).map(x => ({ label: x, insert: x, detail: "in this file" }))).slice(0, 50)
+    }
     function takeComp(i) { const it = comps[i]; if (!it) return; const w0 = wordStart(); doc.select(carets[0][0], w0, carets[0][1] - w0); doc.insert(it.insert || it.label); completing = false; cv.fv.comps = [] }
     function askHere(kind) { if (cv.fv) cv.fv.askAt(kind, cv.carets[0][0], cv.carets[0][1]) }
     readonly property string file: win.filePath
@@ -296,7 +306,7 @@ Rectangle {
                 if (e.key === Qt.Key_Escape) { cv.completing = false; cv.fv.comps = []; e.accepted = true; return }
             }
             if (ctrl && alt && (e.key === Qt.Key_Up || e.key === Qt.Key_Down)) { doc.addCursorLine(e.key === Qt.Key_Up ? -1 : 1); e.accepted = true; return }
-            if (ctrl && e.key === Qt.Key_Space) { cv.completing = true; cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion"); e.accepted = true; return }
+            if (ctrl && e.key === Qt.Key_Space) { cv.completing = true; if (cv.fv && cv.fv.lsp) { cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion") } e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_Period) { cv.fv && cv.fv.askActions(cv.carets[0][0], cv.carets[0][1]); e.accepted = true; return }
             if (e.key === Qt.Key_F2 && cv.fv && cv.fv.lsp) { rename.open(); e.accepted = true; return }
             if (e.key === Qt.Key_Escape && cv.fv && cv.fv.sigLabel) { cv.fv.sigLabel = ""; e.accepted = true; return }

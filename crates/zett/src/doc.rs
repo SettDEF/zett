@@ -73,6 +73,9 @@ pub mod qobject {
         /// Shift+Alt drag: a cursor on each line from l0 to l1 at column col
         #[qinvokable]
         fn columns(self: Pin<&mut CodeDoc>, l0: i32, l1: i32, col: i32);
+        /// the file's own words starting with `prefix` (not the prefix itself), nearest the cursor first, 30 at most
+        #[qinvokable]
+        fn words(self: &CodeDoc, prefix: &QString) -> QString;
         #[qinvokable]
         #[cxx_name = "lineText"]
         fn line_text(self: &CodeDoc, line: i32) -> QString;
@@ -923,5 +926,16 @@ impl qobject::CodeDoc {
             if !cs.is_empty() { r.carets = cs; }
         }
         self.publish();
+    }
+}
+
+impl qobject::CodeDoc {
+    // the terminal editor's keyword completion (zett_tui::keyword_candidates, as i_CTRL-N): this file, nearest first
+    pub fn words(&self, prefix: &QString) -> QString {
+        let r = self.rust();
+        let p = prefix.to_string();
+        if p.is_empty() { return QString::from("[]") }
+        let found = zett_tui::keyword_candidates(&p, &r.rope.to_string(), r.carets[0].head, false, &[], true);
+        QString::from(&serde_json::Value::Array(found.into_iter().take(30).map(|(w, _)| serde_json::Value::String(w)).collect()).to_string())
     }
 }

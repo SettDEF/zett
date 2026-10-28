@@ -49,7 +49,7 @@ pub(crate) fn infer_case(typed: &str, word: &str) -> String {
 /// The candidates for `prefix`: this buffer's words around `pos` (after it first for CTRL-N,
 /// before it nearest first for CTRL-P), then `others` (name, text) in order; each once, never the
 /// word being typed itself.
-pub(crate) fn candidates(prefix: &str, here: &str, pos: usize, back: bool, others: &[(String, String)], ignorecase: bool) -> Vec<(String, String)> {
+pub fn candidates(prefix: &str, here: &str, pos: usize, back: bool, others: &[(String, String)], ignorecase: bool) -> Vec<(String, String)> {
     let fold = |s: &str| if ignorecase { s.to_lowercase() } else { s.to_string() };
     let p = fold(prefix);
     let fits = |w: &str| w.chars().count() > prefix.chars().count() && fold(w).starts_with(&p);
