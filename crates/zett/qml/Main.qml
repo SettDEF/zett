@@ -779,6 +779,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 if (app.shotEngine.startsWith("fileproblems:")) Qt.callLater(() => fileView.testProblems())
                 if (app.shotEngine.startsWith("fileside:")) win.sideFile = app.dir + "/" + (app.shotEngine.split(":")[2] ?? "")
                 if (app.shotEngine.startsWith("filelsp:")) fileView.testLsp(app.shotEngine.split(":").slice(2).join(":"))
+                if (app.shotEngine.includes(":act:")) claudeShot.interval = 20000   // the server takes its time to report the problem first
                 if (app.shotEngine.startsWith("filediff:")) Qt.callLater(() => { fileView.showDiff = true; console.log("zett-probe: diff " + fileView.diffRows.length) })
                 if (app.shotEngine.startsWith("filemulti:")) Qt.callLater(() => fileView.testMulti())
                 if (app.shotEngine.startsWith("filesticky:")) stickyT.start()

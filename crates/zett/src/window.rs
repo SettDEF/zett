@@ -1016,6 +1016,9 @@ impl qobject::Zett {
             "format" => crate::lsp::with(&p, |cl| cl.format(&p, 4)),
             "save" => crate::lsp::with(&p, |cl| cl.did_save(&p)),
             // "rename:NEW": the symbol at the cursor renamed everywhere (the edits come back as an event)
+            "signature" => crate::lsp::with(&p, |cl| cl.signature(&p, l, c)),
+            // "actions:[diagnostics as the server sent them]": quick fixes and refactors at the cursor
+            k if k.starts_with("actions:") => { let d = serde_json::from_str(&k[8..]).unwrap_or(serde_json::json!([])); crate::lsp::with(&p, |cl| cl.code_actions(&p, l, c, d)) }
             k if k.starts_with("rename:") => crate::lsp::with(&p, |cl| cl.rename(&p, l, c, &k[7..])),
             _ => {}
         }

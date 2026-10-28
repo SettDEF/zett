@@ -15,6 +15,8 @@ pass=0 fail=0
 printf '# Check\n\nSome text worth selecting here.\n\n```lua\nfor i = 1, 3 do print("hi " .. i) end\n```\n\nEnd.\n' > "$W/check.md"
 { echo 'fn main() {'; for i in $(seq 1 50); do echo "    println!(\"line $i\");   "; done; echo '}'; } > "$W/main.rs"
 printf 'int main(void) {\n    int x = "text";\n    undefined_fn();\n    return x;\n}\n' > "$W/bad.c"
+printf 'int add(int a, int b);\nint main(void) {\n    add(1, 2);\n    return 0;\n}\n' > "$W/sig.c"
+printf 'int main(void) {\n    int x = 1\n    return x;\n}\n' > "$W/fix.c"
 mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
 git -C "$W" init -q && git -C "$W" add -A && git -C "$W" -c user.email=c@c -c user.name=c commit -qm init
 echo '// changed' >> "$W/main.rs"
@@ -56,6 +58,7 @@ check diff filediff:main.rs "grep -q 'zett-probe: diff [1-9]' \"\$OUT/diff.log\"
 check tasks tasks "grep -q 'zett-probe: palette' \"\$OUT/tasks.log\""
 check quick quick:mnrs "grep -q 'quick \[\"file:main.rs' "$OUT/quick.log""
 if command -v clangd >/dev/null; then check symbols filelsp:bad.c:symbols "grep -q 'jumps .*main' \"\$OUT/symbols.log\""; check rename filelsp:bad.c:rename:1:8:count "grep -q 'int count' '$W/bad.c' && grep -q 'return count' '$W/bad.c'"; fi
+if command -v clangd >/dev/null; then check signature filelsp:sig.c:sig:2:12 "grep -q 'signature add(int a, int b).*\\[int b\\]' \"\$OUT/signature.log\""; check actions filelsp:fix.c:act:2:4 "grep -q 'int x = 1;' '$W/fix.c'"; fi
 if command -v clangd >/dev/null; then check problems fileproblems:bad.c; else echo "  skip  problems (no clangd)"; fi
 echo "$pass passed, $fail failed  (pictures: $OUT, kept only on failure)"
 if [ $fail -gt 0 ]; then trap - EXIT; echo "workspace kept: $W"; exit 1; fi

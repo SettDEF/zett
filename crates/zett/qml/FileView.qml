@@ -74,9 +74,10 @@ ColumnLayout {
     // gui-check: the server asked once it has the file (symbols, or rename:LINE:COL:NEW); what comes back is logged
     function testLsp(spec) { lspTest.spec = spec; lspTest.start() }
     Timer {
-        id: lspTest; property string spec; interval: 1800
-        onTriggered: { const p = spec.split(":"); if (p[0] === "symbols") fv.ask("symbols", 0); else { fv.goTo(+p[1], +p[2]); renameField.text = p[3]; renameBox.done(true) } }
+        id: lspTest; property string spec; interval: 1800; property int tries: 0
+        onTriggered: { const p = spec.split(":"); if (p[0] === "symbols") fv.ask("symbols", 0); else if (p[0] === "sig") { fv.goTo(+p[1], +p[2]); fv.ask("signature", ed.cursorPosition); sigLog.start() } else if (p[0] === "act") { fv.goTo(+p[1], +p[2]); if (fv.diags.length || ++tries > 8) fv.askActions(); else restart() } else { fv.goTo(+p[1], +p[2]); renameField.text = p[3]; renameBox.done(true) } }
     }
+    Timer { id: sigLog; interval: 1200; onTriggered: console.log("zett-probe: signature " + fv.sigLabel + " [" + fv.sigLabel.slice(fv.sigFrom, fv.sigTo) + "]") }
     onJumpsChanged: if (app.shot.length && jumps.length) console.log("zett-probe: jumps " + JSON.stringify(jumps.map(j => j.name ?? j.line)))
     // the cursor to a 0-based line and column (search results, problems)
     function cursorPos() { return ed.cursorPosition }
@@ -180,6 +181,8 @@ ColumnLayout {
                 if (fv.app.writeFile(f.path, s)) fv.renamedFiles++
             }
             if (e.type === "edits" && fv.renameAsked) { fv.renameAsked = false; if (fv.app.shot.length) { console.log("zett-probe: renamed"); fv.write() } fv.note = fv.renamedFiles ? `Renamed, ${fv.renamedFiles + 1} files changed` : "Renamed"; fv.renamedFiles = 0; noteT.restart() }
+            if (e.type === "signature") { fv.sigLabel = e.label; fv.sigFrom = e.from; fv.sigTo = e.to }
+            if (e.type === "actions") { fv.actions = e.items; fv.actionSel = 0; if (!e.items.length) { fv.note = "No code actions here"; noteT.restart() } else if (fv.app.shot.length) fv.takeAction(0) }
             if (e.type === "references" || e.type === "symbols") { fv.jumpKind = e.type; fv.jumps = e.items; fv.jumpSel = 0 }
             if (e.type === "edits" && fv.savePending) { fv.savePending = false; saveWait.stop(); fv.write() }
         }
@@ -459,6 +462,44 @@ ColumnLayout {
                     onActiveFocusChanged: if (!activeFocus && renameBox.visible) renameBox.done(false)
                 }
             }
+            // signature help over the cursor: the active parameter in bold
+            Rectangle {
+                visible: fv.sigLabel.length > 0 && ed.activeFocus
+                x: Math.max(0, ed.x + ed.cursorRectangle.x - 20); y: Math.max(0, ed.cursorRectangle.y - height - 6)
+                width: Math.min(620, sigT.implicitWidth + 24); height: sigT.implicitHeight + 14; radius: 12; z: 55
+                color: t.raised; border.width: 1; border.color: Qt.alpha(t.rule, 0.4)
+                Text {
+                    id: sigT; x: 12; anchors.verticalCenter: parent.verticalCenter; width: Math.min(596, implicitWidth)
+                    readonly property var e: s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                    text: fv.sigTo > fv.sigFrom ? e(fv.sigLabel.slice(0, fv.sigFrom)) + `<b><font color="${t.accent}">` + e(fv.sigLabel.slice(fv.sigFrom, fv.sigTo)) + "</font></b>" + e(fv.sigLabel.slice(fv.sigTo)) : e(fv.sigLabel)
+                    textFormat: Text.StyledText; wrapMode: Text.Wrap
+                    color: t.dim; font.family: t.mono; font.pixelSize: 12
+                }
+            }
+            // code actions (Ctrl+.) under the cursor: ↑ ↓ Enter Esc
+            Rectangle {
+                visible: fv.actions.length > 0
+                x: ed.x + ed.cursorRectangle.x; y: ed.cursorRectangle.y + ed.cursorRectangle.height + 4
+                width: 360; height: Math.min(260, actCol.implicitHeight + 12); radius: 12; z: 56
+                color: t.raised; border.width: 1; border.color: Qt.alpha(t.rule, 0.4)
+                Column {
+                    id: actCol; x: 6; y: 6; width: parent.width - 12
+                    Repeater {
+                        model: fv.actions
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
+                            width: actCol.width; height: 28; radius: 8
+                            color: index === fv.actionSel ? Qt.alpha(t.accent, 0.18) : acH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                            Row { x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                Text { text: "lightbulb"; color: t.accent; font.family: t.icons; font.pixelSize: 15 }
+                                Text { text: modelData.title; color: t.text; font.family: t.sans; font.pixelSize: 12; elide: Text.ElideRight; width: actCol.width - 40 } }
+                            HoverHandler { id: acH; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: fv.takeAction(index) }
+                        }
+                    }
+                }
+            }
             // the extra cursors
             Repeater {
                 model: fv.extra
@@ -499,6 +540,9 @@ ColumnLayout {
                     if (fv.lsp && activeFocus && (prev === "." || text.slice(p - 2, p) === "::")) { fv.compFrom = p; lspSync.stop(); fv.app.lspChange(fv.win.filePath, text); fv.ask("completion", p) }
                     else if (fv.comps.length && /[\w$]/.test(prev)) { lspSync.stop(); fv.app.lspChange(fv.win.filePath, text); fv.ask("completion", p) }
                     else if (fv.comps.length) fv.comps = []
+                    // signature help: asked after ( and , ; gone after )
+                    if (fv.lsp && activeFocus && (prev === "(" || prev === ",")) { lspSync.stop(); fv.app.lspChange(fv.win.filePath, text); fv.ask("signature", p) }
+                    else if (prev === ")") fv.sigLabel = ""
                 }
                 // hover: the mouse resting on a word asks the server about it
                 HoverHandler { id: edHover; onPointChanged: { fv.hoverText = ""; hoverAsk.restart() } }
@@ -525,6 +569,14 @@ ColumnLayout {
                         else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { fv.multiEdit("\n", 0); e.accepted = true; return }
                         else if (e.text.length && !(e.modifiers & Qt.ControlModifier) && e.text.charCodeAt(0) >= 32) { fv.multiEdit(e.text, 0); e.accepted = true; return }
                     }
+                    if (fv.actions.length) {
+                        if (e.key === Qt.Key_Down) { fv.actionSel = (fv.actionSel + 1) % fv.actions.length; e.accepted = true; return }
+                        if (e.key === Qt.Key_Up) { fv.actionSel = (fv.actionSel - 1 + fv.actions.length) % fv.actions.length; e.accepted = true; return }
+                        if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { fv.takeAction(fv.actionSel); e.accepted = true; return }
+                        if (e.key === Qt.Key_Escape) { fv.actions = []; e.accepted = true; return }
+                    }
+                    if (e.key === Qt.Key_Period && (e.modifiers & Qt.ControlModifier) && fv.lsp) { fv.askActions(); e.accepted = true; return }
+                    if (e.key === Qt.Key_Escape && fv.sigLabel) { fv.sigLabel = ""; e.accepted = true; return }
                     // the jump list takes ↑ ↓ Enter Esc while open
                     if (fv.jumps.length) {
                         if (e.key === Qt.Key_Down) { fv.jumpSel = (fv.jumpSel + 1) % fv.jumps.length; e.accepted = true; return }
@@ -567,6 +619,28 @@ ColumnLayout {
     property var jumps: []
     property string jumpKind: ""
     property int jumpSel: 0
+    // signature help (after '(' or ',') and code actions (Ctrl+.)
+    property string sigLabel: ""
+    property int sigFrom: 0
+    property int sigTo: 0
+    property var actions: []
+    property int actionSel: 0
+    function askActions() {
+        const l = ed.line
+        const ds = diags.filter(d => d.line <= l && (d.endLine ?? d.line) >= l).map(d => ({ range: { start: { line: d.line, character: d.col }, end: { line: d.endLine ?? d.line, character: d.endCol ?? d.col } }, severity: d.severity, message: d.message }))
+        app.lspChange(win.filePath, ed.text); ask("actions:" + JSON.stringify(ds), ed.cursorPosition)
+    }
+    // edits per file: the open one in the buffer, others on disk
+    function applyFiles(files) {
+        for (const f of files) {
+            if (f.path === win.filePath) { for (const x of f.edits.slice().reverse()) { const a = posOf(x[0], x[1]), b = posOf(x[2], x[3]); ed.remove(a, b); ed.insert(a, x[4]) } continue }
+            let s = app.readFile(f.path)
+            const at = (l, c) => { const ls = s.split("\n"); let p = 0; for (let i = 0; i < Math.min(l, ls.length - 1); i++) p += ls[i].length + 1; return p + c }
+            for (const x of f.edits.slice().reverse()) { const a = at(x[0], x[1]), b = at(x[2], x[3]); s = s.slice(0, a) + x[4] + s.slice(b) }
+            app.writeFile(f.path, s)
+        }
+    }
+    function takeAction(i) { const a = actions[i]; actions = []; if (!a) return; applyFiles(a.files); note = a.title; noteT.restart(); if (app.shot.length) { console.log("zett-probe: action " + a.title); write() } }
     property bool renameAsked: false
     property int renamedFiles: 0
     function jumpTo(j) {

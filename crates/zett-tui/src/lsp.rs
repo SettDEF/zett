@@ -84,6 +84,8 @@ impl App {
                         self.after_lua(fx);
                     }
                 }
+                // the window's (signature help, code actions): the terminal editor does not ask for them yet
+                Event::Signature(..) | Event::CodeActions(_) => {}
                 Event::Exited(tag) => {
                     // only that client: a restarted server's new one has the same name
                     let had = self.lsp.clients.len();

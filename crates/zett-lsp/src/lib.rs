@@ -218,6 +218,10 @@ pub enum Event {
     Status(String),
     /// a piece of work a server reports ($/progress): server, token, title, message, percent, done
     Progress { server: String, token: String, title: String, message: String, percent: Option<u64>, done: bool },
+    /// the signature at the cursor: its label and the active parameter's range in it (start, end; 0, 0: none)
+    Signature(String, usize, usize),
+    /// code actions at a position: titles with their edits (actions that are only commands are left out)
+    CodeActions(Vec<(String, Vec<(PathBuf, Vec<(usize, usize, usize, usize, String)>)>)>),
     /// a client's tag (Client::tag): its server is gone
     Exited(String),
 }
@@ -229,6 +233,8 @@ enum Pending {
     Symbols,
     Edits(Option<PathBuf>),
     Completion(usize),
+    Signature,
+    CodeActions,
     Resolve,
     Init,
 }
@@ -301,6 +307,8 @@ impl Client {
                     "synchronization": { "didSave": true },
                     "publishDiagnostics": { "relatedInformation": false },
                     "hover": { "contentFormat": ["plaintext", "markdown"] },
+                    "signatureHelp": { "signatureInformation": { "parameterInformation": { "labelOffsetSupport": true } } },
+                    "codeAction": { "codeActionLiteralSupport": { "codeActionKind": { "valueSet": ["quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source"] } } },
                     "completion": { "completionItem": { "snippetSupport": true, "documentationFormat": ["markdown", "plaintext"], "labelDetailsSupport": true, "insertReplaceSupport": false, "resolveSupport": { "properties": ["documentation", "detail", "additionalTextEdits"] } }, "contextSupport": true },
                     "references": {},
                     "documentSymbol": { "hierarchicalDocumentSymbolSupport": true },
@@ -381,6 +389,18 @@ impl Client {
     pub fn rename(&mut self, path: &Path, line: usize, col: usize, name: &str) {
         let id = self.request("textDocument/rename", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col }, "newName": name }));
         self.pending.lock().unwrap().insert(id, Pending::Edits(None));
+    }
+
+    pub fn signature(&mut self, path: &Path, line: usize, col: usize) {
+        let id = self.request("textDocument/signatureHelp", json!({ "textDocument": { "uri": uri(path) }, "position": { "line": line, "character": col } }));
+        self.pending.lock().unwrap().insert(id, Pending::Signature);
+    }
+
+    /// `diags`: the diagnostics on the line, as the server sent them (quick fixes are offered for them)
+    pub fn code_actions(&mut self, path: &Path, line: usize, col: usize, diags: Value) {
+        let pos = json!({ "line": line, "character": col });
+        let id = self.request("textDocument/codeAction", json!({ "textDocument": { "uri": uri(path) }, "range": { "start": pos, "end": pos }, "context": { "diagnostics": diags } }));
+        self.pending.lock().unwrap().insert(id, Pending::CodeActions);
     }
 
     pub fn format(&mut self, path: &Path, tab: usize) {
@@ -598,6 +618,22 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
                         } else {
                             let _ = events.send(Event::Edits(edits(res, file)));
                         }
+                    }
+                    Some(Pending::Signature) => {
+                        let i = res["activeSignature"].as_u64().unwrap_or(0) as usize;
+                        let s = &res["signatures"][i];
+                        let label = s["label"].as_str().unwrap_or("").to_string();
+                        let ap = s["activeParameter"].as_u64().or(res["activeParameter"].as_u64()).unwrap_or(0) as usize;
+                        let (a, b) = match &s["parameters"][ap]["label"] {
+                            Value::Array(r) if r.len() == 2 => (r[0].as_u64().unwrap_or(0) as usize, r[1].as_u64().unwrap_or(0) as usize),
+                            Value::String(p) => label.find(p.as_str()).map(|a| (a, a + p.len())).unwrap_or((0, 0)),
+                            _ => (0, 0),
+                        };
+                        let _ = events.send(Event::Signature(label, a, b));
+                    }
+                    Some(Pending::CodeActions) => {
+                        let acts = res.as_array().map(|a| a.iter().filter(|x| x["edit"].is_object()).map(|x| (x["title"].as_str().unwrap_or("").to_string(), edits(&x["edit"], None))).collect()).unwrap_or_default();
+                        let _ = events.send(Event::CodeActions(acts));
                     }
                     Some(Pending::Hover) => {
                         let c = &res["contents"];

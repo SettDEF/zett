@@ -47,6 +47,8 @@ pub fn event_json(e: &Event) -> Value {
         Event::Symbols(ss) => json!({ "type": "symbols", "items": ss.iter().map(|(n, k, l, c, d)| json!({ "name": n, "kind": k, "line": l, "col": c, "depth": d })).collect::<Vec<_>>() }),
         Event::Edits(fs) => json!({ "type": "edits", "files": fs.iter().map(|(p, es)| json!({ "path": p, "edits": es.iter().map(|(a, b, c, d, t)| json!([a, b, c, d, t])).collect::<Vec<_>>() })).collect::<Vec<_>>() }),
         Event::Completion(line, items, more) => json!({ "type": "completion", "line": line, "more": more, "items": items.iter().take(200).map(|i| json!({ "label": i.label, "insert": i.insert, "detail": i.detail, "kind": i.kind, "sort": i.sort, "filter": i.filter })).collect::<Vec<_>>() }),
+        Event::Signature(l, a, b) => json!({ "type": "signature", "label": l, "from": a, "to": b }),
+        Event::CodeActions(acts) => json!({ "type": "actions", "items": acts.iter().map(|(t, fs)| json!({ "title": t, "files": fs.iter().map(|(p, es)| json!({ "path": p, "edits": es.iter().map(|(a, b, c, d, t)| json!([a, b, c, d, t])).collect::<Vec<_>>() })).collect::<Vec<_>>() })).collect::<Vec<_>>() }),
         Event::Resolved(i) => json!({ "type": "resolved", "label": i.label, "detail": i.detail }),
         Event::Status(s) => json!({ "type": "status", "text": s }),
         Event::Progress { server, title, message, percent, done, .. } => json!({ "type": "progress", "server": server, "title": title, "message": message, "percent": percent, "done": done }),
