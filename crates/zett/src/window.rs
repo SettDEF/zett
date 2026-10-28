@@ -67,6 +67,10 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// every block of every page whose text has all words of the query (case-insensitive), pages whose
+        /// title has them first: [{page, title, block, kind, text, titleHit}], at most 300
+        #[qinvokable]
+        fn search(self: &Zett, query: &QString) -> QString;
         /// moves block `from` of the open page to position `to` (among the page's blocks); false if it cannot
         #[qinvokable]
         #[cxx_name = "moveBlock"]
@@ -1156,5 +1160,32 @@ impl qobject::Zett {
         };
         if ok { self.publish() }
         ok
+    }
+}
+
+// ── search everything (Ctrl+Shift+F) ──
+impl qobject::Zett {
+    fn search(&self, query: &QString) -> QString {
+        let r = self.rust();
+        let Some(f) = &r.folder else { return QString::from("[]") };
+        let words: Vec<String> = query.to_string().to_lowercase().split_whitespace().map(String::from).collect();
+        if words.is_empty() { return QString::from("[]") }
+        let has = |s: &str| { let l = s.to_lowercase(); words.iter().all(|w| l.contains(w.as_str())) };
+        let mut out = Vec::new();
+        for (pi, p) in r.order.iter().enumerate() {
+            let title = f.ws.text(*p);
+            if has(&title) {
+                out.push(serde_json::json!({ "page": pi, "title": title, "block": -1, "kind": "page", "text": title, "titleHit": true }));
+            }
+            for (bi, (b, _)) in flat(&f.ws, *p).into_iter().enumerate() {
+                let t = f.ws.text(b);
+                if has(&t) {
+                    out.push(serde_json::json!({ "page": pi, "title": title, "block": bi, "kind": kind_json(&f.ws.kind(b))["kind"], "text": t, "titleHit": false }));
+                    if out.len() >= 300 { break }
+                }
+            }
+            if out.len() >= 300 { break }
+        }
+        QString::from(&serde_json::Value::Array(out).to_string())
     }
 }

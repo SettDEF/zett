@@ -159,7 +159,7 @@ ApplicationWindow {
     property bool drawerShown: false
     function toggleDrawer() { drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
-    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : "page") : (prefs.start === "page" ? "page" : "today")
+    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : app.shotEngine.startsWith("search:") ? "search" : "page") : (prefs.start === "page" ? "page" : "today")
     // ── hooks from init.lua: zett.gui = { status = {...}, sidebar = {...}, palette = {...} } ──
     //   status:  strings, or functions returning a string or {text, icon} (read every 5 s)
     //   sidebar: { title = "Links", items = { {label=, icon=, cmd=} } }   (cmd: a command or `lua …`)
@@ -274,6 +274,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequences: ["Ctrl+Z"]; onActivated: if (!app.undo()) win.note("nothing to undo") }
     Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; onActivated: if (!app.redo()) win.note("nothing to redo") }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
+    Shortcut { sequence: "Ctrl+Shift+F"; onActivated: win.openSearch() }
+    function openSearch() { win.view = "search"; Qt.callLater(searchView.focusField) }
     Shortcut { sequence: "Ctrl+`"; onActivated: win.toggleDrawer() }
     // the palette: the window's own actions, then every engine command with its key
     // the page's file into the system share sheet (apps, phone, Telegram…)
@@ -296,6 +298,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "terminal", name: "Toggle shell drawer", desc: "a command in the workspace", keys: "Ctrl `", run: () => win.toggleDrawer() },
             { icon: "undo", name: "Undo", desc: "the last change, across blocks", keys: "Ctrl Z", run: () => { if (!app.undo()) win.note("nothing to undo") } },
             { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
+            { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" }
         ].concat(win.hooks.palette.map(h => ({ icon: "extension", name: h.name, desc: (h.desc ?? "") + "  ·  init.lua", keys: h.keys ?? "", run: () => win.runHook(h.cmd) })))
         let binds = []
@@ -564,6 +567,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine.startsWith("search:")) { win.view = "search"; searchView.query(app.shotEngine.slice(7)); console.log("zett-probe: search hits " + searchView.hits.length); grabLater.start(); return }
             if (app.shotEngine === "multisel") { win.selectBlock(1, "one"); win.selectBlock(2, "range"); grabLater.start(); return }
             if (app.shotEngine === "multi") {
                 const d = () => win.blocks.map(b => b.text + ":" + (b.depth ?? 0)).join(" ")
@@ -658,6 +662,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
             // ───────── Today: the start screen ─────────
             Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+            Search { id: searchView; visible: win.view === "search"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
             Settings { visible: win.view === "settings"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // empty workspace
