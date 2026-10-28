@@ -19,7 +19,7 @@ ColumnLayout {
     readonly property bool dirty: ed.text !== saved
     readonly property int curLine: ed.line
     readonly property int curCol: ed.col
-    readonly property int lineCount: ed.lineCount
+    readonly property int lineCount: lineStarts.length
     property string note: ""
     // the coloured copy follows the text a moment after typing (big files stay quick)
     property string shownText: win.fileText
@@ -128,6 +128,10 @@ ColumnLayout {
         ed.cursorPosition = Math.max(0, moved[mi])
         extra = moved.filter((_, i) => i !== mi).map(p => Math.max(0, p))
     }
+    // word wrap (Alt+Z, Settings > Editor): the editor and its coloured copy wrap alike; line numbers follow the wrapped lines
+    property bool wrapTest: false     // gui-check turns wrap on without touching the settings
+    readonly property bool wrap: wrapTest || (win.prefs.wordWrap ?? false)
+    readonly property var lineStarts: { const s = [0]; const t2 = shownText; for (let i = t2.indexOf("\n"); i >= 0; i = t2.indexOf("\n", i + 1)) s.push(i + 1); return s }
     property bool showDiff: false
     property var diffRows: []
     function loadDiff() {
@@ -344,13 +348,14 @@ ColumnLayout {
                 y: ed.cursorRectangle.y; height: ed.cursorRectangle.height
                 color: Qt.alpha(t.text, 0.05)
             }
-            // line numbers, the cursor's lit
-            Column {
+            // line numbers, the cursor's lit; with wrap each at its line's first row
+            Item {
                 x: 0; width: 40
                 Repeater {
-                    model: ed.lineCount
+                    model: fv.wrap ? fv.lineStarts.length : ed.lineCount
                     delegate: Text {
                         required property int index
+                        y: fv.wrap ? (ed.contentHeight, ed.width, ed.positionToRectangle(fv.lineStarts[index] ?? 0).y) : index * ed.lineH   // re-read when the layout changes
                         width: 40; height: ed.lineH
                         horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
                         text: index + 1
@@ -392,7 +397,9 @@ ColumnLayout {
             // the coloured copy, under the editor
             Text {
                 x: 54
-                text: fv.visible ? app.highlight(fv.ext, fv.shownText) : ""
+                width: fv.wrap ? ed.width : undefined
+                wrapMode: fv.wrap ? Text.WordWrap : Text.NoWrap
+                text: !fv.visible ? "" : fv.wrap ? app.highlight(fv.ext, fv.shownText).replace("white-space:pre\"", "white-space:pre-wrap\"") : app.highlight(fv.ext, fv.shownText)
                 textFormat: Text.RichText
                 color: t.text; font: ed.font
             }
@@ -471,13 +478,13 @@ ColumnLayout {
             TextEdit {
                 id: ed
                 x: 54
-                width: Math.max(fileFlick.width - 60, contentWidth)
+                width: fv.wrap ? fileFlick.width - 60 : Math.max(fileFlick.width - 60, contentWidth)
                 text: fv.win.fileText
                 color: "transparent"
                 selectedTextColor: "transparent"
                 selectionColor: Qt.alpha(t.accent, 0.3)
                 selectByMouse: true
-                wrapMode: TextEdit.NoWrap
+                wrapMode: fv.wrap ? TextEdit.WordWrap : TextEdit.NoWrap
                 font.family: t.mono; font.pixelSize: 13
                 font.features: fv.win.codeLigatures ? {} : { "liga": 0, "calt": 0, "dlig": 0 }
                 cursorDelegate: Rectangle { width: 2; color: t.accent; visible: ed.cursorVisible }
@@ -525,6 +532,7 @@ ColumnLayout {
                         if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { fv.jumpTo(fv.jumps[fv.jumpSel]); e.accepted = true; return }
                         if (e.key === Qt.Key_Escape) { fv.jumps = []; e.accepted = true; return }
                     }
+                    if (e.key === Qt.Key_Z && (e.modifiers & Qt.AltModifier)) { fv.win.setPref("wordWrap", !fv.wrap); e.accepted = true; return }
                     // the language server's keys, as in VS Code
                     if (e.key === Qt.Key_F12 && (e.modifiers & Qt.ShiftModifier)) { fv.ask("references", ed.cursorPosition); e.accepted = true; return }
                     if (e.key === Qt.Key_F12) { fv.ask("definition", ed.cursorPosition); e.accepted = true; return }
