@@ -126,9 +126,50 @@ ColumnLayout {
         Layout.leftMargin: 16; Layout.rightMargin: 16
         radius: 17
         color: t.card
+        // the minimap: the whole file small, the part in view framed; a click or drag scrolls there;
+        // errors and find hits as marks on its edge
+        Item {
+            id: miniMap
+            visible: ed.lineCount > 40 && parent.width > 700
+            anchors { right: parent.right; top: parent.top; bottom: parent.bottom; margins: 10 }
+            width: 86
+            clip: true
+            readonly property real k: 0.13
+            readonly property real total: Math.max(1, ed.contentHeight)
+            // the small file follows the view when it is taller than the map
+            readonly property real off: Math.max(0, Math.min(total * k - height, fileFlick.contentY * k - (height - fileFlick.height * k) / 2))
+            Text {
+                y: -miniMap.off
+                transformOrigin: Item.TopLeft
+                scale: miniMap.k
+                text: fv.visible ? app.highlight(fv.ext, fv.shownText) : ""
+                textFormat: Text.RichText
+                color: t.text; font: ed.font
+                opacity: 0.75
+            }
+            Rectangle {
+                y: fileFlick.contentY * miniMap.k - miniMap.off
+                width: parent.width; height: Math.max(12, fileFlick.height * miniMap.k)
+                radius: 4
+                color: Qt.alpha(t.text, mmH.hovered || mmDrag.active ? 0.14 : 0.08)
+                border.width: 1; border.color: Qt.alpha(t.text, 0.12)
+            }
+            Repeater {
+                model: fv.diags.filter(d => d.severity <= 2)
+                delegate: Rectangle { required property var modelData; x: miniMap.width - 4; width: 4; height: 3; y: modelData.line * ed.lineH * miniMap.k - miniMap.off; color: modelData.severity === 1 ? t.removed : "#d8a54a" }
+            }
+            Repeater {
+                model: findBar.matches.slice(0, 300)
+                delegate: Rectangle { required property var modelData; x: 0; width: 4; height: 2; y: ed.positionToRectangle(modelData[0]).y * miniMap.k - miniMap.off; color: t.accent }
+            }
+            function scrollTo(y) { fileFlick.contentY = Math.max(0, Math.min(fileFlick.contentHeight - fileFlick.height, (y + off) / k - fileFlick.height / 2)) }
+            HoverHandler { id: mmH; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: (ev) => miniMap.scrollTo(ev.position.y) }
+            DragHandler { id: mmDrag; target: null; onCentroidChanged: if (active) miniMap.scrollTo(centroid.position.y) }
+        }
         Flickable {
             id: fileFlick
-            anchors { fill: parent; margins: 14 }
+            anchors { fill: parent; margins: 14; rightMargin: miniMap.visible ? 14 + miniMap.width + 8 : 14 }
             clip: true
             contentWidth: Math.max(width, ed.contentWidth + 70)
             contentHeight: ed.contentHeight + 40
