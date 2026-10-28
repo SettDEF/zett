@@ -15,6 +15,9 @@ ApplicationWindow {
     color: t.bg
 
     Zett { id: app }
+    // ZETT_SHOT_ENGINE=timing: the time of the first frame on stdout, then quit (start-up measured from outside)
+    property bool firstFrame: false
+    onFrameSwapped: if (!firstFrame) { firstFrame = true; if (app.shotEngine === "timing") { console.log("zett-probe: frame " + Date.now()); Qt.quit() } }
     // for the parts in their own files (Today, FileView, Details): `win: win` there would bind to itself
     readonly property var theme: t
     readonly property var engine: app

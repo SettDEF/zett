@@ -405,3 +405,5 @@ pill rows with icons, mono counts), chips in the status line. Simple core, extra
 
 Not VS Code: no activity rail, no square tabs or file-explorer look; pill tabs, cards, the shell's
 layers and rounding, Dotos rows. Everything reachable by key, with the key shown next to it.
+
+Measured 2026-10-28 (ZETT_SHOT_ENGINE=timing, offscreen, release): first frame 237-242 ms in 3 of 5 runs, 325 and 424 ms in two (machine busy); target < 300 ms.
