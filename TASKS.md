@@ -360,3 +360,23 @@ Rule from the user: zett builds in only what Neovim builds in; the rest stays pl
    log, fixed with a regression test each.
 4. **Plugins through z.plug**, fixing the API gaps they hit: conform.nvim (format on save), nvim-lint,
    gitsigns (setup works; check the gutter marks), flash, which-key, persisted (or :mksession).
+
+## GUI: everything VS Code has, in our style (planned 2026-10-28)
+
+Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless shots + scripts/gui-check.sh for each.
+
+1. [ ] Activity bar without the stripe: the active item is a soft filled pill
+2. [ ] Sidebar editor first: Explorer on top (folder name as the header, new file/folder, collapse all), notes things (Today, Templates, Import, Trash) in a folded "Notes" section at the bottom
+3. [ ] Quick open files (Ctrl P finds files too, fuzzy), recent files
+4. [ ] Editor: indent guides, bracket pair highlight, word wrap toggle (Alt Z), render whitespace, trim trailing whitespace on save, auto save (setting)
+5. [ ] Editor: sticky scroll (the enclosing lines at the top), code folding by indent in files
+6. [ ] LSP: go to definition (F12), find references (Shift F12) as a list, rename symbol (F2), hover, signature help, code actions (Ctrl .), format document (Shift Alt F)
+7. [ ] Outline for files (LSP document symbols, else headings/fn lines) in the details panel; Go to symbol (Ctrl Shift O)
+8. [ ] Split editor (Ctrl \ in a file): two files side by side, both editable
+9. [ ] Source control view: changed files, stage/unstage, commit message + commit, diff view of a file (side by side, rounded)
+10. [ ] Panel at the bottom with tabs: Terminal, Problems (all files), Output
+11. [ ] Multi-cursor: Alt click adds a cursor, Ctrl Alt Up/Down, column select (Shift Alt drag)
+12. [ ] Keyboard shortcuts page in Settings (searchable list of every key, rebind)
+13. [ ] Zen mode (Ctrl K Z), breadcrumbs with symbol, minimap toggle
+14. [ ] Tasks: run a project command (cargo build / npm run …) from the palette, its output in the panel; problems from it
+15. [ ] Debug: later (DAP) — planned only
