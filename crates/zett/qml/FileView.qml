@@ -317,6 +317,16 @@ ColumnLayout {
                         if (e.key === Qt.Key_Escape) { fv.comps = []; e.accepted = true; return }
                     }
                     if (e.key === Qt.Key_Space && (e.modifiers & Qt.ControlModifier)) { fv.compFrom = fv.wordStart(ed.cursorPosition); fv.ask("completion", ed.cursorPosition); e.accepted = true; return }
+                    // Ctrl+D: the next occurrence of the selection (or of the word at the cursor) selected; Ctrl+Shift+L: all of
+                    // them into find & replace, so one Replace all changes every place (a TextEdit has one cursor)
+                    if (e.key === Qt.Key_D && (e.modifiers & Qt.ControlModifier) && !(e.modifiers & Qt.ShiftModifier)) {
+                        let w = ed.selectedText
+                        if (!w) { const a = fv.wordStart(ed.cursorPosition); let b = ed.cursorPosition; while (b < ed.text.length && /[\w$]/.test(ed.text[b])) b++; ed.select(a, b); e.accepted = true; return }
+                        let i = ed.text.indexOf(w, ed.selectionEnd); if (i < 0) i = ed.text.indexOf(w)
+                        if (i >= 0) ed.select(i, i + w.length)
+                        e.accepted = true; return
+                    }
+                    if (e.key === Qt.Key_L && (e.modifiers & Qt.ControlModifier) && (e.modifiers & Qt.ShiftModifier) && ed.selectedText) { findBar.open("replace"); findBar.r.forceActiveFocus(); e.accepted = true; return }
                     if (e.key === Qt.Key_F12) { fv.ask("definition", ed.cursorPosition); e.accepted = true; return }
                     if (e.key === Qt.Key_F && (e.modifiers & Qt.AltModifier) && (e.modifiers & Qt.ShiftModifier)) { fv.ask("format", 0); e.accepted = true; return }
                     if (e.key === Qt.Key_S && (e.modifiers & Qt.ControlModifier)) { fv.save(); e.accepted = true; return }
