@@ -129,6 +129,17 @@ impl Editor {
 }
 
 impl Editor {
+    /// The length of a list header at the start of `line` (formatlistpat, with 'n' in formatoptions).
+    pub(crate) fn list_header(&self, line: &str) -> Option<usize> {
+        if !self.opt("formatoptions").unwrap_or("tcqj").contains('n') { return None }
+        let pat = self.opt("formatlistpat").unwrap_or(r"^\s*\d\+[\]:.)}\t ]\s*");
+        let re = crate::vimre::compile(pat, false, false).ok()?;
+        let (s, e) = re.find_at(line, 0)?;
+        (s == 0 && e > 0).then_some(e)
+    }
+}
+
+impl Editor {
     /// gq's own formatting of lines `l1..=l2`: each paragraph filled to the text width, its first
     /// line's prefix (a comment leader, a list mark) kept (also when formatexpr gives non-zero).
     pub fn format_lines(&mut self, l1: usize, l2: usize) {
@@ -138,6 +149,15 @@ impl Editor {
         let mut out: Vec<String> = Vec::new();
         for para in text.split("\n\n") {
             let first = para.lines().next().unwrap_or("");
+            // formatoptions n: a list header (formatlistpat) is the first line's prefix, the lines after
+            // line up under its text
+            if let Some(n) = self.list_header(first) {
+                let (head, body) = para.split_at(n);
+                let words: Vec<&str> = body.split_whitespace().collect();
+                let pad = " ".repeat(head.chars().count());
+                out.push(crate::textops::fill(&words, head, &pad, width).join("\n"));
+                continue;
+            }
             let (p1, rest) = crate::textops::fill_prefix(first);
             let words: Vec<&str> = para.split_whitespace().collect();
             out.push(crate::textops::fill(&words, &p1, &rest, width).join("\n"));

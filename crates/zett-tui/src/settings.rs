@@ -90,7 +90,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "breakat", "breakindentopt",
     "wildmenu", "wildmode", "wildignore", "wildignorecase", "wildoptions", "fileignorecase", "suffixes",
     "keywordprg",
-    "vartabstop", "tags", "tagfunc", "findfunc", "quickfixtextfunc", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "diff", "diffopt", "runtimepath", "viewdir", "include", "define", "path", "suffixesadd", "comments",
+    "vartabstop", "background", "tags", "tagfunc", "findfunc", "quickfixtextfunc", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "diff", "diffopt", "runtimepath", "viewdir", "include", "define", "path", "suffixesadd", "comments",
     "makeprg", "errorformat", "grepprg", "grepformat", "shell", "shellcmdflag", "shellquote", "shellxquote", "makeencoding",
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",
@@ -206,6 +206,7 @@ impl App {
             self.say(format!("modified = {value}"));
             return true;
         }
+        let before = self.setting(cur, setting.name);
         if local {
             self.docs[cur].local.insert(setting.name.to_string(), value.clone());
         } else {
@@ -218,6 +219,11 @@ impl App {
             self.docs[cur].local.insert(setting.name.to_string(), value.clone());
         }
         self.apply_settings();
+        // background: the colour scheme loads again (it picks its dark or light side), as in Neovim
+        if setting.name == "background" && before != value && self.colors_name != "default" {
+            let name = self.colors_name.clone();
+            self.command(&format!("colorscheme {name}"));
+        }
         // quiet as in Vim (plugins set options every frame); :help options says which ones act
         let _ = works;
         true

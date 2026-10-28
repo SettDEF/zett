@@ -592,3 +592,33 @@ mod vsts_tests {
         assert_eq!(e.text(), "   x    y    z", "stops at 3, 8, then every 5");
     }
 }
+
+#[cfg(test)]
+mod virtualedit_tests {
+    use crate::Editor;
+    #[test]
+    fn onemore_lets_the_cursor_past_the_end() {
+        let mut e = Editor::from_str("abc\n");
+        e.feed("$");
+        assert_eq!(e.cursor().col, 2);
+        e.set_opt("virtualedit", "onemore");
+        e.feed("l");
+        assert_eq!(e.cursor().col, 3, "onemore: one past the last character");
+        e.feed("ix<Esc>");
+        assert_eq!(e.text(), "abcx\n");
+    }
+}
+
+#[cfg(test)]
+mod formatlistpat_tests {
+    use crate::Editor;
+    #[test]
+    fn gq_lines_a_list_item_up_under_its_text() {
+        let mut e = Editor::from_str("1) one two three four five six seven eight nine ten\n");
+        e.set_fill_column(20);
+        e.set_opt("formatoptions", "tcqn");
+        e.set_opt("formatlistpat", r"^\d\+)\s*");
+        e.feed("gqq");
+        assert_eq!(e.text(), "1) one two three\n   four five six\n   seven eight nine\n   ten\n");
+    }
+}

@@ -808,3 +808,20 @@ mod gitsigns_live_tests {
         assert!(signs.contains("Delete") || signs.contains("_"), "no delete sign in {signs:?}");
     }
 }
+
+#[cfg(test)]
+mod background_tests {
+    #[test]
+    fn setting_background_loads_the_colorscheme_again() {
+        let base = std::env::temp_dir().join(format!("zett-bg-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("colors")).unwrap();
+        std::fs::write(base.join("colors/duo.vim"), "if &background == 'light'\n  set shiftwidth=3\nelse\n  set shiftwidth=7\nendif\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("set runtimepath={}", base.display()));
+        app.command("colorscheme duo");
+        assert_eq!(app.setting(app.cur, "shiftwidth"), "7");
+        app.command("set background=light");
+        assert_eq!(app.setting(app.cur, "shiftwidth"), "3", "the scheme ran again with the light side");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}

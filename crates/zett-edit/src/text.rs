@@ -21,7 +21,11 @@ impl Editor {
         let (s, len) = (self.line_start(line), self.buf.line_len(line));
         // normal and visual stay on a character; visual after `$` may sit on the line break
         let on_char = self.mode == Mode::Normal || (matches!(self.mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && self.want_col != usize::MAX);
-        let max = if on_char && len > 0 { s + len - 1 } else { s + len };
+        // virtualedit=onemore: normal mode may also stand just past the last character (all and
+        // block reach that far too; columns beyond the line's end are not made)
+        let ve = self.opt("virtualedit").unwrap_or("");
+        let onemore = self.mode == Mode::Normal && ve.split(',').any(|v| v == "onemore" || v == "all");
+        let max = if on_char && len > 0 && !onemore { s + len - 1 } else { s + len };
         self.cursor = self.cursor.clamp(s, max);
     }
     pub(crate) fn char(&self, i: usize) -> Option<char> {
