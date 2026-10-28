@@ -199,6 +199,8 @@ ApplicationWindow {
     // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
     property bool codeLigatures: prefs.codeLigatures ?? false
     property int runFirst: -1      // tests: the block whose Run is pressed
+    // a file shown beside the editor or page (SideFile.qml); "" when none
+    property string sideFile: ""
     // the block at the top of the view (the outline lights its section)
     property int topBlock: 0
     Connections { target: list; function onContentYChanged() { const i = list.indexAt(list.width / 2, list.contentY + list.topMargin + 8); if (i >= 0) win.topBlock = i } }
@@ -328,6 +330,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         row[3].run = () => ctx.run(row[3])
         ctx.show(px, py, row, [
             { icon: x.dir ? "unfold_more" : "open_in_new", label: x.dir ? "Fold / unfold" : "Open", run: () => win.openFile(x) },
+            { icon: "splitscreen_right", label: "Open to the side", enabled: !x.dir, run: () => win.sideFile = x.path },
             { icon: "open_in_browser", label: "Open with the system", enabled: !x.dir, run: () => Qt.openUrlExternally("file://" + x.path) },
             { icon: "folder_open", label: "Show in folder", run: () => Qt.openUrlExternally("file://" + (x.dir ? x.path : x.path.slice(0, x.path.lastIndexOf("/")))) },
             { icon: "refresh", label: "Refresh", run: () => win.refreshSide() }
@@ -696,12 +699,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
-            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:")) {
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:")) {
                 const rel = app.shotEngine.split(":")[1]
                 win.openFile({ path: app.dir + "/" + rel, rel })
                 if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
                 if (app.shotEngine.startsWith("filefind:")) Qt.callLater(() => fileView.testFind(app.shotEngine.split(":")[2] ?? ""))
                 if (app.shotEngine.startsWith("fileproblems:")) Qt.callLater(() => fileView.testProblems())
+                if (app.shotEngine.startsWith("fileside:")) win.sideFile = app.dir + "/" + (app.shotEngine.split(":")[2] ?? "")
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
@@ -1744,6 +1748,12 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             onLoaded: { item.app = app; item.t = win.theme; item.folder = app.env("PWD"); Qt.callLater(() => item.focusInput()) }
         }
         // ───────── details: outline, links, info ─────────
+        SideFile {
+            // its own share of the row: the editor beside it would take it all
+            Layout.preferredWidth: Math.max(300, rootRow.width * 0.3); Layout.fillHeight: true
+            Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
+            win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
+        }
         SidePage {
             visible: win.sidePage >= 0 && win.view === "page"
             page: win.sidePage
