@@ -138,6 +138,37 @@ Rectangle {
             color: hit ? Qt.alpha("#e5c46f", 0.28) : Qt.alpha(modelData[3] === 1 ? cv.t.removed : "#d8a54a", 0.85)
         }
     }
+    // the bracket pair at the cursor: two soft rounded boxes
+    readonly property var pair: { doc.version; doc.cursors; const s = doc.bracketPair(); return s ? JSON.parse(s) : [] }
+    Repeater {
+        model: cv.pair.length && input.activeFocus ? [[cv.pair[0], cv.pair[1]], [cv.pair[2], cv.pair[3]]] : []
+        delegate: Rectangle {
+            required property var modelData
+            x: cv.gutter + 12 + modelData[1] * cv.cw - 1; y: doc.lineRow(modelData[0]) * cv.lh - cv.scrollY + 3
+            width: cv.cw + 2; height: cv.lh - 6; radius: 4
+            color: Qt.alpha(cv.t.accent, 0.22)
+        }
+    }
+    // sticky scroll: the lines that open the scope at the top of the view, over the code in a soft strip
+    readonly property var sticky: { doc.version; if (firstRow < 1) return []; try { return JSON.parse(doc.scope(doc.rowLine(firstRow + 1))) } catch (e) { return [] } }
+    Rectangle {
+        visible: cv.sticky.length > 0
+        z: 20; x: 0; y: 0; width: cv.width; height: cv.sticky.length * cv.lh + 6
+        color: cv.t.card
+        Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 12; rightMargin: 12 } height: 1; color: Qt.alpha(cv.t.rule, 0.4) }
+        Repeater {
+            model: cv.sticky
+            delegate: Item {
+                required property int modelData
+                required property int index
+                y: index * cv.lh + 3; width: cv.width; height: cv.lh
+                Text { x: 0; width: 40; height: parent.height; horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter; text: modelData + 1; color: cv.t.faint; font.family: cv.t.mono; font.pixelSize: 12 }
+                Text { x: cv.gutter + 12; height: parent.height; verticalAlignment: Text.AlignVCenter; text: (doc.version, doc.lineHtml(modelData)); textFormat: Text.StyledText; color: cv.t.text; font.family: cv.t.mono; font.pixelSize: 13 }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: { doc.select(modelData, 0, 0); input.forceActiveFocus() } }
+            }
+        }
+    }
     // selections: for each cursor, a rounded band per row it covers
     Repeater {
         model: cv.carets.filter(c => c[0] !== c[2] || c[1] !== c[3])
@@ -264,6 +295,7 @@ Rectangle {
                 if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Tab) { cv.takeComp(cv.fv.compSel); e.accepted = true; return }
                 if (e.key === Qt.Key_Escape) { cv.completing = false; cv.fv.comps = []; e.accepted = true; return }
             }
+            if (ctrl && alt && (e.key === Qt.Key_Up || e.key === Qt.Key_Down)) { doc.addCursorLine(e.key === Qt.Key_Up ? -1 : 1); e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_Space) { cv.completing = true; cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion"); e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_Period) { cv.fv && cv.fv.askActions(cv.carets[0][0], cv.carets[0][1]); e.accepted = true; return }
             if (e.key === Qt.Key_F2 && cv.fv && cv.fv.lsp) { rename.open(); e.accepted = true; return }

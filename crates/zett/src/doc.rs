@@ -55,6 +55,17 @@ pub mod qobject {
         fn drag(self: Pin<&mut CodeDoc>, line: i32, col: i32);
         #[qinvokable]
         fn insert(self: Pin<&mut CodeDoc>, text: &QString);
+        /// one more cursor on the line above (-1) or below (+1) the last one, at its column
+        #[qinvokable]
+        #[cxx_name = "addCursorLine"]
+        fn add_cursor_line(self: Pin<&mut CodeDoc>, dir: i32);
+        /// the bracket at the main cursor and its partner: [l, c, l2, c2], or "" for none
+        #[qinvokable]
+        #[cxx_name = "bracketPair"]
+        fn bracket_pair(self: &CodeDoc) -> QString;
+        /// the lines that open the scope around a line (less indented, ending in { ( [ : or a declaration), 3 at most
+        #[qinvokable]
+        fn scope(self: &CodeDoc, line: i32) -> QString;
         #[qinvokable]
         #[cxx_name = "lineText"]
         fn line_text(self: &CodeDoc, line: i32) -> QString;
@@ -129,6 +140,8 @@ pub struct CodeDocRust {
     last: &'static str,
     ext: String,
     states: Vec<Option<(ParseState, HighlightState)>>,
+    /// states far from the dense ones (a big file opened deep in): by line, every KEEP lines, from where it was entered
+    far: std::collections::BTreeMap<usize, (ParseState, HighlightState)>,
     folded: std::collections::BTreeSet<usize>,
     visible: Vec<usize>,
 }
@@ -150,6 +163,7 @@ impl Default for CodeDocRust {
             last: "",
             ext: String::new(),
             states: Vec::new(),
+            far: Default::default(),
             folded: Default::default(),
             visible: vec![0],
         }
@@ -226,6 +240,8 @@ impl qobject::CodeDoc {
         {
             let mut r = self.as_mut().rust_mut();
             r.states.truncate(keep + 1);
+            let cut = keep * KEEP;
+            r.far.retain(|l, _| *l <= cut);
             let n = r.rope.len_lines();
             r.folded.retain(|l| *l < n);
             r.relayout();
@@ -352,6 +368,7 @@ impl qobject::CodeDoc {
             r.carets = vec![Caret::at(0)];
             r.undo.clear();
             r.redo.clear();
+            r.far.clear();
             r.states.clear();   // parse states from before (another language, or none yet) are no use
             r.folded.clear();
             r.ext = std::path::Path::new(&p).extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
@@ -421,11 +438,20 @@ impl qobject::CodeDoc {
         let hl = Highlighter::new(th);
         // from the nearest kept state up to this line, keeping one every KEEP lines
         let k = (l / KEEP).min(r.states.len().saturating_sub(1));
-        let (mut ps, mut hs, mut from) = match r.states.get(k).cloned().flatten() {
+        // far from any kept state (a big file opened at its end): start 200 lines above, fresh, keeping nothing;
+        // right for nearly all code, and the kept states catch up as the view moves down
+        let near = r.states.get(k).cloned().flatten().filter(|_| l - k * KEEP < 300);
+        let approx = near.is_none() && l >= 300;
+        let (mut ps, mut hs, mut from) = match near {
             Some((p, h)) => (p, h, k * KEEP),
+            // the nearest far state above within 300 lines, else fresh 200 lines above (on a KEEP line, so it is kept)
+            None if approx => match r.far.range(l.saturating_sub(300)..=l).next_back().map(|(k, v)| (*k, v.clone())) {
+                Some((at, (p, h))) => (p, h, at),
+                None => (ParseState::new(syn), HighlightState::new(&hl, ScopeStack::new()), (l - 200) / KEEP * KEEP),
+            },
             None => (ParseState::new(syn), HighlightState::new(&hl, ScopeStack::new()), 0),
         };
-        if r.states.is_empty() {
+        if r.states.is_empty() && !approx {
             r.states.push(Some((ps.clone(), hs.clone())));
             from = 0;
         }
@@ -448,8 +474,9 @@ impl qobject::CodeDoc {
             }
             for _ in RangedHighlightIterator::new(&mut hs, &ops, &s, &hl) {}
             i += 1;
-            if i % KEEP == 0 && r.states.len() == i / KEEP {
-                r.states.push(Some((ps.clone(), hs.clone())));
+            if i % KEEP == 0 {
+                if !approx && r.states.len() == i / KEEP { r.states.push(Some((ps.clone(), hs.clone()))); }
+                else if approx && !r.far.contains_key(&i) { r.far.insert(i, (ps.clone(), hs.clone())); }
             }
         }
         QString::from(&out)
@@ -778,5 +805,67 @@ impl qobject::CodeDoc {
 impl qobject::CodeDoc {
     pub fn line_text(&self, line: i32) -> QString {
         QString::from(&self.rust().line_str(line.max(0) as usize))
+    }
+}
+
+impl qobject::CodeDoc {
+    pub fn add_cursor_line(mut self: Pin<&mut Self>, dir: i32) {
+        {
+            let mut r = self.as_mut().rust_mut();
+            let last = *r.carets.last().unwrap();
+            let (l, c) = r.line_col(last.head);
+            let nl = l as i32 + dir;
+            if nl < 0 || nl as usize >= r.rope.len_lines() { return }
+            let p = r.pos(nl as usize, c);
+            if !r.carets.iter().any(|x| x.head == p) { r.carets.push(Caret::at(p)); }
+        }
+        self.publish();
+    }
+    pub fn bracket_pair(&self) -> QString {
+        let r = self.rust();
+        let p = r.carets[0].head;
+        let (open, close) = ("([{", ")]}");
+        for at in [p, p.wrapping_sub(1)] {
+            if at >= r.rope.len_chars() { continue }
+            let c = r.rope.char(at);
+            let (k, dir) = match (open.find(c), close.find(c)) { (Some(k), _) => (k, 1i64), (_, Some(k)) => (k, -1), _ => continue };
+            let (me, other) = if dir > 0 { (c, close.as_bytes()[k] as char) } else { (c, open.as_bytes()[k] as char) };
+            let mut depth = 0i32;
+            let mut i = at as i64;
+            let mut steps = 0;
+            while i >= 0 && (i as usize) < r.rope.len_chars() && steps < 50_000 {
+                let ch = r.rope.char(i as usize);
+                if ch == me { depth += 1 } else if ch == other { depth -= 1; if depth == 0 {
+                    let (l1, c1) = r.line_col(at);
+                    let (l2, c2) = r.line_col(i as usize);
+                    return QString::from(&format!("[{l1},{c1},{l2},{c2}]"));
+                } }
+                i += dir;
+                steps += 1;
+            }
+            break;
+        }
+        QString::default()
+    }
+    pub fn scope(&self, line: i32) -> QString {
+        let r = self.rust();
+        let l = (line.max(0) as usize).min(r.rope.len_lines().saturating_sub(1));
+        static DECL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let decl = DECL.get_or_init(|| regex::Regex::new(r"^\s*(pub(\([^)]*\))?\s+|export\s+|async\s+)*(fn|impl|struct|enum|trait|mod|class|def|function|interface)\b").unwrap());
+        let mut min = indent(&r.line_str(l));
+        let mut out = Vec::new();
+        let mut i = l;
+        while i > 0 && min > 0 && out.len() < 3 && l - i < 2000 {
+            i -= 1;
+            let s = r.line_str(i);
+            if s.trim().is_empty() { continue }
+            let ind = indent(&s);
+            if ind < min && (s.trim_end().ends_with(['{', '(', '[', ':']) || decl.is_match(&s)) {
+                out.push(i);
+                min = ind;
+            }
+        }
+        out.reverse();
+        QString::from(&format!("[{}]", out.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")))
     }
 }
