@@ -250,7 +250,7 @@ ApplicationWindow {
         // the same window: a new one on the folder takes this one's place (the workspace is fixed at start)
         if (app.spawn(JSON.stringify([app.env("HOME") + "/.local/bin/zett", "--gui", p]))) { setPref("sideMode", "files"); quitLater.start() }
     }
-    Timer { id: quitLater; interval: 600; onTriggered: { if (fileView.dirty) fileView.write(); Qt.quit() } }
+    Timer { id: quitLater; interval: 600; onTriggered: { win.saveAll(); Qt.quit() } }   // nothing unsaved is lost on the way
     FolderDialog { id: folderPick; title: "Open Folder"; onAccepted: win.openFolder(decodeURIComponent(String(selectedFolder))) }
     // the KDE folder picker (Dolphin's), its answer read back by id; Qt's own when kdialog is not there
     property string pickOut: ""
@@ -348,6 +348,58 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     // the open files as tabs beside the pages'; closing the shown one shows its neighbour (or the page)
     property var fileTabs: []
+    // files changed and not saved, left for another tab: path → text (the open one is in the editor itself)
+    property var unsaved: ({})
+    // everything unsaved: the open file, the kept ones, the side file
+    function unsavedList() {
+        const out = Object.keys(unsaved)
+        if (fileView.dirty && filePath && !out.includes(filePath)) out.unshift(filePath)
+        return out
+    }
+    function saveAll() {
+        if (fileView.dirty) fileView.write()
+        for (const p of Object.keys(unsaved)) app.writeFile(p, unsaved[p])
+        unsaved = ({})
+    }
+    // closing the window with unsaved files asks first (Save all, Don't save, Cancel)
+    property bool quitting: false
+    onClosing: (close) => { if (quitting || app.shot.length || !unsavedList().length) return; close.accepted = false; quitAsk.open() }
+    Popup {
+        id: quitAsk
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        padding: 22
+        width: 440
+        background: Rectangle { radius: 20; color: t.raised; border.width: 1; border.color: Qt.alpha(t.rule, 0.5) }
+        contentItem: ColumnLayout {
+            spacing: 12
+            RowLayout { spacing: 10
+                Text { text: "save"; color: t.accent; font.family: t.icons; font.pixelSize: 22 }
+                Text { text: "Save changes before closing?"; color: t.text; font.family: t.sans; font.pixelSize: 16; font.weight: Font.DemiBold } }
+            Repeater {
+                model: quitAsk.opened ? win.unsavedList() : []
+                delegate: Text { required property string modelData; Layout.leftMargin: 32; text: modelData.replace(app.dir + "/", ""); elide: Text.ElideLeft; Layout.fillWidth: true; color: t.dim; font.family: t.mono; font.pixelSize: 12 }
+            }
+            RowLayout {
+                Layout.topMargin: 6; spacing: 8
+                Item { Layout.fillWidth: true }
+                component QBtn: Rectangle {
+                    property string label
+                    property bool main: false
+                    signal hit
+                    implicitWidth: qt.implicitWidth + 28; implicitHeight: 34; radius: 17
+                    color: main ? (qh.hovered ? Qt.lighter(t.accent, 1.08) : t.accent) : qh.hovered ? Qt.alpha(t.text, 0.1) : Qt.alpha(t.text, 0.05)
+                    Text { id: qt; anchors.centerIn: parent; text: parent.label; color: parent.main ? t.onAccent : t.text; font.family: t.sans; font.pixelSize: 13; font.weight: parent.main ? Font.DemiBold : Font.Normal }
+                    HoverHandler { id: qh; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: parent.hit() }
+                }
+                QBtn { label: "Cancel"; onHit: quitAsk.close() }
+                QBtn { label: "Don't save"; onHit: { win.quitting = true; quitAsk.close(); win.close() } }
+                QBtn { label: "Save all"; main: true; onHit: { win.saveAll(); win.quitting = true; quitAsk.close(); win.close() } }
+            }
+        }
+    }
     // the problems of every file: the language server's by path, and those read from task output (cargo's --> file:line:col)
     property var allDiags: ({})
     property var taskDiags: []
@@ -820,6 +872,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine.startsWith("core3:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(6), rel: app.shotEngine.slice(6) }); Qt.callLater(() => { const d = fileView.codeDoc; d.selectUnit(1, 8, false); const w = d.selectedText(); d.click(1, 0, false, false); d.click(2, 2, true, false); d.key(0x01000001, "", 0); const indented = d.lineText(1); d.key(0x01000002, "", 0x02000000); d.columns(1, 2, 4); d.key(0, "x", 0); console.log("zett-probe: core3 word [" + w + "] indented [" + indented + "] cursors " + JSON.parse(d.cursors).length); d.save(); grabLater.start() }); return }
             if (app.shotEngine.startsWith("coresave:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(9), rel: app.shotEngine.slice(9) }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(1, 99, false, false); for (const ch of "   ") d.key(0, ch, 0); d.click(4, 0, false, false); for (const ch of "tail") d.key(0, ch, 0); fileView.save(); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corewords:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(10), rel: app.shotEngine.slice(10) }); Qt.callLater(() => { console.log("zett-probe: corewords " + fileView.codeDoc.words("le") + " " + fileView.codeDoc.words("ma")); grabLater.start() }); return }
+            if (app.shotEngine.startsWith("corekeep:")) { const p = app.shotEngine.slice(9).split(","); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(0, 0, false, false); for (const ch of "kept ") d.key(0, ch, 0); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); Qt.callLater(() => { const list = win.unsavedList(); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { console.log("zett-probe: corekeep away " + list.length + " back [" + d.lineText(0) + "] dirty " + d.dirty); grabLater.start() }) }) }); return }
             if (app.shotEngine.startsWith("corebig:")) { const t0 = Date.now(); win.openFile({ path: app.dir + "/" + app.shotEngine.slice(8), rel: app.shotEngine.slice(8) }); Qt.callLater(() => { const t1 = Date.now(); const d = fileView.codeDoc; d.click(99990, 0, false, false); for (const ch of "// end") d.key(0, ch, 0); const t2 = Date.now(); for (const ch of " more") d.key(0, ch, 0); console.log("zett-probe: corebig open " + (t1 - t0) + " ms, lines " + d.lines + ", first typing at the end " + (t2 - t1) + " ms, five more keys " + (Date.now() - t2) + " ms"); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corelsp:")) { const p = app.shotEngine.split(":"); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); claudeShot.interval = 20000; coreLspT.spec = p; coreLspT.start(); return }
             if (app.shotEngine === "explorer") { win.sideMode = "files"; grabLater.start(); return }

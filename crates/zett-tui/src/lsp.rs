@@ -90,7 +90,8 @@ impl App {
                     // only that client: a restarted server's new one has the same name
                     let had = self.lsp.clients.len();
                     self.lsp.clients.retain(|_, c| c.tag != tag);
-                    if self.lsp.clients.len() != had {
+                    // the reason (its last stderr line) came as a Status just before; the bare word only without one
+                    if self.lsp.clients.len() != had && !self.msg.as_ref().is_some_and(|(m, _)| m.contains("stopped:")) {
                         self.say(format!("{} stopped", tag.split('#').next().unwrap_or(&tag)));
                     }
                 }

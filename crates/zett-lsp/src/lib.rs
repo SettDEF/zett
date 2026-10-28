@@ -123,7 +123,7 @@ pub fn server_for(path: &Path) -> Option<(Vec<String>, &'static str)> {
         "glsl" | "vert" | "frag" | "geom" | "comp" | "tesc" | "tese" => (&[&["glsl_analyzer"], &["glslls", "--stdin"]], "glsl"),
         "wgsl" => (&[&["wgsl-analyzer"]], "wgsl"),
         "hlsl" => (&[&["shader-language-server", "--stdio"]], "hlsl"),
-        "cmake" => (&[&["cmake-language-server"], &["neocmakelsp", "--stdio"]], "cmake"),
+        "cmake" => (&[&["neocmakelsp", "--stdio"], &["cmake-language-server"]], "cmake"),
         "dockerfile" => (&[&["docker-langserver", "--stdio"], &["docker-language-server", "start", "--stdio"]], "dockerfile"),
         "tf" | "tfvars" => (&[&["terraform-ls", "serve"], &["tofu-ls", "serve"]], "terraform"),
         "hcl" => (&[&["terraform-ls", "serve"]], "hcl"),
@@ -277,11 +277,21 @@ impl Client {
     /// Starts a server for a project; what it says arrives on `events`.
     pub fn start(cmd: &[String], root: &Path, events: Sender<Event>) -> std::io::Result<Client> {
         // ZETT_LSP_LOG=FILE keeps what servers print on stderr
-        let err = match std::env::var_os("ZETT_LSP_LOG").and_then(|f| std::fs::OpenOptions::new().create(true).append(true).open(f).ok()) {
-            Some(f) => Stdio::from(f),
-            None => Stdio::null(),
-        };
-        let mut child = Command::new(&cmd[0]).args(&cmd[1..]).current_dir(root).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err).spawn()?;
+        let mut child = Command::new(&cmd[0]).args(&cmd[1..]).current_dir(root).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        // what it prints on stderr: the last line kept (a server that dies at start says why), all of it in
+        // ZETT_LSP_LOG=FILE when set
+        let last_err: Arc<Mutex<String>> = Arc::default();
+        if let Some(err) = child.stderr.take() {
+            let keep = last_err.clone();
+            let mut log = std::env::var_os("ZETT_LSP_LOG").and_then(|f| std::fs::OpenOptions::new().create(true).append(true).open(f).ok());
+            std::thread::spawn(move || {
+                use std::io::{BufRead, Write};
+                for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
+                    if let Some(f) = log.as_mut() { let _ = writeln!(f, "{line}"); }
+                    if !line.trim().is_empty() { *keep.lock().unwrap_or_else(|e| e.into_inner()) = line.trim().chars().take(160).collect(); }
+                }
+            });
+        }
         let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or_else(|| std::io::Error::other("no stdin"))?));
         let stdout = child.stdout.take().ok_or_else(|| std::io::Error::other("no stdout"))?;
         let pending: Arc<Mutex<HashMap<i64, Pending>>> = Arc::default();
@@ -292,7 +302,7 @@ impl Client {
         let tag = format!("{name}#{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         {
             let (pending, stdin, encoding, name, gate, tag) = (pending.clone(), stdin.clone(), encoding.clone(), name.clone(), gate.clone(), tag.clone());
-            std::thread::Builder::new().name(format!("lsp {name}")).spawn(move || read_loop(stdout, pending, stdin, encoding, events, name, gate, tag))?;
+            std::thread::Builder::new().name(format!("lsp {name}")).spawn(move || read_loop(stdout, pending, stdin, encoding, events, name, gate, tag, last_err))?;
         }
         let c = Client { name, tag, root: root.to_path_buf(), stdin, child, next: 2, pending, gate, encoding, versions: HashMap::new() };
         // initialize goes out at once; everything else waits for its answer (the gate)
@@ -475,7 +485,14 @@ pub fn from_utf16(line: &str, units: usize) -> usize {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pending>>>, stdin: Arc<Mutex<ChildStdin>>, encoding: Arc<Mutex<String>>, events: Sender<Event>, name: String, gate: Arc<Mutex<Gate>>, tag: String) {
+fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pending>>>, stdin: Arc<Mutex<ChildStdin>>, encoding: Arc<Mutex<String>>, events: Sender<Event>, name: String, gate: Arc<Mutex<Gate>>, tag: String, last_err: Arc<Mutex<String>>) {
+    // it went away: its last stderr line says why (a broken install, a missing module), once
+    let gone = |events: &Sender<Event>, tag: String| {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let why = last_err.lock().map(|s| s.clone()).unwrap_or_default();
+        if !why.is_empty() { let _ = events.send(Event::Status(format!("{name} stopped: {why}"))); }
+        let _ = events.send(Event::Exited(tag));
+    };
     let mut r = BufReader::new(out);
     loop {
         // headers, then the body
@@ -484,7 +501,7 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
             let mut h = String::new();
             match r.read_line(&mut h) {
                 Ok(0) | Err(_) => {
-                    let _ = events.send(Event::Exited(tag));
+                    gone(&events, tag);
                     return;
                 }
                 Ok(_) => {}
@@ -499,7 +516,7 @@ fn read_loop(out: std::process::ChildStdout, pending: Arc<Mutex<HashMap<i64, Pen
         }
         let mut body = vec![0u8; len];
         if r.read_exact(&mut body).is_err() {
-            let _ = events.send(Event::Exited(tag));
+            gone(&events, tag);
             return;
         }
         let Ok(msg) = serde_json::from_slice::<Value>(&body) else { continue };

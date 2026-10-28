@@ -62,6 +62,7 @@ check core2 core2:core2.rs "grep -q 'core2 found 2 replaced 2' \"\$OUT/core2.log
 check core3 core3:core3.rs "grep -q 'core3 word \\[a\\] indented \\[        let a = 1;\\] cursors 2' \"\$OUT/core3.log\" && grep -q '^    xlet a' '$W/core3.rs' && grep -q '^    xlet b' '$W/core3.rs'"
 check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \"\$(tail -c1 '$W/core4.rs' | od -An -c | tr -d ' ')\" = '\\n' ] && tail -1 '$W/core4.rs' | grep -q tail"
 check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"\\]' \"\$OUT/corewords.log\""
+check corekeep corekeep:core5.rs,lines.rs "grep -q 'corekeep away 1 back \\[kept fn main' \"\$OUT/corekeep.log\" && grep -q 'dirty true' \"\$OUT/corekeep.log\""
 check welcome welcome
 check lines filelines:lines.rs "[ \"\$(tr '\\n' '|' < '$W/lines.rs')\" = 'b|// a|// a|c|' ]"
 check tooltip acttip

@@ -76,6 +76,9 @@ pub mod qobject {
         /// the file's own words starting with `prefix` (not the prefix itself), nearest the cursor first, 30 at most
         #[qinvokable]
         fn words(self: &CodeDoc, prefix: &QString) -> QString;
+        /// the text replaced, the file on disk kept as it is (so it shows as unsaved): edits kept while away
+        #[qinvokable]
+        fn restore(self: Pin<&mut CodeDoc>, text: &QString);
         #[qinvokable]
         #[cxx_name = "lineText"]
         fn line_text(self: &CodeDoc, line: i32) -> QString;
@@ -937,5 +940,19 @@ impl qobject::CodeDoc {
         if p.is_empty() { return QString::from("[]") }
         let found = zett_tui::keyword_candidates(&p, &r.rope.to_string(), r.carets[0].head, false, &[], true);
         QString::from(&serde_json::Value::Array(found.into_iter().take(30).map(|(w, _)| serde_json::Value::String(w)).collect()).to_string())
+    }
+}
+
+impl qobject::CodeDoc {
+    pub fn restore(mut self: Pin<&mut Self>, text: &QString) {
+        {
+            let mut r = self.as_mut().rust_mut();
+            let s = text.to_string();
+            r.rope = Rope::from_str(&s);
+            r.states.clear();
+            r.far.clear();
+            r.carets = vec![Caret::at(0)];
+        }
+        self.changed(0);
     }
 }

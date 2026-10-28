@@ -19,6 +19,15 @@ Rectangle {
     Timer { id: lspSync; interval: 300; onTriggered: if (cv.fv && cv.fv.lsp) cv.app.lspChange(cv.file, doc.text()) }
     Connections { target: doc; function onVersionChanged() { if (doc.dirty) lspSync.restart() } }
     function findBarOpen() { findBar.open(false) }
+    function expandSnippet() {
+        const w = word(), body = (win.snippets ?? {})[w]
+        if (!w || typeof body !== "string" || carets.length > 1) return false
+        const l = carets[0][0], w0 = wordStart(), ind = doc.lineText(l).match(/^\s*/)[0]
+        const text = body.split("\n").join("\n" + ind), at = text.indexOf("$0")
+        doc.select(l, w0, w.length); doc.insert(text.replace("$0", ""))
+        if (at >= 0) { const before = text.slice(0, at).split("\n"); doc.select(l + before.length - 1, (before.length > 1 ? 0 : w0) + before[before.length - 1].length, 0) }
+        return true
+    }
     // the word before the main cursor (what completion filters by) and where it starts
     function wordStart() { const s = doc.lineText(carets[0][0]); let c = carets[0][1]; while (c > 0 && /[\w$]/.test(s[c - 1])) c--; return c }
     function word() { return doc.lineText(carets[0][0]).slice(wordStart(), carets[0][1]) }
@@ -50,8 +59,14 @@ Rectangle {
     function takeComp(i) { const it = comps[i]; if (!it) return; const w0 = wordStart(); doc.select(carets[0][0], w0, carets[0][1] - w0); doc.insert(it.insert || it.label); completing = false; cv.fv.comps = [] }
     function askHere(kind) { if (cv.fv) cv.fv.askAt(kind, cv.carets[0][0], cv.carets[0][1]) }
     readonly property string file: win.filePath
-    onFileChanged: if (file && visible) doc.open(file)
-    onVisibleChanged: if (visible && file && doc.path !== file) doc.open(file)
+    // switching files: unsaved text is kept (win.unsaved) and comes back when the file is opened again
+    function openHere(p) {
+        if (doc.dirty && doc.path) { const u = Object.assign({}, win.unsaved); u[doc.path] = doc.text(); win.unsaved = u }
+        doc.open(p)
+        if (win.unsaved[p] !== undefined) { doc.restore(win.unsaved[p]); const u = Object.assign({}, win.unsaved); delete u[p]; win.unsaved = u }
+    }
+    onFileChanged: if (file && visible) openHere(file)
+    onVisibleChanged: if (visible && file && doc.path !== file) openHere(file)
 
     FontMetrics { id: fm; font.family: cv.t.mono; font.pixelSize: 13 }
     readonly property real cw: fm.advanceWidth("M")
@@ -90,7 +105,8 @@ Rectangle {
             readonly property bool cur: cv.carets.some(c => c[0] === line)
             y: row * cv.lh - cv.scrollY
             width: cv.width; height: cv.lh
-            Rectangle { visible: parent.cur; anchors.fill: parent; color: Qt.alpha(cv.t.text, 0.04) }
+            // the current line: inset with its own corners, so it stays inside the rounded card
+            Rectangle { visible: parent.cur; anchors { fill: parent; leftMargin: 6; rightMargin: 6 } radius: 8; color: Qt.alpha(cv.t.text, 0.05) }
             Text {
                 x: 0; width: 40; height: parent.height
                 horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
@@ -305,6 +321,8 @@ Rectangle {
                 if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Tab) { cv.takeComp(cv.fv.compSel); e.accepted = true; return }
                 if (e.key === Qt.Key_Escape) { cv.completing = false; cv.fv.comps = []; e.accepted = true; return }
             }
+            // a snippet: its prefix before the cursor, then Tab (snippets.json; $0 is where the cursor goes)
+            if (e.key === Qt.Key_Tab && !shift && !ctrl && cv.expandSnippet()) { e.accepted = true; return }
             if (ctrl && alt && (e.key === Qt.Key_Up || e.key === Qt.Key_Down)) { doc.addCursorLine(e.key === Qt.Key_Up ? -1 : 1); e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_Space) { cv.completing = true; if (cv.fv && cv.fv.lsp) { cv.app.lspChange(cv.file, doc.text()); cv.askHere("completion") } e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_Period) { cv.fv && cv.fv.askActions(cv.carets[0][0], cv.carets[0][1]); e.accepted = true; return }
@@ -412,6 +430,35 @@ Rectangle {
                     TapHandler { onTapped: rall.hit() } }
             }
         }
+    }
+    // the minimap: each line a bar as long as its text (indent left out), drawn once per change, the view framed
+    Canvas {
+        id: mini
+        visible: (cv.win.prefs.minimap ?? true) && doc.rows > 40 && cv.width > 700
+        anchors { right: parent.right; top: parent.top; bottom: parent.bottom; rightMargin: 14; topMargin: 8; bottomMargin: 8 }
+        width: 70
+        readonly property real per: Math.min(3, height / Math.max(1, doc.rows))
+        onPaint: {
+            const g = getContext("2d"); g.reset()
+            const n = doc.rows, step = Math.max(1, Math.ceil(n / height)), col = Qt.alpha(cv.t.text, 0.28)
+            g.fillStyle = col
+            for (let r = 0, y = 0; r < n; r += step, y += per * step) {
+                const s = doc.lineText(doc.rowLine(r)), lead = s.length - s.replace(/^\s+/, "").length
+                const len = s.length - lead
+                if (len > 0) g.fillRect(Math.min(lead, 40) * 0.6, y, Math.min(len, 110) * 0.55, Math.max(1, per * step - 0.5))
+            }
+        }
+        Connections { target: doc; function onVersionChanged() { repaint.restart() } }
+        Timer { id: repaint; interval: 120; onTriggered: mini.requestPaint() }
+        onVisibleChanged: if (visible) requestPaint()
+        Rectangle {
+            y: cv.scrollY / cv.lh * mini.per; width: parent.width; height: Math.max(10, cv.height / cv.lh * mini.per)
+            radius: 4; color: Qt.alpha(cv.t.text, mmH.hovered ? 0.14 : 0.08); border.width: 1; border.color: Qt.alpha(cv.t.text, 0.12)
+        }
+        function scrollTo(y) { cv.scrollY = Math.max(0, Math.min(cv.maxTop(), y / per * cv.lh - cv.height / 2)) }
+        HoverHandler { id: mmH; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: (ev) => mini.scrollTo(ev.position.y) }
+        DragHandler { target: null; onCentroidChanged: if (active) mini.scrollTo(centroid.position.y) }
     }
     // the scrollbar: a slim rounded thumb
     Rectangle {
