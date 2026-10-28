@@ -123,6 +123,7 @@ ColumnLayout {
         target: fv.app
         function onLspEvent(json) {
             let e; try { e = JSON.parse(json) } catch (x) { return }
+            if (e.type === "diagnostics") { const m = Object.assign({}, fv.win.allDiags); if (e.items.length) m[e.path] = e.items; else delete m[e.path]; fv.win.allDiags = m }
             if (e.type === "diagnostics" && e.path === fv.win.filePath) fv.diags = e.items
             else if (e.type === "completion") {
                 const word = ed.text.slice(fv.compFrom, ed.cursorPosition).toLowerCase()

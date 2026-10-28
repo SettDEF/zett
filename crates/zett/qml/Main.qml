@@ -312,6 +312,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     // the open files as tabs beside the pages'; closing the shown one shows its neighbour (or the page)
     property var fileTabs: []
+    // the problems of every file: the language server's by path, and those read from task output (cargo's --> file:line:col)
+    property var allDiags: ({})
+    property var taskDiags: []
+    readonly property var problems: {
+        const out = []
+        for (const p of Object.keys(allDiags)) for (const d of allDiags[p]) if (d.severity <= 2) out.push({ path: p, line: d.line, col: d.col, severity: d.severity, message: d.message, from: "server" })
+        return out.concat(taskDiags).sort((a, b) => a.severity - b.severity || a.path.localeCompare(b.path) || a.line - b.line)
+    }
     function closeFileTab(p) {
         const at = fileTabs.indexOf(p)
         fileTabs = fileTabs.filter(x => x !== p)
@@ -758,6 +766,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
+            if (app.shotEngine === "problems-panel") { win.drawerShown = true; drawer.tab = "problems"; drawer.run("printf 'error[E0308]: mismatched types\\n  --> src/main.rs:2:5\\n'"); probT.start(); return }
             if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
             if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
@@ -851,6 +860,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })  }
     Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }  // the panel polls cui first
+    Timer { id: probT; interval: 1500; onTriggered: { console.log("zett-probe: problems " + JSON.stringify(win.problems.map(p => p.path.replace(app.dir + "/", "") + ":" + (p.line + 1) + " " + p.message))); claudeShot.start() } }
     // the page sits in one card on the background, like the shell's panels
     Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.color: pageDrop.containsDrag ? t.accent : Qt.alpha(t.rule, 0.35)
         // a page or file dropped on the open page becomes a [[link]]

@@ -48,6 +48,7 @@ check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' 
 check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett' && ! grep -qE '[[:blank:]]$' '$W/main.rs'"
 check side fileside:main.rs:check.md
 check git git
+check panel problems-panel "grep -q 'problems \\[\"src/main.rs:2' \"\$OUT/panel.log\""
 check diff filediff:main.rs "grep -q 'zett-probe: diff [1-9]' \"\$OUT/diff.log\""
 check tasks tasks "grep -q 'zett-probe: palette' \"\$OUT/tasks.log\""
 check quick quick:mnrs "grep -q 'quick \[\"file:main.rs' "$OUT/quick.log""
