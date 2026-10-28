@@ -26,6 +26,7 @@ Rectangle {
     property bool openOpen: true
     property bool recentOpen: true
     property bool foldersOpen: true
+    property bool todoOpen: true
     function create(name) {
         name = name.trim().replace(/^\/+/, ""); const kind = newKind; newKind = ""
         if (!name || name.includes("..")) return
@@ -67,14 +68,8 @@ Rectangle {
                 spacing: 10
                 RowLayout {
                     spacing: 10
-                    Rectangle {
-                        implicitWidth: 36; implicitHeight: 36; radius: 12
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: t.accent }
-                            GradientStop { position: 1; color: Qt.darker(t.accent, 1.25) }
-                        }
-                        Text { anchors.centerIn: parent; text: hdr.name.slice(0, 1).toUpperCase(); color: t.onAccent; font.family: t.sans; font.pixelSize: 18; font.weight: Font.Bold }
-                    }
+                    // zett's logo (packaging/logo.glsl, installed with the icons)
+                    Image { source: "file://" + win.homeDir + "/.local/share/icons/hicolor/128x128/apps/zett.png"; sourceSize: Qt.size(72, 72); Layout.preferredWidth: 36; Layout.preferredHeight: 36; smooth: true; mipmap: true }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 1
@@ -162,7 +157,7 @@ Rectangle {
             Layout.fillWidth: true
             // as tall as its pages, up to half the sidebar; the file tree takes the rest
             Layout.preferredHeight: Math.min(contentHeight, Math.max(120, (parent.height - 200) * 0.5))
-            Layout.fillHeight: !win.filesOpen || win.sideMode === "pages"
+            Layout.fillHeight: false   // only as tall as its pages: the sections under it follow straight after
             clip: true
             spacing: 2
             model: win.pages
@@ -327,6 +322,18 @@ Rectangle {
         }
         readonly property var openEditors: win.tabs.map(i => ({ page: i })).concat(win.fileTabs.map(p => ({ file: p })))
         readonly property var recent: (win.prefs.recentFiles ?? []).filter(p => !win.fileTabs.includes(p) && p.startsWith(app.dir + "/")).slice(0, 6)
+        readonly property var allTodos: { if (win.sideMode === "files") return []; win.pages.length; try { return JSON.parse(app.todos()).slice(0, 8) } catch (e) { return [] } }
+        readonly property var lastPages: win.pages.map((p, i) => ({ p, i })).filter(o => o.i !== app.current).sort((a, b) => (b.p.modified ?? 0) - (a.p.modified ?? 0)).slice(0, 5)
+        SectionHead { visible: parent.allTodos.length > 0; label: "TO DO"; count: parent.allTodos.length; open: side.todoOpen; onToggled: side.todoOpen = !side.todoOpen }
+        Repeater {
+            model: side.todoOpen ? parent.allTodos : []
+            delegate: QuickRow { required property var modelData; icon: "check_box_outline_blank"; label: modelData.text; sub: modelData.title; onHit: { win.openPage(modelData.page); Qt.callLater(() => win.jumpToBlock(modelData.block)) } }
+        }
+        SectionHead { visible: parent.lastPages.length > 1 && win.sideMode === "pages"; label: "RECENT"; count: parent.lastPages.length; open: side.recentOpen; onToggled: side.recentOpen = !side.recentOpen }
+        Repeater {
+            model: side.recentOpen && win.sideMode === "pages" && parent.lastPages.length > 1 ? parent.lastPages : []
+            delegate: QuickRow { required property var modelData; icon: "history"; label: modelData.p.title || "Untitled"; sub: modelData.p.blocks + " blocks"; onHit: win.openPage(modelData.i) }
+        }
         SectionHead { visible: parent.openEditors.length > 1; label: "OPEN EDITORS"; count: parent.openEditors.length; open: side.openOpen; onToggled: side.openOpen = !side.openOpen }
         Repeater {
             model: side.openOpen && parent.openEditors.length > 1 ? parent.openEditors : []
@@ -400,6 +407,8 @@ Rectangle {
                 }
             }
         }
+        // the free room goes here, above the foot (in the Explorer the file tree takes it)
+        Item { visible: !(win.filesOpen && win.sideMode !== "pages"); Layout.fillHeight: true }
         // the foot, as in Notion: templates (templates/*.md become a new page), import, trash
         Repeater {
             // notes things: not in the Explorer

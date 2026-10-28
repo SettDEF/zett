@@ -22,6 +22,8 @@ Flickable {
         default property alias body: inner.data
         property string title
         Layout.fillWidth: true
+        Layout.preferredWidth: 1   // the grid's columns share the width (natural widths pushed the right one off the page)
+        Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignTop
         implicitHeight: inner.implicitHeight + 42
         radius: 18; color: wl.t.card
