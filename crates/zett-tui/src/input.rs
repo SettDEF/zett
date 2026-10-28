@@ -867,7 +867,7 @@ impl App {
             let want = d.left + (col - a.x - app.gutter) as usize;
             let (mut sc, mut c) = (0, 0);
             for ch in d.ed.buf.line(line).chars().filter(|&ch| ch != '\n') {
-                let w = if ch == '\t' { tab() } else { 1 };
+                let w = if ch == '\t' { crate::tab_at(sc) } else { 1 };
                 if sc + w > want {
                     break;
                 }

@@ -90,7 +90,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "breakat", "breakindentopt",
     "wildmenu", "wildmode", "wildignore", "wildignorecase", "wildoptions", "fileignorecase", "suffixes",
     "keywordprg",
-    "tags", "tagfunc", "findfunc", "quickfixtextfunc", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "diff", "diffopt", "runtimepath", "viewdir", "include", "define", "path", "suffixesadd", "comments",
+    "vartabstop", "tags", "tagfunc", "findfunc", "quickfixtextfunc", "tagcase", "taglength", "tagrelative", "tagstack", "cdpath", "diff", "diffopt", "runtimepath", "viewdir", "include", "define", "path", "suffixesadd", "comments",
     "makeprg", "errorformat", "grepprg", "grepformat", "shell", "shellcmdflag", "shellquote", "shellxquote", "makeencoding",
     "errorfile", "switchbuf", "chistory", "lhistory",
     "maxmapdepth", "remap",

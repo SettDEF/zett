@@ -580,3 +580,15 @@ mod search_count {
         assert!(m.iter().any(|r| matches!(r, Request::Message(s) if s.ends_with("/>2]"))), "{m:?}");
     }
 }
+
+#[cfg(test)]
+mod vsts_tests {
+    use crate::Editor;
+    #[test]
+    fn varsofttabstop_sets_where_tab_stops() {
+        let mut e = Editor::from_str("");
+        e.set_opt("varsofttabstop", "3,5");
+        e.feed("i<Tab>x<Tab>y<Tab>z<Esc>");
+        assert_eq!(e.text(), "   x    y    z", "stops at 3, 8, then every 5");
+    }
+}

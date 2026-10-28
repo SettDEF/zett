@@ -68,10 +68,35 @@ use zett_script::{Effect, Engine, Feed, MenuItem, PanelView};
 thread_local! {
     /// the buffer being drawn: its tabstop and whether list shows tabs (set per buffer, read below)
     static SHOW: std::cell::Cell<(usize, bool)> = const { std::cell::Cell::new((4, false)) };
+    /// its vartabstop: the widths of the stops in turn, the last repeating (empty: every tabstop)
+    static VTS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 /// Columns a tab takes (the tabstop setting of the buffer being drawn or edited).
 fn tab() -> usize {
     SHOW.with(|s| s.get().0)
+}
+
+/// Columns a tab at screen column `col` takes: to the next stop (tabstop, or vartabstop's list).
+pub(crate) fn tab_at(col: usize) -> usize {
+    VTS.with(|v| {
+        let v = v.borrow();
+        if v.is_empty() {
+            let t = tab().max(1);
+            return t - col % t;
+        }
+        let mut stop = 0;
+        for w in v.iter().copied() {
+            stop += w.max(1);
+            if stop > col { return stop - col }
+        }
+        let last = v.last().copied().unwrap_or(8).max(1);
+        last - (col - stop) % last
+    })
+}
+
+/// The vartabstop of the buffer being drawn ("" for none).
+pub(crate) fn set_vartabstop(spec: &str) {
+    VTS.with(|v| *v.borrow_mut() = spec.split(',').filter_map(|n| n.trim().parse().ok()).collect());
 }
 
 // ── syntax colours from the terminal's palette ──
@@ -259,6 +284,7 @@ impl Doc {
         let (mut ps, mut hs) = self.states[line].clone();
         let text = format!("{}\n", self.ed.buf.line(line));
         let Ok(ops) = ps.parse_line(&text, ss) else { return vec![(Style::default(), expand(&text))] };
+        let mut col = 0;
         HighlightIterator::new(&mut hs, &ops, &text, hl)
             .map(|(st, s)| {
                 let mut style = Style::default().fg(to_color(st.foreground));
@@ -272,26 +298,40 @@ impl Doc {
                 if st.font_style.contains(F::UNDERLINE) {
                     style = style.add_modifier(Modifier::UNDERLINED);
                 }
-                (style, expand(s.trim_end_matches('\n')))
+                (style, expand_from(s.trim_end_matches('\n'), &mut col))
             })
             .collect()
     }
 }
 
 fn expand(s: &str) -> String {
-    let (t, list) = SHOW.with(|s| s.get());
-    // list: placeholder cells the window draws as listchars' tab (display.rs)
-    let shown = if list {
-        let mut s = display::TAB_FIRST.to_string();
-        if t > 1 {
-            s.extend(std::iter::repeat_n(display::TAB_FILL, t - 2));
-            s.push(display::TAB_LAST);
+    expand_from(s, &mut 0)
+}
+
+/// Tabs to the next stop from screen column `col` (kept going across a line's spans).
+fn expand_from(s: &str, col: &mut usize) -> String {
+    let list = SHOW.with(|s| s.get().1);
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c != '\t' {
+            out.push(c);
+            if c != '\n' { *col += 1 }
+            continue;
         }
-        s
-    } else {
-        " ".repeat(t)
-    };
-    s.replace('\t', &shown)
+        let t = tab_at(*col);
+        *col += t;
+        // list: placeholder cells the window draws as listchars' tab (display.rs)
+        if list {
+            out.push(display::TAB_FIRST);
+            if t > 1 {
+                out.extend(std::iter::repeat_n(display::TAB_FILL, t - 2));
+                out.push(display::TAB_LAST);
+            }
+        } else {
+            out.extend(std::iter::repeat_n(' ', t));
+        }
+    }
+    out
 }
 
 /// Where a wrapped line's rows start, in screen columns (wrap): every `width` columns, or with
@@ -319,7 +359,7 @@ fn wrap_starts(line: &str, width: usize, words: Option<&[char]>, cont: usize) ->
 
 /// The screen column of a character column in a line (a tab counts as tabstop columns).
 fn screen_col(line: &str, col: usize) -> usize {
-    line.chars().take(col).map(|c| if c == '\t' { tab() } else { 1 }).sum()
+    line.chars().take(col).fold(0, |w, c| w + if c == '\t' { tab_at(w) } else { 1 })
 }
 
 // ── the file finder ──
@@ -1603,5 +1643,20 @@ mod syntax_tests {
     fn qml_is_known() {
         let ss = super::syntax_set();
         assert_eq!(ss.find_syntax_by_extension("qml").map(|s| s.name.as_str()), Some("QML"));
+    }
+}
+
+#[cfg(test)]
+mod tab_stop_tests {
+    #[test]
+    fn tabs_go_to_the_next_stop_and_vartabstop_sets_them() {
+        super::SHOW.with(|s| s.set((8, false)));
+        super::set_vartabstop("");
+        assert_eq!(super::expand("a\tb"), format!("a{}b", " ".repeat(7)), "a tab after one column fills to column 8");
+        assert_eq!(super::screen_col("ab\tc", 3), 8);
+        super::set_vartabstop("4,2");
+        assert_eq!(super::expand("\t\t\tx"), format!("{}x", " ".repeat(8)), "stops at 4, 6, then every 2");
+        assert_eq!(super::tab_at(5), 1);
+        super::set_vartabstop("");
     }
 }

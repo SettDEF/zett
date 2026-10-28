@@ -13,7 +13,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
     "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions", "equalprg", "formatprg", "incsearch",
-    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr", "cinwords", "window",
+    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr", "cinwords", "window", "varsofttabstop",
 ];
 
 impl Editor {
@@ -179,6 +179,20 @@ impl Editor {
     }
 
     /// Tab in insert mode with softtabstop or smarttab: blanks to the next stop.
+    /// varsofttabstop: the blanks Tab inserts at `col` to reach its next stop (its list of widths, the last
+    /// repeating); None when unset or with paste.
+    pub(crate) fn vsts_step(&self, col: usize) -> Option<usize> {
+        if self.opt_on("paste", false) { return None }
+        let v: Vec<usize> = self.opt("varsofttabstop").unwrap_or("").split(',').filter_map(|n| n.trim().parse().ok()).filter(|&n: &usize| n > 0).collect();
+        let last = *v.last()?;
+        let mut stop = 0;
+        for w in &v {
+            stop += w;
+            if stop > col { return Some(stop - col) }
+        }
+        Some(last - (col - stop) % last)
+    }
+
     pub(crate) fn vim_tab_width(&self) -> Option<usize> {
         if self.opt_on("paste", false) {
             return None;

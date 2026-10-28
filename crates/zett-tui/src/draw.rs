@@ -384,6 +384,7 @@ impl App {
         let (wrap, words, cul, scrolloff, list) = (self.flag(di, "wrap"), self.flag(di, "linebreak"), self.flag(di, "cursorline"), self.num(di, "scrolloff"), self.flag(di, "list"));
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();
         SHOW.with(|s| s.set((self.num(di, "tabstop").max(1), list)));
+        crate::set_vartabstop(&self.setting(di, "vartabstop"));
         let show = self.display(di);
         // :match: this window's pattern and its highlight group
         // :3match, :2match, :match in that order: where they meet, the lowest number is drawn last and wins
@@ -575,7 +576,7 @@ impl App {
                 }
                 for h in hunks.iter().filter(|h| h.end() == next) {
                     for (i, t) in h.new.iter().enumerate() {
-                        let shown: String = t.replace('\t', &" ".repeat(tab())).chars().skip(d.left).take(width).collect();
+                        let shown: String = crate::expand(t).chars().skip(d.left).take(width).collect();
                         let mut spans = vec![Span::styled(gut("+ ", gutter as usize), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
                         if i == 0 {
                             spans.push(Span::styled(format!(" {} ", h.author), hl::hl("AgentTag")));
