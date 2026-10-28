@@ -514,10 +514,27 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Timer { id: noteClear; interval: 4000; onTriggered: win.notes = [] }
 
     // [[Page]] → a link (the text is escaped first: it is shown as StyledText)
+    // a block's Markdown drawn (while it is not being typed in): **bold**, *italic*, `code`, ~~struck~~,
+    // [[page]] and [text](url) links; code spans first, so nothing inside them is read as marks
+    readonly property var inlineMarks: /\[\[|\*\*|\*[^*\s]|`|~~|\]\(|(^|\W)_[^_\s]/
     function linkify(s) {
-        const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")
-        return esc.replace(/\[\[([^\]]+)\]\]/g, (m, title) => `<a href="${encodeURIComponent(title)}"><u>${title}</u></a>`)
+        const esc = x => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        const code = []
+        let h = esc(s).replace(/`([^`\n]+)`/g, (m, c) => { code.push(c); return `\u0000${code.length - 1}\u0000` })
+        // links next, kept aside too: an _ in a URL is not italics
+        const links = []
+        const keep = a => { links.push(a); return `\u0001${links.length - 1}\u0001` }
+        h = h.replace(/\[\[([^\]]+)\]\]/g, (m, title) => keep(`<a href="${encodeURIComponent(title)}">${title}</a>`))
+             .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => keep(`<a href="ext:${url}">${text}</a>`))
+        h = h.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+             .replace(/(^|[^*\w])\*([^*\s][^*\n]*?)\*(?!\w)/g, "$1<i>$2</i>")
+             .replace(/(^|\W)_([^_\s][^_\n]*?)_(?!\w)/g, "$1<i>$2</i>")
+             .replace(/~~([^~\n]+)~~/g, "<s>$1</s>")
+             .replace(/\n/g, "<br>")
+        return h.replace(/\u0001(\d+)\u0001/g, (m, i) => links[+i])
+                .replace(/\u0000(\d+)\u0000/g, (m, i) => `<font face="${t.mono}" color="${t.accent}">${code[+i]}</font>`)
     }
+    function openLink(l) { if (l.startsWith("ext:")) Qt.openUrlExternally(l.slice(4)); else app.openTitle(decodeURIComponent(l)) }
 
     function focusBlock(i, end) {
         const d = list.itemAtIndex(i)
@@ -822,14 +839,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             Text {
                                 id: shown
                                 anchors.fill: edit
-                                visible: !edit.activeFocus && edit.text.indexOf("[[") >= 0 && blockItem.kind !== "code"
+                                visible: !edit.activeFocus && win.inlineMarks.test(edit.text) && blockItem.kind !== "code"
                                 text: win.linkify(edit.text)
                                 textFormat: Text.StyledText
                                 wrapMode: Text.Wrap
                                 font: edit.font
                                 color: edit.color
                                 linkColor: t.accent
-                                onLinkActivated: (l) => app.openTitle(decodeURIComponent(l))
+                                onLinkActivated: (l) => win.openLink(l)
                                 HoverHandler { cursorShape: shown.hoveredLink ? Qt.PointingHandCursor : Qt.IBeamCursor }
                                 TapHandler { onTapped: if (!shown.hoveredLink) edit.forceActiveFocus() }
                                 z: 2

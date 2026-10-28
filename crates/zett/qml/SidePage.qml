@@ -78,7 +78,7 @@ Rectangle {
             text: (b.kind === "todo" ? (b.checked ? "☑  " : "☐  ") : b.kind === "bullet" ? "•  " : "") + win.linkify(b.text ?? "")
             color: b.kind === "quote" || (b.kind === "todo" && b.checked) ? t.dim : t.text
             linkColor: t.accent
-            onLinkActivated: (l) => app.openTitle(decodeURIComponent(l))
+            onLinkActivated: (l) => win.openLink(l)
             font.family: t.sans
             font.pixelSize: Math.round((b.kind === "heading" ? [0, 22, 18, 16, 15, 14, 14][b.level ?? 1] : 14) * t.scale)
             font.weight: b.kind === "heading" ? Font.DemiBold : Font.Normal
