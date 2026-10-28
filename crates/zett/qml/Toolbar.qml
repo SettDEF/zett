@@ -94,7 +94,7 @@ Item {
         spacing: 6
         // the page width: narrow (680) → wide (960) → full; Settings has the exact width
         Rectangle {
-            readonly property int w: win.prefs.width ?? 760
+            readonly property int w: win.prefs.width ?? 10000
             readonly property string mode: w >= 4000 ? "full" : w >= 900 ? "wide" : "narrow"
             implicitWidth: 34; implicitHeight: 30; radius: 15
             color: wHov.hovered ? t.raised : t.card

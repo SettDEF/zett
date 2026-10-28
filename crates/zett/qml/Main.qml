@@ -947,7 +947,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 bottomMargin: 120
                 model: win.blocks
                 boundsBehavior: Flickable.StopAtBounds
-                readonly property real column: Math.min(win.prefs.width ?? 760, width - 96)
+                readonly property real column: Math.min(win.prefs.width ?? 10000, width - 64)   // full width unless Settings narrows it
 
                 header: Item {
                     id: pageHead

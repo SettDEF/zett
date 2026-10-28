@@ -195,7 +195,7 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        Layout.leftMargin: 24; Layout.rightMargin: 24
+        Layout.leftMargin: 12; Layout.rightMargin: 12
         spacing: 8
         Item { Layout.fillWidth: true }   // the path and the unsaved dot are in the window's header
         Text { visible: fv.note.length > 0; text: fv.note; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
@@ -222,7 +222,7 @@ ColumnLayout {
     Rectangle {
         visible: fv.showDiff
         Layout.fillWidth: true; Layout.fillHeight: true
-        Layout.leftMargin: 16; Layout.rightMargin: 16
+        Layout.leftMargin: 8; Layout.rightMargin: 8
         radius: 17; color: t.card
         ListView {
             anchors { fill: parent; margins: 12 }
@@ -244,12 +244,12 @@ ColumnLayout {
         }
     }
     // find / replace / go to line (FindBar.qml)
-    FindBar { id: findBar; t: fv.t; editor: ed; Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16 }
+    FindBar { id: findBar; t: fv.t; editor: ed; Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8 }
     Rectangle {
         visible: !fv.showDiff
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.leftMargin: 16; Layout.rightMargin: 16
+        Layout.leftMargin: 8; Layout.rightMargin: 8
         radius: 17
         color: t.card
         // the minimap: the whole file small, the part in view framed; a click or drag scrolls there;
@@ -330,7 +330,7 @@ ColumnLayout {
         }
         Flickable {
             id: fileFlick
-            anchors { fill: parent; margins: 14; rightMargin: miniMap.visible ? 14 + miniMap.width + 8 : 14 }
+            anchors { fill: parent; margins: 10; rightMargin: miniMap.visible ? 10 + miniMap.width + 6 : 10 }
             clip: true
             contentWidth: Math.max(width, ed.contentWidth + 70)
             contentHeight: ed.contentHeight + 40
@@ -650,7 +650,7 @@ ColumnLayout {
     }
     Rectangle {
         visible: fv.jumps.length > 0
-        Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16
+        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8
         implicitHeight: Math.min(220, jumpCol.implicitHeight + 44)
         radius: 14; color: t.card
         RowLayout {
@@ -690,7 +690,7 @@ ColumnLayout {
     property bool showProblems: false
     Rectangle {
         visible: fv.showProblems && fv.diags.length > 0
-        Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16
+        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8
         implicitHeight: Math.min(180, probCol.implicitHeight + 16)
         radius: 14; color: t.card
         Flickable {
