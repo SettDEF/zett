@@ -362,6 +362,25 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const s = ed.selectionStart, e = ed.selectionEnd, t = ed.selectedText
         ed.remove(s, e); ed.insert(s, a + t + z)
     }
+    // ── folding: a heading folds what follows it (to the next heading as high), a list item its own
+    // items; only the view (the file keeps everything); per page, forgotten when it closes ──
+    property var folded: []
+    Connections { target: app; function onCurrentChanged() { win.folded = [] } }
+    function toggleFold(i) { folded = folded.includes(i) ? folded.filter(x => x !== i) : folded.concat([i]) }
+    // what a block would fold (the blocks after it it owns)
+    function foldEnd(i) {
+        const b = blocks[i]; if (!b) return i
+        let j = i + 1
+        if (b.kind === "heading") { while (j < blocks.length && !(blocks[j].kind === "heading" && (blocks[j].level ?? 1) <= (b.level ?? 1))) j++ }
+        else { while (j < blocks.length && (blocks[j].depth ?? 0) > (b.depth ?? 0)) j++ }
+        return j
+    }
+    readonly property var hiddenBlocks: {
+        const h = {}
+        for (const i of folded) for (let j = i + 1, e = foldEnd(i); j < e; j++) h[j] = true
+        return h
+    }
+
     // ── several blocks at once: selected with Shift/Ctrl+click on the grip or Ctrl+A ──
     property var selBlocks: []          // indices in reading order, sorted
     property int selAnchor: -1
@@ -447,6 +466,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "transform", label: "Turn into", sub: win.slashItems.filter(s => !s.text).map(s => ({ icon: { paragraph: "notes", h1: "title", h2: "title", h3: "title", todo: "check_box", bullet: "format_list_bulleted", quote: "format_quote", code: "code" }[s.k], label: s.label, key: s.hint, enabled: s.k !== kindName(b), run: () => app.setKind(i, s.k) })) },
             { icon: "play_arrow", label: "Run in the drawer", enabled: b.kind === "code" && /^(sh|bash|zsh|shell|console)?$/.test(b.lang ?? ""), run: () => { win.drawerShown = true; drawer.run(b.text) } },
             { icon: "add", label: "Add block below", key: "Enter", run: () => win.focusAfter = app.addBlock(i, "paragraph") },
+            { icon: win.folded.includes(i) ? "unfold_more" : "unfold_less", label: win.folded.includes(i) ? "Unfold" : "Fold what is under it", enabled: win.foldEnd(i) > i + 1, run: () => win.toggleFold(i) },
             { icon: "arrow_upward", label: "Move up", key: "Alt ↑", enabled: i > 0, run: () => { if (app.moveBlock(i, i - 1)) win.focusAfter = i - 1 } },
             { icon: "arrow_downward", label: "Move down", key: "Alt ↓", enabled: i < win.blocks.length - 1, run: () => { if (app.moveBlock(i, i + 1)) win.focusAfter = i + 1 } },
             { icon: "content_copy", label: "Duplicate", run: () => { const n = app.addBlock(i, kindName(b)); app.setText(n, b.text) } },
@@ -584,6 +604,12 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine === "fold") {
+                const why = win.blocks.findIndex(b => b.text === "Why")
+                win.toggleFold(why)
+                console.log(`zett-probe: fold "Why" at ${why}: hides ${JSON.stringify(Object.keys(win.hiddenBlocks).map(k => win.blocks[k].text.slice(0, 20)))}`)
+                grabLater.start(); return
+            }
             if (app.shotEngine === "preview") { win.previewAt("fan-curve", 420, 230); win.previewShown = true; grabLater.start(); return }
             if (app.shotEngine === "linkpick") { win.focusAfter = 0; Qt.callLater(() => { const dd = list.itemAtIndex(0); if (!dd) { Qt.quit(); return } dd.insertForTest("see [[fa"); const before = dd.textForTest(); dd.insertLink(win.linkMatches[0].title); console.log(`zett-probe: link "${before}" -> "${dd.textForTest()}" open=${win.linkFor >= 0}`); Qt.quit() }); return }
             if (app.shotEngine === "linkpop") { const d = list.itemAtIndex(0); win.focusAfter = 0; Qt.callLater(() => { const dd = list.itemAtIndex(0); if (dd) dd.insertForTest(" see [[fa"); grabLater.start() }); return }
@@ -803,7 +829,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     required property var modelData
                     required property int index
                     width: list.width
-                    height: body.implicitHeight + (modelData.kind === "heading" ? 14 : 6)
+                    height: hidden ? 0 : body.implicitHeight + (modelData.kind === "heading" ? 14 : 6)
 
                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, edit, shown.visible ? shown.hoveredLink : "") }
                     function vimKeyForTest(k) { edit.applyVim(app.vimKey(k)) }
@@ -827,6 +853,22 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     readonly property int level: modelData.level ?? 1
                     readonly property bool checked: modelData.checked ?? false
 
+                    // the fold arrow, left of the grip: on hover, and always while folded
+                    Rectangle {
+                        visible: blockItem.canFold && (blockHov.hovered || win.folded.includes(blockItem.index))
+                        x: body.x - 54; y: body.y + 2
+                        width: 22; height: 24; radius: 6
+                        color: foldHov.hovered ? Qt.alpha(t.text, 0.08) : "transparent"
+                        Text { anchors.centerIn: parent; text: win.folded.includes(blockItem.index) ? "chevron_right" : "expand_more"; color: win.folded.includes(blockItem.index) ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 18 }
+                        HoverHandler { id: foldHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: win.toggleFold(blockItem.index) }
+                    }
+                    // how much is folded away, after the block
+                    Text {
+                        visible: win.folded.includes(blockItem.index)
+                        anchors { right: parent.right; rightMargin: (list.width - list.column) / 2; verticalCenter: body.verticalCenter }
+                        text: `${win.foldEnd(blockItem.index) - blockItem.index - 1} folded`; color: t.faint; font.family: t.mono; font.pixelSize: 11
+                    }
                     // a selected block (Shift/Ctrl+click on its grip, Ctrl+A): a tint behind it
                     Rectangle {
                         visible: win.selBlocks.includes(blockItem.index)
@@ -866,6 +908,10 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
                     // nested list items step in, 26 px a level
                     readonly property int depth: modelData.depth ?? 0
+                    // folded away under a heading or list item above it
+                    readonly property bool hidden: !!win.hiddenBlocks[index]
+                    readonly property bool canFold: win.foldEnd(index) > index + 1
+                    visible: !hidden
     // a standard Markdown form drawn as its own block (see `special`): "" for plain text
                     readonly property string look: {
                         const s = (modelData.text ?? "").trim()
