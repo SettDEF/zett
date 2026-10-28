@@ -266,7 +266,7 @@ function vim.schedule_wrap(f) return function(...) local a = { ... } vim.schedul
 function vim.in_fast_event() return false end
 vim.uv = vim.uv or {}
 function vim.uv.hrtime() return z.hrtime() end
-function vim.uv.now() return math.floor(os.time() * 1000) end
+function vim.uv.now() return math.floor(z.hrtime() / 1e6) end
 function vim.uv.cwd() return z.root() end
 function vim.uv.os_homedir() return os.getenv("HOME") end
 function vim.uv.os_getenv(n) return os.getenv(n) end
@@ -1115,9 +1115,14 @@ function fn.flatten(l) return vim.tbl_flatten(l) end
 -- time
 function fn.localtime() return os.time() end
 function fn.strftime(f, t) return os.date(f, t) end
-function fn.reltime() return { os.clock() } end
-function fn.reltimestr(t) return string.format("%.6f", os.clock() - (t[1] or 0)) end
-function fn.reltimefloat(t) return os.clock() - (t[1] or 0) end
+-- reltime: wall-clock seconds as { s }; reltime(a) is the time since a, reltime(a, b) from a to b
+local function wall() return z.hrtime() / 1e9 end
+function fn.reltime(a, b)
+  if a == nil then return { wall() } end
+  return { (b and b[1] or wall()) - (a[1] or 0) }
+end
+function fn.reltimefloat(t) return t and t[1] or 0 end
+function fn.reltimestr(t) return string.format("%10.6f", fn.reltimefloat(t)) end
 
 -- the editor itself
 local features = { nvim = 1, zett = 1, unix = 1, linux = 1, termguicolors = 1, lua = 1, ["nvim-0.10"] = 1, ["nvim-0.9"] = 1, ["nvim-0.8"] = 1, ["nvim-0.7"] = 1, ["nvim-0.5"] = 1, syntax = 1, autocmd = 1, clipboard = 1, ["patch-8.1.0000"] = 1, folding = 1, timers = 1, ["vim_starting"] = 0, ttyin = 1, ttyout = 1 }

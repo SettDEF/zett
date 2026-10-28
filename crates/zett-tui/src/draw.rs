@@ -27,7 +27,7 @@ impl App {
             _ => (self.tabs && self.docs.len() > 1) || self.tab_count() > 1,
         };
         // cmdheight: the rows under the windows (0: only while there is something to show)
-        let busy = self.cmdline.is_some() || self.msg.is_some() || self.minibuf.is_some() || self.docs[cur].ed.isearch().is_some() || !self.keyseq.is_empty();
+        let busy = self.cmdline.is_some() || self.msg.is_some() || self.minibuf.is_some() || self.docs[cur].ed.isearch().is_some() || !self.keyseq.is_empty() || self.agent.is_some();
         // laststatus 3: one status line for the focused window, under all of them
         let laststatus = self.num(cur, "laststatus");
         // with 0 and a status line at the bottom, the : line and messages take that line's place
