@@ -386,7 +386,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys(); readHooks() }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.view === "file" ? win.closeFileTab(win.filePath) : win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
-    Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
+    // Ctrl+\: in a file the split editor (the latest other open file beside it, or closed again); on a page the details
+    Shortcut { sequence: "Ctrl+\\"; onActivated: { if (win.view !== "file") { win.detailsShown = !win.detailsShown; return } if (win.sideFile) { win.sideFile = ""; return } const o = win.fileTabs.filter(p => p !== win.filePath); win.sideFile = o.length ? o[o.length - 1] : win.filePath } }
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
     // undo / redo across blocks (the engine); inside a block being typed in, its own undo comes first
