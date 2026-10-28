@@ -377,6 +377,6 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 10. [ ] Panel at the bottom with tabs: Terminal, Problems (all files), Output
 11. [ ] Multi-cursor: Alt click adds a cursor, Ctrl Alt Up/Down, column select (Shift Alt drag)
 12. [ ] Keyboard shortcuts page in Settings (searchable list of every key, rebind)
-13. [ ] Zen mode (Ctrl K Z), breadcrumbs with symbol, minimap toggle
-14. [ ] Tasks: run a project command (cargo build / npm run …) from the palette, its output in the panel; problems from it
+13. [~] Zen mode (Ctrl K Z, Esc leaves) done; left: breadcrumbs with the symbol, a minimap toggle
+14. [~] Tasks: Cargo, npm scripts and make targets found and run from the palette in the shell drawer — done; left: their problems into the problems list
 15. [ ] Debug: later (DAP) — planned only

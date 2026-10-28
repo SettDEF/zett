@@ -397,6 +397,20 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const p = win.pages[app.current] ?? {}
         if (!p.path || !app.shareItems(p.path)) win.note("the share sheet is not installed (~/.scripts/apps/share/share)")
     }
+    // the project's tasks, as VS Code finds them: Cargo, npm scripts, make targets; run in the shell drawer
+    function projectTasks() {
+        const out = [], rd = f => app.readFile(app.dir + "/" + f)
+        if (/^\[(package|workspace)\]/m.test(rd("Cargo.toml"))) for (const c of ["build", "test", "run", "clippy", "check"]) out.push(`cargo ${c}`)
+        try { const pj = JSON.parse(rd("package.json")); for (const s of Object.keys(pj.scripts ?? {})) out.push(`npm run ${s}`) } catch (e) {}
+        for (const l of rd("Makefile").split("\n")) { const m = /^([A-Za-z][\w-]*):(?!=)/.exec(l); if (m) out.push(`make ${m[1]}`) }   // Qt's JS has no matchAll
+        return out
+    }
+    function runTask(cmd) { win.drawerShown = true; drawer.run(cmd) }
+    // zen: only the editor or page; again (or Esc) brings the rest back
+    property bool zen: false
+    onZenChanged: { sidebarHidden = zen; if (zen) detailsShown = false }
+    Shortcut { sequence: "Ctrl+K, Z"; onActivated: win.zen = !win.zen }
+    Shortcut { enabled: win.zen; sequence: "Escape"; onActivated: win.zen = false }
     // every command: the window's own, init.lua's hooks, the engine's; the palette and Settings > Keyboard Shortcuts show it
     function paletteEntries() {
         const own = [
@@ -418,8 +432,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "undo", name: "Undo", desc: "the last change, across blocks", keys: "Ctrl Z", run: () => { if (!app.undo()) win.note("nothing to undo") } },
             { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
             { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
-            { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" }
-        ].concat(win.hooks.palette.map(h => ({ icon: "extension", name: h.name, desc: (h.desc ?? "") + "  ·  init.lua", keys: h.keys ?? "", run: () => win.runHook(h.cmd) })))
+            { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" },
+            { icon: "commit", name: "Source Control", desc: "changes, stage, commit", keys: "Ctrl ⇧ G", run: () => { win.sideMode = "git"; win.sidebarHidden = false } },
+            { icon: "center_focus_strong", name: "Zen mode", desc: "only the editor", keys: "Ctrl K Z", run: () => win.zen = !win.zen },
+            { icon: "arrow_forward", name: "Go to definition", desc: "the language server", keys: "F12", run: () => fileView.ask("definition", fileView.cursorPos()) },
+            { icon: "link", name: "Find references", desc: "a list under the editor", keys: "⇧ F12", run: () => fileView.ask("references", fileView.cursorPos()) },
+            { icon: "data_object", name: "Go to symbol in file", desc: "", keys: "Ctrl ⇧ O", run: () => fileView.ask("symbols", 0) },
+            { icon: "format_align_left", name: "Format document", desc: "the language server", keys: "⇧ Alt F", run: () => fileView.ask("format", 0) }
+        ].concat(win.projectTasks().map(c => ({ icon: "play_arrow", name: `Run task: ${c}`, desc: "in the shell drawer", keys: "", run: () => win.runTask(c) }))).concat(win.hooks.palette.map(h => ({ icon: "extension", name: h.name, desc: (h.desc ?? "") + "  ·  init.lua", keys: h.keys ?? "", run: () => win.runHook(h.cmd) })))
         let binds = []
         try { binds = JSON.parse(app.bindingList()).bindings || [] } catch (e) {}
         const keyOf = {}
@@ -738,6 +758,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
+            if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
             if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
             if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:")) {

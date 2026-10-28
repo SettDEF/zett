@@ -75,6 +75,7 @@ ColumnLayout {
     }
     onJumpsChanged: if (app.shot.length && jumps.length) console.log("zett-probe: jumps " + JSON.stringify(jumps.map(j => j.name ?? j.line)))
     // the cursor to a 0-based line and column (search results, problems)
+    function cursorPos() { return ed.cursorPosition }
     function goTo(line, col) { ed.cursorPosition = posOf(line, col); ed.forceActiveFocus() }
     Timer { id: noteT; interval: 1800; onTriggered: fv.note = "" }
 

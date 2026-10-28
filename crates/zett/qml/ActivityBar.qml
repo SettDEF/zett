@@ -9,6 +9,7 @@ Rectangle {
     required property var t
     Layout.fillHeight: true
     implicitWidth: 52
+    visible: !win.zen
     color: "transparent"
 
     function pick(mode) { win.sideMode = win.sideMode === mode ? "all" : mode; win.setPref("sideMode", win.sideMode); win.sidebarHidden = false }
