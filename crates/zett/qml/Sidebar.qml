@@ -32,21 +32,59 @@ Rectangle {
     ColumnLayout {
         anchors { fill: parent; margins: 12; topMargin: 16 }
         spacing: 4
-        RowLayout {
-            Layout.leftMargin: 6
-            Layout.bottomMargin: 12
-            spacing: 10
-            Rectangle {
-                implicitWidth: 34; implicitHeight: 34; radius: 10
-                color: t.accent
-                Text { anchors.centerIn: parent; text: "z"; color: t.onAccent; font.family: t.sans; font.pixelSize: 20; font.weight: Font.Bold }
-            }
+        // the header: a card with the workspace (its initial, name, folder) and its state as soft chips
+        Rectangle {
+            id: hdr
+            Layout.fillWidth: true
+            Layout.bottomMargin: 10
+            readonly property bool code: win.sideMode === "files" || win.sideMode === "git"
+            readonly property string name: code ? app.dir.slice(app.dir.lastIndexOf("/") + 1) : "zett"
+            readonly property int changed: win.files.filter(x => !x.dir && x.git.length > 0).length
+            implicitHeight: hdrCol.implicitHeight + 24
+            radius: 18
+            color: t.card
+            border.width: 1; border.color: Qt.alpha(t.rule, 0.25)
             ColumnLayout {
-                spacing: 0
-                // Explorer: the folder, as an editor names it; otherwise zett and its pages
-                readonly property bool code: win.sideMode === "files"
-                Text { text: parent.code ? app.dir.slice(app.dir.lastIndexOf("/") + 1) : "zett"; color: t.text; font.family: t.sans; font.pixelSize: 17; font.weight: Font.DemiBold }
-                Text { text: parent.code ? `${win.files.filter(x => !x.dir).length} files${win.gitBranch ? "  ·  " + win.gitBranch : ""}` : `${win.pages.length} pages`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                id: hdrCol
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+                spacing: 10
+                RowLayout {
+                    spacing: 10
+                    Rectangle {
+                        implicitWidth: 36; implicitHeight: 36; radius: 12
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: t.accent }
+                            GradientStop { position: 1; color: Qt.darker(t.accent, 1.25) }
+                        }
+                        Text { anchors.centerIn: parent; text: hdr.name.slice(0, 1).toUpperCase(); color: t.onAccent; font.family: t.sans; font.pixelSize: 18; font.weight: Font.Bold }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 1
+                        Text { Layout.fillWidth: true; text: hdr.name; elide: Text.ElideRight; color: t.text; font.family: t.sans; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Text { Layout.fillWidth: true; text: app.dir.replace(win.homeDir, "~"); elide: Text.ElideLeft; color: t.faint; font.family: t.mono; font.pixelSize: 10 }
+                    }
+                }
+                // state chips: one line, the same height, each an icon and a number or a name
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: (hdr.code
+                            ? [[win.gitBranch ? "commit" : "", win.gitBranch], ["draft", `${win.files.filter(x => !x.dir).length} files`], [hdr.changed ? "edit" : "", hdr.changed ? `${hdr.changed} changed` : ""]]
+                            : [["description", `${win.pages.length} pages`], ["sell", win.tagList.length ? `${win.tagList.length} tags` : ""]]).filter(c => c[1])
+                        delegate: Rectangle {
+                            required property var modelData
+                            implicitWidth: chipRow.implicitWidth + 16; implicitHeight: 22; radius: 11
+                            color: Qt.alpha(modelData[0] === "edit" ? t.accent : t.text, modelData[0] === "edit" ? 0.14 : 0.06)
+                            Row {
+                                id: chipRow; anchors.centerIn: parent; spacing: 4
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData[0]; color: modelData[0] === "edit" ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 13 }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData[1]; color: modelData[0] === "edit" ? t.accent : t.dim; font.family: t.mono; font.pixelSize: 10 }
+                            }
+                        }
+                    }
+                }
             }
         }
         // search: opens quick open

@@ -299,6 +299,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     // a file: a .md page opens as a page, a folder folds, anything else in the file view
     property string filePath: ""
     readonly property var fileEditor: fileView   // the status bar reads the editor's cursor and problems
+    readonly property string homeDir: app.env("HOME")
     property string fileText: ""
     // a file opened in the editor at a 0-based line and column
     function openFileAt(x, line, col) { openFile(x); Qt.callLater(() => fileView.goTo(line, col)) }
@@ -768,6 +769,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
             if (app.shotEngine === "acttip") { activityBar.tipTest = true; grabLater.start(); return }
+            if (app.shotEngine === "explorer") { win.sideMode = "files"; grabLater.start(); return }
             if (app.shotEngine === "newfile") { sidebar.newKind = "file"; sidebar.create("made/new.rs"); sidebar.newKind = "folder"; sidebar.create("emptydir"); claudeShot.start(); return }
             if (app.shotEngine === "problems-panel") { win.drawerShown = true; drawer.tab = "problems"; drawer.run("printf 'error[E0308]: mismatched types\\n  --> src/main.rs:2:5\\n'"); probT.start(); return }
             if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
