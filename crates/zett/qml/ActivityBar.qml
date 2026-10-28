@@ -16,7 +16,7 @@ Rectangle {
         { icon: "description", tip: "Pages", on: win.sideMode === "pages", run: () => pick("pages") },
         { icon: "folder_open", tip: "Files", on: win.sideMode === "files", run: () => pick("files") },
         { icon: "search", tip: "Search everything  Ctrl ⇧ F", on: win.view === "search", run: () => win.openSearch() },
-        { icon: "wb_sunny", tip: "Today  Ctrl ⇧ D", on: win.view === "today", run: () => win.view = "today" },
+        { icon: "home", tip: "Home  Ctrl ⇧ D", on: win.view === "today", run: () => win.view = "today" },
         { icon: "toc", tip: "Outline and links  Ctrl \\", on: win.detailsShown, run: () => win.detailsShown = !win.detailsShown },
         { icon: "smart_toy", tip: "Claude  Ctrl ⇧ A", on: win.claudeShown, run: () => win.claudeShown = !win.claudeShown },
         { icon: "terminal", tip: "Shell  Ctrl `", on: win.drawerShown, run: () => win.toggleDrawer() }

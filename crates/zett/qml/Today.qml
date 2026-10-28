@@ -16,6 +16,7 @@ Flickable {
     readonly property string iso: Qt.formatDate(new Date(), "yyyy-MM-dd")
     readonly property var recent: win.pages.map((p, i) => ({ p, i })).filter(o => o.p.modified > 0).sort((a, b) => b.p.modified - a.p.modified).slice(0, 6)
     readonly property var todos: { win.pages; win.blocks; try { return JSON.parse(app.todos()) } catch (e) { return [] } }
+    readonly property var changed: win.files.filter(f => !f.dir && (f.git ?? "").trim().length > 0)
     readonly property int journal: win.pages.findIndex(p => p.title === iso)
     function ago(s) {
         const d = Date.now() / 1000 - s
@@ -70,7 +71,7 @@ Flickable {
         width: Math.min(760, today.width - 48)
         spacing: 14
         Text { text: Qt.formatDate(new Date(), "dddd, d MMMM"); color: t.text; font.family: t.sans; font.pixelSize: 30; font.weight: Font.Bold }
-        Text { Layout.topMargin: -8; text: `${win.pages.length} pages  ·  ${today.todos.length} open to-dos`; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
+        Text { Layout.topMargin: -8; text: `${win.pages.length} pages  ·  ${win.files.filter(f => !f.dir).length} files  ·  ${today.changed.length} changed  ·  ${today.todos.length} open to-dos`; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
         GridLayout {
             Layout.fillWidth: true
             columns: today.width > 720 ? 2 : 1
@@ -97,6 +98,16 @@ Flickable {
                 Repeater {
                     model: today.recent
                     delegate: Row2 { required property var modelData; icon: "description"; label: modelData.p.title || "Untitled"; side: today.ago(modelData.p.modified); onClicked: win.openPage(modelData.i) }
+                }
+            }
+            // the code side: files git says changed, a click opens them in the editor
+            Card {
+                icon: "difference"; title: "Changed files"; extra: today.changed.length ? `${today.changed.length}` : ""
+                Layout.alignment: Qt.AlignTop
+                Text { visible: today.changed.length === 0; text: "Nothing changed since the last commit"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+                Repeater {
+                    model: today.changed.slice(0, 10)
+                    delegate: Row2 { required property var modelData; icon: modelData.git.includes("?") ? "note_add" : modelData.git.includes("D") ? "delete" : "edit_document"; label: modelData.rel; side: modelData.git; onClicked: win.openFile(modelData) }
                 }
             }
         }
