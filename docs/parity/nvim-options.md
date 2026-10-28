@@ -1,8 +1,8 @@
 # Neovim's options in zett
 
-Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-279 ✓ do something in zett, 81 — decided against (why in the last column), 14 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+293 ✓ do something in zett, 81 — decided against (why in the last column), 0 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does | |
 |---|---|---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `autoread` | ar | boolean | buf | `true` | autom. read file when changed outside of Vim |  |
 | ✓ | `autowrite` | aw | boolean | global | `false` | automatically write file if changed |  |
 | ✓ | `autowriteall` | awa | boolean | global | `false` | as 'autowrite', but works with more commands |  |
-| ◐ | `background` | bg | string | global | `dark` | "dark" or "light", used for highlight colors |  |
+| ✓ | `background` | bg | string | global | `dark` | "dark" or "light", used for highlight colors |  |
 | ✓ | `backspace` | bs | string | global | `indent,eol,start` | how backspace works at start of line |  |
 | ✓ | `backup` | bk | boolean | global | `false` | keep backup file after overwriting a file |  |
 | ✓ | `backupcopy` | bkc | string | buf | `auto` | make backup as a copy, don't rename the file |  |
@@ -74,7 +74,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `cursorlineopt` | culopt | string | win | `both` | settings for 'cursorline' |  |
 | — | `debug` |  | string | global | `` | set to "msg" to see all error messages | zett never hides an error: every one goes to the messages (:messages) |
 | ✓ | `define` | def | string | buf | `` | pattern to be used to find a macro definition |  |
-| ◐ | `delcombine` | deco | boolean | global | `false` | delete combining characters on their own |  |
+| ✓ | `delcombine` | deco | boolean | global | `false` | delete combining characters on their own |  |
 | ✓ | `dictionary` | dict | string | buf | `` | list of file names used for keyword completion |  |
 | ✓ | `diff` |  | boolean | win | `false` | use diff mode for the current window |  |
 | — | `diffanchors` | dia | string | buf | `` | list of {address} to force anchoring of a diff | zett's diff engine (similar) aligns by itself; no anchors |
@@ -82,7 +82,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `diffopt` | dip | string | global | `internal,filler,closeoff,indent-heuristic,inline:char,linematch:40` | options for using diff mode |  |
 | ✓ | `digraph` | dg | boolean | global | `false` | enable the entering of digraphs in Insert mode |  |
 | — | `directory` | dir | string | global | `/home/caesar/.local/state/nvim/swap//` | list of directory names for the swap file | no swap files: every change is kept in the undo history on disk (time travel) |
-| ◐ | `display` | dy | string | global | `lastline` | list of flags for how to display text |  |
+| ✓ | `display` | dy | string | global | `lastline` | list of flags for how to display text |  |
 | ✓ | `eadirection` | ead | string | global | `both` | in which direction 'equalalways' works |  |
 | ✓ | `edcompatible` | ed | boolean | global | `false` |  |  |
 | — | `emoji` | emo | boolean | global | `true` |  | how wide a character shows is the terminal's to say |
@@ -105,7 +105,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `fileignorecase` | fic | boolean | global | `false` | ignore case when using file names |  |
 | ✓ | `filetype` | ft | string | buf | `` | type of file, used for autocommands |  |
 | ✓ | `fillchars` | fcs | string | win | `` | characters to use for displaying special items |  |
-| ◐ | `findfunc` | ffu | string | buf | `` | function to be called for the \|:find\| command |  |
+| ✓ | `findfunc` | ffu | string | buf | `` | function to be called for the \|:find\| command |  |
 | ✓ | `fixendofline` | fixeol | boolean | buf | `true` | make sure last line in file has <EOL> |  |
 | ✓ | `foldclose` | fcl | string | global | `` | close a fold when the cursor leaves it |  |
 | ✓ | `foldcolumn` | fdc | string | win | `0` | width of the column used to indicate folds |  |
@@ -121,7 +121,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `foldopen` | fdo | string | global | `block,hor,mark,percent,quickfix,search,tag,undo` | for which commands a fold will be opened |  |
 | ✓ | `foldtext` | fdt | string | win | `foldtext()` | expression used to display for a closed fold |  |
 | ✓ | `formatexpr` | fex | string | buf | `` | expression used with "gq" command |  |
-| ◐ | `formatlistpat` | flp | string | buf | `^\s*\d\+[\]:.)}\t ]\s*` | pattern used to recognize a list header |  |
+| ✓ | `formatlistpat` | flp | string | buf | `^\s*\d\+[\]:.)}\t ]\s*` | pattern used to recognize a list header |  |
 | ✓ | `formatoptions` | fo | string | buf | `tcqj` | how automatic formatting is to be done |  |
 | ✓ | `formatprg` | fp | string | buf | `` | name of external program used with "gq" command |  |
 | ✓ | `fsync` | fs | boolean | buf | `true` | whether to invoke fsync() after file write |  |
@@ -234,7 +234,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `pummaxwidth` | pmw | number | global | `0` |  |  |
 | ✓ | `pumwidth` | pw | number | global | `15` | minimum width of the popup menu |  |
 | — | `pyxversion` | pyx | number | global | `3` | Python version used for pyx* commands | no Python: zett's scripting is Lua (vim.*, and Vimscript translated to it) |
-| ◐ | `quickfixtextfunc` | qftf | string | global | `` |  |  |
+| ✓ | `quickfixtextfunc` | qftf | string | global | `` |  |  |
 | ✓ | `quoteescape` | qe | string | buf | `\` | escape characters used in a string |  |
 | ✓ | `readonly` | ro | boolean | buf | `false` | disallow writing the buffer |  |
 | — | `redrawdebug` | rdb | string | global | `` |  | Vim's redraw debugging |
@@ -259,7 +259,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `secure` |  | boolean | global | `false` | secure mode for reading .vimrc in current dir |  |
 | ✓ | `selection` | sel | string | global | `inclusive` | what type of selection to use |  |
 | — | `selectmode` | slm | string | global | `` | when to use Select mode instead of Visual mode | Select mode: zett has none (a selection is visual) |
-| ◐ | `sessionoptions` | ssop | string | global | `blank,buffers,curdir,folds,help,tabpages,winsize,terminal` | options for \|:mksession\| |  |
+| ✓ | `sessionoptions` | ssop | string | global | `blank,buffers,curdir,folds,help,tabpages,winsize,terminal` | options for \|:mksession\| |  |
 | — | `shada` | sd | string | global | `!,'100,<50,s10,h,r/tmp/,r/private/` | use \|shada\| file upon startup and exiting | no ShaDa file: history, marks and registers live in zett's own state folder |
 | — | `shadafile` | sdf | string | global | `` |  | no ShaDa file: history, marks and registers live in zett's own state folder |
 | ✓ | `shell` | sh | string | global | `/bin/zsh` | name of shell to use for external commands |  |
@@ -296,7 +296,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `spelloptions` | spo | string | buf | `` | options for spell checking |  |
 | ✓ | `spellsuggest` | sps | string | global | `best` | method(s) used to suggest spelling corrections |  |
 | ✓ | `splitbelow` | sb | boolean | global | `false` | new window from split is below the current one |  |
-| ◐ | `splitkeep` | spk | string | global | `cursor` | determines scroll behavior for split windows |  |
+| ✓ | `splitkeep` | spk | string | global | `cursor` | determines scroll behavior for split windows |  |
 | ✓ | `splitright` | spr | boolean | global | `false` | new window is put right of the current one |  |
 | ✓ | `startofline` | sol | boolean | global | `false` | commands move cursor to first non-blank in line |  |
 | ✓ | `statuscolumn` | stc | string | win | `` | custom format for the status column |  |
@@ -313,7 +313,7 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `tabstop` | ts | number | buf | `8` | number of columns between two tab stops |  |
 | — | `tagbsearch` | tbs | boolean | global | `true` | use binary searching in tags files | zett reads tags files whole; binary or linear search gives the same matches |
 | ✓ | `tagcase` | tc | string | buf | `followic` | how to handle case when searching in tags files |  |
-| ◐ | `tagfunc` | tfu | string | buf | `` | function to get list of tag matches |  |
+| ✓ | `tagfunc` | tfu | string | buf | `` | function to get list of tag matches |  |
 | ✓ | `taglength` | tl | number | global | `0` | number of significant characters for a tag |  |
 | ✓ | `tagrelative` | tr | boolean | global | `true` | file names in tag file are relative |  |
 | ✓ | `tags` | tag | string | buf | `./tags;,tags` | list of file names used by the tag command |  |
@@ -340,16 +340,16 @@ Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `undodir` | udir | string | global | `/home/caesar/.local/state/nvim/undo//` | where to store undo files |  |
 | ✓ | `undofile` | udf | boolean | buf | `false` | save undo information in a file |  |
 | ✓ | `undolevels` | ul | number | buf | `1000` | maximum number of changes that can be undone |  |
-| ◐ | `undoreload` | ur | number | global | `10000` | max nr of lines to save for undo on a buffer reload |  |
+| ✓ | `undoreload` | ur | number | global | `10000` | max nr of lines to save for undo on a buffer reload |  |
 | — | `updatecount` | uc | number | global | `200` | after this many characters flush swap file | no swap files: every change is kept in the undo history on disk (time travel) |
 | ✓ | `updatetime` | ut | number | global | `4000` | after this many milliseconds flush swap file |  |
-| ◐ | `varsofttabstop` | vsts | string | buf | `` | a list of number of columns between soft tab stops |  |
-| ◐ | `vartabstop` | vts | string | buf | `` | a list of number of columns between tab stops |  |
+| ✓ | `varsofttabstop` | vsts | string | buf | `` | a list of number of columns between soft tab stops |  |
+| ✓ | `vartabstop` | vts | string | buf | `` | a list of number of columns between tab stops |  |
 | ✓ | `verbose` | vbs | number | global | `0` | give informative messages |  |
 | ✓ | `verbosefile` | vfile | string | global | `` | file to write messages in |  |
 | ✓ | `viewdir` | vdir | string | global | `/home/caesar/.local/state/nvim/view//` | directory where to store files with :mkview |  |
-| ◐ | `viewoptions` | vop | string | global | `folds,cursor,curdir` | specifies what to save for :mkview |  |
-| ◐ | `virtualedit` | ve | string | win | `` | when to use virtual editing |  |
+| ✓ | `viewoptions` | vop | string | global | `folds,cursor,curdir` | specifies what to save for :mkview |  |
+| ✓ | `virtualedit` | ve | string | win | `` | when to use virtual editing |  |
 | ✓ | `visualbell` | vb | boolean | global | `false` | use visual bell instead of beeping |  |
 | ✓ | `warn` |  | boolean | global | `true` | warn for shell command when buffer was changed |  |
 | ✓ | `whichwrap` | ww | string | global | `b,s` | allow specified keys to cross line boundaries |  |

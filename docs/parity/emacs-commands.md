@@ -1,6 +1,6 @@
 # Emacs's commands
 
-Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 All 3163 interactive commands of a plain Emacs (`emacs -Q`), by their package's prefix. ✓ zett has it under
 the same name. Most are packages (mail, games, modes for other languages): zett's answer to many is a

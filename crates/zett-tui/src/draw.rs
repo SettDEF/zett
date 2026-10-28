@@ -516,6 +516,7 @@ impl App {
         // where it was and the cursor moves into view instead (cursor: the view follows the cursor)
         let resized = WIN_H.with(|m| m.borrow_mut().insert(self.drawing_win, height).is_some_and(|h| h != height));
         let spk = self.setting(di, "splitkeep");
+        let dy = self.setting(di, "display");
         let d = &mut self.docs[di];
         if resized && d.top != was && (spk == "screen" || spk == "topline") {
             d.top = was;
@@ -1023,6 +1024,24 @@ impl App {
                 out.push(finish(spans));
             }
         }
+        // display: the last line did not fit (wrapped rows left over): lastline puts @@@ at the end of
+        // the last row, truncate the whole last row as @@@, neither shows "@" there (as Vim)
+        if !virt.is_empty() && !out.is_empty() {
+            let has = |f: &str| dy.split(',').any(|o| o == f);
+            let at = hl::hl("NonText");
+            let last = out.len() - 1;
+            if has("truncate") {
+                out[last] = Line::from(Span::styled("@@@", at));
+            } else if has("lastline") {
+                let w = a.width as usize;
+                let text: String = out[last].spans.iter().map(|s| s.content.as_ref()).collect();
+                let keep: String = text.chars().take(w.saturating_sub(3)).collect();
+                let pad = w.saturating_sub(3).saturating_sub(keep.chars().count());
+                out[last] = Line::from(vec![Span::raw(keep), Span::raw(" ".repeat(pad)), Span::styled("@@@", at)]);
+            } else {
+                out[last] = Line::from(Span::styled("@", at));
+            }
+        }
         f.render_widget(Paragraph::new(out), a);
         self.fx_marks.extend(fx_marks);
         if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
@@ -1204,5 +1223,26 @@ mod splitkeep_tests {
         let (top, line) = after_split("cursor");
         assert_eq!(line, 34, "cursor: the cursor stays");
         assert!(top > 0, "and the view scrolled to it");
+    }
+}
+
+#[cfg(test)]
+mod display_tests {
+    fn last_row(dy: &str) -> String {
+        let mut app = crate::App::new(Vec::new());
+        let text = format!("{}{}\n", "a\n".repeat(7), "b".repeat(400));
+        app.docs[app.cur].ed = zett_edit::Editor::from_str(&text);
+        app.command(&format!("set display={dy} nonumber norelativenumber laststatus=0 showtabline=0"));
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(40, 12)).unwrap();
+        term.draw(|f| app.draw(f)).unwrap();
+        let b = term.backend().buffer();
+        let rows: Vec<String> = (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>()).collect();
+        rows.into_iter().filter(|r| r.contains('b') || r.contains('@')).last().unwrap_or_default()
+    }
+    #[test]
+    fn display_marks_a_last_line_that_does_not_fit() {
+        assert!(last_row("lastline").trim_end().ends_with("@@@"), "{:?}", last_row("lastline"));
+        assert!(last_row("truncate").starts_with("@@@"), "{:?}", last_row("truncate"));
+        assert_eq!(last_row("").trim_end(), "@");
     }
 }

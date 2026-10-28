@@ -1,6 +1,6 @@
 # Neovim's API (vim.api) and functions (vim.fn)
 
-Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 What a plugin can call. zett's own plugin API is `zett.*` (`:help config`, `:help plugins`); this is what
 it is measured against.

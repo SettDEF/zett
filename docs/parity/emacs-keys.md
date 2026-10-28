@@ -1,6 +1,6 @@
 # Emacs's default keys in zett
 
-Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 466 of 500 bound commands, 34 — decided against (why in the last column), 0 · not yet. ✓ zett has the command under the same name (`M-x`).
 
