@@ -164,6 +164,33 @@ impl Workspace {
         self.tree.get_meta(id).map_err(err)
     }
 
+    // ── page properties (front matter besides the title: icon, tags, status, dates…) ──
+
+    /// A page's properties in their order; kept as one ordered list (`props`, JSON) in its meta.
+    pub fn props(&self, id: BlockId) -> Vec<(String, String)> {
+        let Ok(m) = self.meta(id) else { return Vec::new() };
+        get_str(&m, "props").and_then(|s| serde_json::from_str::<Vec<(String, String)>>(&s).ok()).unwrap_or_default()
+    }
+
+    /// Sets one property (an empty value removes it); a new one goes last.
+    pub fn set_prop(&self, id: BlockId, key: &str, value: &str) -> Result<()> {
+        let mut p = self.props(id);
+        match (p.iter().position(|(k, _)| k == key), value.is_empty()) {
+            (Some(i), true) => { p.remove(i); }
+            (Some(i), false) => p[i].1 = value.to_string(),
+            (None, false) => p.push((key.to_string(), value.to_string())),
+            (None, true) => return Ok(()),
+        }
+        self.set_props(id, &p)
+    }
+
+    /// Replaces all of them (reading a file).
+    pub fn set_props(&self, id: BlockId, p: &[(String, String)]) -> Result<()> {
+        let m = self.meta(id)?;
+        m.insert("props", serde_json::to_string(p).unwrap_or_default()).map_err(err)?;
+        Ok(())
+    }
+
     // ── content ──
 
     pub fn kind(&self, id: BlockId) -> Kind {

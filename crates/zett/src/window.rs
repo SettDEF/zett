@@ -67,6 +67,14 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// the open page's properties (its front matter besides the title): [[key, value]]
+        #[qinvokable]
+        #[cxx_name = "pageProps"]
+        fn page_props(self: &Zett) -> QString;
+        /// sets one (an empty value removes it) and saves
+        #[qinvokable]
+        #[cxx_name = "setProp"]
+        fn set_prop(self: Pin<&mut Zett>, key: &QString, value: &QString);
         /// every block of every page whose text has all words of the query (case-insensitive), pages whose
         /// title has them first: [{page, title, block, kind, text, titleHit}], at most 300
         #[qinvokable]
@@ -1187,5 +1195,25 @@ impl qobject::Zett {
             if out.len() >= 300 { break }
         }
         QString::from(&serde_json::Value::Array(out).to_string())
+    }
+}
+
+// ── the page's properties (icon, tags, status… in its front matter) ──
+impl qobject::Zett {
+    fn page_props(&self) -> QString {
+        let r = self.rust();
+        let (Some(f), Some(p)) = (&r.folder, r.page()) else { return QString::from("[]") };
+        QString::from(&serde_json::to_string(&f.ws.props(p)).unwrap_or_else(|_| "[]".into()))
+    }
+
+    fn set_prop(mut self: Pin<&mut Self>, key: &QString, value: &QString) {
+        {
+            let r = self.as_mut().rust_mut();
+            if let (Some(f), Some(p)) = (r.folder.as_ref(), r.page()) {
+                let _ = f.ws.set_prop(p, key.to_string().trim(), value.to_string().trim());
+            }
+            r.save();
+        }
+        self.publish();
     }
 }

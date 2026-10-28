@@ -725,13 +725,66 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 readonly property real column: Math.min(win.prefs.width ?? 760, width - 96)
 
                 header: Item {
+                    id: pageHead
                     width: list.width
-                    height: titleEdit.implicitHeight + 18
+                    height: headCol.implicitHeight + 18
+                    readonly property string icon: { app.title; app.blocks; try { return (JSON.parse(app.pageProps()).find(p => p[0] === "icon") ?? ["", ""])[1] } catch (e) { return "" } }
+                    property bool picking: false
+                    HoverHandler { id: headHov }
+                    ColumnLayout {
+                    id: headCol
+                    x: (list.width - list.column) / 2
+                    width: list.column
+                    spacing: 6
+                    // the page's icon (its "icon" property); without one, "Add icon" on hover
+                    Text {
+                        visible: pageHead.icon.length > 0
+                        text: pageHead.icon
+                        font.pixelSize: 44
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: pageHead.picking = !pageHead.picking }
+                    }
+                    Rectangle {
+                        visible: pageHead.icon.length === 0
+                        opacity: headHov.hovered || pageHead.picking ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        implicitWidth: aiRow.implicitWidth + 18; implicitHeight: 26; radius: 13
+                        color: aiHov.hovered ? t.raised : "transparent"
+                        RowLayout { id: aiRow; anchors.centerIn: parent; spacing: 4
+                            Text { text: "add_reaction"; color: t.faint; font.family: t.icons; font.pixelSize: 15 }
+                            Text { text: "Add icon"; color: t.faint; font.family: t.sans; font.pixelSize: 12 } }
+                        HoverHandler { id: aiHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: pageHead.picking = !pageHead.picking }
+                    }
+                    // the picker: a few symbols, or none
+                    Flow {
+                        visible: pageHead.picking
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Repeater {
+                            model: ["📝", "📚", "💡", "🎯", "🚀", "🧪", "🛠️", "🐛", "📅", "✅", "🎵", "🎮", "🌀", "⚡", "🔥", "🌱", "🧠", "💬", "📦", "🔒", "🖥️", "🎨", "📈", "⭐"]
+                            delegate: Rectangle {
+                                required property string modelData
+                                width: 36; height: 36; radius: 10
+                                color: ih.hovered ? t.raised : t.card
+                                Text { anchors.centerIn: parent; text: modelData; font.pixelSize: 20 }
+                                HoverHandler { id: ih; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: { app.setProp("icon", modelData); pageHead.picking = false } }
+                            }
+                        }
+                        Rectangle {
+                            visible: pageHead.icon.length > 0
+                            width: rmRow.implicitWidth + 16; height: 36; radius: 10
+                            color: rmh.hovered ? t.raised : t.card
+                            RowLayout { id: rmRow; anchors.centerIn: parent; Text { text: "Remove"; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
+                            HoverHandler { id: rmh; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: { app.setProp("icon", ""); pageHead.picking = false } }
+                        }
+                    }
                     TextInput {
                         id: titleEdit
+                        Layout.fillWidth: true
                         Connections { target: win; function onRenameReqChanged() { titleEdit.forceActiveFocus(); titleEdit.selectAll() } }
-                        x: (list.width - list.column) / 2
-                        width: list.column
                         text: app.title
                         color: t.text
                         font.family: t.sans; font.pixelSize: 34; font.weight: Font.Bold
@@ -739,6 +792,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                         onEditingFinished: if (text !== app.title) app.renamePage(text)
                         Keys.onReturnPressed: { app.renamePage(text); win.focusBlock(0, false) }
                         Keys.onDownPressed: win.focusBlock(0, false)
+                    }
+                    // the page's properties as chips (PageProps.qml)
+                    PageProps { Layout.fillWidth: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
                     }
                 }
 

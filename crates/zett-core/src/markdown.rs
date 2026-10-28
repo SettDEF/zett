@@ -22,7 +22,11 @@ use crate::blocks::{BlockId, Kind, Result, Workspace};
 pub fn to_markdown(ws: &Workspace, page: BlockId) -> String {
     let blocks = ws.children(page);
     let mut out = String::with_capacity(64 + blocks.len() * 48);
-    out += &format!("---\ntitle: {}\n---\n", yaml_str(&ws.text(page)));
+    out += &format!("---\ntitle: {}\n", yaml_str(&ws.text(page)));
+    for (k, v) in ws.props(page) {
+        out += &format!("{k}: {}\n", yaml_str(&v));
+    }
+    out += "---\n";
     let mut prev_list = false;
     for b in blocks {
         let kind = ws.kind(b);
@@ -68,8 +72,9 @@ fn write_item(ws: &Workspace, b: BlockId, depth: usize, out: &mut String) {
 /// Reads Markdown into a new page and returns it. A file without front matter
 /// takes `fallback_title` (the file name, for the folder mirror).
 pub fn from_markdown(ws: &Workspace, md: &str, fallback_title: &str) -> Result<BlockId> {
-    let (title, body) = split_front_matter(md);
+    let (title, props, body) = split_front_matter(md);
     let page = ws.new_page(title.as_deref().unwrap_or(fallback_title))?;
+    ws.set_props(page, &props)?;
     read_blocks(ws, page, body)?;
     Ok(page)
 }
@@ -77,10 +82,11 @@ pub fn from_markdown(ws: &Workspace, md: &str, fallback_title: &str) -> Result<B
 /// Replaces a page's title and blocks with what the Markdown says (after an
 /// edit of its text). The page keeps its id, so links to it stay valid.
 pub fn replace_page(ws: &Workspace, page: BlockId, md: &str) -> Result<()> {
-    let (title, body) = split_front_matter(md);
+    let (title, props, body) = split_front_matter(md);
     if let Some(t) = title {
         ws.set_text(page, &t)?;
     }
+    ws.set_props(page, &props)?;
     for b in ws.children(page) {
         ws.remove(b)?;
     }
@@ -182,14 +188,21 @@ fn longest_run(s: &str, c: char) -> usize {
     best
 }
 
-fn split_front_matter(md: &str) -> (Option<String>, &str) {
-    let Some(rest) = md.strip_prefix("---\n") else { return (None, md) };
+/// The title, the other `key: value` lines (the page's properties, in order), and the body.
+fn split_front_matter(md: &str) -> (Option<String>, Vec<(String, String)>, &str) {
+    let Some(rest) = md.strip_prefix("---\n") else { return (None, Vec::new(), md) };
     let Some(end) = rest.find("\n---\n").map(|e| (e, e + 5)).or_else(|| rest.strip_suffix("\n---").map(|r| (r.len(), rest.len()))) else {
-        return (None, md);
+        return (None, Vec::new(), md);
     };
     let (fm, body) = (&rest[..end.0], &rest[end.1..]);
-    let title = fm.lines().find_map(|l| l.strip_prefix("title:")).map(|v| unyaml_str(v.trim()));
-    (title, body)
+    let mut title = None;
+    let mut props = Vec::new();
+    for l in fm.lines() {
+        let Some((k, v)) = l.split_once(':') else { continue };
+        let (k, v) = (k.trim(), unyaml_str(v.trim()));
+        if k == "title" { title = Some(v) } else if !k.is_empty() && !k.starts_with(' ') { props.push((k.to_string(), v)) }
+    }
+    (title, props, body)
 }
 
 /// Quotes a title only when YAML needs it.
@@ -301,5 +314,22 @@ mod nested_tests {
         assert_eq!(ws.text(ws.children(kids[0])[0]), "grandchild todo");
         assert!(ws.children(top[3]).is_empty(), "a paragraph ends the list: the new list starts at the top");
         assert_eq!(to_markdown(&ws, p), md, "written back the same");
+    }
+}
+
+#[cfg(test)]
+mod props_tests {
+    use super::*;
+
+    #[test]
+    fn page_properties_round_trip() {
+        let md = "---\ntitle: P\nicon: 🌀\nstatus: draft\ntags: zett, ui\n---\n\nBody.\n";
+        let ws = Workspace::new();
+        let p = from_markdown(&ws, md, "P").unwrap();
+        assert_eq!(ws.props(p), vec![("icon".into(), "🌀".into()), ("status".into(), "draft".into()), ("tags".into(), "zett, ui".into())]);
+        assert_eq!(to_markdown(&ws, p), md);
+        ws.set_prop(p, "status", "done").unwrap();
+        ws.set_prop(p, "icon", "").unwrap();
+        assert_eq!(ws.props(p), vec![("status".into(), "done".into()), ("tags".into(), "zett, ui".into())]);
     }
 }
