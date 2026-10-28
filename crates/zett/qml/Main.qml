@@ -584,6 +584,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine === "preview") { win.previewAt("fan-curve", 420, 230); win.previewShown = true; grabLater.start(); return }
             if (app.shotEngine === "linkpick") { win.focusAfter = 0; Qt.callLater(() => { const dd = list.itemAtIndex(0); if (!dd) { Qt.quit(); return } dd.insertForTest("see [[fa"); const before = dd.textForTest(); dd.insertLink(win.linkMatches[0].title); console.log(`zett-probe: link "${before}" -> "${dd.textForTest()}" open=${win.linkFor >= 0}`); Qt.quit() }); return }
             if (app.shotEngine === "linkpop") { const d = list.itemAtIndex(0); win.focusAfter = 0; Qt.callLater(() => { const dd = list.itemAtIndex(0); if (dd) dd.insertForTest(" see [[fa"); grabLater.start() }); return }
             if (app.shotEngine.startsWith("search:")) { win.view = "search"; searchView.query(app.shotEngine.slice(7)); console.log("zett-probe: search hits " + searchView.hits.length); grabLater.start(); return }
@@ -1000,7 +1001,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 color: edit.color
                                 linkColor: t.accent
                                 onLinkActivated: (l) => win.openLink(l)
-                                HoverHandler { cursorShape: shown.hoveredLink ? Qt.PointingHandCursor : Qt.IBeamCursor }
+                                HoverHandler { id: shownHov; cursorShape: shown.hoveredLink ? Qt.PointingHandCursor : Qt.IBeamCursor }
+                                // resting on a [[page]] link: a preview card of it (half a second later)
+                                onHoveredLinkChanged: { if (hoveredLink && !hoveredLink.startsWith("ext:")) { const p = shown.mapToItem(rootRow, shownHov.point.position.x, shownHov.point.position.y); win.previewAt(decodeURIComponent(hoveredLink), p.x, p.y) } else win.previewHide() }
                                 TapHandler { onTapped: if (!shown.hoveredLink) edit.forceActiveFocus() }
                                 z: 2
                             }
@@ -1353,6 +1356,59 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) quick.sel = index }
                     TapHandler { onTapped: quick.choose(index) }
+                }
+            }
+        }
+    }
+
+    // ── link previews: a card of the page under the pointer ──
+    property string previewTitle: ""
+    property real previewX: 0
+    property real previewY: 0
+    property bool previewShown: false
+    function previewAt(title, x, y) { previewTitle = title; previewX = x; previewY = y; previewShown = false; previewLater.restart() }
+    function previewHide() { previewLater.stop(); previewShown = false }
+    Timer { id: previewLater; interval: 450; onTriggered: win.previewShown = win.previewTitle.length > 0 }
+    Rectangle {
+        id: previewCard
+        parent: rootRow
+        z: 120
+        readonly property int pi: win.pages.findIndex(p => (p.title || "").toLowerCase() === win.previewTitle.toLowerCase())
+        readonly property var bs: { if (!win.previewShown || pi < 0) return []; try { return JSON.parse(app.pageBlocks(pi)).slice(0, 7) } catch (e) { return [] } }
+        visible: win.previewShown
+        opacity: visible ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 120 } }
+        width: 320
+        height: pc.implicitHeight + 24
+        x: Math.min(win.previewX + 8, rootRow.width - width - 12)
+        y: win.previewY + height + 28 > rootRow.height ? win.previewY - height - 12 : win.previewY + 18
+        radius: 14
+        color: t.raised
+        border.width: 1; border.color: Qt.alpha(t.rule, 0.6)
+        ColumnLayout {
+            id: pc
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+            spacing: 4
+            RowLayout {
+                spacing: 6
+                Text { text: previewCard.pi >= 0 ? "description" : "note_add"; color: t.accent; font.family: t.icons; font.pixelSize: 16 }
+                Text { Layout.fillWidth: true; text: win.previewTitle; elide: Text.ElideRight; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+            }
+            Text { visible: previewCard.pi < 0; text: "No page yet; a click makes it"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+            Text { visible: previewCard.pi >= 0 && previewCard.bs.length === 0; text: "An empty page"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+            Repeater {
+                model: previewCard.bs
+                delegate: Text {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Layout.leftMargin: (modelData.depth ?? 0) * 12
+                    wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
+                    textFormat: Text.StyledText
+                    text: (modelData.kind === "todo" ? (modelData.checked ? "☑ " : "☐ ") : modelData.kind === "bullet" ? "• " : "") + win.linkify(modelData.text)
+                    color: modelData.kind === "heading" ? t.text : t.dim
+                    font.family: modelData.kind === "code" ? t.mono : t.sans
+                    font.pixelSize: modelData.kind === "heading" ? 13 : 12
+                    font.weight: modelData.kind === "heading" ? Font.DemiBold : Font.Normal
                 }
             }
         }
