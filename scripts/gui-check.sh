@@ -13,7 +13,7 @@ pass=0 fail=0
 
 # the workspace: a page with code, a Rust file, a C file with two errors, a template, a git repository
 printf '# Check\n\nSome text worth selecting here.\n\n```lua\nfor i = 1, 3 do print("hi " .. i) end\n```\n\nEnd.\n' > "$W/check.md"
-{ echo 'fn main() {'; for i in $(seq 1 50); do echo "    println!(\"line $i\");"; done; echo '}'; } > "$W/main.rs"
+{ echo 'fn main() {'; for i in $(seq 1 50); do echo "    println!(\"line $i\");   "; done; echo '}'; } > "$W/main.rs"
 printf 'int main(void) {\n    int x = "text";\n    undefined_fn();\n    return x;\n}\n' > "$W/bad.c"
 mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
 git -C "$W" init -q && git -C "$W" add -A && git -C "$W" -c user.email=c@c -c user.name=c commit -qm init
@@ -45,7 +45,7 @@ check file file:main.rs
 check find filefind:main.rs:line
 check filesearch filesearch:println
 check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' && ! grep -q 'println' '$W/main.rs'"
-check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett'"
+check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett' && ! grep -qE '[[:blank:]]$' '$W/main.rs'"
 check side fileside:main.rs:check.md
 check quick quick:mnrs "grep -q 'quick \[\"file:main.rs' "$OUT/quick.log""
 if command -v clangd >/dev/null; then check problems fileproblems:bad.c; else echo "  skip  problems (no clangd)"; fi

@@ -368,7 +368,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 1. [x] Activity bar without the stripe: the active item is a soft filled pill
 2. [x] Sidebar editor first: Explorer on top (folder name as the header, new file/folder, collapse all), notes things (Today, Templates, Import, Trash) in a folded "Notes" section at the bottom
 3. [x] Quick open files (Ctrl P finds files too, fuzzy), recent files
-4. [ ] Editor: indent guides, bracket pair highlight, word wrap toggle (Alt Z), render whitespace, trim trailing whitespace on save, auto save (setting)
+4. [~] Editor: bracket pair highlight, trim trailing whitespace + final newline on save, auto save (setting) done; left: word wrap (the coloured copy must wrap the same), render whitespace; indent guides skipped (stripes)
 5. [ ] Editor: sticky scroll (the enclosing lines at the top), code folding by indent in files
 6. [ ] LSP: go to definition (F12), find references (Shift F12) as a list, rename symbol (F2), hover, signature help, code actions (Ctrl .), format document (Shift Alt F)
 7. [ ] Outline for files (LSP document symbols, else headings/fn lines) in the details panel; Go to symbol (Ctrl Shift O)

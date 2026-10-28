@@ -33,11 +33,37 @@ ColumnLayout {
         if (win.prefs.formatOnSave && lsp && !savePending) { savePending = true; ask("format", 0); saveWait.restart(); return }
         write()
     }
-    function write() {
+    // `auto`: written by auto save, so the text under the cursor is left as typed (no trimming)
+    function write(auto) {
+        if (!auto && (win.prefs.trimOnSave ?? true)) {
+            let s = ed.text.replace(/[ \t]+$/gm, "")
+            if ((win.prefs.finalNewline ?? true) && s.length && !s.endsWith("\n")) s += "\n"
+            if (s !== ed.text) { const c = ed.cursorPosition; ed.text = s; ed.cursorPosition = Math.min(c, s.length) }
+        }
         if (app.writeFile(win.filePath, ed.text)) { saved = ed.text; note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"
         noteT.restart()
     }
     function revert() { ed.text = saved; shownText = saved }
+    // auto save: a second after the last change (Settings > Editor)
+    Timer { id: autoSave; interval: 1000; onTriggered: if (fv.dirty && win.view === "file") fv.write(true) }
+    // the bracket at (or before) the cursor and its partner, for the pair highlight; [] when none
+    readonly property var bracketPair: {
+        const s = ed.text, p = ed.cursorPosition, open = "([{", close = ")]}"
+        for (const at of [p, p - 1]) {
+            const c = s[at]; if (c === undefined) continue
+            let k = open.indexOf(c), dir = 1
+            if (k < 0) { k = close.indexOf(c); dir = -1 }
+            if (k < 0) continue
+            const me = c, other = dir > 0 ? close[k] : open[k]
+            let depth = 0
+            for (let i = at; i >= 0 && i < s.length && Math.abs(i - at) < 20000; i += dir) {
+                if (s[i] === me) depth++
+                else if (s[i] === other && --depth === 0) return [at, i]
+            }
+            return []
+        }
+        return []
+    }
     function testEdit(s) { ed.forceActiveFocus(); ed.cursorPosition = 0; ed.insert(0, s); save() }
     function testFind(q) { findBar.open("find"); findBar.q.text = q }
     function testProblems() { showProblems = true }
@@ -281,6 +307,16 @@ ColumnLayout {
                 z: 50
                 Text { id: hoverT; x: 12; y: 8; width: Math.min(536, implicitWidth); text: fv.hoverText; wrapMode: Text.Wrap; color: t.text; font.family: t.mono; font.pixelSize: 12 }
             }
+            // the bracket pair at the cursor: two soft rounded boxes
+            Repeater {
+                model: ed.activeFocus ? fv.bracketPair : []
+                delegate: Rectangle {
+                    required property int modelData
+                    readonly property rect r: ed.positionToRectangle(modelData)
+                    x: ed.x + r.x - 1; y: r.y; width: Math.max(8, ed.positionToRectangle(modelData + 1).x - r.x) + 2; height: r.height
+                    radius: 4; color: Qt.alpha(t.accent, 0.22)
+                }
+            }
             // the editor: its own glyphs hidden, its cursor and selection shown over the copy
             TextEdit {
                 id: ed
@@ -300,6 +336,7 @@ ColumnLayout {
                 readonly property int col: cursorPosition - (text.lastIndexOf("\n", cursorPosition - 1) + 1)
                 onTextChanged: {
                     rehl.restart(); lspSync.restart()
+                    if (fv.win.prefs.autoSave === true) autoSave.restart()
                     // completion: after . or :: it opens; while open it follows the word typed
                     const p = cursorPosition, prev = text[p - 1] ?? ""
                     if (fv.lsp && activeFocus && (prev === "." || text.slice(p - 2, p) === "::")) { fv.compFrom = p; lspSync.stop(); fv.app.lspChange(fv.win.filePath, text); fv.ask("completion", p) }
