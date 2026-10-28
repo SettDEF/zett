@@ -206,6 +206,34 @@ Rectangle {
                 }
             }
         }
+        // init.lua's sections (zett.gui.sidebar): a title and rows that run a command
+        Repeater {
+            model: win.hooks.sidebar
+            delegate: ColumnLayout {
+                id: hs
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: 2
+                Text { Layout.leftMargin: 8; Layout.topMargin: 10; text: hs.modelData.title.toUpperCase(); color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                Repeater {
+                    model: hs.modelData.items
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 30; radius: t.rRow
+                        color: hiHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                            spacing: 10
+                            Text { text: modelData.icon ?? "chevron_right"; color: t.faint; font.family: t.icons; font.pixelSize: 16 }
+                            Text { Layout.fillWidth: true; text: modelData.label; elide: Text.ElideRight; color: t.dim; font.family: t.sans; font.pixelSize: 13 }
+                        }
+                        HoverHandler { id: hiHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: win.runHook(modelData.cmd) }
+                    }
+                }
+            }
+        }
         // settings, at the foot of the sidebar
         Rectangle {
             Layout.fillWidth: true

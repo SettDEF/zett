@@ -125,6 +125,31 @@ ApplicationWindow {
     function toggleDrawer() { drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
     property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : "page") : (prefs.start === "page" ? "page" : "today")
+    // ── hooks from init.lua: zett.gui = { status = {...}, sidebar = {...}, palette = {...} } ──
+    //   status:  strings, or functions returning a string or {text, icon} (read every 5 s)
+    //   sidebar: { title = "Links", items = { {label=, icon=, cmd=} } }   (cmd: a command or `lua …`)
+    //   palette: { {name=, desc=, keys=, cmd=} }
+    property var hooks: ({ status: [], sidebar: [], palette: [] })
+    readonly property string hooksLua: `local g = zett.gui or {}
+local function val(x) if type(x) == "function" then local ok, r = pcall(x); if ok then return r end return nil end return x end
+local st, sb, pl = {}, {}, {}
+for _, s in ipairs(g.status or {}) do local v = val(s); if v ~= nil then st[#st + 1] = type(v) == "table" and { text = tostring(v.text or ""), icon = v.icon } or { text = tostring(v) } end end
+for _, sec in ipairs(g.sidebar or {}) do
+  local items = {}
+  for _, it in ipairs(val(sec.items) or {}) do items[#items + 1] = { label = tostring(it.label or it[1] or ""), icon = it.icon, cmd = it.cmd or it[2] } end
+  sb[#sb + 1] = { title = tostring(sec.title or ""), items = items }
+end
+for _, p in ipairs(g.palette or {}) do pl[#pl + 1] = { name = tostring(p.name or p[1] or ""), desc = p.desc, keys = p.keys, cmd = p.cmd or p[2] } end
+return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
+    function readHooks() {
+        let h = {}
+        try { h = JSON.parse(JSON.parse(app.evalLua(hooksLua)).result || "{}") } catch (e) { h = {} }
+        const arr = x => Array.isArray(x) ? x : []    // an empty Lua table comes back as {}
+        hooks = { status: arr(h.status), sidebar: arr(h.sidebar).map(s => ({ title: s.title, items: arr(s.items) })), palette: arr(h.palette) }
+    }
+    function runHook(cmd) { if (cmd) win.applyScript(JSON.parse(app.runCommand(cmd))) }
+    Timer { interval: 5000; running: win.active && win.hooks.status.length > 0; repeat: true; onTriggered: win.readHooks() }
+
     function openPage(i) { win.view = "page"; app.open(i) }
     function openQuick(text) { quickField.text = text; quick.open(); quickField.forceActiveFocus() }
     function jumpToBlock(i) { list.positionViewAtIndex(i, ListView.Beginning); win.focusAfter = i }
@@ -202,7 +227,7 @@ ApplicationWindow {
         if (i === app.current && tabs.length) win.openPage(tabs[Math.min(at, tabs.length - 1)])
     }
     Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
-    Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys() }
+    Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys(); readHooks() }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
@@ -230,7 +255,7 @@ ApplicationWindow {
             { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) },
             { icon: "terminal", name: "Toggle shell drawer", desc: "a command in the workspace", keys: "Ctrl `", run: () => win.toggleDrawer() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" }
-        ]
+        ].concat(win.hooks.palette.map(h => ({ icon: "extension", name: h.name, desc: (h.desc ?? "") + "  ·  init.lua", keys: h.keys ?? "", run: () => win.runHook(h.cmd) })))
         let binds = []
         try { binds = JSON.parse(app.bindingList()).bindings || [] } catch (e) {}
         const keyOf = {}
@@ -422,6 +447,7 @@ ApplicationWindow {
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
+            if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
             if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
@@ -958,6 +984,8 @@ ApplicationWindow {
                     Chip { visible: win.vimMode.length > 0; label: win.vimMode; tint: win.vimMode === "INSERT" ? t.dim : t.accent }
                     Chip { icon: "check_circle"; label: "saved"; tint: t.accent }
                     Chip { icon: "notes"; label: `${win.blocks.length} blocks` }
+                    // init.lua's chips (zett.gui.status)
+                    Repeater { model: win.hooks.status; delegate: Chip { required property var modelData; icon: modelData.icon ?? ""; label: modelData.text } }
                     // the hints take what is left and shorten, so nothing runs past the card
                     Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; elide: Text.ElideLeft; text: "Ctrl P go to  ·  Ctrl \\ details  ·  / block kinds  ·  Esc Vim"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
                     Rectangle {
