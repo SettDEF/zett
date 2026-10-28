@@ -314,12 +314,22 @@ impl App {
                     return self.say(format!("E189: \"{}\" exists (add ! to override)", view.display()));
                 }
                 let c = self.docs[self.cur].ed.cursor();
+                // viewoptions: options/localoptions (setlocal), curdir (lcd), cursor (its line and column)
+                let vop = self.setting(self.cur, "viewoptions");
+                let has = |f: &str| vop.split(',').any(|o| o == f);
                 let mut lines = vec!["\" zett view".to_string()];
-                for (k, v) in self.docs[self.cur].local.iter() {
-                    lines.push(format!("setlocal {k}={}", v.replace(' ', "\\ ")));
+                if has("curdir") {
+                    lines.push(format!("lcd {}", self.root.display().to_string().replace(' ', "\\ ")));
                 }
-                lines.push(format!("{}", c.line + 1));
-                lines.push(format!("normal! 0{}", if c.col > 0 { format!("{}l", c.col) } else { String::new() }));
+                if has("options") || has("localoptions") {
+                    for (k, v) in self.docs[self.cur].local.iter() {
+                        lines.push(format!("setlocal {k}={}", v.replace(' ', "\\ ")));
+                    }
+                }
+                if has("cursor") {
+                    lines.push(format!("{}", c.line + 1));
+                    lines.push(format!("normal! 0{}", if c.col > 0 { format!("{}l", c.col) } else { String::new() }));
+                }
                 let _ = std::fs::create_dir_all(view.parent().unwrap_or(Path::new(".")));
                 if let Err(e) = std::fs::write(&view, lines.join("\n") + "\n") {
                     self.say(format!("E190: Cannot open \"{}\" for writing: {e}", view.display()));
@@ -333,10 +343,21 @@ impl App {
     /// line), and which one has the focus.
     fn session_text(&self) -> String {
         let mut out = vec!["\" zett session: :source it (or zett -S) to come back here".to_string()];
-        out.push(format!("cd {}", self.root.display().to_string().replace(' ', "\\ ")));
+        // sessionoptions: what goes in (curdir, buffers; options and globals add the :set ones and g:Vars)
+        let ssop = self.setting(self.cur, "sessionoptions");
+        let has = |f: &str| ssop.split(',').any(|o| o == f);
+        if has("curdir") || has("sesdir") {
+            out.push(format!("cd {}", self.root.display().to_string().replace(' ', "\\ ")));
+        }
+        if has("options") || has("localoptions") {
+            let d = &self.docs[self.cur];
+            let mut opts: Vec<_> = d.local.iter().collect();
+            opts.sort();
+            for (k, v) in opts { out.push(format!("set {k}={}", v.replace(' ', "\\ "))) }
+        }
         out.push("only".into());
         out.push("set splitbelow splitright".into());
-        for d in &self.docs {
+        for d in self.docs.iter().filter(|_| has("buffers")) {
             if let Some(p) = d.abs_path() {
                 out.push(format!("badd {}", p.display().to_string().replace(' ', "\\ ")));
             }
@@ -823,5 +844,30 @@ mod background_tests {
         app.command("set background=light");
         assert_eq!(app.setting(app.cur, "shiftwidth"), "3", "the scheme ran again with the light side");
         let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
+#[cfg(test)]
+mod ssop_tests {
+    #[test]
+    fn sessionoptions_and_viewoptions_choose_what_is_saved() {
+        let d = std::env::temp_dir().join(format!("zett-ssop-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("a.txt"), "one\ntwo\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.root = d.clone();
+        app.open(&d.join("a.txt"));
+        app.command("set sessionoptions=curdir");
+        let s = app.session_text();
+        assert!(s.contains("cd ") && !s.contains("badd"), "{s}");
+        app.command("set sessionoptions=buffers");
+        let s = app.session_text();
+        assert!(!s.contains("\ncd ") && s.contains("badd"), "{s}");
+        app.command(&format!("set viewdir={}", d.join("v").display()));
+        app.command("set viewoptions=folds");
+        app.command("mkview");
+        let v = std::fs::read_dir(d.join("v")).unwrap().flatten().next().map(|e| std::fs::read_to_string(e.path()).unwrap()).unwrap();
+        assert!(!v.contains("normal!"), "no cursor without the flag: {v}");
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
