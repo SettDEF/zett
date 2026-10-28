@@ -61,6 +61,21 @@ pub mod qobject {
         #[qinvokable]
         fn files(self: &Zett) -> QString;
         /// a file's text for the file view (at most 1 MB)
+        /// the language server for a file opened / changed in the file editor (one server per language, started once)
+        #[qinvokable]
+        #[cxx_name = "lspOpen"]
+        fn lsp_open(self: Pin<&mut Zett>, path: &QString, text: &QString) -> bool;
+        #[qinvokable]
+        #[cxx_name = "lspChange"]
+        fn lsp_change(self: &Zett, path: &QString, text: &QString);
+        /// completion, hover, definition, references, symbols, format at a 0-based line and column
+        #[qinvokable]
+        #[cxx_name = "lspAsk"]
+        fn lsp_ask(self: &Zett, kind: &QString, path: &QString, line: i32, col: i32);
+        /// what a server said, as JSON: {type: diagnostics|completion|hover|definition|references|symbols|edits|status, …}
+        #[qsignal]
+        #[cxx_name = "lspEvent"]
+        fn lsp_event(self: Pin<&mut Zett>, json: QString);
         #[qinvokable]
         #[cxx_name = "readFile"]
         fn read_file(self: &Zett, path: &QString) -> QString;
@@ -122,11 +137,11 @@ pub mod qobject {
         #[cxx_name = "movePath"]
         fn move_path(self: Pin<&mut Zett>, from: &QString, to_dir: &QString) -> bool;
         /// copies dropped files (file:// URLs, one per line) into a folder of the workspace; how many
-        #[qinvokable]
         /// an image on the clipboard saved into the workspace (assets/paste-TIME.png); its path from the workspace, or ""
         #[qinvokable]
         #[cxx_name = "pasteImage"]
         fn paste_image(self: &Zett) -> QString;
+        #[qinvokable]
         #[cxx_name = "importFiles"]
         fn import_files(self: Pin<&mut Zett>, urls: &QString, to_dir: &QString) -> i32;
         #[qinvokable]
@@ -917,6 +932,33 @@ impl qobject::Zett {
             // reaped on a thread, so no zombie waits for zett to exit
             Ok(mut c) => { std::thread::spawn(move || { let _ = c.wait(); }); true }
             Err(_) => false,
+        }
+    }
+
+    fn lsp_open(self: Pin<&mut Self>, path: &QString, text: &QString) -> bool {
+        use cxx_qt::Threading;
+        let qt = self.qt_thread();
+        let on = move |j: String| { let _ = qt.queue(move |o| o.lsp_event(QString::from(&j))); };
+        crate::lsp::open(std::path::Path::new(&path.to_string()), &text.to_string(), &workspace_dir(), on)
+    }
+
+    fn lsp_change(&self, path: &QString, text: &QString) {
+        let (p, t) = (std::path::PathBuf::from(path.to_string()), text.to_string());
+        crate::lsp::with(&p, |c| c.did_change(&p, &t));
+    }
+
+    fn lsp_ask(&self, kind: &QString, path: &QString, line: i32, col: i32) {
+        let p = std::path::PathBuf::from(path.to_string());
+        let (l, c) = (line.max(0) as usize, col.max(0) as usize);
+        match kind.to_string().as_str() {
+            "completion" => crate::lsp::with(&p, |cl| cl.completion(&p, l, c, None)),
+            "hover" => crate::lsp::with(&p, |cl| cl.hover(&p, l, c)),
+            "definition" => crate::lsp::with(&p, |cl| cl.definition(&p, l, c)),
+            "references" => crate::lsp::with(&p, |cl| cl.references(&p, l, c)),
+            "symbols" => crate::lsp::with(&p, |cl| cl.symbols(&p)),
+            "format" => crate::lsp::with(&p, |cl| cl.format(&p, 4)),
+            "save" => crate::lsp::with(&p, |cl| cl.did_save(&p)),
+            _ => {}
         }
     }
 

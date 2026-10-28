@@ -3,6 +3,7 @@
 //!
 //! A workspace is a folder of Markdown files: `--dir`, $ZETT_DIR, or ~/zett.
 
+mod lsp;
 mod window;
 
 use clap::{CommandFactory, Parser, Subcommand};

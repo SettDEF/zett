@@ -1073,7 +1073,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             readonly property real lineH: edit.contentHeight / Math.max(1, edit.lineCount)
                             readonly property bool folded: codeLines > 15 && !edit.activeFocus && !blockItem.unfolded
                             clip: blockItem.kind === "code"
-                            implicitHeight: special.visible ? special.implicitHeight : folded ? 12 * lineH + 12 + 34 : edit.implicitHeight + (blockItem.kind === "code" ? 24 + (codeLines > 15 ? 30 : 0) : 0)
+                            implicitHeight: special.visible ? special.implicitHeight : folded ? 12 * lineH + 40 + 34 : edit.implicitHeight + (blockItem.kind === "code" ? 52 + (codeLines > 15 ? 30 : 0) : 0)
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
@@ -1376,7 +1376,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             TextEdit {
                                 id: edit
                                 opacity: shown.visible || special.visible || (codeShown.visible && !edit.activeFocus) ? 0 : 1
-                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0; leftMargin: blockItem.kind === "code" ? 48 : 0; bottomMargin: blockItem.kind === "code" && parent.codeLines > 15 ? 42 : (blockItem.kind === "code" ? 12 : 0) }
+                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0; leftMargin: blockItem.kind === "code" ? 48 : 0; topMargin: blockItem.kind === "code" ? 40 : 0; bottomMargin: blockItem.kind === "code" && parent.codeLines > 15 ? 42 : (blockItem.kind === "code" ? 12 : 0) }
                                 text: blockItem.modelData.text
                                 wrapMode: blockItem.kind === "code" ? TextEdit.NoWrap : TextEdit.Wrap   // code: lines as in the coloured copy under it
                                 selectByMouse: true
