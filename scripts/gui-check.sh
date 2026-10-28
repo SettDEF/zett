@@ -23,7 +23,7 @@ echo '// changed' >> "$W/main.rs"
 check() {
     local name=$1 engine=$2 test=${3:-true}
     local png=$OUT/$name.png log=$OUT/$name.log
-    ZETT_DIR=$W QT_QPA_PLATFORM=offscreen ZETT_SHOT=$png ZETT_SHOT_ENGINE=$engine timeout 40 nice -n 19 "$BIN" --gui check.md > "$log" 2>&1
+    ZETT_DIR=$W QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 ZETT_SHOT=$png ZETT_SHOT_ENGINE=$engine timeout 40 nice -n 19 "$BIN" --gui check.md > "$log" 2>&1
     local code=$?
     local why=""
     [ $code -eq 0 ] || why="exit $code"
@@ -47,6 +47,7 @@ check filesearch filesearch:println
 check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' && ! grep -q 'println' '$W/main.rs'"
 check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett'"
 check side fileside:main.rs:check.md
+check quick quick:mnrs "grep -q 'quick \[\"file:main.rs' "$OUT/quick.log""
 if command -v clangd >/dev/null; then check problems fileproblems:bad.c; else echo "  skip  problems (no clangd)"; fi
 echo "$pass passed, $fail failed  (pictures: $OUT, kept only on failure)"
 if [ $fail -gt 0 ]; then trap - EXIT; echo "workspace kept: $W"; exit 1; fi

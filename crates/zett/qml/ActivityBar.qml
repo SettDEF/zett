@@ -26,11 +26,10 @@ Rectangle {
         id: act
         property var item
         implicitWidth: 52; implicitHeight: 46
-        Rectangle { visible: act.item.on; x: 0; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 22; radius: 1.5; color: bar.t.accent }
         Rectangle {
             anchors.centerIn: parent
-            width: 38; height: 38; radius: 12
-            color: act.item.on ? Qt.alpha(bar.t.accent, 0.16) : ah.hovered ? Qt.alpha(bar.t.text, 0.07) : "transparent"
+            width: 40; height: 40; radius: 14
+            color: act.item.on ? Qt.alpha(bar.t.accent, 0.24) : ah.hovered ? Qt.alpha(bar.t.text, 0.07) : "transparent"
             Text { anchors.centerIn: parent; text: act.item.icon; color: act.item.on ? bar.t.accent : ah.hovered ? bar.t.text : bar.t.dim; font.family: bar.t.icons; font.pixelSize: 21 }
         }
         HoverHandler { id: ah; cursorShape: Qt.PointingHandCursor }

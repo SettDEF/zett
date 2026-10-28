@@ -34,7 +34,7 @@ Rectangle {
         Chip { visible: !parent.code; icon: "notes"; label: `${win.blocks.length} blocks` }
         Chip { visible: parent.code && win.gitBranch.length > 0; icon: "commit"; label: win.gitBranch }
         Chip { visible: parent.code && win.fileEditor !== null; icon: win.fileEditor && win.fileEditor.dirty ? "edit" : "check_circle"; label: win.fileEditor && win.fileEditor.dirty ? "unsaved" : "saved"; tint: win.fileEditor && win.fileEditor.dirty ? t.dim : t.accent }
-        Chip { visible: parent.code && win.fileEditor !== null && win.fileEditor.lsp; icon: win.fileEditor && win.fileEditor.errors ? "error" : "check"; label: win.fileEditor ? `${win.fileEditor.errors} ${win.fileEditor.warnings}` : ""; tint: win.fileEditor && win.fileEditor.errors ? t.removed : t.dim }
+        Chip { visible: parent.code && win.fileEditor !== null && win.fileEditor.lsp; icon: win.fileEditor && win.fileEditor.errors ? "error" : "check"; label: !win.fileEditor ? "" : win.fileEditor.errors + win.fileEditor.warnings ? `${win.fileEditor.errors} errors  ${win.fileEditor.warnings} warnings` : "no problems"; tint: win.fileEditor && win.fileEditor.errors ? t.removed : t.dim }
         Chip { visible: parent.code && win.fileEditor !== null; label: win.fileEditor ? `Ln ${win.fileEditor.curLine + 1}, Col ${win.fileEditor.curCol + 1}` : "" }
         Chip { visible: parent.code && win.fileEditor !== null; label: win.fileEditor ? `${win.fileEditor.ext}  ·  ${win.fileEditor.lineCount} lines` : "" }
         // init.lua's chips (zett.gui.status)

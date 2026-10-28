@@ -194,7 +194,7 @@ ApplicationWindow {
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
     // what the sidebar shows, picked in the activity bar: all, pages (Notion-like), files (an explorer)
-    property string sideMode: prefs.sideMode ?? "all"
+    property string sideMode: prefs.sideMode ?? "files"   // editor first: the Explorer
     property bool detailsShown: prefs.details ?? true
     // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
     property bool codeLigatures: prefs.codeLigatures ?? false
@@ -736,6 +736,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine.startsWith("filesearch:")) { win.view = "search"; searchView.scope = "files"; searchView.query(app.shotEngine.slice(11)); claudeShot.start(); return }
             if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
+            if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
             if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:")) {
                 const rel = app.shotEngine.split(":")[1]
@@ -1816,19 +1817,30 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         modal: true
         focus: true
         background: Rectangle { radius: 16; color: t.raised; border.width: 1; border.color: t.rule }
+        // fuzzy: the letters in order; a lower score is better (consecutive letters and a match in the name win)
+        function fuzzy(q, s) {
+            s = s.toLowerCase(); let i = 0, score = 0, last = -1
+            for (const c of q) { const j = s.indexOf(c, i); if (j < 0) return -1; score += last >= 0 && j === last + 1 ? 0 : j - i + 1; last = j; i = j + 1 }
+            return score
+        }
+        // files (open ones first, as an editor's Go to file), then pages; {file|title|create, label, sub}
         readonly property var matches: {
             const q = quickField.text.trim().toLowerCase()
-            const all = win.pages.map(p => p.title)
-            const hit = q.length === 0 ? all : all.filter(tl => tl.toLowerCase().includes(q))
-            const exact = all.some(tl => tl.toLowerCase() === q)
-            return q.length > 0 && !exact ? hit.concat([{ create: quickField.text.trim() }]) : hit
+            const files = win.files.filter(f => !f.dir && !f.path.endsWith(".md")).map(f => ({ file: f.path, label: f.rel.slice(f.rel.lastIndexOf("/") + 1), sub: f.rel.includes("/") ? f.rel.slice(0, f.rel.lastIndexOf("/")) : "", open: win.fileTabs.includes(f.path) }))
+            const pages = win.pages.map(p => ({ title: p.title, label: p.title || "Untitled", sub: "page" }))
+            let all = files.concat(pages)
+            if (q.length) all = all.map(x => ({ x, s: (a => a >= 0 ? a : (b => b >= 0 ? b + 20 : 1e9)(quick.fuzzy(q, (x.sub ? x.sub + "/" : "") + x.label)))(quick.fuzzy(q, x.label)) })).filter(o => o.s < 1e9).sort((a, b) => a.s - b.s).map(o => o.x)
+            else all.sort((a, b) => (b.open ? 1 : 0) - (a.open ? 1 : 0))
+            const exact = pages.some(p => (p.title || "").toLowerCase() === q)
+            return (q.length > 0 && !exact ? all.concat([{ create: quickField.text.trim() }]) : all).slice(0, 200)
         }
         property int sel: 0
         onMatchesChanged: sel = 0
         function choose(i) {
             const m = matches[i]
             if (m === undefined) return
-            app.openTitle(typeof m === "string" ? m : m.create)
+            if (m.file) win.openFile({ path: m.file, rel: m.file })
+            else app.openTitle(m.create ?? m.title)
             quick.close()
         }
         contentItem: ColumnLayout {
@@ -1836,7 +1848,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             TextField {
                 id: quickField
                 Layout.fillWidth: true
-                placeholderText: "Go to a page, or name a new one"
+                placeholderText: "Go to a file or page, or name a new page"
                 font.family: t.sans; font.pixelSize: 16
                 color: t.text
                 placeholderTextColor: t.faint
@@ -1858,11 +1870,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     height: 36
                     radius: 8
                     color: index === quick.sel ? Qt.alpha(t.accent, 0.18) : "transparent"
-                    Text {
-                        anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                        text: typeof modelData === "string" ? modelData : `+  New page “${modelData.create}”`
-                        color: typeof modelData === "string" ? t.text : t.accent
-                        font.family: t.sans; font.pixelSize: 14
+                    RowLayout {
+                        anchors { left: parent.left; right: parent.right; leftMargin: 12; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                        spacing: 10
+                        Text { text: modelData.create !== undefined ? "add" : modelData.file ? "code" : "description"; color: modelData.create !== undefined ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                        Text { text: modelData.create !== undefined ? `New page “${modelData.create}”` : modelData.label; color: modelData.create !== undefined ? t.accent : t.text; font.family: modelData.file ? t.mono : t.sans; font.pixelSize: modelData.file ? 13 : 14 }
+                        Text { Layout.fillWidth: true; text: modelData.sub ?? ""; elide: Text.ElideLeft; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                        Text { visible: !!modelData.open; text: "open"; color: t.accent; font.family: t.sans; font.pixelSize: 11 }
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) quick.sel = index }
                     TapHandler { onTapped: quick.choose(index) }

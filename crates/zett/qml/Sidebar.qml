@@ -31,8 +31,10 @@ Rectangle {
             }
             ColumnLayout {
                 spacing: 0
-                Text { text: "zett"; color: t.text; font.family: t.sans; font.pixelSize: 17; font.weight: Font.DemiBold }
-                Text { text: `${win.pages.length} pages`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                // Explorer: the folder, as an editor names it; otherwise zett and its pages
+                readonly property bool code: win.sideMode === "files"
+                Text { text: parent.code ? app.dir.slice(app.dir.lastIndexOf("/") + 1) : "zett"; color: t.text; font.family: t.sans; font.pixelSize: 17; font.weight: Font.DemiBold }
+                Text { text: parent.code ? `${win.files.filter(x => !x.dir).length} files${win.gitBranch ? "  ·  " + win.gitBranch : ""}` : `${win.pages.length} pages`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
             }
         }
         // search: opens quick open
@@ -46,7 +48,7 @@ Rectangle {
                 anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
                 spacing: 8
                 Text { text: "search"; color: t.dim; font.family: t.icons; font.pixelSize: 18 }
-                Text { Layout.fillWidth: true; text: "Search pages"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+                Text { Layout.fillWidth: true; text: win.sideMode === "files" ? "Go to file" : "Search pages"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
                 Text { text: "Ctrl P"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
             }
             HoverHandler { id: searchHov; cursorShape: Qt.PointingHandCursor }
@@ -55,6 +57,7 @@ Rectangle {
         // places: Today
         Rectangle {
             Layout.fillWidth: true
+            visible: win.sideMode !== "files"
             Layout.bottomMargin: 8
             implicitHeight: 36; radius: t.rRow
             readonly property bool sel: win.view === "today"
@@ -135,6 +138,8 @@ Rectangle {
             property string count
             property bool open: true
             signal toggled
+            property string action: ""      // an icon button at the right (collapse all)
+            signal acted
             Layout.fillWidth: true
             Layout.leftMargin: 8
             Layout.topMargin: 10
@@ -142,10 +147,18 @@ Rectangle {
             Text { text: parent.label; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
             Text { text: parent.count; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
             Item { Layout.fillWidth: true; implicitHeight: 22 }
+            Rectangle {
+                visible: parent.action.length > 0
+                implicitWidth: 24; implicitHeight: 22; radius: 11
+                color: actHov.hovered ? t.raised : "transparent"
+                Text { anchors.centerIn: parent; text: parent.parent.action; color: t.dim; font.family: t.icons; font.pixelSize: 15 }
+                HoverHandler { id: actHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: parent.parent.acted() }
+            }
             TapHandler { onTapped: parent.toggled() }
             HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
-        SectionHead { visible: win.sideMode !== "pages"; label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen }
+        SectionHead { visible: win.sideMode !== "pages"; label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen; action: "unfold_less"; onActed: win.closedDirs = win.files.filter(x => x.dir).map(x => x.rel) }
         ListView {
             id: fileList
             visible: win.filesOpen && win.sideMode !== "pages"
@@ -242,7 +255,8 @@ Rectangle {
         }
         // the foot, as in Notion: templates (templates/*.md become a new page), import, trash
         Repeater {
-            model: [
+            // notes things: not in the Explorer
+            model: win.sideMode === "files" ? [] : [
                 { icon: "auto_awesome_mosaic", label: "Templates", hint: side.templates.length ? `${side.templates.length}` : "", run: () => side.templatesOpen = !side.templatesOpen },
                 { icon: "download", label: "Import", hint: "drop files here", run: () => Qt.openUrlExternally("file://" + app.dir) },
                 { icon: "delete", label: "Trash", hint: "", run: () => Qt.openUrlExternally("trash:///") }
