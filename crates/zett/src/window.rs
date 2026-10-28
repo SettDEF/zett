@@ -137,7 +137,20 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "vimKey"]
         fn vim_key(self: Pin<&mut Zett>, key: &QString) -> QString;
+        /// the drawer: runs a shell command in the workspace on its own thread; output comes as runOutput
+        #[qinvokable]
+        #[cxx_name = "runShell"]
+        fn run_shell(self: Pin<&mut Zett>, id: i32, cmd: &QString) -> bool;
+        /// stops the drawer's running command (and what it started)
+        #[qinvokable]
+        #[cxx_name = "stopShell"]
+        fn stop_shell(self: Pin<&mut Zett>);
+        /// a piece of a command's output; done with its exit code at the end
+        #[qsignal]
+        #[cxx_name = "runOutput"]
+        fn run_output(self: Pin<&mut Zett>, id: i32, chunk: QString, done: bool, code: i32);
     }
+    impl cxx_qt::Threading for Zett {}
 }
 
 use cxx_qt::CxxQtType;
@@ -954,5 +967,51 @@ impl qobject::Zett {
             v
         }).collect();
         QString::from(&serde_json::Value::Array(list).to_string())
+    }
+}
+
+// ── the drawer: shell commands in the workspace, off the UI thread ──
+static RUNNING: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
+
+impl qobject::Zett {
+    fn run_shell(self: Pin<&mut Self>, id: i32, cmd: &QString) -> bool {
+        use cxx_qt::Threading;
+        use std::io::Read;
+        use std::os::unix::process::CommandExt;
+        let (cmd, dir) = (cmd.to_string(), self.dir.to_string());
+        let Ok(mut child) = std::process::Command::new("bash").arg("-c").arg(format!("{cmd} 2>&1"))
+            .current_dir(&dir)
+            .env_remove("ZEIT").env_remove("ZEIT_PANE")   // inside zeit, a child that sees these talks to it
+            .env("TERM", "dumb").env("NO_COLOR", "1")
+            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped())
+            .process_group(0)                             // stop takes the whole group
+            .spawn() else { return false };
+        *RUNNING.lock().unwrap() = Some(child.id());
+        let qt = self.qt_thread();
+        std::thread::spawn(move || {
+            let mut out = child.stdout.take().expect("piped");
+            let mut buf = [0u8; 8192];
+            let mut carry = Vec::new();
+            loop {
+                let n = out.read(&mut buf).unwrap_or(0);
+                if n == 0 { break }
+                carry.extend_from_slice(&buf[..n]);
+                // whole UTF-8 only; the rest waits for the next read
+                let cut = match std::str::from_utf8(&carry) { Ok(_) => carry.len(), Err(e) => e.valid_up_to() };
+                let chunk = String::from_utf8_lossy(&carry[..cut]).to_string();
+                carry.drain(..cut);
+                let _ = qt.queue(move |o| o.run_output(id, QString::from(&chunk), false, 0));
+            }
+            let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+            *RUNNING.lock().unwrap() = None;
+            let _ = qt.queue(move |o| o.run_output(id, QString::default(), true, code));
+        });
+        true
+    }
+
+    fn stop_shell(self: Pin<&mut Self>) {
+        if let Some(pid) = *RUNNING.lock().unwrap() {
+            let _ = std::process::Command::new("kill").arg("--").arg(format!("-{pid}")).status();
+        }
     }
 }

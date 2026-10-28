@@ -121,6 +121,8 @@ ApplicationWindow {
     property bool detailsShown: prefs.details ?? true
     // a second page beside the editor, read-only (SidePage.qml); -1 when none
     property int sidePage: -1
+    property bool drawerShown: false
+    function toggleDrawer() { drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
     property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : "page") : (prefs.start === "page" ? "page" : "today")
     function openPage(i) { win.view = "page"; app.open(i) }
@@ -206,6 +208,7 @@ ApplicationWindow {
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
+    Shortcut { sequence: "Ctrl+`"; onActivated: win.toggleDrawer() }
     // the palette: the window's own actions, then every engine command with its key
     // the page's file into the system share sheet (apps, phone, Telegram…)
     function sharePage() {
@@ -224,6 +227,7 @@ ApplicationWindow {
             { icon: "markdown", name: "Show Markdown", desc: "the file as on disk", keys: "", run: () => win.showSource = !win.showSource },
             { icon: "ios_share", name: "Share page", desc: "the system share sheet", keys: "", run: () => win.sharePage() },
             { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) },
+            { icon: "terminal", name: "Toggle shell drawer", desc: "a command in the workspace", keys: "Ctrl `", run: () => win.toggleDrawer() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" }
         ]
         let binds = []
@@ -301,6 +305,7 @@ ApplicationWindow {
         ] : []
         ctx.show(x, y, row, fmt.concat([
             { icon: "transform", label: "Turn into", sub: win.slashItems.map(s => ({ icon: { paragraph: "notes", h1: "title", h2: "title", h3: "title", todo: "check_box", bullet: "format_list_bulleted", quote: "format_quote", code: "code" }[s.k], label: s.label, key: s.hint, enabled: s.k !== kindName(b), run: () => app.setKind(i, s.k) })) },
+            { icon: "play_arrow", label: "Run in the drawer", enabled: b.kind === "code" && /^(sh|bash|zsh|shell|console)?$/.test(b.lang ?? ""), run: () => { win.drawerShown = true; drawer.run(b.text) } },
             { icon: "add", label: "Add block below", key: "Enter", run: () => win.focusAfter = app.addBlock(i, "paragraph") },
             { icon: "content_copy", label: "Duplicate", run: () => { const n = app.addBlock(i, kindName(b)); app.setText(n, b.text) } },
             { icon: "check_box", label: b.kind === "todo" ? (b.checked ? "Mark not done" : "Mark done") : "Make a to-do", run: () => b.kind === "todo" ? app.toggle(i) : app.setKind(i, "todo") },
@@ -415,6 +420,7 @@ ApplicationWindow {
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
+            if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
@@ -1142,6 +1148,15 @@ ApplicationWindow {
             }
 
             // status bar
+            // the drawer: a shell in the workspace (Drawer.qml, Ctrl+`)
+            Drawer {
+                id: drawer
+                visible: win.drawerShown
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(160, pageCol.height * 0.32)
+                Layout.leftMargin: 12; Layout.rightMargin: 12
+                win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
+            }
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 40
