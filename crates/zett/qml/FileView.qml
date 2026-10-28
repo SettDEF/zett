@@ -24,7 +24,7 @@ ColumnLayout {
     Connections { target: fv.win; function onFileTextChanged() { fv.saved = fv.win.fileText; fv.shownText = fv.win.fileText } }
 
     function save() {
-        if (app.writeFile(win.filePath, ed.text)) { saved = ed.text; note = "Saved"; if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"
+        if (app.writeFile(win.filePath, ed.text)) { saved = ed.text; note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"
         noteT.restart()
     }
     function revert() { ed.text = saved; shownText = saved }
@@ -46,8 +46,12 @@ ColumnLayout {
     function posOf(line, col) { const ls = ed.text.split("\n"); let p = 0; for (let i = 0; i < Math.min(line, ls.length - 1); i++) p += ls[i].length + 1; return p + col }
     function wordStart(pos) { let s = pos; while (s > 0 && /[\w$]/.test(ed.text[s - 1])) s--; return s }
     function ask(kind, pos) { if (!lsp) return; const [l, c] = lineCol(pos); app.lspAsk(kind, win.filePath, l, c) }
-    onVisibleChanged: if (visible) openLsp()
-    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp() } }
+    onVisibleChanged: if (visible) { openLsp(); loadGit() }
+    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit() } }
+    // git: the lines changed since the last commit, as bars in the gutter (green added, blue changed, red removed)
+    property var gitMarks: []
+    function loadGit() { try { gitMarks = visible && win.filePath ? JSON.parse(app.gitLines(win.filePath)) : [] } catch (e) { gitMarks = [] } }
+    function gitAt(i) { for (const m of gitMarks) { if (m.kind === "removed" ? m.line === i : (i >= m.line && i < m.line + m.count)) return m.kind } return "" }
     function openLsp() { if (visible && win.filePath) lsp = app.lspOpen(win.filePath, win.fileText) }
     Timer { id: lspSync; interval: 300; onTriggered: if (fv.lsp) fv.app.lspChange(fv.win.filePath, ed.text) }
     Connections {
@@ -144,6 +148,9 @@ ColumnLayout {
                         text: index + 1
                         color: index === ed.line && ed.activeFocus ? t.accent : t.faint
                         font.family: t.mono; font.pixelSize: 12
+                        readonly property string git: fv.gitAt(index)
+                        Rectangle { visible: parent.git === "added" || parent.git === "changed"; x: 44; width: 3; height: parent.height; color: parent.git === "added" ? "#5fb98a" : "#5b9bd5" }
+                        Rectangle { visible: parent.git === "removed"; x: 43; y: -3; width: 6; height: 6; rotation: 45; color: fv.t.removed }
                         readonly property int sev: { let s = 9; for (const d of fv.diags) if (d.line === index && d.severity < s) s = d.severity; return s }
                         Rectangle { visible: parent.sev <= 2; x: 2; anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: parent.sev === 1 ? fv.t.removed : "#d8a54a" }
                     }

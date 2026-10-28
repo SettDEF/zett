@@ -61,6 +61,10 @@ pub mod qobject {
         #[qinvokable]
         fn files(self: &Zett) -> QString;
         /// a file's text for the file view (at most 1 MB)
+        /// a file's lines changed since the last commit (git diff -U0): [{line, count, kind: added|changed|removed}], 0-based
+        #[qinvokable]
+        #[cxx_name = "gitLines"]
+        fn git_lines(self: &Zett, path: &QString) -> QString;
         /// the language server for a file opened / changed in the file editor (one server per language, started once)
         #[qinvokable]
         #[cxx_name = "lspOpen"]
@@ -933,6 +937,27 @@ impl qobject::Zett {
             Ok(mut c) => { std::thread::spawn(move || { let _ = c.wait(); }); true }
             Err(_) => false,
         }
+    }
+
+    fn git_lines(&self, path: &QString) -> QString {
+        let p = std::path::PathBuf::from(path.to_string());
+        let Some(dir) = p.parent() else { return QString::from("[]") };
+        let out = std::process::Command::new("git").arg("-C").arg(dir).args(["diff", "-U0", "--no-color", "HEAD", "--"]).arg(&p).output();
+        let text = out.map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+        // an untracked file: every line new
+        let tracked = std::process::Command::new("git").arg("-C").arg(dir).args(["ls-files", "--error-unmatch"]).arg(&p).output().is_ok_and(|o| o.status.success());
+        if !tracked { let n = std::fs::read_to_string(&p).map(|s| s.lines().count()).unwrap_or(0); return QString::from(&serde_json::json!([{ "line": 0, "count": n, "kind": "added" }]).to_string()) }
+        let mut v = Vec::new();
+        for l in text.lines().filter(|l| l.starts_with("@@")) {
+            // @@ -a,b +c,d @@
+            let nums = |s: &str| { let mut it = s[1..].split(','); let a: usize = it.next().and_then(|x| x.parse().ok()).unwrap_or(0); let b: usize = it.next().and_then(|x| x.parse().ok()).unwrap_or(1); (a, b) };
+            let mut parts = l.split_whitespace().skip(1);
+            let (Some(old), Some(new)) = (parts.next(), parts.next()) else { continue };
+            let ((_, ob), (nc, nd)) = (nums(old), nums(new));
+            let kind = if nd == 0 { "removed" } else if ob == 0 { "added" } else { "changed" };
+            v.push(serde_json::json!({ "line": if nd == 0 { nc } else { nc.saturating_sub(1) }, "count": nd.max(1), "kind": kind }));
+        }
+        QString::from(&serde_json::Value::Array(v).to_string())
     }
 
     fn lsp_open(self: Pin<&mut Self>, path: &QString, text: &QString) -> bool {
