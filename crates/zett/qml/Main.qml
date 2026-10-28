@@ -771,7 +771,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
             if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
-            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:") || app.shotEngine.startsWith("filediff:") || app.shotEngine.startsWith("filemulti:")) {
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:") || app.shotEngine.startsWith("filediff:") || app.shotEngine.startsWith("filemulti:") || app.shotEngine.startsWith("filesticky:")) {
                 const rel = app.shotEngine.split(":")[1]
                 win.openFile({ path: app.dir + "/" + rel, rel })
                 if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
@@ -781,6 +781,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 if (app.shotEngine.startsWith("filelsp:")) fileView.testLsp(app.shotEngine.split(":").slice(2).join(":"))
                 if (app.shotEngine.startsWith("filediff:")) Qt.callLater(() => { fileView.showDiff = true; console.log("zett-probe: diff " + fileView.diffRows.length) })
                 if (app.shotEngine.startsWith("filemulti:")) Qt.callLater(() => fileView.testMulti())
+                if (app.shotEngine.startsWith("filesticky:")) stickyT.start()
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
@@ -863,6 +864,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })  }
     Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }  // the panel polls cui first
     Timer { id: probT; interval: 1500; onTriggered: { console.log("zett-probe: problems " + JSON.stringify(win.problems.map(p => p.path.replace(app.dir + "/", "") + ":" + (p.line + 1) + " " + p.message))); claudeShot.start() } }
+    Timer { id: stickyT; interval: 1200; onTriggered: fileView.testSticky() }
     // the page sits in one card on the background, like the shell's panels
     Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.color: pageDrop.containsDrag ? t.accent : Qt.alpha(t.rule, 0.35)
         // a page or file dropped on the open page becomes a [[link]]

@@ -68,6 +68,8 @@ ColumnLayout {
     function testFind(q) { findBar.open("find"); findBar.q.text = q }
     function testProblems() { showProblems = true }
     // gui-check: cursors on lines 1-3 at column 0, "// " typed at all, saved
+    // gui-check: scrolled to the bottom, so the scope's first line sticks
+    function testSticky() { fileFlick.contentY = Math.max(0, fileFlick.contentHeight - fileFlick.height); Qt.callLater(() => console.log("zett-probe: sticky " + JSON.stringify(sticky.heads.map(h => h.s.trim())))) }
     function testMulti() { ed.forceActiveFocus(); ed.cursorPosition = posOf(1, 0); addCursorLine(1); addCursorLine(1); multiEdit("// ", 0); multiEdit("", -1); multiEdit(" ", 0); save() }
     // gui-check: the server asked once it has the file (symbols, or rename:LINE:COL:NEW); what comes back is logged
     function testLsp(spec) { lspTest.spec = spec; lspTest.start() }
@@ -284,6 +286,41 @@ ColumnLayout {
             HoverHandler { id: mmH; cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: (ev) => miniMap.scrollTo(ev.position.y) }
             DragHandler { id: mmDrag; target: null; onCentroidChanged: if (active) miniMap.scrollTo(centroid.position.y) }
+        }
+        // sticky scroll: the lines that open the scope at the top of the view (fn … {, impl, class, def …:), at most 3
+        Rectangle {
+            id: sticky
+            readonly property var heads: {
+                if (!fv.visible || ed.lineH <= 0) return []
+                const top = Math.floor(fileFlick.contentY / ed.lineH) + 1
+                if (top < 2) return []
+                const ls = fv.shownText.split("\n"), ind = s => s.length - s.replace(/^\s+/, "").length
+                let min = ind(ls[Math.min(top, ls.length - 1)] ?? ""), out = []
+                for (let i = Math.min(top, ls.length) - 1; i >= 0 && min > 0 && out.length < 3; i--) {
+                    const s = ls[i]; if (!s.trim()) continue
+                    if (ind(s) < min && (/[{:(]\s*$/.test(s) || /^\s*(pub |async |export )*(fn|impl|struct|enum|trait|mod|class|def|function|interface)\b/.test(s))) { out.unshift({ i, s }); min = ind(s) }
+                }
+                return out
+            }
+            visible: heads.length > 0
+            anchors { left: fileFlick.left; right: fileFlick.right; top: parent.top; topMargin: 8 }
+            height: stickyCol.implicitHeight + 8; radius: 12; z: 10
+            color: t.raised; border.width: 1; border.color: Qt.alpha(t.rule, 0.3)
+            Column {
+                id: stickyCol
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+                Repeater {
+                    model: sticky.heads
+                    delegate: Item {
+                        required property var modelData
+                        width: stickyCol.width; height: ed.lineH
+                        Text { x: 0; width: 40; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter; text: modelData.i + 1; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
+                        Text { x: 54; anchors.verticalCenter: parent.verticalCenter; text: modelData.s.replace(/\t/g, "    "); color: t.text; font: ed.font; elide: Text.ElideRight; width: parent.width - 60 }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: fv.goTo(modelData.i, 0) }
+                    }
+                }
+            }
         }
         Flickable {
             id: fileFlick
