@@ -50,6 +50,8 @@ check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' 
 check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett' && ! grep -qE '[[:blank:]]$' '$W/main.rs'"
 check side fileside:main.rs:check.md
 check git git
+check tooltip acttip
+check newfile newfile "[ -f '$W/made/new.rs' ] && [ -d '$W/emptydir' ]"
 check wrap filewrap:main.rs
 check sticky filesticky:main.rs "grep -q 'sticky \\[\"fn main' \"\$OUT/sticky.log\""
 check multicursor filemulti:main.rs "[ \$(grep -cE '^// (fn|    print)' '$W/main.rs') -eq 3 ]"

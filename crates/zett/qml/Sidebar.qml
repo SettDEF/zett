@@ -7,6 +7,18 @@ Rectangle {
     required property var win
     // the foot's templates (templates/*.md become a new page)
     property bool templatesOpen: false
+    // the Explorer's New file / New folder: the name typed in a field under the head (a/b.rs makes the folders too)
+    property string newKind: ""
+    function create(name) {
+        name = name.trim().replace(/^\/+/, ""); const kind = newKind; newKind = ""
+        if (!name || name.includes("..")) return
+        const p = app.dir + "/" + name
+        if (kind === "folder") app.spawn(JSON.stringify(["mkdir", "-p", p]))
+        else { const d = p.slice(0, p.lastIndexOf("/")); app.spawn(JSON.stringify(["sh", "-c", 'mkdir -p "$1" && touch "$2"', "sh", d, p])); openLater.path = p; openLater.start() }
+        sideRefresh.start()
+    }
+    Timer { id: sideRefresh; interval: 300; onTriggered: side.win.refreshSide() }
+    Timer { id: openLater; property string path; interval: 400; onTriggered: { side.win.refreshSide(); side.win.openFile({ path, rel: path }) } }
     readonly property var templates: win.files.filter(x => !x.dir && /^templates\/[^/]+\.md$/.test(x.rel))
     required property var t
     required property var app
@@ -139,6 +151,7 @@ Rectangle {
             property bool open: true
             signal toggled
             property string action: ""      // an icon button at the right (collapse all)
+            property var more: []          // more buttons before it: [icon, tip, run]
             signal acted
             Layout.fillWidth: true
             Layout.leftMargin: 8
@@ -147,6 +160,17 @@ Rectangle {
             Text { text: parent.label; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
             Text { text: parent.count; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
             Item { Layout.fillWidth: true; implicitHeight: 22 }
+            Repeater {
+                model: parent.more
+                delegate: Rectangle {
+                    required property var modelData
+                    implicitWidth: 24; implicitHeight: 22; radius: 11
+                    color: mH.hovered ? t.raised : "transparent"
+                    Text { anchors.centerIn: parent; text: modelData[0]; color: t.dim; font.family: t.icons; font.pixelSize: 15 }
+                    HoverHandler { id: mH; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: modelData[2]() }
+                }
+            }
             Rectangle {
                 visible: parent.action.length > 0
                 implicitWidth: 24; implicitHeight: 22; radius: 11
@@ -158,7 +182,28 @@ Rectangle {
             TapHandler { onTapped: parent.toggled() }
             HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
-        SectionHead { visible: win.sideMode !== "pages"; label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen; action: "unfold_less"; onActed: win.closedDirs = win.files.filter(x => x.dir).map(x => x.rel) }
+        SectionHead { visible: win.sideMode !== "pages"; label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen; action: "unfold_less"; more: [["note_add", "New file", () => side.newKind = "file"], ["create_new_folder", "New folder", () => side.newKind = "folder"]]; onActed: win.closedDirs = win.files.filter(x => x.dir).map(x => x.rel) }
+        Rectangle {
+            visible: side.newKind.length > 0
+            Layout.fillWidth: true; Layout.leftMargin: 6
+            implicitHeight: 32; radius: 16; color: t.card
+            border.width: 1; border.color: Qt.alpha(t.accent, 0.5)
+            onVisibleChanged: if (visible) { newName.text = ""; newName.forceActiveFocus() }
+            RowLayout {
+                anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                spacing: 8
+                Text { text: side.newKind === "folder" ? "create_new_folder" : "note_add"; color: t.accent; font.family: t.icons; font.pixelSize: 16 }
+                TextInput {
+                    id: newName
+                    Layout.fillWidth: true
+                    color: t.text; font.family: t.mono; font.pixelSize: 12; clip: true
+                    Keys.onReturnPressed: side.create(text)
+                    Keys.onEnterPressed: side.create(text)
+                    Keys.onEscapePressed: side.newKind = ""
+                    Text { visible: !newName.text; text: side.newKind === "folder" ? "folder name" : "file name (a/b.rs makes the folder)"; color: t.faint; font: newName.font }
+                }
+            }
+        }
         ListView {
             id: fileList
             visible: win.filesOpen && win.sideMode !== "pages"

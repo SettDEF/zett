@@ -767,6 +767,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
+            if (app.shotEngine === "acttip") { activityBar.tipTest = true; grabLater.start(); return }
+            if (app.shotEngine === "newfile") { sidebar.newKind = "file"; sidebar.create("made/new.rs"); sidebar.newKind = "folder"; sidebar.create("emptydir"); claudeShot.start(); return }
             if (app.shotEngine === "problems-panel") { win.drawerShown = true; drawer.tab = "problems"; drawer.run("printf 'error[E0308]: mismatched types\\n  --> src/main.rs:2:5\\n'"); probT.start(); return }
             if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
             if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
@@ -881,8 +883,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         spacing: 0
 
         // ───────── sidebar ─────────
-        ActivityBar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme }
-        Sidebar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+        ActivityBar { id: activityBar; win: ApplicationWindow.window; t: ApplicationWindow.window.theme }
+        Sidebar { id: sidebar; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
         SourceControl { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
         // ───────── the page ─────────

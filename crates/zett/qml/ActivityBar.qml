@@ -10,6 +10,8 @@ Rectangle {
     Layout.fillHeight: true
     implicitWidth: 52
     visible: !win.zen
+    property bool tipTest: false   // gui-check: one label shown without a mouse
+    z: 20   // its hover labels reach over the sidebar beside it, which comes later and would paint over them
     color: "transparent"
 
     function pick(mode) { win.sideMode = win.sideMode === mode ? "all" : mode; win.setPref("sideMode", win.sideMode); win.sidebarHidden = false }
@@ -38,7 +40,7 @@ Rectangle {
         TapHandler { onTapped: act.item.run() }
         // the name, beside it on hover
         Rectangle {
-            visible: ah.hovered
+            visible: ah.hovered || (bar.tipTest && act.item.icon === "folder_open")
             x: 50; anchors.verticalCenter: parent.verticalCenter
             width: tipT.implicitWidth + 16; height: 26; radius: 8
             color: bar.t.raised; border.width: 1; border.color: Qt.alpha(bar.t.rule, 0.4)
