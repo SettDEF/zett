@@ -10,6 +10,8 @@ Item {
     required property var app
     Layout.fillWidth: true
     implicitHeight: 50
+    clip: true   // a narrow window (beside Claude) must not spill it over the sidebar
+    readonly property bool roomy: width >= 620
     readonly property bool file: win.view === "file"
     readonly property string title: file ? win.filePath.slice(win.filePath.lastIndexOf("/") + 1) : win.view === "page" ? (win.pages[app.current]?.title || "Untitled") : ({ today: "Home", settings: "Settings", search: "Search" })[win.view] ?? win.view
     // the crumbs before the name: the workspace, then the file's folders
@@ -40,7 +42,7 @@ Item {
     Row {
         id: crumbRow
         anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter; verticalCenterOffset: 4 }
-        width: Math.min(implicitWidth, pill.x - 30)
+        width: Math.max(0, Math.min(implicitWidth, (pill.visible ? pill.x : segs.x) - 30))
         clip: true
         spacing: 6
         Text { anchors.verticalCenter: parent.verticalCenter; text: hd.file ? "code" : hd.win.view === "page" ? "description" : hd.win.view === "settings" ? "settings" : "home"; color: hd.t.accent; font.family: hd.t.icons; font.pixelSize: 16 }
@@ -61,6 +63,7 @@ Item {
     // the search pill, centred
     Rectangle {
         id: pill
+        visible: hd.roomy
         anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter; verticalCenterOffset: 4 }
         width: Math.max(180, Math.min(420, hd.width - crumbRow.implicitWidth - segs.width - 120))
         height: 32; radius: 16
