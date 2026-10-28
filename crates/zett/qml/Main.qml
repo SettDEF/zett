@@ -197,6 +197,9 @@ ApplicationWindow {
     // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
     property bool codeLigatures: prefs.codeLigatures ?? false
     property int runFirst: -1      // tests: the block whose Run is pressed
+    // the block at the top of the view (the outline lights its section)
+    property int topBlock: 0
+    Connections { target: list; function onContentYChanged() { const i = list.indexAt(list.width / 2, list.contentY + list.topMargin + 8); if (i >= 0) win.topBlock = i } }
     property int selectFirst: -1   // tests: the block whose first word gets selected
     // the clipboard's text, read through a hidden field
     TextEdit { id: clipRead; visible: false }
