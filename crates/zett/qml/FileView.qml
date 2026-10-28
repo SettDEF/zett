@@ -197,8 +197,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 24; Layout.rightMargin: 24
         spacing: 8
-        Text { text: "draft"; color: t.accent; font.family: t.icons; font.pixelSize: 18 }
-        Text { Layout.fillWidth: true; text: win.filePath.replace(app.dir + "/", "").split("/").join("  ›  ") + (fv.dirty ? "  ●" : ""); elide: Text.ElideMiddle; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+        Item { Layout.fillWidth: true }   // the path and the unsaved dot are in the window's header
         Text { visible: fv.note.length > 0; text: fv.note; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
         // the server: its errors and warnings for this file
         Text { visible: fv.lsp; text: fv.errors + fv.warnings ? `${fv.errors} errors  ${fv.warnings} warnings` : "no problems"; color: fv.errors ? t.removed : fv.warnings ? "#d8a54a" : t.faint; font.family: t.mono; font.pixelSize: 11 
