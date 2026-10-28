@@ -11,6 +11,7 @@ Rectangle {
     property string newKind: ""
     property bool openOpen: true
     property bool recentOpen: true
+    property bool foldersOpen: true
     function create(name) {
         name = name.trim().replace(/^\/+/, ""); const kind = newKind; newKind = ""
         if (!name || name.includes("..")) return
@@ -321,6 +322,12 @@ Rectangle {
                 on: modelData.file ? (win.view === "file" && win.filePath === modelData.file) : (win.view === "page" && app.current === modelData.page)
                 onHit: modelData.file ? win.openFile({ path: modelData.file, rel: modelData.file }) : win.openPage(modelData.page)
             }
+        }
+        readonly property var folders: (win.prefs.recentFolders ?? []).filter(f => f !== app.dir).slice(0, 5)
+        SectionHead { visible: parent.folders.length > 0 && win.sideMode === "files"; label: "FOLDERS"; count: parent.folders.length; open: side.foldersOpen; onToggled: side.foldersOpen = !side.foldersOpen; action: "create_new_folder"; onActed: win.openFolderPick() }
+        Repeater {
+            model: side.foldersOpen && win.sideMode === "files" ? parent.folders : []
+            delegate: QuickRow { required property string modelData; icon: "folder"; label: modelData.slice(modelData.lastIndexOf("/") + 1); sub: modelData.replace(win.homeDir, "~").split("/").slice(0, -1).join("/"); onHit: win.openFolder(modelData) }
         }
         SectionHead { visible: parent.recent.length > 0 && win.sideMode !== "pages"; label: "RECENT"; count: parent.recent.length; open: side.recentOpen; onToggled: side.recentOpen = !side.recentOpen }
         Repeater {

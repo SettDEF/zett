@@ -253,6 +253,25 @@ Item {
     Component { id: actC; Row { spacing: 6; Repeater { model: parent.setting ? parent.setting.actions : []; delegate: Button1 { required property var modelData; icon: modelData[0]; label: modelData[1]; onClicked: modelData[2]() } } } }
 
     // ── Keyboard Shortcuts: every command with its keys (the palette's list), searchable; a click runs it ──
+    // rebinding: the row being set listens for the next key combination (Esc cancels, Backspace clears)
+    property string capturing: ""
+    function setKey(name, seq) { const k = Object.assign({}, win.prefs.keys ?? {}); if (seq) k[name] = seq; else delete k[name]; win.setPref("keys", k); capturing = "" }
+    Item {
+        id: keyCatch
+        focus: s.capturing.length > 0
+        Keys.onPressed: (e) => {
+            if (!s.capturing) return
+            e.accepted = true
+            if (e.key === Qt.Key_Escape) { s.capturing = ""; return }
+            if (e.key === Qt.Key_Backspace && !e.modifiers) { s.setKey(s.capturing, ""); return }
+            if ([Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R].includes(e.key)) return
+            const mods = (e.modifiers & Qt.ControlModifier ? "Ctrl+" : "") + (e.modifiers & Qt.AltModifier ? "Alt+" : "") + (e.modifiers & Qt.ShiftModifier ? "Shift+" : "") + (e.modifiers & Qt.MetaModifier ? "Meta+" : "")
+            const names = { [Qt.Key_Return]: "Return", [Qt.Key_Enter]: "Enter", [Qt.Key_Tab]: "Tab", [Qt.Key_Space]: "Space", [Qt.Key_Delete]: "Delete", [Qt.Key_Up]: "Up", [Qt.Key_Down]: "Down", [Qt.Key_Left]: "Left", [Qt.Key_Right]: "Right", [Qt.Key_Home]: "Home", [Qt.Key_End]: "End", [Qt.Key_PageUp]: "PgUp", [Qt.Key_PageDown]: "PgDown" }
+            let k = names[e.key] ?? (e.key >= Qt.Key_F1 && e.key <= Qt.Key_F35 ? "F" + (e.key - Qt.Key_F1 + 1) : String.fromCharCode(e.key).toUpperCase())
+            if (!mods && !/^F\d+$/.test(k)) return   // a bare letter would take typing away
+            s.setKey(s.capturing, mods + k)
+        }
+    }
     readonly property var shortcuts: { const q = search.text.trim().toLowerCase(); return s.cat === "Keyboard Shortcuts" ? win.paletteEntries().filter(c => !q || (c.name + " " + c.desc + " " + c.keys).toLowerCase().includes(q)) : [] }
     Flickable {
         visible: !s.jsonView && s.cat === "Keyboard Shortcuts"
@@ -277,12 +296,21 @@ Item {
                         id: keyRow
                         anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                         spacing: 4
+                        readonly property string own: (win.prefs.keys ?? {})[modelData.name] ?? ""
                         Repeater {
-                            model: (modelData.keys ?? "").split(" ").filter(k => k)
+                            model: s.capturing === modelData.name ? ["press the keys…"] : (keyRow.own ? keyRow.own.split("+") : (modelData.keys ?? "").split(" ")).filter(k => k)
                             delegate: Rectangle { required property string modelData; width: kt.implicitWidth + 12; height: 22; radius: 6; color: Qt.alpha(t.text, 0.06); border.width: 1; border.color: Qt.alpha(t.text, 0.12)
-                                Text { id: kt; anchors.centerIn: parent; text: modelData; color: t.text; font.family: t.mono; font.pixelSize: 11 } }
+                                Text { id: kt; anchors.centerIn: parent; text: modelData; color: keyRow.own || s.capturing ? t.accent : t.text; font.family: t.mono; font.pixelSize: 11 } }
                         }
-                        Text { visible: !modelData.keys; text: "no key"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                        Text { visible: !modelData.keys && s.capturing !== modelData.name && !keyRow.own; text: "no key"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                        // change it: the next key combination pressed
+                        Rectangle {
+                            width: 24; height: 22; radius: 11
+                            color: rbH.hovered ? t.raised : "transparent"
+                            Text { anchors.centerIn: parent; text: "edit"; color: t.dim; font.family: t.icons; font.pixelSize: 14 }
+                            HoverHandler { id: rbH; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: { s.capturing = modelData.name; keyCatch.forceActiveFocus() } }
+                        }
                     }
                     HoverHandler { id: kH; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: modelData.run() }

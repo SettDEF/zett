@@ -103,6 +103,7 @@ Item {
             anchors.centerIn: parent
             spacing: 2
             Seg { visible: hd.file; icon: "splitscreen_right"; tip: "Split  Ctrl \\"; on: hd.win.sideFile.length > 0; onHit: { if (hd.win.sideFile) hd.win.sideFile = ""; else { const o = hd.win.fileTabs.filter(p => p !== hd.win.filePath); hd.win.sideFile = o.length ? o[o.length - 1] : hd.win.filePath } } }
+            Seg { icon: "create_new_folder"; tip: "Open Folder  Ctrl K O"; onHit: hd.win.openFolderPick() }
             Seg { icon: "left_panel_open"; tip: "Sidebar"; on: !hd.win.sidebarHidden; onHit: hd.win.sidebarHidden = !hd.win.sidebarHidden }
             Seg { icon: "right_panel_open"; tip: "Details"; on: hd.win.detailsShown; onHit: hd.win.detailsShown = !hd.win.detailsShown }
             Seg { icon: "terminal"; tip: "Panel  Ctrl `"; on: hd.win.drawerShown; onHit: hd.win.toggleDrawer() }

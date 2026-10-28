@@ -2,9 +2,10 @@
 Type=Application
 Name=zett
 GenericName=Notes and editor
-Comment=Pages, blocks and Vim everywhere, saved as Markdown
-Exec=zett --gui
+Comment=Code editor and notes
+Exec=zett --gui %F
 Icon=zett
 Terminal=false
-Categories=Office;TextEditor;Utility;
+Categories=Development;TextEditor;IDE;Office;
 StartupWMClass=zett
+MimeType=inode/directory;text/plain;

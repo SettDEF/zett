@@ -23,7 +23,7 @@ use zett_core::{markdown, Kind};
 const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
   zett                              the editor in this terminal (its dashboard)
   zett src/main.rs                  open files; a folder opens its file finder
-  zett --gui                        the notes window (pages, blocks)
+  zett --gui [FOLDER]               the window: the editor on FOLDER (a project), else ~/zett (notes)
   zett doc                          the documentation (also :help in the editor)
   zett new \"Ideas\"
   zett add ideas \"build zash\" --todo
@@ -173,7 +173,9 @@ fn main() {
     let Some(cmd) = cli.cmd else {
         if cli.gui {
             // the window, on the workspace folder
-            if std::env::var_os("ZETT_DIR").is_none() {
+            // `zett --gui FOLDER` opens that folder, as an editor opens a project
+            let dir = cli.paths.iter().find(|p| p.is_dir()).map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())).unwrap_or(dir);
+            if std::env::var_os("ZETT_DIR").is_none() || cli.paths.iter().any(|p| p.is_dir()) {
                 unsafe { std::env::set_var("ZETT_DIR", &dir) };
             }
             window::run();

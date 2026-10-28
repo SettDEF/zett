@@ -1,7 +1,9 @@
 import QtQuick
+import QtQml
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQuick.Dialogs
 import dev.zett.app
 
 // zett's first window: the pages of a workspace folder and the open page as
@@ -240,6 +242,15 @@ ApplicationWindow {
     function moveCur(d) { const c = curBlock; if (c < 0) return; rootRow.forceActiveFocus(); if (app.moveBlock(c, c + d)) win.focusAfter = c + d }
     property bool drawerShown: false
     // Settings > Terminal: "zash" opens a real zash in the workspace folder instead of the panel's command runner
+    // Open Folder: a new window on another project (zett --gui FOLDER); the folders opened before are kept
+    function openFolder(p) {
+        p = String(p).replace(/^file:\/\//, "")
+        if (!p) return
+        setPref("recentFolders", [p].concat((prefs.recentFolders ?? []).filter(x => x !== p)).slice(0, 10))
+        app.spawn(JSON.stringify([app.env("HOME") + "/.local/bin/zett", "--gui", p]))
+    }
+    FolderDialog { id: folderPick; title: "Open Folder"; onAccepted: win.openFolder(decodeURIComponent(String(selectedFolder))) }
+    function openFolderPick() { folderPick.open() }
     function openZash() { app.runShell(-1, 'setsid -f "$HOME/.local/bin/zash" >/dev/null 2>&1') }
     function toggleDrawer() { if ((prefs.terminal ?? "panel") === "zash") { openZash(); return } drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
@@ -387,7 +398,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         if (i === app.current && tabs.length) win.openPage(tabs[Math.min(at, tabs.length - 1)])
     }
     Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
-    Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys(); readHooks() }
+    Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys(); readHooks(); if (!app.shot.length && !(prefs.recentFolders ?? []).includes(app.dir)) setPref("recentFolders", [app.dir].concat(prefs.recentFolders ?? []).slice(0, 10)) }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.view === "file" ? win.closeFileTab(win.filePath) : win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     // Ctrl+\: in a file the split editor (the latest other open file beside it, or closed again); on a page the details
@@ -423,6 +434,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     property bool zen: false
     onZenChanged: { sidebarHidden = zen; if (zen) detailsShown = false }
     Shortcut { sequence: "Ctrl+K, Z"; onActivated: win.zen = !win.zen }
+    Shortcut { sequence: "Ctrl+K, O"; onActivated: folderPick.open() }
     Shortcut { enabled: win.zen; sequence: "Escape"; onActivated: win.zen = false }
     // every command: the window's own, init.lua's hooks, the engine's; the palette and Settings > Keyboard Shortcuts show it
     function paletteEntries() {
@@ -446,6 +458,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
             { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" },
+            { icon: "folder_open", name: "Open Folder…", desc: "a project in a new window", keys: "Ctrl K O", run: () => folderPick.open() },
             { icon: "commit", name: "Source Control", desc: "changes, stage, commit", keys: "Ctrl ⇧ G", run: () => { win.sideMode = "git"; win.sidebarHidden = false } },
             { icon: "center_focus_strong", name: "Zen mode", desc: "only the editor", keys: "Ctrl K Z", run: () => win.zen = !win.zen },
             { icon: "arrow_forward", name: "Go to definition", desc: "the language server", keys: "F12", run: () => fileView.ask("definition", fileView.cursorPos()) },
@@ -463,6 +476,15 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     function openPalette() { palette.entries = paletteEntries(); palette.show() }
     Shortcut { sequence: "Ctrl+Shift+D"; onActivated: win.view = "today" }
+    // the keys set in Settings > Keyboard Shortcuts (gui.json "keys": {command name: "Ctrl+Alt+X"}), beside the built-in ones
+    Instantiator {
+        model: Object.keys(win.prefs.keys ?? {})
+        delegate: Shortcut {
+            required property string modelData
+            sequence: (win.prefs.keys ?? {})[modelData] ?? ""
+            onActivated: { const e = win.paletteEntries().find(x => x.name === modelData); if (e) e.run(); else win.note(`no command "${modelData}"`) }
+        }
+    }
     Shortcut { sequence: "Ctrl+Shift+G"; onActivated: { win.sideMode = win.sideMode === "git" ? "files" : "git"; win.sidebarHidden = false } }
 
     // ── context menus: one component, each place passes its own items ──
