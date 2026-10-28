@@ -10,6 +10,7 @@ Item {
     implicitHeight: 64
     // the open pages as pill tabs
     ListView {
+        id: tabList
         anchors { left: parent.left; right: toolRow.left; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 24 }
         height: 34
         orientation: ListView.Horizontal
@@ -38,6 +39,22 @@ Item {
             TapHandler { onTapped: win.openPage(modelData) }
             TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.tabMenu(modelData, ev.scenePosition.x, ev.scenePosition.y) }
             TapHandler { acceptedButtons: Qt.MiddleButton; onTapped: win.closeTab(modelData) }
+            // drag a tab sideways to put it elsewhere among the tabs
+            DragHandler {
+                id: tabDrag
+                target: null
+                yAxis.enabled: false
+                onActiveChanged: if (!active) {
+                    const p = parent.mapToItem(tabList.contentItem, parent.width / 2 + translation.x, parent.height / 2)
+                    let to = tabList.indexAt(p.x, p.y)
+                    if (to < 0) to = translation.x < 0 ? 0 : win.tabs.length - 1
+                    const from = win.tabs.indexOf(modelData)
+                    if (to !== from && from >= 0) { const t2 = win.tabs.slice(); t2.splice(from, 1); t2.splice(to, 0, modelData); win.tabs = t2 }
+                }
+            }
+            transform: Translate { x: tabDrag.active ? tabDrag.translation.x : 0 }
+            z: tabDrag.active ? 10 : 0
+            opacity: tabDrag.active ? 0.85 : 1
         }
     }
     RowLayout {
@@ -45,6 +62,16 @@ Item {
         visible: win.view === "page"
         anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 28 }
         spacing: 6
+        // the page width: narrow (680) → wide (960) → full; Settings has the exact width
+        Rectangle {
+            readonly property int w: win.prefs.width ?? 760
+            readonly property string mode: w >= 4000 ? "full" : w >= 900 ? "wide" : "narrow"
+            implicitWidth: 34; implicitHeight: 30; radius: 15
+            color: wHov.hovered ? t.raised : t.card
+            Text { anchors.centerIn: parent; text: ({ narrow: "width_normal", wide: "width_wide", full: "fit_screen" })[parent.mode]; color: t.dim; font.family: t.icons; font.pixelSize: 18 }
+            HoverHandler { id: wHov; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: win.setPref("width", ({ narrow: 960, wide: 10000, full: 680 })[parent.mode]) }
+        }
         Rectangle {
             implicitWidth: srcRow.implicitWidth + 24; implicitHeight: 30; radius: 15
             color: win.showSource ? t.accent : (srcHov.hovered ? t.raised : t.card)
