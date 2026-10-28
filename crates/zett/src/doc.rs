@@ -56,6 +56,9 @@ pub mod qobject {
         #[qinvokable]
         fn insert(self: Pin<&mut CodeDoc>, text: &QString);
         #[qinvokable]
+        #[cxx_name = "lineText"]
+        fn line_text(self: &CodeDoc, line: i32) -> QString;
+        #[qinvokable]
         #[cxx_name = "selectedText"]
         fn selected_text(self: &CodeDoc) -> QString;
         /// line editing: "comment://", "up", "down", "copyup", "copydown", "delete"
@@ -769,5 +772,11 @@ impl qobject::CodeDoc {
         }
         let n = self.rust().rope.len_lines();
         self.changed(low.min(n));
+    }
+}
+
+impl qobject::CodeDoc {
+    pub fn line_text(&self, line: i32) -> QString {
+        QString::from(&self.rust().line_str(line.max(0) as usize))
     }
 }

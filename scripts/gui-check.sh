@@ -20,6 +20,7 @@ printf 'int main(void) {\n    int x = 1\n    return x;\n}\n' > "$W/fix.c"
 printf 'a\nb\nc\n' > "$W/lines.rs"
 printf 'fn main() {\n    let a = 1;\n    let b = 2;\n}\n' > "$W/core.rs"
 cp "$W/core.rs" "$W/core2.rs"
+cp "$W/fix.c" "$W/fix2.c"; cp "$W/bad.c" "$W/bad2.c"   # untouched copies for the new core's server checks
 mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
 git -C "$W" init -q && git -C "$W" add -A && git -C "$W" -c user.email=c@c -c user.name=c commit -qm init
 echo '// changed' >> "$W/main.rs"
@@ -68,6 +69,7 @@ check tasks tasks "grep -q 'zett-probe: palette' \"\$OUT/tasks.log\""
 check quick quick:mnrs "grep -q 'quick \[\"file:main.rs' "$OUT/quick.log""
 if command -v clangd >/dev/null; then check symbols filelsp:bad.c:symbols "grep -q 'jumps .*main' \"\$OUT/symbols.log\""; check rename filelsp:bad.c:rename:1:8:count "grep -q 'int count' '$W/bad.c' && grep -q 'return count' '$W/bad.c'"; fi
 if command -v clangd >/dev/null; then check signature filelsp:sig.c:sig:2:12 "grep -q 'signature add(int a, int b).*\\[int b\\]' \"\$OUT/signature.log\""; check actions filelsp:fix.c:act:2:4 "grep -q 'int x = 1;' '$W/fix.c'"; fi
+if command -v clangd >/dev/null; then check coreaction corelsp:fix2.c:act:2:4 "grep -q 'int x = 1;' '$W/fix2.c'"; check corerename corelsp:bad2.c:rename:1:8:count "grep -q 'int count' '$W/bad2.c' && grep -q 'return count' '$W/bad2.c'"; fi
 if command -v clangd >/dev/null; then check problems fileproblems:bad.c; else echo "  skip  problems (no clangd)"; fi
 echo "$pass passed, $fail failed  (pictures: $OUT, kept only on failure)"
 if [ $fail -gt 0 ]; then trap - EXIT; echo "workspace kept: $W"; exit 1; fi

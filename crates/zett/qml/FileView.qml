@@ -16,7 +16,7 @@ ColumnLayout {
 
     readonly property string ext: win.filePath.slice(win.filePath.lastIndexOf(".") + 1)
     property string saved: win.fileText            // what is on disk
-    readonly property bool dirty: ed.text !== saved
+    readonly property bool dirty: newCore ? codeView.doc.dirty : ed.text !== saved   // the new core keeps its own text
     readonly property int curLine: ed.line
     readonly property int curCol: ed.col
     readonly property int lineCount: lineStarts.length
@@ -35,6 +35,8 @@ ColumnLayout {
     }
     // `auto`: written by auto save, so the text under the cursor is left as typed (no trimming)
     function write(auto) {
+        // the new core: its text is the one to write (the old editor's would be stale)
+        if (newCore) { if (codeView.doc.save()) { note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"; noteT.restart(); return }
         if (!auto && (win.prefs.trimOnSave ?? true)) {
             let s = ed.text.replace(/[ \t]+$/gm, "")
             if ((win.prefs.finalNewline ?? true) && s.length && !s.endsWith("\n")) s += "\n"
@@ -199,7 +201,7 @@ ColumnLayout {
             if (e.type === "diagnostics") { const m = Object.assign({}, fv.win.allDiags); if (e.items.length) m[e.path] = e.items; else delete m[e.path]; fv.win.allDiags = m }
             if (e.type === "diagnostics" && e.path === fv.win.filePath) fv.diags = e.items
             else if (e.type === "completion") {
-                const word = ed.text.slice(fv.compFrom, ed.cursorPosition).toLowerCase()
+                const word = (fv.newCore ? codeView.word() : ed.text.slice(fv.compFrom, ed.cursorPosition)).toLowerCase()
                 fv.comps = e.items.filter(i => (i.filter || i.label).toLowerCase().includes(word)).sort((a, b) => (a.sort || a.label).localeCompare(b.sort || b.label)).slice(0, 50)
                 fv.compSel = 0
             }
@@ -692,9 +694,10 @@ ColumnLayout {
     property int sigTo: 0
     property var actions: []
     property int actionSel: 0
-    function askActions() {
-        const l = ed.line
+    function askActions(atLine, atCol) {
+        const l = atLine ?? ed.line
         const ds = diags.filter(d => d.line <= l && (d.endLine ?? d.line) >= l).map(d => ({ range: { start: { line: d.line, character: d.col }, end: { line: d.endLine ?? d.line, character: d.endCol ?? d.col } }, severity: d.severity, message: d.message }))
+        if (atLine !== undefined) { app.lspChange(win.filePath, codeView.doc.text()); askAt("actions:" + JSON.stringify(ds), atLine, atCol); return }
         app.lspChange(win.filePath, ed.text); ask("actions:" + JSON.stringify(ds), ed.cursorPosition)
     }
     // edits per file: the open one in the buffer, others on disk
