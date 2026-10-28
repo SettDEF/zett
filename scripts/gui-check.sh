@@ -51,6 +51,7 @@ check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' 
 check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett' && ! grep -qE '[[:blank:]]$' '$W/main.rs'"
 check side fileside:main.rs:check.md
 check git git
+check welcome welcome
 check lines filelines:lines.rs "[ \"\$(tr '\\n' '|' < '$W/lines.rs')\" = 'b|// a|// a|c|' ]"
 check tooltip acttip
 check newfile newfile "[ -f '$W/made/new.rs' ] && [ -d '$W/emptydir' ]"

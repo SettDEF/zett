@@ -30,8 +30,8 @@ Rectangle {
         Chip { visible: win.vimMode.length > 0; label: win.vimMode; tint: win.vimMode === "INSERT" ? t.dim : t.accent }
         readonly property bool code: win.view === "file"
         // a page: saved and its blocks; a file: the editor's branch, problems, cursor and language
-        Chip { visible: !parent.code; icon: "check_circle"; label: "saved"; tint: t.accent }
-        Chip { visible: !parent.code; icon: "notes"; label: `${win.blocks.length} blocks` }
+        Chip { visible: win.view === "page"; icon: "check_circle"; label: "saved"; tint: t.accent }
+        Chip { visible: win.view === "page"; icon: "notes"; label: `${win.blocks.length} blocks` }
         Chip { visible: parent.code && win.gitBranch.length > 0; icon: "commit"; label: win.gitBranch }
         Chip { visible: parent.code && win.fileEditor !== null; icon: win.fileEditor && win.fileEditor.dirty ? "edit" : "check_circle"; label: win.fileEditor && win.fileEditor.dirty ? "unsaved" : "saved"; tint: win.fileEditor && win.fileEditor.dirty ? t.dim : t.accent }
         Chip { visible: parent.code && win.fileEditor !== null && win.fileEditor.lsp; icon: win.fileEditor && win.fileEditor.errors ? "error" : "check"; label: !win.fileEditor ? "" : win.fileEditor.errors + win.fileEditor.warnings ? `${win.fileEditor.errors} errors  ${win.fileEditor.warnings} warnings` : "no problems"; tint: win.fileEditor && win.fileEditor.errors ? t.removed : t.dim }

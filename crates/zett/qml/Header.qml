@@ -13,7 +13,7 @@ Item {
     clip: true   // a narrow window (beside Claude) must not spill it over the sidebar
     readonly property bool roomy: width >= 620
     readonly property bool file: win.view === "file"
-    readonly property string title: file ? win.filePath.slice(win.filePath.lastIndexOf("/") + 1) : win.view === "page" ? (win.pages[app.current]?.title || "Untitled") : ({ today: "Home", settings: "Settings", search: "Search" })[win.view] ?? win.view
+    readonly property string title: file ? win.filePath.slice(win.filePath.lastIndexOf("/") + 1) : win.view === "page" ? (win.pages[app.current]?.title || "Untitled") : ({ today: "Home", welcome: "Welcome", settings: "Settings", search: "Search" })[win.view] ?? win.view
     // the crumbs before the name: the workspace, then the file's folders
     readonly property var crumbs: [app.dir.slice(app.dir.lastIndexOf("/") + 1)].concat(file ? win.filePath.replace(app.dir + "/", "").split("/").slice(0, -1) : [])
     readonly property bool dirty: file && win.fileEditor !== null && win.fileEditor.dirty

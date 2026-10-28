@@ -251,10 +251,12 @@ ApplicationWindow {
     }
     FolderDialog { id: folderPick; title: "Open Folder"; onAccepted: win.openFolder(decodeURIComponent(String(selectedFolder))) }
     function openFolderPick() { folderPick.open() }
+    function newFileHere() { sidebar.newKind = "file" }
+    function showProblemsTab() { drawerShown = true; drawer.tab = "problems" }
     function openZash() { app.runShell(-1, 'setsid -f "$HOME/.local/bin/zash" >/dev/null 2>&1') }
     function toggleDrawer() { if ((prefs.terminal ?? "panel") === "zash") { openZash(); return } drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
-    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : app.shotEngine.startsWith("search:") ? "search" : "page") : (prefs.start === "page" ? "page" : "today")
+    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "welcome" ? "welcome" : app.shotEngine === "settings" ? "settings" : app.shotEngine.startsWith("search:") ? "search" : "page") : (prefs.start === "page" ? "page" : prefs.start === "today" ? "today" : "welcome")   // editor first: the Welcome page
     // ── hooks from init.lua: zett.gui = { status = {...}, sidebar = {...}, palette = {...} } ──
     //   status:  strings, or functions returning a string or {text, icon} (read every 5 s)
     //   sidebar: { title = "Links", items = { {label=, icon=, cmd=} } }   (cmd: a command or `lua …`)
@@ -933,6 +935,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
             // ───────── Today: the start screen ─────────
             Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+            Welcome { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
             Search { id: searchView; visible: win.view === "search"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
             Settings { id: settingsView; visible: win.view === "settings"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 

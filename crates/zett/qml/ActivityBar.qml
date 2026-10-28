@@ -20,7 +20,7 @@ Rectangle {
         { icon: "folder_open", tip: "Files", on: win.sideMode === "files", run: () => pick("files") },
         { icon: "commit", tip: "Source Control  Ctrl ⇧ G", on: win.sideMode === "git", run: () => pick("git") },
         { icon: "search", tip: "Search everything  Ctrl ⇧ F", on: win.view === "search", run: () => win.openSearch() },
-        { icon: "home", tip: "Home  Ctrl ⇧ D", on: win.view === "today", run: () => win.view = "today" },
+        { icon: "home", tip: "Welcome", on: win.view === "welcome" || win.view === "today", run: () => win.view = "welcome" },
         { icon: "toc", tip: "Outline and links  Ctrl \\", on: win.detailsShown, run: () => win.detailsShown = !win.detailsShown },
         { icon: "smart_toy", tip: "Claude  Ctrl ⇧ A", on: win.claudeShown, run: () => win.claudeShown = !win.claudeShown },
         { icon: "terminal", tip: "Shell  Ctrl `", on: win.drawerShown, run: () => win.toggleDrawer() }
