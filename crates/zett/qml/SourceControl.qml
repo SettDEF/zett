@@ -67,6 +67,10 @@ Rectangle {
     component Row_: Rectangle {
         id: row
         property var item
+        property bool canDiscard: false
+        property bool armed: false        // discard asks once: the first click arms it (red), a second within 3 s throws the change away
+        signal discarded
+        Timer { id: disarm; interval: 3000; onTriggered: row.armed = false }
         property string action
         signal acted
         Layout.fillWidth: true
@@ -79,6 +83,16 @@ Rectangle {
             Text { text: "draft"; color: sc.t.faint; font.family: sc.t.icons; font.pixelSize: 15 }
             Text { text: row.item.path.slice(row.item.path.lastIndexOf("/") + 1); color: row.item.code === "D" ? sc.t.faint : sc.t.text; font.strikeout: row.item.code === "D"; font.family: sc.t.mono; font.pixelSize: 12 }
             Text { Layout.fillWidth: true; text: row.item.path.includes("/") ? row.item.path.slice(0, row.item.path.lastIndexOf("/")) : ""; elide: Text.ElideLeft; color: sc.t.faint; font.family: sc.t.sans; font.pixelSize: 11 }
+            Rectangle {
+                visible: (rh.hovered || row.armed) && row.canDiscard && row.item.code !== "U"
+                implicitWidth: row.armed ? dT.implicitWidth + 30 : 22; implicitHeight: 22; radius: 11
+                color: row.armed ? Qt.alpha(sc.t.removed, 0.22) : dh.hovered ? sc.t.raised : "transparent"
+                Row { anchors.centerIn: parent; spacing: 4
+                    Text { text: "undo"; color: row.armed ? sc.t.removed : sc.t.dim; font.family: sc.t.icons; font.pixelSize: 16 }
+                    Text { id: dT; visible: row.armed; text: "Discard?"; color: sc.t.removed; font.family: sc.t.sans; font.pixelSize: 11 } }
+                HoverHandler { id: dh; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: { if (row.armed) { row.armed = false; row.discarded() } else { row.armed = true; disarm.restart() } } }
+            }
             Rectangle {
                 visible: rh.hovered
                 implicitWidth: 22; implicitHeight: 22; radius: 11
@@ -95,7 +109,8 @@ Rectangle {
             }
         }
         HoverHandler { id: rh; cursorShape: Qt.PointingHandCursor }
-        TapHandler { onTapped: if (row.item.code !== "D") sc.win.openFile({ path: sc.app.dir + "/" + row.item.path, rel: row.item.path }) }
+        // a click opens the file at its changes (an untracked one as it is)
+        TapHandler { onTapped: if (row.item.code !== "D") { sc.win.openFile({ path: sc.app.dir + "/" + row.item.path, rel: row.item.path }); if (row.item.code !== "U") Qt.callLater(() => sc.win.fileEditor.showDiff = true) } }
     }
 
     ColumnLayout {
@@ -160,7 +175,7 @@ Rectangle {
                 Head { visible: sc.staged.length > 0; label: "STAGED"; count: sc.staged.length; action: "remove"; onActed: sc.run(["reset", "-q"]) }
                 Repeater { model: sc.staged; delegate: Row_ { required property var modelData; item: modelData; action: "remove"; onActed: sc.run(["reset", "-q", "--", modelData.path]) } }
                 Head { label: "CHANGES"; count: sc.changes.length; action: "add"; onActed: sc.run(["add", "-A"]) }
-                Repeater { model: sc.changes; delegate: Row_ { required property var modelData; item: modelData; action: "add"; onActed: sc.run(["add", "--", modelData.path]) } }
+                Repeater { model: sc.changes; delegate: Row_ { required property var modelData; item: modelData; action: "add"; onActed: sc.run(["add", "--", modelData.path]); canDiscard: true; onDiscarded: sc.run(["checkout", "--", modelData.path], "Discarded") } }
                 Text { visible: sc.isRepo && !sc.changes.length && !sc.staged.length; Layout.leftMargin: 10; Layout.topMargin: 6; text: "No changes"; color: sc.t.faint; font.family: sc.t.sans; font.pixelSize: 12 }
             }
         }

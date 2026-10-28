@@ -761,7 +761,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
             if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
-            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:")) {
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:") || app.shotEngine.startsWith("filediff:")) {
                 const rel = app.shotEngine.split(":")[1]
                 win.openFile({ path: app.dir + "/" + rel, rel })
                 if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
@@ -769,6 +769,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 if (app.shotEngine.startsWith("fileproblems:")) Qt.callLater(() => fileView.testProblems())
                 if (app.shotEngine.startsWith("fileside:")) win.sideFile = app.dir + "/" + (app.shotEngine.split(":")[2] ?? "")
                 if (app.shotEngine.startsWith("filelsp:")) fileView.testLsp(app.shotEngine.split(":").slice(2).join(":"))
+                if (app.shotEngine.startsWith("filediff:")) Qt.callLater(() => { fileView.showDiff = true; console.log("zett-probe: diff " + fileView.diffRows.length) })
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }

@@ -98,6 +98,24 @@ ColumnLayout {
     // git: the lines changed since the last commit, as bars in the gutter (green added, blue changed, red removed)
     property var gitMarks: []
     function loadGit() { try { gitMarks = visible && win.filePath ? JSON.parse(app.gitLines(win.filePath)) : [] } catch (e) { gitMarks = [] } }
+    // the file's changes since the last commit, as a diff (Changes in the header, or a click in Source Control)
+    property bool showDiff: false
+    property var diffRows: []
+    function loadDiff() {
+        let r; try { r = JSON.parse(app.git(JSON.stringify(["diff", "--no-color", "-U3", "HEAD", "--", win.filePath]))) } catch (e) { r = { out: "" } }
+        const rows = []; let a = 0, b = 0
+        for (const l of r.out.split("\n")) {
+            const h = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(l)
+            if (h) { a = +h[1]; b = +h[2]; rows.push({ k: "hunk", text: l.replace(/^@@[^@]*@@ ?/, "") || "…" }); continue }
+            if (!rows.length || /^(\+\+\+|---) /.test(l)) continue
+            if (l[0] === "+") rows.push({ k: "add", b: b++, text: l.slice(1) })
+            else if (l[0] === "-") rows.push({ k: "del", a: a++, text: l.slice(1) })
+            else if (l[0] === " ") rows.push({ k: "same", a: a++, b: b++, text: l.slice(1) })
+        }
+        diffRows = rows
+    }
+    onShowDiffChanged: if (showDiff) loadDiff()
+    Connections { target: fv.win; function onFilePathChanged() { fv.showDiff = false } }
     function gitAt(i) { for (const m of gitMarks) { if (m.kind === "removed" ? m.line === i : (i >= m.line && i < m.line + m.count)) return m.kind } return "" }
     function openLsp() { if (visible && win.filePath) lsp = app.lspOpen(win.filePath, win.fileText) }
     Timer { id: lspSync; interval: 300; onTriggered: if (fv.lsp) fv.app.lspChange(fv.win.filePath, ed.text) }
@@ -151,7 +169,7 @@ ColumnLayout {
             TapHandler { onTapped: fv.showProblems = !fv.showProblems }
         }
         Repeater {
-            model: fv.dirty ? [["undo", "Revert", () => fv.revert()], ["save", "Save  Ctrl S", () => fv.save()]] : [["open_in_new", "Open with the system", () => Qt.openUrlExternally("file://" + fv.win.filePath)]]
+            model: fv.dirty ? [["undo", "Revert", () => fv.revert()], ["save", "Save  Ctrl S", () => fv.save()]] : (fv.gitMarks.length || fv.showDiff ? [[fv.showDiff ? "edit" : "difference", fv.showDiff ? "Edit" : "Changes", () => fv.showDiff = !fv.showDiff]] : []).concat([["open_in_new", "Open with the system", () => Qt.openUrlExternally("file://" + fv.win.filePath)]])
             delegate: Rectangle {
                 required property var modelData
                 implicitWidth: bRow.implicitWidth + 20; implicitHeight: 28; radius: 14
@@ -164,9 +182,35 @@ ColumnLayout {
             }
         }
     }
+    // the diff: old and new line numbers, removed and added lines in soft tints, hunks as headers
+    Rectangle {
+        visible: fv.showDiff
+        Layout.fillWidth: true; Layout.fillHeight: true
+        Layout.leftMargin: 16; Layout.rightMargin: 16
+        radius: 17; color: t.card
+        ListView {
+            anchors { fill: parent; margins: 12 }
+            clip: true; boundsBehavior: Flickable.StopAtBounds
+            model: fv.diffRows
+            delegate: Rectangle {
+                required property var modelData
+                width: ListView.view.width; height: modelData.k === "hunk" ? 30 : 20; radius: 6
+                color: modelData.k === "add" ? Qt.alpha(t.added, 0.14) : modelData.k === "del" ? Qt.alpha(t.removed, 0.14) : "transparent"
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                    Text { width: 36; horizontalAlignment: Text.AlignRight; text: modelData.a !== undefined && modelData.k !== "add" ? modelData.a : ""; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Text { width: 36; horizontalAlignment: Text.AlignRight; text: modelData.b !== undefined && modelData.k !== "del" ? modelData.b : ""; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Text { width: 14; text: modelData.k === "add" ? "+" : modelData.k === "del" ? "−" : ""; color: modelData.k === "add" ? t.added : t.removed; font.family: t.mono; font.pixelSize: 12 }
+                    Text { text: modelData.k === "hunk" ? modelData.text : modelData.text.replace(/\t/g, "    "); color: modelData.k === "hunk" ? t.accent : t.text; font.family: modelData.k === "hunk" ? t.sans : t.mono; font.pixelSize: 12 }
+                }
+            }
+            Text { visible: !fv.diffRows.length; anchors.centerIn: parent; text: "No changes since the last commit"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+        }
+    }
     // find / replace / go to line (FindBar.qml)
     FindBar { id: findBar; t: fv.t; editor: ed; Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16 }
     Rectangle {
+        visible: !fv.showDiff
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.leftMargin: 16; Layout.rightMargin: 16
