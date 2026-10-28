@@ -61,6 +61,14 @@ pub mod qobject {
         #[qinvokable]
         fn files(self: &Zett) -> QString;
         /// a file's text for the file view (at most 1 MB)
+        /// search the workspace's files (not the pages): opts {regex, case, word}; [{path, rel, line, col, len, text}]
+        #[qinvokable]
+        #[cxx_name = "grepFiles"]
+        fn grep_files(self: &Zett, query: &QString, opts: &QString) -> QString;
+        /// replace in them (rels: a JSON list of relative paths, all when empty); how many places changed
+        #[qinvokable]
+        #[cxx_name = "replaceFiles"]
+        fn replace_files(self: &Zett, query: &QString, with: &QString, opts: &QString, rels: &QString) -> i32;
         /// a file's lines changed since the last commit (git diff -U0): [{line, count, kind: added|changed|removed}], 0-based
         #[qinvokable]
         #[cxx_name = "gitLines"]
@@ -937,6 +945,17 @@ impl qobject::Zett {
             Ok(mut c) => { std::thread::spawn(move || { let _ = c.wait(); }); true }
             Err(_) => false,
         }
+    }
+
+    fn grep_files(&self, query: &QString, opts: &QString) -> QString {
+        let o: serde_json::Value = serde_json::from_str(&opts.to_string()).unwrap_or_default();
+        QString::from(&crate::grep::search(&workspace_dir(), &query.to_string(), &o).to_string())
+    }
+
+    fn replace_files(&self, query: &QString, with: &QString, opts: &QString, rels: &QString) -> i32 {
+        let o: serde_json::Value = serde_json::from_str(&opts.to_string()).unwrap_or_default();
+        let only: Vec<String> = serde_json::from_str(&rels.to_string()).unwrap_or_default();
+        crate::grep::replace(&workspace_dir(), &query.to_string(), &with.to_string(), &o, &only) as i32
     }
 
     fn git_lines(&self, path: &QString) -> QString {

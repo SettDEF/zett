@@ -286,6 +286,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     // a file: a .md page opens as a page, a folder folds, anything else in the file view
     property string filePath: ""
     property string fileText: ""
+    // a file opened in the editor at a 0-based line and column
+    function openFileAt(x, line, col) { openFile(x); Qt.callLater(() => fileView.goTo(line, col)) }
     function openFile(x) {
         if (x.dir) { closedDirs = closedDirs.includes(x.rel) ? closedDirs.filter(d => d !== x.rel) : closedDirs.concat([x.rel]); return }
         const pi = win.pages.findIndex(p => p.path === x.path)
@@ -698,6 +700,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
             if (app.shotEngine === "select") { win.selectFirst = win.blocks.findIndex(b => b.kind === "paragraph" && b.text.length > 3); claudeShot.start(); return }
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
+            if (app.shotEngine.startsWith("filereplace:")) { const p = app.shotEngine.split(":"); app.replaceFiles(p[1], p[2], "{}", "[]"); win.view = "search"; searchView.scope = "files"; searchView.query(p[2]); claudeShot.start(); return }
+            if (app.shotEngine.startsWith("filesearch:")) { win.view = "search"; searchView.scope = "files"; searchView.query(app.shotEngine.slice(11)); claudeShot.start(); return }
             if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves

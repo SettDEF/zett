@@ -43,6 +43,8 @@ check run run "grep -q 'hi 3' '$W/check.md'"
 check run-again run "[ \$(grep -c '^\`\`\`output' '$W/check.md') -eq 1 ]"
 check file file:main.rs
 check find filefind:main.rs:line
+check filesearch filesearch:println
+check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' && ! grep -q 'println' '$W/main.rs'"
 check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett'"
 check side fileside:main.rs:check.md
 if command -v clangd >/dev/null; then check problems fileproblems:bad.c; else echo "  skip  problems (no clangd)"; fi

@@ -10,6 +10,8 @@ ColumnLayout {
     required property var app
     spacing: 10
     property var hits: []
+    // Pages (the blocks) or Files (the workspace's files, SearchFiles.qml)
+    property string scope: "pages"
     property int sel: 0
     // the hits grouped by page, in order: [{page, title, rows: [hit]}]
     readonly property var groups: {
@@ -54,7 +56,7 @@ ColumnLayout {
                 color: t.text; font.family: t.sans; font.pixelSize: 16
                 clip: true
                 onTextChanged: later.restart()
-                Text { visible: !parent.text; text: "Search every page…"; color: t.faint; font: parent.font }
+                Text { visible: !parent.text; text: s.scope === "files" ? "Search the workspace's files…" : "Search every page…"; color: t.faint; font: parent.font }
                 Keys.onPressed: (e) => {
                     const n = s.flatHits.length
                     if (e.key === Qt.Key_Down) { s.sel = Math.min(n - 1, s.sel + 1); e.accepted = true }
@@ -68,7 +70,29 @@ ColumnLayout {
     }
 
     // the hits, by page
+    // Pages or Files
+    Row {
+        Layout.leftMargin: 24
+        spacing: 4
+        Repeater {
+            model: [["pages", "Pages", "description"], ["files", "Files", "folder_open"]]
+            delegate: Rectangle {
+                required property var modelData
+                readonly property bool on: s.scope === modelData[0]
+                width: scRow.implicitWidth + 24; height: 32; radius: 16
+                color: on ? t.accent : scH.hovered ? t.raised : t.card
+                Row { id: scRow; anchors.centerIn: parent; spacing: 6
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: modelData[2]; color: parent.parent.on ? t.onAccent : t.dim; font.family: t.icons; font.pixelSize: 15 }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: modelData[1]; color: parent.parent.on ? t.onAccent : t.dim; font.family: t.sans; font.pixelSize: 13 } }
+                HoverHandler { id: scH; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: s.scope = modelData[0] }
+            }
+        }
+    }
+    SearchFiles { visible: s.scope === "files"; Layout.fillWidth: true; Layout.fillHeight: true; win: s.win; t: s.t; app: s.app; query: s.scope === "files" ? field.text : "" }
+
     Flickable {
+        visible: s.scope === "pages"
         Layout.fillWidth: true
         Layout.fillHeight: true
         clip: true

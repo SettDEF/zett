@@ -3,6 +3,7 @@
 //!
 //! A workspace is a folder of Markdown files: `--dir`, $ZETT_DIR, or ~/zett.
 
+mod grep;
 mod lsp;
 mod window;
 

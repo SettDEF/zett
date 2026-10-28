@@ -244,7 +244,7 @@ Item {
     }
     Component { id: choiceC; Choice { options: parent.setting.options; value: s.valueOf(parent.setting); onPicked: (v) => s.set(parent.setting, v) } }
     Component { id: stepC; Stepper { value: s.valueOf(parent.setting); step: parent.setting.step; from: parent.setting.from; to: parent.setting.to; suffix: parent.setting.suffix; onChanged: (v) => s.set(parent.setting, v) } }
-    Component { id: actC; Row { spacing: 6; Repeater { model: parent.setting.actions; delegate: Button1 { required property var modelData; icon: modelData[0]; label: modelData[1]; onClicked: modelData[2]() } } } }
+    Component { id: actC; Row { spacing: 6; Repeater { model: parent.setting ? parent.setting.actions : []; delegate: Button1 { required property var modelData; icon: modelData[0]; label: modelData[1]; onClicked: modelData[2]() } } } }
 
     // ── Keyboard Shortcuts: every command with its keys (the palette's list), searchable; a click runs it ──
     readonly property var shortcuts: { const q = search.text.trim().toLowerCase(); return s.cat === "Keyboard Shortcuts" ? win.paletteEntries().filter(c => !q || (c.name + " " + c.desc + " " + c.keys).toLowerCase().includes(q)) : [] }

@@ -12,6 +12,7 @@ zett-edit.workspace = true
 zett-script.workspace = true
 zett-tui.workspace = true
 zett-lsp = { path = "../zett-lsp" }
+regex = "1"
 syntect = { version = "5", default-features = false, features = ["default-syntaxes", "parsing", "regex-fancy", "yaml-load"] }
 clap = { version = "4", features = ["derive", "env"] }
 clap_complete = "4"

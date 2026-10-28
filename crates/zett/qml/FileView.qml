@@ -38,6 +38,8 @@ ColumnLayout {
     function testEdit(s) { ed.forceActiveFocus(); ed.cursorPosition = 0; ed.insert(0, s); save() }
     function testFind(q) { findBar.open("find"); findBar.q.text = q }
     function testProblems() { showProblems = true }
+    // the cursor to a 0-based line and column (search results, problems)
+    function goTo(line, col) { ed.cursorPosition = posOf(line, col); ed.forceActiveFocus() }
     Timer { id: noteT; interval: 1800; onTriggered: fv.note = "" }
 
     // ── the language server (Rust: lsp.rs): diagnostics, completion, hover, definition, format ──
