@@ -147,6 +147,11 @@ ApplicationWindow {
     property bool detailsShown: prefs.details ?? true
     // a second page beside the editor, read-only (SidePage.qml); -1 when none
     property int sidePage: -1
+    // moving blocks: where a dragged block would land (its index), the block the cursor is in
+    property int dropAt: -1
+    property int curBlock: -1
+    // the focus leaves the block first, so what was just typed is saved before the move
+    function moveCur(d) { const c = curBlock; if (c < 0) return; rootRow.forceActiveFocus(); if (app.moveBlock(c, c + d)) win.focusAfter = c + d }
     property bool drawerShown: false
     function toggleDrawer() { drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
@@ -260,6 +265,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
     // undo / redo across blocks (the engine); inside a block being typed in, its own undo comes first
+    Shortcut { sequence: "Alt+Up"; onActivated: win.moveCur(-1) }
+    Shortcut { sequence: "Alt+Down"; onActivated: win.moveCur(1) }
     Shortcut { sequences: ["Ctrl+Z"]; onActivated: if (!app.undo()) win.note("nothing to undo") }
     Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; onActivated: if (!app.redo()) win.note("nothing to redo") }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
@@ -364,6 +371,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "transform", label: "Turn into", sub: win.slashItems.map(s => ({ icon: { paragraph: "notes", h1: "title", h2: "title", h3: "title", todo: "check_box", bullet: "format_list_bulleted", quote: "format_quote", code: "code" }[s.k], label: s.label, key: s.hint, enabled: s.k !== kindName(b), run: () => app.setKind(i, s.k) })) },
             { icon: "play_arrow", label: "Run in the drawer", enabled: b.kind === "code" && /^(sh|bash|zsh|shell|console)?$/.test(b.lang ?? ""), run: () => { win.drawerShown = true; drawer.run(b.text) } },
             { icon: "add", label: "Add block below", key: "Enter", run: () => win.focusAfter = app.addBlock(i, "paragraph") },
+            { icon: "arrow_upward", label: "Move up", key: "Alt ↑", enabled: i > 0, run: () => { if (app.moveBlock(i, i - 1)) win.focusAfter = i - 1 } },
+            { icon: "arrow_downward", label: "Move down", key: "Alt ↓", enabled: i < win.blocks.length - 1, run: () => { if (app.moveBlock(i, i + 1)) win.focusAfter = i + 1 } },
             { icon: "content_copy", label: "Duplicate", run: () => { const n = app.addBlock(i, kindName(b)); app.setText(n, b.text) } },
             { icon: "check_box", label: b.kind === "todo" ? (b.checked ? "Mark not done" : "Mark done") : "Make a to-do", run: () => b.kind === "todo" ? app.toggle(i) : app.setKind(i, "todo") },
             { sep: true },
@@ -481,6 +490,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
+            if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine === "move") {
+                const before = win.blocks.map(b => b.text.slice(0, 12))
+                const ok = app.moveBlock(0, 1); const mid = win.blocks.map(b => b.text.slice(0, 12))
+                const back = app.undo(); const after = win.blocks.map(b => b.text.slice(0, 12))
+                console.log(`zett-probe: move ${JSON.stringify(before)} -> (${ok}) ${JSON.stringify(mid)} -> undo(${back}) ${JSON.stringify(after)}`)
+                Qt.quit(); return
+            }
             if (app.shotEngine === "undo") {
                 const n0 = win.blocks.length
                 const b = app.addBlock(n0 - 1, "paragraph"); app.setText(b, "to be undone")
@@ -635,6 +652,32 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     readonly property string kind: modelData.kind
                     readonly property int level: modelData.level ?? 1
                     readonly property bool checked: modelData.checked ?? false
+
+                    // the grip left of the block (on hover): drag it onto another block to move it there
+                    HoverHandler { id: blockHov }
+                    Rectangle {
+                        id: grip
+                        x: body.x - 30; y: body.y + 2
+                        width: 22; height: 24; radius: 6
+                        opacity: blockHov.hovered || gripDrag.active ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        color: gripHov.hovered ? Qt.alpha(t.text, 0.08) : "transparent"
+                        Text { anchors.centerIn: parent; text: "drag_indicator"; color: t.faint; font.family: t.icons; font.pixelSize: 18 }
+                        HoverHandler { id: gripHov; cursorShape: gripDrag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor }
+                        DragHandler { id: gripDrag; target: null; onActiveChanged: if (!active && win.dropAt >= 0) { const to = win.dropAt; win.dropAt = -1; if (app.moveBlock(blockItem.index, to)) win.focusAfter = to } }
+                        Drag.active: gripDrag.active
+                        Drag.keys: ["zett-block"]
+                        Drag.hotSpot.x: 10; Drag.hotSpot.y: 12
+                        TapHandler { onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, null, "") }
+                    }
+                    // where a dragged block would land: a line above this one
+                    DropArea {
+                        anchors.fill: parent
+                        keys: ["zett-block"]
+                        onEntered: win.dropAt = blockItem.index
+                        onExited: if (win.dropAt === blockItem.index) win.dropAt = -1
+                    }
+                    Rectangle { visible: win.dropAt === blockItem.index; x: body.x; width: body.width; height: 2; radius: 1; color: t.accent; y: 0 }
 
                     RowLayout {
                         id: body
@@ -809,7 +852,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 onActiveFocusChanged: if (!activeFocus) {
                                     if (saveLater.running) { saveLater.stop(); app.setText(blockItem.index, edit.text) }
                                     if (normal) { normal = false; deselect(); win.vimMode = "" }
-                                }
+                                } else win.curBlock = blockItem.index   // Alt+Up/Down move this one
 
                                 Keys.onPressed: (e) => {
                                     if (normal) {

@@ -67,6 +67,10 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// moves block `from` of the open page to position `to` (among the page's blocks); false if it cannot
+        #[qinvokable]
+        #[cxx_name = "moveBlock"]
+        fn move_block(self: Pin<&mut Zett>, from: i32, to: i32) -> bool;
         /// the last change taken back / done again, across blocks; false when there is nothing
         #[qinvokable]
         fn undo(self: Pin<&mut Zett>) -> bool;
@@ -1054,5 +1058,24 @@ impl qobject::Zett {
             self.publish();
         }
         done
+    }
+}
+
+// ── moving blocks (Alt+Up/Down, the drag grip) ──
+impl qobject::Zett {
+    fn move_block(mut self: Pin<&mut Self>, from: i32, to: i32) -> bool {
+        let ok = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let (Some(b), Some(p)) = (r.block(from), r.page()) else { return false };
+            let Some(f) = r.folder.as_ref() else { return false };
+            let n = f.ws.children(p).len() as i32;
+            if to < 0 || to >= n || to == from { return false }
+            let ok = f.ws.move_to(b, p, to as usize).is_ok();
+            if ok { r.save() }
+            ok
+        };
+        if ok { self.publish() }
+        ok
     }
 }
