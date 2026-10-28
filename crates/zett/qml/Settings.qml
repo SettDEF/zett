@@ -1,16 +1,14 @@
 import QtQuick
 import QtQuick.Layouts
 
-// Settings for the window: keys, text, layout, start. Every change applies at once and is saved to
+// Settings, structured like VS Code's in our look: search, categories on the left, one row a setting (what it
+// is, its control, a bar + Reset when changed), a JSON view of what is stored. Saved at once to
 // ~/.config/zett/gui.json; the editor's own options stay in init.lua (a button opens it).
-Flickable {
+Item {
     id: s
     required property var win
     required property var t
     required property var app
-    clip: true
-    contentHeight: col.implicitHeight + 60
-    boundsBehavior: Flickable.StopAtBounds
 
     // a row: label + hint on the left, the control on the right
     component Row1: RowLayout {
@@ -105,82 +103,165 @@ Flickable {
         TapHandler { onTapped: parent.clicked() }
     }
 
-    ColumnLayout {
-        id: col
-        x: Math.max(24, (s.width - width) / 2)
-        y: 28
-        width: Math.min(760, s.width - 48)
-        spacing: 14
+    // every setting: key in gui.json, category, label, hint, control (choice / stepper / action), default
+    readonly property var schema: [
+        { cat: "Editor", key: "keys", label: "Key profile", hint: "Emacs keys type at once; Vim keys start in normal mode (Esc)", type: "choice", options: [["emacs", "Emacs"], ["vim", "Vim"]], def: "emacs" },
+        { cat: "Editor", key: "codeLigatures", label: "Ligatures in code", hint: "=> drawn as ⇒ in code blocks and files", type: "choice", options: [[false, "Off"], [true, "On"]], def: false },
+        { cat: "Editor", key: "formatOnSave", label: "Format on save", hint: "Ctrl+S in the file editor lets the language server format first", type: "choice", options: [[false, "Off"], [true, "On"]], def: false },
+        { cat: "Appearance", key: "scale", label: "Text size", hint: "the page's text, headings with it", type: "stepper", from: 0.8, to: 1.5, step: 0.05, suffix: "×", def: 1 },
+        { cat: "Appearance", key: "width", label: "Page width", hint: "the longest a line gets; about 70 characters reads best (the toolbar button: narrow, wide, full)", type: "stepper", from: 480, to: 1400, step: 40, suffix: " px", def: 760 },
+        { cat: "Appearance", key: "sans", label: "Font", hint: "for the page and the window", type: "choice", options: [["Google Sans Flex", "Google Sans"], ["Inter", "Inter"], ["Noto Serif", "Serif"]], def: "Google Sans Flex" },
+        { cat: "Window", key: "start", label: "Open on", hint: "what the window shows when it starts", type: "choice", options: [["today", "Home"], ["page", "Last page"]], def: "today" },
+        { cat: "Window", key: "details", label: "Details card", hint: "outline, links and counts beside the page (Ctrl+\\)", type: "choice", options: [[true, "Shown"], [false, "Hidden"]], def: true },
+        { cat: "Window", key: "sideMode", label: "Sidebar shows", hint: "pages and files, or one of them (the activity bar switches it too)", type: "choice", options: [["all", "Both"], ["pages", "Pages"], ["files", "Files"]], def: "all" },
+        { cat: "Advanced", key: "", label: "init.lua", hint: app.configPath(), type: "action", actions: [["edit", "Open", () => win.openFile({ path: app.configPath(), rel: "init.lua", dir: false })], ["refresh", "Reload", () => win.applyScript(JSON.parse(app.reloadConfig()))]] },
+        { cat: "Advanced", key: "", label: "Workspace", hint: app.dir, type: "action", actions: [["folder_open", "Show folder", () => Qt.openUrlExternally("file://" + app.dir)]] },
+        { cat: "Advanced", key: "", label: "Commands", hint: "everything zett can do, with its key", type: "action", actions: [["terminal", "Palette  Ctrl ⇧ P", () => win.openPalette()]] }
+    ]
+    readonly property var cats: [["Editor", "edit_note"], ["Appearance", "palette"], ["Window", "dashboard"], ["Advanced", "tune"]]
+    property string cat: ""                     // "" = all
+    property bool jsonView: false
+    function valueOf(x) { return win.prefs[x.key] ?? x.def }
+    function changed(x) { return x.key !== "" && win.prefs[x.key] !== undefined && win.prefs[x.key] !== x.def }
+    function set(x, v) {
+        win.setPref(x.key, v)
+        if (x.key === "details") win.detailsShown = v
+        if (x.key === "sideMode") win.sideMode = v
+    }
+    readonly property var shown: {
+        const q = search.text.trim().toLowerCase()
+        return schema.filter(x => (!cat || x.cat === cat) && (!q || (x.label + " " + x.hint + " " + x.cat + " " + x.key).toLowerCase().includes(q)))
+    }
 
-        Text { text: "Settings"; color: t.text; font.family: t.sans; font.pixelSize: 30; font.weight: Font.Bold }
-        Text { Layout.topMargin: -8; text: "saved as you change them  ·  ~/.config/zett/gui.json"; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
-
-        Section {
-            title: "Keys"; icon: "keyboard"
-            Row1 {
-                label: "Key profile"; hint: "Emacs keys type at once; Vim keys start in normal mode (Esc)"
-                Choice { options: [["emacs", "Emacs"], ["vim", "Vim"]]; value: win.prefs.keys ?? "emacs"; onPicked: (v) => win.setPref("keys", v) }
-            }
-        }
-
-        Section {
-            title: "Text"; icon: "text_fields"
-            Row1 {
-                label: "Text size"; hint: "the page's text, headings with it"
-                Stepper { value: win.prefs.scale ?? 1; step: 0.05; from: 0.8; to: 1.5; suffix: "×"; onChanged: (v) => win.setPref("scale", v) }
-            }
-            Row1 {
-                label: "Page width"; hint: "the longest a line gets; about 70 characters reads best"
-                Stepper { value: win.prefs.width ?? 760; step: 40; from: 480; to: 1400; suffix: " px"; onChanged: (v) => win.setPref("width", v) }
-            }
-            Row1 {
-                label: "Font"; hint: "for the page and the window"
-                Choice { options: [["Google Sans Flex", "Google Sans"], ["Inter", "Inter"], ["Noto Serif", "Serif"]]; value: win.prefs.sans ?? "Google Sans Flex"; onPicked: (v) => win.setPref("sans", v) }
-            }
-            Row1 {
-                label: "Ligatures in code"; hint: "=> drawn as ⇒ in code blocks"
-                Choice { options: [[false, "Off"], [true, "On"]]; value: win.prefs.codeLigatures ?? false; onPicked: (v) => win.setPref("codeLigatures", v) }
-            }
-            Row1 {
-                label: "Format on save"; hint: "Ctrl+S in the file editor lets the language server format first"
-                Choice { options: [[false, "Off"], [true, "On"]]; value: win.prefs.formatOnSave ?? false; onPicked: (v) => win.setPref("formatOnSave", v) }
-            }
-        }
-
-        Section {
-            title: "Window"; icon: "dashboard"
-            Row1 {
-                label: "Open on"; hint: "what the window shows when it starts"
-                Choice { options: [["today", "Today"], ["page", "Last page"]]; value: win.prefs.start ?? "today"; onPicked: (v) => win.setPref("start", v) }
-            }
-            Row1 {
-                label: "Details card"; hint: "outline, links and counts beside the page (Ctrl+\\)"
-                Choice { options: [[true, "Shown"], [false, "Hidden"]]; value: win.prefs.details ?? true; onPicked: (v) => { win.setPref("details", v); win.detailsShown = v } }
-            }
-            Row1 {
-                label: "Sidebar"
-                Choice { options: [[false, "Shown"], [true, "Hidden"]]; value: win.sidebarHidden; onPicked: (v) => win.sidebarHidden = v }
-            }
-        }
-
-        Section {
-            title: "Configuration"; icon: "tune"
-            Row1 {
-                label: "init.lua"; hint: app.configPath()
+    // ── the categories, on the left ──
+    Column {
+        id: catCol
+        x: 16; y: 96; width: 190
+        spacing: 2
+        Repeater {
+            model: [["", "All settings"]].concat(s.cats.map(c => [c[0], c[0], c[1]]))
+            delegate: Rectangle {
+                required property var modelData
+                readonly property bool on: s.cat === modelData[0]
+                readonly property int n: s.schema.filter(x => (!modelData[0] || x.cat === modelData[0]) && s.changed(x)).length
+                width: catCol.width; height: 34; radius: 10
+                color: on ? Qt.alpha(t.accent, 0.16) : ccH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
                 Row {
-                    spacing: 6
-                    Button1 { icon: "edit"; label: "Open"; onClicked: win.openFile({ path: app.configPath(), rel: "init.lua", dir: false }) }
-                    Button1 { icon: "refresh"; label: "Reload"; onClicked: win.applyScript(JSON.parse(app.reloadConfig())) }
+                    x: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                    Text { text: modelData[2] ?? "settings"; color: parent.parent.on ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 17 }
+                    Text { text: modelData[1]; color: parent.parent.on ? t.text : t.dim; font.family: t.sans; font.pixelSize: 14; font.weight: parent.parent.on ? Font.DemiBold : Font.Normal }
+                }
+                // how many were changed here
+                Text { visible: parent.n > 0; anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter } text: parent.n; color: t.accent; font.family: t.mono; font.pixelSize: 11 }
+                HoverHandler { id: ccH; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: s.cat = modelData[0] }
+            }
+        }
+    }
+
+    // ── the title, the search, the JSON switch ──
+    ColumnLayout {
+        id: top
+        x: 24; y: 24; width: s.width - 48
+        spacing: 12
+        RowLayout {
+            Layout.fillWidth: true
+            Text { Layout.fillWidth: true; text: "Settings"; color: t.text; font.family: t.sans; font.pixelSize: 26; font.weight: Font.Bold }
+            Choice { options: [[false, "Settings"], [true, "JSON"]]; value: s.jsonView; onPicked: (v) => s.jsonView = v }
+        }
+    }
+    Rectangle {
+        id: searchBox
+        x: catCol.x + catCol.width + 24; y: 92
+        width: Math.min(760, s.width - x - 24); height: 38; radius: 12
+        color: t.card
+        border.width: search.activeFocus ? 1 : 0; border.color: Qt.alpha(t.accent, 0.5)
+        visible: !s.jsonView
+        Text { id: sIc; x: 12; anchors.verticalCenter: parent.verticalCenter; text: "search"; color: t.dim; font.family: t.icons; font.pixelSize: 18 }
+        TextInput {
+            id: search
+            anchors { left: sIc.right; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 12 }
+            color: t.text; font.family: t.sans; font.pixelSize: 14; clip: true
+            Text { visible: !search.text; text: "Search settings"; color: t.faint; font: search.font }
+        }
+    }
+
+    // ── the settings ──
+    Flickable {
+        visible: !s.jsonView
+        x: searchBox.x; y: searchBox.y + searchBox.height + 16
+        width: searchBox.width; height: s.height - y - 16
+        clip: true
+        contentHeight: list.implicitHeight + 40
+        boundsBehavior: Flickable.StopAtBounds
+        ColumnLayout {
+            id: list
+            width: parent.width
+            spacing: 4
+            Text { visible: s.shown.length === 0; text: "No setting matches"; color: t.faint; font.family: t.sans; font.pixelSize: 14 }
+            Repeater {
+                model: s.shown
+                delegate: Rectangle {
+                    id: row
+                    required property var modelData
+                    required property int index
+                    readonly property bool first: index === 0 || s.shown[index - 1].cat !== modelData.cat
+                    Layout.fillWidth: true
+                    implicitHeight: rowCol.implicitHeight + 20
+                    radius: 12
+                    color: rh.hovered ? Qt.alpha(t.text, 0.03) : "transparent"
+                    HoverHandler { id: rh }
+                    // changed from the default: a bar on the left
+                    Rectangle { visible: s.changed(modelData); x: 0; y: (row.first ? 34 : 0) + 8; width: 3; height: rowCol.implicitHeight - (row.first ? 34 : 0) - 4; radius: 1.5; color: t.accent }
+                    ColumnLayout {
+                        id: rowCol
+                        x: 14; y: 10; width: parent.width - 28
+                        spacing: 6
+                        // the category's name over its first setting
+                        Text { visible: row.first; Layout.topMargin: row.index ? 14 : 0; text: modelData.cat.toUpperCase(); color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Text { text: modelData.label; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+                            Text { visible: modelData.key.length > 0; text: modelData.key; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                visible: s.changed(modelData)
+                                text: "Reset"; color: rsH.hovered ? t.accent : t.dim; font.family: t.sans; font.pixelSize: 12
+                                HoverHandler { id: rsH; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: s.set(modelData, modelData.def) }
+                            }
+                        }
+                        Text { Layout.fillWidth: true; text: modelData.hint; wrapMode: Text.Wrap; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                        Loader {
+                            sourceComponent: modelData.type === "choice" ? choiceC : modelData.type === "stepper" ? stepC : actC
+                            property var setting: modelData
+                        }
+                    }
                 }
             }
-            Row1 {
-                label: "Workspace"; hint: app.dir
-                Button1 { icon: "folder_open"; label: "Show folder"; onClicked: Qt.openUrlExternally("file://" + app.dir) }
-            }
-            Row1 {
-                label: "Commands"; hint: "everything zett can do, with its key"
-                Button1 { icon: "terminal"; label: "Palette  Ctrl ⇧ P"; onClicked: win.openPalette() }
-            }
+        }
+    }
+    Component { id: choiceC; Choice { options: parent.setting.options; value: s.valueOf(parent.setting); onPicked: (v) => s.set(parent.setting, v) } }
+    Component { id: stepC; Stepper { value: s.valueOf(parent.setting); step: parent.setting.step; from: parent.setting.from; to: parent.setting.to; suffix: parent.setting.suffix; onChanged: (v) => s.set(parent.setting, v) } }
+    Component { id: actC; Row { spacing: 6; Repeater { model: parent.setting.actions; delegate: Button1 { required property var modelData; icon: modelData[0]; label: modelData[1]; onClicked: modelData[2]() } } } }
+
+    // ── the JSON view: what is stored, as it is ──
+    Rectangle {
+        visible: s.jsonView
+        x: searchBox.x; y: 92
+        width: searchBox.width; height: s.height - y - 16
+        radius: 14; color: t.card
+        RowLayout {
+            id: jHead
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+            Text { Layout.fillWidth: true; text: "~/.config/zett/gui.json  ·  only what differs from the defaults is worth keeping"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+            Button1 { icon: "edit"; label: "Open the file"; onClicked: win.openFile({ path: app.configPath().replace(/init\.lua$/, "gui.json"), rel: "gui.json", dir: false }) }
+        }
+        Flickable {
+            anchors { left: parent.left; right: parent.right; top: jHead.bottom; bottom: parent.bottom; margins: 12 }
+            clip: true; contentHeight: jText.implicitHeight
+            Text { id: jText; width: parent.width; text: app.highlight("json", JSON.stringify(win.prefs, null, 2)); textFormat: Text.RichText; font.family: t.mono; font.pixelSize: 13; color: t.text }
         }
     }
 }
