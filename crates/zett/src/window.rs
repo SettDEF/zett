@@ -64,6 +64,12 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "readFile"]
         fn read_file(self: &Zett, path: &QString) -> QString;
+        /// an environment variable (empty when unset), for views that need HOME or XDG_RUNTIME_DIR
+        #[qinvokable]
+        fn env(self: &Zett, name: &QString) -> QString;
+        /// start a program detached: argv as a JSON array; false when it could not start
+        #[qinvokable]
+        fn spawn(self: &Zett, argv: &QString) -> bool;
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
@@ -887,6 +893,20 @@ impl qobject::Zett {
         }
         walk(&root, &root, 0, &git, &mut out);
         QString::from(&serde_json::Value::Array(out).to_string())
+    }
+
+    fn env(&self, name: &QString) -> QString {
+        QString::from(&std::env::var(name.to_string()).unwrap_or_default())
+    }
+
+    fn spawn(&self, argv: &QString) -> bool {
+        let v: Vec<String> = serde_json::from_str(&argv.to_string()).unwrap_or_default();
+        let Some((cmd, args)) = v.split_first() else { return false };
+        match std::process::Command::new(cmd).args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
+            // reaped on a thread, so no zombie waits for zett to exit
+            Ok(mut c) => { std::thread::spawn(move || { let _ = c.wait(); }); true }
+            Err(_) => false,
+        }
     }
 
     fn read_file(&self, path: &QString) -> QString {

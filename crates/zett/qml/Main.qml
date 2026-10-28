@@ -168,6 +168,8 @@ ApplicationWindow {
     property bool detailsShown: prefs.details ?? true
     // a second page beside the editor, read-only (SidePage.qml); -1 when none
     property int sidePage: -1
+    // Claude beside the page: claude-ui's panel, from its install (Ctrl+Shift+A)
+    property bool claudeShown: false
     // moving blocks: where a dragged block would land (its index), the block the cursor is in
     property int dropAt: -1
     property int curBlock: -1
@@ -294,6 +296,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequence: "Ctrl+Shift+F"; onActivated: win.openSearch() }
     function openSearch() { win.view = "search"; Qt.callLater(searchView.focusField) }
     Shortcut { sequence: "Ctrl+`"; onActivated: win.toggleDrawer() }
+    Shortcut { sequence: "Ctrl+Shift+A"; onActivated: win.claudeShown = !win.claudeShown }
     // the palette: the window's own actions, then every engine command with its key
     // the page's file into the system share sheet (apps, phone, Telegram…)
     function sharePage() {
@@ -313,6 +316,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "ios_share", name: "Share page", desc: "the system share sheet", keys: "", run: () => win.sharePage() },
             { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) },
             { icon: "terminal", name: "Toggle shell drawer", desc: "a command in the workspace", keys: "Ctrl `", run: () => win.toggleDrawer() },
+            { icon: "smart_toy", name: "Toggle Claude", desc: "Claude Code beside the page (claude-ui)", keys: "Ctrl Shift A", run: () => win.claudeShown = !win.claudeShown },
             { icon: "undo", name: "Undo", desc: "the last change, across blocks", keys: "Ctrl Z", run: () => { if (!app.undo()) win.note("nothing to undo") } },
             { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
             { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
@@ -598,6 +602,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
+            if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
@@ -676,6 +681,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     focus: true
     Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })  }
+    Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }  // the panel polls cui first
     // the page sits in one card on the background, like the shell's panels
     Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.color: pageDrop.containsDrag ? t.accent : Qt.alpha(t.rule, 0.35)
         // a page or file dropped on the open page becomes a [[link]]
@@ -1397,6 +1403,16 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             StatusBar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
         }
 
+        // Claude: loaded from claude-ui's install, so zett runs without it
+        Loader {
+            id: claudeView
+            active: win.claudeShown
+            visible: active
+            Layout.preferredWidth: 480; Layout.fillHeight: true
+            Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
+            source: "file://" + app.env("HOME") + "/.local/share/claude-ui-app/zett/ZettPanel.qml"
+            onLoaded: { item.app = app; item.t = win.theme; item.folder = app.env("PWD"); Qt.callLater(() => item.focusInput()) }
+        }
         // ───────── details: outline, links, info ─────────
         SidePage {
             visible: win.sidePage >= 0 && win.view === "page"
