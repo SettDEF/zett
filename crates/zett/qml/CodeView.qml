@@ -19,6 +19,41 @@ Rectangle {
     Timer { id: lspSync; interval: 300; onTriggered: if (cv.fv && cv.fv.lsp) cv.app.lspChange(cv.file, doc.text()) }
     Connections { target: doc; function onVersionChanged() { if (doc.dirty) lspSync.restart() } }
     function findBarOpen() { findBar.open(false) }
+    // ── Claude in the editor (Ctrl+I): the selection (or the line) rewritten as asked, shown as a diff to take or leave ──
+    property var ai: null          // { l0, c0, old, ask, out, busy, err }
+    function aiRange() {
+        const c = carets[0], a = c[0] < c[2] || (c[0] === c[2] && c[1] < c[3]) ? [c[0], c[1]] : [c[2], c[3]], b = a[0] === c[0] && a[1] === c[1] ? [c[2], c[3]] : [c[0], c[1]]
+        if (a[0] === b[0] && a[1] === b[1]) { const s = doc.lineText(a[0]); return { l0: a[0], c0: 0, old: s } }
+        doc.select(a[0], a[1], 0); doc.click(b[0], b[1], true, false)
+        return { l0: a[0], c0: a[1], old: doc.selectedText() }
+    }
+    function aiAsk(ask) {
+        if (!ask.trim()) return
+        const r = aiRange()
+        const lang = file.slice(file.lastIndexOf(".") + 1)
+        const prompt = `Rewrite this ${lang} code from ${file.replace(app.dir + "/", "")}: ${ask.trim()}. Keep its indentation. Answer with only the rewritten code: no explanation, no code fences.`
+        ai = { l0: r.l0, c0: r.c0, old: r.old, ask: ask, out: "", busy: true, err: "" }
+        const b64 = Qt.btoa(unescape(encodeURIComponent(r.old)))
+        app.runShell(99998, `printf %s ${b64} | base64 -d | claude -p '${prompt.replace(/'/g, "'\\''")}' 2>/dev/null`)
+    }
+    Connections {
+        target: cv.app
+        function onRunOutput(id, chunk, done, code) {
+            if (id !== 99998 || !cv.ai) return
+            const a = Object.assign({}, cv.ai); a.out += chunk
+            if (done) { a.busy = false; a.out = a.out.replace(/^\s*```[\w-]*\n/, "").replace(/\n?```\s*$/, ""); if (code !== 0 && !a.out.trim()) a.err = "claude failed (exit " + code + ")" }
+            cv.ai = a
+        }
+    }
+    function aiAccept() {
+        if (!ai || ai.busy || !ai.out) return
+        const old = ai.old, l0 = ai.l0, c0 = ai.c0
+        let out = ai.out
+        if (!old.endsWith("\n")) out = out.replace(/\n$/, "")
+        doc.select(l0, c0, old.length); doc.insert(out)
+        ai = null; input.forceActiveFocus()
+    }
+    function aiReject() { if (ai && ai.busy) cv.app.stopShell(); ai = null; input.forceActiveFocus() }
     function expandSnippet() {
         const w = word(), body = (win.snippets ?? {})[w]
         if (!w || typeof body !== "string" || carets.length > 1) return false
@@ -308,6 +343,10 @@ Rectangle {
         Keys.onPressed: (e) => {
             const ctrl = e.modifiers & Qt.ControlModifier
             const shift = e.modifiers & Qt.ShiftModifier, alt = e.modifiers & Qt.AltModifier
+            // Claude: Ctrl+I asks; a change shown takes Tab or Ctrl+Enter, Esc leaves it
+            if (ctrl && e.key === Qt.Key_I) { aiBar.open(); e.accepted = true; return }
+            if (cv.ai && !cv.ai.busy && cv.ai.out && (e.key === Qt.Key_Tab || ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && ctrl))) { cv.aiAccept(); e.accepted = true; return }
+            if (cv.ai && e.key === Qt.Key_Escape) { cv.aiReject(); e.accepted = true; return }
             // the completion list takes ↑ ↓ Enter Tab Esc while open
             if (cv.fv && cv.fv.actions.length) {
                 if (e.key === Qt.Key_Down) { cv.fv.actionSel = (cv.fv.actionSel + 1) % cv.fv.actions.length; e.accepted = true; return }
@@ -459,6 +498,71 @@ Rectangle {
         HoverHandler { id: mmH; cursorShape: Qt.PointingHandCursor }
         TapHandler { onTapped: (ev) => mini.scrollTo(ev.position.y) }
         DragHandler { target: null; onCentroidChanged: if (active) mini.scrollTo(centroid.position.y) }
+    }
+    // Claude's prompt at the cursor: what to do, or one of the quick ones
+    Pop {
+        id: aiBar
+        visible: false
+        function open() { visible = true; aiQ.text = ""; aiQ.forceActiveFocus() }
+        function go(ask) { visible = false; cv.aiAsk(ask) }
+        x: Math.max(8, Math.min(cv.cx - 20, cv.width - width - 8)); y: Math.min(cv.cy + cv.lh + 4, cv.height - height - 8)
+        width: 460; height: aiCol.implicitHeight + 20; z: 60
+        border.color: Qt.alpha(cv.t.accent, 0.5)
+        Column {
+            id: aiCol; x: 10; y: 10; width: parent.width - 20; spacing: 8
+            Row { spacing: 8
+                Text { text: "smart_toy"; color: cv.t.accent; font.family: cv.t.icons; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter }
+                TextInput { id: aiQ; width: aiCol.width - 30; anchors.verticalCenter: parent.verticalCenter; color: cv.t.text; font.family: cv.t.sans; font.pixelSize: 14; clip: true; selectionColor: Qt.alpha(cv.t.accent, 0.35)
+                    Keys.onReturnPressed: aiBar.go(text)
+                    Keys.onEscapePressed: { aiBar.visible = false; input.forceActiveFocus() }
+                    Text { visible: !aiQ.text; text: "Ask Claude to change this code…"; color: cv.t.faint; font: aiQ.font } } }
+            Flow { width: aiCol.width; spacing: 6
+                Repeater {
+                    model: [["build", "Fix it", "fix the bugs in it"], ["science", "Add tests", "add unit tests for it, in the language's usual style"], ["description", "Document", "add short doc comments to it"], ["auto_fix_high", "Simplify", "make it simpler and clearer without changing what it does"], ["help", "Explain", ""]]
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: qr.implicitWidth + 20; height: 26; radius: 13
+                        color: qch.hovered ? Qt.alpha(cv.t.accent, 0.22) : Qt.alpha(cv.t.text, 0.06)
+                        Row { id: qr; anchors.centerIn: parent; spacing: 5
+                            Text { text: modelData[0]; color: cv.t.accent; font.family: cv.t.icons; font.pixelSize: 14 }
+                            Text { text: modelData[1]; color: cv.t.text; font.family: cv.t.sans; font.pixelSize: 12 } }
+                        HoverHandler { id: qch; cursorShape: Qt.PointingHandCursor }
+                        // Explain goes to the Claude panel with the code; the rest change it here
+                        TapHandler { onTapped: { if (modelData[2]) aiBar.go(modelData[2]); else { aiBar.visible = false; cv.win.askClaude("Explain this code from " + cv.file.replace(cv.app.dir + "/", "") + ":\n\n" + (doc.selectedText() || doc.lineText(cv.carets[0][0]))) } } }
+                    }
+                }
+            }
+        }
+    }
+    // the change: the old lines (red) and the new (green) under the code, Accept / Reject
+    Pop {
+        visible: cv.ai !== null
+        x: 40; width: cv.width - 80
+        y: Math.min(Math.max(8, (doc.lineRow(cv.ai ? cv.ai.l0 : 0) + 1) * cv.lh - cv.scrollY + 4), cv.height - height - 8)
+        height: Math.min(cv.height * 0.6, diffCol.implicitHeight + 20); z: 58; clip: true
+        border.color: Qt.alpha(cv.t.accent, 0.4)
+        Column {
+            id: diffCol; x: 12; y: 10; width: parent.width - 24; spacing: 6
+            Row { spacing: 8
+                Text { text: "smart_toy"; color: cv.t.accent; font.family: cv.t.icons; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: cv.ai ? (cv.ai.busy ? "Claude is writing… (" + cv.ai.ask + ")" : cv.ai.err || cv.ai.ask) : ""; color: cv.ai && cv.ai.err ? cv.t.removed : cv.t.dim; font.family: cv.t.sans; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; width: diffCol.width - 260 }
+                Rectangle { visible: cv.ai && !cv.ai.busy && !!cv.ai.out; width: acT.implicitWidth + 24; height: 26; radius: 13; color: cv.t.accent
+                    Text { id: acT; anchors.centerIn: parent; text: "Accept  Tab"; color: cv.t.onAccent; font.family: cv.t.sans; font.pixelSize: 12; font.weight: Font.DemiBold }
+                    TapHandler { onTapped: cv.aiAccept() } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+                Rectangle { width: rjT.implicitWidth + 24; height: 26; radius: 13; color: Qt.alpha(cv.t.text, 0.08)
+                    Text { id: rjT; anchors.centerIn: parent; text: cv.ai && cv.ai.busy ? "Stop  Esc" : "Reject  Esc"; color: cv.t.text; font.family: cv.t.sans; font.pixelSize: 12 }
+                    TapHandler { onTapped: cv.aiReject() } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+            }
+            Repeater {
+                model: cv.ai ? cv.ai.old.split("\n").filter((l, i, a) => i < a.length - 1 || l).map(l => ["-", l]).concat((cv.ai.out || "").split("\n").filter((l, i, a) => i < a.length - 1 || l).map(l => ["+", l])).slice(0, 400) : []
+                delegate: Rectangle {
+                    required property var modelData
+                    width: diffCol.width; height: cv.lh - 2; radius: 5
+                    color: Qt.alpha(modelData[0] === "+" ? cv.t.added : cv.t.removed, 0.14)
+                    Text { x: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData[0] + " " + modelData[1].replace(/\t/g, "    "); color: cv.t.text; font.family: cv.t.mono; font.pixelSize: 12 }
+                }
+            }
+        }
     }
     // the scrollbar: a slim rounded thumb
     Rectangle {
