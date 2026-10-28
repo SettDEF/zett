@@ -110,6 +110,41 @@ ApplicationWindow {
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
     property string view: app.shot.length > 0 && app.shotEngine !== "today" ? "page" : "today"
     function openPage(i) { win.view = "page"; app.open(i) }
+    // the sidebar's Files and Tags, read again when pages change and every few seconds
+    property var files: []
+    property var tagList: []
+    property var closedDirs: []
+    property bool filesOpen: true
+    property bool tagsOpen: true
+    function refreshSide() {
+        try { files = JSON.parse(app.files()) } catch (e) { files = [] }
+        try { tagList = JSON.parse(app.tags()) } catch (e) { tagList = [] }
+    }
+    onPagesChanged: sideLater.restart()
+    Timer { id: sideLater; interval: 300; onTriggered: win.refreshSide() }
+    Timer { interval: 5000; running: win.active; repeat: true; onTriggered: win.refreshSide() }
+    // a file: a .md page opens as a page, a folder folds, anything else in the file view
+    property string filePath: ""
+    property string fileText: ""
+    function openFile(x) {
+        if (x.dir) { closedDirs = closedDirs.includes(x.rel) ? closedDirs.filter(d => d !== x.rel) : closedDirs.concat([x.rel]); return }
+        const pi = win.pages.findIndex(p => p.path === x.path)
+        if (pi >= 0) { win.openPage(pi); return }
+        filePath = x.path; fileText = app.readFile(x.path); view = "file"
+    }
+    function fileMenu(x, px, py) {
+        const row = clipRow(x.rel, null, null, [
+            { icon: "draft", label: "Copy path", run: () => win.copyText(x.path) },
+            { icon: "link", label: "Copy as a link", run: () => win.copyText(`[[${x.rel}]]`) }
+        ])
+        row[3].run = () => ctx.run(row[3])
+        ctx.show(px, py, row, [
+            { icon: x.dir ? "unfold_more" : "open_in_new", label: x.dir ? "Fold / unfold" : "Open", run: () => win.openFile(x) },
+            { icon: "open_in_browser", label: "Open with the system", enabled: !x.dir, run: () => Qt.openUrlExternally("file://" + x.path) },
+            { icon: "folder_open", label: "Show in folder", run: () => Qt.openUrlExternally("file://" + (x.dir ? x.path : x.path.slice(0, x.path.lastIndexOf("/")))) },
+            { icon: "refresh", label: "Refresh", run: () => win.refreshSide() }
+        ])
+    }
     // the open pages (indices into pages), the focus stack's tabs
     property var tabs: []
     function addTab(i) { if (i >= 0 && !tabs.includes(i)) tabs = tabs.concat([i]) }
@@ -119,7 +154,7 @@ ApplicationWindow {
         if (i === app.current && tabs.length) win.openPage(tabs[Math.min(at, tabs.length - 1)])
     }
     Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
-    Component.onCompleted: addTab(app.current)
+    Component.onCompleted: { addTab(app.current); refreshSide() }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
@@ -298,6 +333,7 @@ ApplicationWindow {
                 win.focusAfter = app.addBlock(-1, "paragraph")
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
+            if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
             if (app.shotEngine === "trash") { const n = win.pages.length; const ok = app.trashPage(n - 1); console.log(`zett-probe: trash ok=${ok} pages ${n} -> ${win.pages.length}`); grabLater.start(); return }
             if (app.shotEngine === "selmenu") { const d = list.itemAtIndex(1); win.blockMenu(1, 340, 150, null, ""); grabLater.start(); return }
@@ -410,7 +446,9 @@ ApplicationWindow {
                 ListView {
                     id: pageList
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    // as tall as its pages, up to half the sidebar; the file tree takes the rest
+                    Layout.preferredHeight: Math.min(contentHeight, Math.max(120, (parent.height - 200) * 0.5))
+                    Layout.fillHeight: !win.filesOpen
                     clip: true
                     spacing: 2
                     model: win.pages
@@ -439,6 +477,75 @@ ApplicationWindow {
                         HoverHandler { id: rowHov; cursorShape: Qt.PointingHandCursor }
                         TapHandler { onTapped: win.openPage(index) }
                         TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.pageMenu(index, ev.scenePosition.x, ev.scenePosition.y) }
+                    }
+                }
+
+                // ── FILES: the workspace folder with git status ──
+                component SectionHead: RowLayout {
+                    property string label
+                    property string count
+                    property bool open: true
+                    signal toggled
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.topMargin: 10
+                    Text { text: parent.open ? "expand_more" : "chevron_right"; color: t.faint; font.family: t.icons; font.pixelSize: 16 }
+                    Text { text: parent.label; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                    Text { text: parent.count; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Item { Layout.fillWidth: true; implicitHeight: 22 }
+                    TapHandler { onTapped: parent.toggled() }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                }
+                SectionHead { label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen }
+                ListView {
+                    id: fileList
+                    visible: win.filesOpen
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 60
+                    clip: true
+                    // a folder closed in the tree hides what is under it
+                    model: win.files.filter(x => !win.closedDirs.some(d => x.rel.startsWith(d + "/")))
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool sel: win.view === "file" && win.filePath === modelData.path
+                        readonly property bool shut: win.closedDirs.includes(modelData.rel)
+                        width: ListView.view.width
+                        height: 28; radius: 8
+                        color: sel ? Qt.alpha(t.accent, 0.16) : fHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 8 + modelData.depth * 14; rightMargin: 10 }
+                            spacing: 6
+                            Text { text: modelData.dir ? (parent.parent.shut ? "folder" : "folder_open") : modelData.name.endsWith(".md") ? "description" : "draft"; color: modelData.dir ? t.dim : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                            Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; color: modelData.git === "M" ? "#e5c07b" : modelData.git === "U" || modelData.git === "A" ? "#98c379" : modelData.git === "D" ? "#e06c75" : t.dim; font.family: t.sans; font.pixelSize: 13 }
+                            Text { visible: modelData.git.length > 0; text: modelData.git; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                        }
+                        HoverHandler { id: fHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: win.openFile(modelData) }
+                        TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.fileMenu(modelData, ev.scenePosition.x, ev.scenePosition.y) }
+                    }
+                }
+
+                // ── TAGS ──
+                SectionHead { visible: win.tagList.length > 0; label: "TAGS"; count: win.tagList.length; open: win.tagsOpen; onToggled: win.tagsOpen = !win.tagsOpen }
+                Flow {
+                    visible: win.tagsOpen && win.tagList.length > 0
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.bottomMargin: 6
+                    spacing: 6
+                    Repeater {
+                        model: win.tagList.slice(0, 24)
+                        delegate: Rectangle {
+                            required property var modelData
+                            implicitWidth: tagRow.implicitWidth + 16; implicitHeight: 24; radius: 12
+                            color: tagHov.hovered ? t.raised : t.card
+                            RowLayout { id: tagRow; anchors.centerIn: parent; spacing: 4
+                                Text { text: "#" + modelData.tag; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
+                                Text { text: modelData.count; color: t.faint; font.family: t.mono; font.pixelSize: 10 } }
+                            HoverHandler { id: tagHov; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: { quickField.text = "#" + modelData.tag; quick.open(); quickField.forceActiveFocus() } }
+                        }
                     }
                 }
                 Text {
@@ -497,6 +604,7 @@ ApplicationWindow {
                 }
                 RowLayout {
                     id: toolRow
+                    visible: win.view === "page"
                     anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 28 }
                     spacing: 6
                     Rectangle {
@@ -505,6 +613,61 @@ ApplicationWindow {
                         RowLayout { id: srcRow; anchors.centerIn: parent; Text { text: "Markdown"; color: win.showSource ? t.onAccent : t.dim; font.family: t.sans; font.pixelSize: 13 } }
                         HoverHandler { id: srcHov; cursorShape: Qt.PointingHandCursor }
                         TapHandler { onTapped: win.showSource = !win.showSource }
+                    }
+                }
+            }
+
+            // ───────── a file from the tree, read-only and highlighted ─────────
+            ColumnLayout {
+                visible: win.view === "file"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 8
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    spacing: 8
+                    Text { text: "draft"; color: t.accent; font.family: t.icons; font.pixelSize: 18 }
+                    Text { Layout.fillWidth: true; text: win.filePath.replace(app.dir + "/", "").split("/").join("  ›  "); elide: Text.ElideMiddle; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    Text { text: `${win.fileText.split("\n").length} lines`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    Rectangle {
+                        implicitWidth: oRow.implicitWidth + 20; implicitHeight: 28; radius: 14
+                        color: oHov.hovered ? t.raised : t.card
+                        RowLayout { id: oRow; anchors.centerIn: parent; spacing: 5
+                            Text { text: "open_in_new"; color: t.dim; font.family: t.icons; font.pixelSize: 15 }
+                            Text { text: "Open with the system"; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
+                        HoverHandler { id: oHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: Qt.openUrlExternally("file://" + win.filePath) }
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.leftMargin: 16; Layout.rightMargin: 16
+                    radius: 17
+                    color: t.card
+                    Flickable {
+                        id: fileFlick
+                        anchors { fill: parent; margins: 14 }
+                        clip: true
+                        contentWidth: Math.max(width, fileBody.implicitWidth + 50)
+                        contentHeight: fileBody.implicitHeight
+                        boundsBehavior: Flickable.StopAtBounds
+                        // line numbers beside the code, both in the cell font
+                        Text {
+                            id: gutter
+                            text: win.fileText.split("\n").map((_, i) => i + 1).join("\n")
+                            color: t.faint; font.family: t.mono; font.pixelSize: 13
+                            horizontalAlignment: Text.AlignRight
+                            width: 40
+                        }
+                        Text {
+                            id: fileBody
+                            x: 52
+                            text: win.view === "file" ? app.highlight(win.filePath.slice(win.filePath.lastIndexOf(".") + 1), win.fileText) : ""
+                            textFormat: Text.RichText
+                            color: t.text; font.family: t.mono; font.pixelSize: 13
+                        }
                     }
                 }
             }

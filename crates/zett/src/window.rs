@@ -57,6 +57,16 @@ pub mod qobject {
         /// every open to-do in the workspace: [{page, title, block, text}]
         #[qinvokable]
         fn todos(self: &Zett) -> QString;
+        /// the workspace folder as a tree with git status: [{path, rel, name, depth, dir, git}]
+        #[qinvokable]
+        fn files(self: &Zett) -> QString;
+        /// a file's text for the file view (at most 1 MB)
+        #[qinvokable]
+        #[cxx_name = "readFile"]
+        fn read_file(self: &Zett, path: &QString) -> QString;
+        /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
+        #[qinvokable]
+        fn tags(self: &Zett) -> QString;
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
         /// opens the page with this title, making it if there is none ([[links]], quick open)
@@ -748,4 +758,75 @@ fn highlight_html(lang: &str, code: &str) -> String {
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+// ── the sidebar's Files and Tags ──
+impl qobject::Zett {
+    fn files(&self) -> QString {
+        let root = std::path::PathBuf::from(self.dir.to_string());
+        // git status by path, relative to the repo's top
+        let mut git = std::collections::HashMap::new();
+        if let Ok(o) = std::process::Command::new("git").arg("-C").arg(&root).args(["status", "--porcelain=v1", "-z", "--untracked-files=all", "."]).stderr(std::process::Stdio::null()).output() {
+            let top = std::process::Command::new("git").arg("-C").arg(&root).args(["rev-parse", "--show-toplevel"]).output().ok()
+                .map(|t| std::path::PathBuf::from(String::from_utf8_lossy(&t.stdout).trim())).unwrap_or_else(|| root.clone());
+            for e in o.stdout.split(|b| *b == 0).filter(|e| e.len() > 3) {
+                let s = String::from_utf8_lossy(e);
+                let code = s[..2].trim().chars().next().unwrap_or(' ');
+                git.insert(top.join(&s[3..]), if code == '?' { "U".to_string() } else { code.to_string() });
+            }
+        }
+        let mut out = Vec::new();
+        fn walk(d: &std::path::Path, root: &std::path::Path, depth: usize, git: &std::collections::HashMap<std::path::PathBuf, String>, out: &mut Vec<serde_json::Value>) {
+            let Ok(rd) = std::fs::read_dir(d) else { return };
+            let mut es: Vec<_> = rd.flatten().map(|e| e.path()).filter(|p| {
+                let n = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                !n.starts_with('.') && !matches!(n.as_str(), "target" | "node_modules" | "build" | "__pycache__")
+            }).collect();
+            es.sort_by_key(|p| (!p.is_dir(), p.file_name().map(|n| n.to_string_lossy().to_lowercase())));
+            for p in es {
+                if out.len() >= 400 { return }
+                let is_dir = p.is_dir();
+                // a folder shows the status of anything changed inside it
+                let g = if is_dir { git.keys().any(|k| k.starts_with(&p)).then(|| "•".to_string()).unwrap_or_default() } else { git.get(&p).cloned().unwrap_or_default() };
+                out.push(serde_json::json!({
+                    "path": p.to_string_lossy(), "rel": p.strip_prefix(root).unwrap_or(&p).to_string_lossy(),
+                    "name": p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                    "depth": depth, "dir": is_dir, "git": g,
+                }));
+                if is_dir && depth < 6 { walk(&p, root, depth + 1, git, out) }
+            }
+        }
+        walk(&root, &root, 0, &git, &mut out);
+        QString::from(&serde_json::Value::Array(out).to_string())
+    }
+
+    fn read_file(&self, path: &QString) -> QString {
+        let p = std::path::PathBuf::from(path.to_string());
+        match std::fs::metadata(&p) {
+            Ok(m) if m.len() > 1 << 20 => QString::from("(file larger than 1 MB, not shown)"),
+            Ok(_) => QString::from(&std::fs::read(&p).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default()),
+            Err(e) => QString::from(&format!("({e})")),
+        }
+    }
+
+    fn tags(&self) -> QString {
+        let r = self.rust();
+        let Some(f) = &r.folder else { return QString::from("[]") };
+        let mut n: std::collections::BTreeMap<String, usize> = Default::default();
+        for p in f.ws.pages() {
+            for b in f.ws.children(p) {
+                if matches!(f.ws.kind(b), Kind::Code { .. }) { continue }
+                for w in f.ws.text(b).split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')') {
+                    let Some(t) = w.strip_prefix('#') else { continue };
+                    let t = t.trim_end_matches(|c: char| !c.is_alphanumeric());
+                    if t.chars().next().is_some_and(|c| c.is_alphabetic()) && t.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '/') {
+                        *n.entry(t.to_lowercase()).or_default() += 1;
+                    }
+                }
+            }
+        }
+        let mut v: Vec<_> = n.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        QString::from(&serde_json::Value::Array(v.into_iter().map(|(t, c)| serde_json::json!({ "tag": t, "count": c })).collect()).to_string())
+    }
 }
