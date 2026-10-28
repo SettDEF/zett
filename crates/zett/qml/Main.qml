@@ -395,8 +395,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
     // undo / redo across blocks (the engine); inside a block being typed in, its own undo comes first
-    Shortcut { sequence: "Alt+Up"; onActivated: win.selecting ? win.selMove(-1) : win.moveCur(-1) }
-    Shortcut { sequence: "Alt+Down"; onActivated: win.selecting ? win.selMove(1) : win.moveCur(1) }
+    Shortcut { enabled: win.view !== "file"; sequence: "Alt+Up"; onActivated: win.selecting ? win.selMove(-1) : win.moveCur(-1) }   // in a file the editor moves lines
+    Shortcut { enabled: win.view !== "file"; sequence: "Alt+Down"; onActivated: win.selecting ? win.selMove(1) : win.moveCur(1) }
     Shortcut { sequences: ["Ctrl+Z"]; onActivated: if (!app.undo()) win.note("nothing to undo") }
     Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; onActivated: if (!app.redo()) win.note("nothing to redo") }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
@@ -778,7 +778,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "tasks") { console.log("zett-probe: tasks " + JSON.stringify(win.projectTasks())); console.log("zett-probe: palette " + win.paletteEntries().filter(e => /^Run task|Zen|Source Control/.test(e.name)).length); grabLater.start(); return }
             if (app.shotEngine.startsWith("quick:")) { quickField.text = app.shotEngine.slice(6); console.log("zett-probe: quick " + JSON.stringify(quick.matches.slice(0, 5).map(m => m.create !== undefined ? "+" + m.create : (m.file ? "file:" : "page:") + m.label))); grabLater.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
-            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:") || app.shotEngine.startsWith("filediff:") || app.shotEngine.startsWith("filemulti:") || app.shotEngine.startsWith("filesticky:") || app.shotEngine.startsWith("filewrap:")) {
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:") || app.shotEngine.startsWith("filelsp:") || app.shotEngine.startsWith("filediff:") || app.shotEngine.startsWith("filemulti:") || app.shotEngine.startsWith("filesticky:") || app.shotEngine.startsWith("filewrap:") || app.shotEngine.startsWith("filelines:")) {
                 const rel = app.shotEngine.split(":")[1]
                 win.openFile({ path: app.dir + "/" + rel, rel })
                 if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
@@ -791,6 +791,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 if (app.shotEngine.startsWith("filemulti:")) Qt.callLater(() => fileView.testMulti())
                 if (app.shotEngine.startsWith("filesticky:")) stickyT.start()
                 if (app.shotEngine.startsWith("filewrap:")) fileView.wrapTest = true
+                if (app.shotEngine.startsWith("filelines:")) Qt.callLater(() => fileView.testLines())
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }

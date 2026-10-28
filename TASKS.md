@@ -375,8 +375,8 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 8. [x] Split editor (Ctrl \ in a file): two files side by side, both editable
 9. [x] Source control (Ctrl Shift G): stage/unstage, commit, diff view, discard with a confirm
 10. [x] Panel under the editor: Terminal and Problems (every file, tasks' errors) tabs
-11. [x] Multi-cursor: Alt click, Ctrl Alt Up/Down; column select (Shift Alt drag) still open
+11. [x] Multi-cursor: Alt click, Ctrl Alt Up/Down, column select (Shift Alt drag); line editing: Ctrl / comment, Alt Up/Down move, Shift Alt Up/Down copy, Ctrl Shift K delete
 12. [~] Keyboard shortcuts page: the searchable list is in Settings; rebinding from it still open
-13. [x] Zen mode (Ctrl K Z), minimap setting; breadcrumbs with the symbol still open
+13. [x] Zen mode (Ctrl K Z), minimap setting, breadcrumbs with the symbol the cursor is in
 14. [x] Tasks from Cargo/npm/make in the palette, their errors in Problems
 15. [ ] Debug: later (DAP) — planned only

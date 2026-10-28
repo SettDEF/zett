@@ -7,7 +7,7 @@ Rectangle {
     required property var t
     required property var app
     // narrow windows leave it out rather than cut it off
-    visible: win.detailsShown && win.pages.length > 0 && win.view === "page" && win.sidePage < 0 && win.width >= 900
+    visible: win.detailsShown && win.pages.length > 0 && win.view === "page" && win.sidePage < 0 && win.width >= (win.claudeShown ? 1600 : 900)   // beside Claude only when there is room
     Layout.fillHeight: true
     Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
     implicitWidth: 248

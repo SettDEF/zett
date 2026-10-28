@@ -17,6 +17,7 @@ printf '# Check\n\nSome text worth selecting here.\n\n```lua\nfor i = 1, 3 do pr
 printf 'int main(void) {\n    int x = "text";\n    undefined_fn();\n    return x;\n}\n' > "$W/bad.c"
 printf 'int add(int a, int b);\nint main(void) {\n    add(1, 2);\n    return 0;\n}\n' > "$W/sig.c"
 printf 'int main(void) {\n    int x = 1\n    return x;\n}\n' > "$W/fix.c"
+printf 'a\nb\nc\n' > "$W/lines.rs"
 mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
 git -C "$W" init -q && git -C "$W" add -A && git -C "$W" -c user.email=c@c -c user.name=c commit -qm init
 echo '// changed' >> "$W/main.rs"
@@ -50,6 +51,7 @@ check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' 
 check edit fileedit:main.rs "head -1 '$W/main.rs' | grep -q 'edited in zett' && ! grep -qE '[[:blank:]]$' '$W/main.rs'"
 check side fileside:main.rs:check.md
 check git git
+check lines filelines:lines.rs "[ \"\$(tr '\\n' '|' < '$W/lines.rs')\" = 'b|// a|// a|c|' ]"
 check tooltip acttip
 check newfile newfile "[ -f '$W/made/new.rs' ] && [ -d '$W/emptydir' ]"
 check wrap filewrap:main.rs

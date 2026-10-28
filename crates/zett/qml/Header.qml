@@ -58,6 +58,16 @@ Item {
         }
         Text { anchors.verticalCenter: parent.verticalCenter; text: hd.title; color: hd.t.text; font.family: hd.t.sans; font.pixelSize: 13; font.weight: Font.DemiBold }
         Rectangle { visible: hd.dirty; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 3.5; color: hd.t.accent }
+        Repeater {
+            model: hd.file && hd.win.fileEditor ? hd.win.fileEditor.symbolPath : []
+            delegate: Row {
+                required property var modelData
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Text { anchors.verticalCenter: parent.verticalCenter; text: "chevron_right"; color: hd.t.faint; opacity: 0.6; font.family: hd.t.icons; font.pixelSize: 14 }
+                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: hd.t.dim; font.family: hd.t.mono; font.pixelSize: 12 }
+            }
+        }
     }
 
     // the search pill, centred

@@ -70,6 +70,8 @@ ColumnLayout {
     // gui-check: cursors on lines 1-3 at column 0, "// " typed at all, saved
     // gui-check: scrolled to the bottom, so the scope's first line sticks
     function testSticky() { fileFlick.contentY = Math.max(0, fileFlick.contentHeight - fileFlick.height); Qt.callLater(() => console.log("zett-probe: sticky " + JSON.stringify(sticky.heads.map(h => h.s.trim())))) }
+    // gui-check: comment line 1, move it down, copy it down, save
+    function testLines() { ed.forceActiveFocus(); ed.cursorPosition = 0; toggleComment(); moveLines(1); copyLines(1); save() }
     function testMulti() { ed.forceActiveFocus(); ed.cursorPosition = posOf(1, 0); addCursorLine(1); addCursorLine(1); multiEdit("// ", 0); multiEdit("", -1); multiEdit(" ", 0); save() }
     // gui-check: the server asked once it has the file (symbols, or rename:LINE:COL:NEW); what comes back is logged
     function testLsp(spec) { lspTest.spec = spec; lspTest.start() }
@@ -133,6 +135,43 @@ ColumnLayout {
     property bool wrapTest: false     // gui-check turns wrap on without touching the settings
     readonly property bool wrap: wrapTest || (win.prefs.wordWrap ?? false)
     readonly property var lineStarts: { const s = [0]; const t2 = shownText; for (let i = t2.indexOf("\n"); i >= 0; i = t2.indexOf("\n", i + 1)) s.push(i + 1); return s }
+    // ── line editing as in VS Code: Ctrl+/ comment, Alt+Up/Down move, Shift+Alt+Up/Down copy, Ctrl+Shift+K delete ──
+    readonly property string commentMark: /^(py|sh|bash|zsh|toml|ya?ml|rb|nix|conf|r|pl|mk|cmake)$/.test(ext) || /(^|\/)(Makefile|Dockerfile)$/.test(win.filePath) ? "#" : /^(lua|sql|hs|elm)$/.test(ext) ? "--" : "//"
+    // the lines the cursor or selection covers: [first, last], 0-based
+    function selLines() { const a = lineCol(ed.selectionStart)[0], e = ed.selectionEnd; let b = lineCol(e)[0]; if (b > a && ed.selectedText.length && ed.text[e - 1] === "\n") b--; return [a, b] }
+    // lines a..b replaced by `rows` (one undo step); the cursor kept on its line, moved by `shift` lines
+    function replaceLines(a, b, rows, shift) {
+        const ls = ed.text.split("\n"), [cl, cc] = lineCol(ed.cursorPosition)
+        const from = posOf(a, 0), to = b + 1 < ls.length ? posOf(b + 1, 0) : ed.text.length
+        const tail = b + 1 < ls.length ? "\n" : ""
+        ed.remove(from, to); ed.insert(from, rows.join("\n") + tail)
+        const nl = Math.max(0, Math.min(cl + shift, ed.text.split("\n").length - 1))
+        ed.cursorPosition = Math.min(posOf(nl, 0) + cc, posOf(nl, 0) + (ed.text.split("\n")[nl] ?? "").length)
+    }
+    function toggleComment() {
+        const [a, b] = selLines(), ls = ed.text.split("\n").slice(a, b + 1), m = commentMark
+        const lead = s => s.length - s.replace(/^\s+/, "").length
+        const all = ls.filter(s => s.trim()).every(s => s.trim().startsWith(m))
+        const ind = Math.min(...ls.filter(s => s.trim()).map(lead).concat([1e9]))
+        replaceLines(a, b, ls.map(s => !s.trim() ? s : all ? s.replace(new RegExp("^(\\s*)" + m.replace(/[/]/g, "\\/") + " ?"), "$1") : s.slice(0, ind) + m + " " + s.slice(ind)), 0)
+    }
+    function moveLines(d) {
+        const [a, b] = selLines(), ls = ed.text.split("\n")
+        if (d < 0 && a === 0 || d > 0 && b >= ls.length - 1) return
+        if (d < 0) replaceLines(a - 1, b, ls.slice(a, b + 1).concat([ls[a - 1]]), -1)
+        else replaceLines(a, b + 1, [ls[b + 1]].concat(ls.slice(a, b + 1)), 1)
+    }
+    function copyLines(d) { const [a, b] = selLines(), rows = ed.text.split("\n").slice(a, b + 1); replaceLines(a, b, rows.concat(rows), d > 0 ? b - a + 1 : 0) }
+    function deleteLines() { const [a, b] = selLines(), ls = ed.text.split("\n"); if (ls.length === 1) { ed.text = ""; return } const from = posOf(a, 0), to = b + 1 < ls.length ? posOf(b + 1, 0) : ed.text.length; ed.remove(a > 0 && b + 1 >= ls.length ? from - 1 : from, to) }
+    // the file's declarations (fn, impl, class, def …): the outline card and the header's breadcrumb read it
+    readonly property var outline: {
+        const out = [], ls = shownText.split("\n")
+        const re = /^(\s*)(?:pub(?:\([^)]*\))?\s+|export\s+|async\s+|static\s+|default\s+)*(fn|impl|struct|enum|trait|mod|type|class|def|function|interface|const fn)\s+([\w:<>, ]+?)\s*[({:<=\[]/
+        for (let i = 0; i < ls.length && out.length < 400; i++) { const m = re.exec(ls[i]); if (m) out.push({ line: i, depth: Math.floor(m[1].replace(/\t/g, "    ").length / 4), kind: m[2], name: m[3].trim() }) }
+        return out
+    }
+    // the declaration the cursor is in, and the ones around it (impl › fn)
+    readonly property var symbolPath: { const p = []; for (const it of outline) { if (it.line > ed.line) break; while (p.length && p[p.length - 1].depth >= it.depth) p.pop(); p.push(it) } return p }
     property bool showDiff: false
     property var diffRows: []
     function loadDiff() {
@@ -546,6 +585,17 @@ ColumnLayout {
                 // hover: the mouse resting on a word asks the server about it
                 HoverHandler { id: edHover; onPointChanged: { fv.hoverText = ""; hoverAsk.restart() } }
                 Timer { id: hoverAsk; interval: 650; onTriggered: if (edHover.hovered && fv.lsp) { const pt = edHover.point.position; fv.hoverAt = Qt.point(ed.x + pt.x, pt.y); fv.ask("hover", ed.positionAt(pt.x, pt.y)) } }
+                // Shift+Alt+drag: a cursor on every line from where the drag began, at the column it is at
+                DragHandler {
+                    acceptedModifiers: Qt.ShiftModifier | Qt.AltModifier
+                    target: null
+                    onCentroidChanged: if (active) {
+                        const p0 = ed.positionAt(centroid.pressPosition.x, centroid.pressPosition.y), p1 = ed.positionAt(centroid.position.x, centroid.position.y)
+                        const [l0] = fv.lineCol(p0), [l1, c1] = fv.lineCol(p1), ls = ed.text.split("\n"), ps = []
+                        for (let l = Math.min(l0, l1); l <= Math.max(l0, l1); l++) ps.push(fv.posOf(l, Math.min(c1, ls[l].length)))
+                        ed.cursorPosition = ps[0]; fv.extra = ps.slice(1)
+                    }
+                }
                 // Alt+click: one more cursor there
                 TapHandler { acceptedModifiers: Qt.AltModifier; onTapped: (ev) => fv.addCursor(ed.positionAt(ev.position.x, ev.position.y)) }
                 // Ctrl+click: go to the definition
@@ -576,6 +626,10 @@ ColumnLayout {
                     }
                     if (e.key === Qt.Key_Period && (e.modifiers & Qt.ControlModifier) && fv.lsp) { fv.askActions(); e.accepted = true; return }
                     if (e.key === Qt.Key_Escape && fv.sigLabel) { fv.sigLabel = ""; e.accepted = true; return }
+                    // line editing
+                    if (e.key === Qt.Key_Slash && (e.modifiers & Qt.ControlModifier)) { fv.toggleComment(); e.accepted = true; return }
+                    if (e.key === Qt.Key_K && (e.modifiers & Qt.ControlModifier) && (e.modifiers & Qt.ShiftModifier)) { fv.deleteLines(); e.accepted = true; return }
+                    if ((e.key === Qt.Key_Up || e.key === Qt.Key_Down) && (e.modifiers & Qt.AltModifier) && !(e.modifiers & Qt.ControlModifier) && !fv.comps.length && !fv.jumps.length && !fv.actions.length) { if (e.modifiers & Qt.ShiftModifier) fv.copyLines(e.key === Qt.Key_Up ? -1 : 1); else fv.moveLines(e.key === Qt.Key_Up ? -1 : 1); e.accepted = true; return }
                     // the jump list takes ↑ ↓ Enter Esc while open
                     if (fv.jumps.length) {
                         if (e.key === Qt.Key_Down) { fv.jumpSel = (fv.jumpSel + 1) % fv.jumps.length; e.accepted = true; return }

@@ -8,23 +8,14 @@ Rectangle {
     required property var win
     required property var t
     readonly property var fe: win.fileEditor
-    visible: win.detailsShown && win.view === "file" && !win.sideFile && win.width >= 900 && !win.zen
+    visible: win.detailsShown && win.view === "file" && !win.sideFile && win.width >= (win.claudeShown ? 1600 : 900) && !win.zen   // beside Claude only when there is room
     Layout.fillHeight: true
     Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
     implicitWidth: 248; Layout.minimumWidth: 248; Layout.maximumWidth: 248
     radius: t.rCard
     color: t.panel
     border.width: 1; border.color: Qt.alpha(t.rule, 0.35)
-    readonly property var items: {
-        if (!visible || !fe) return []
-        const out = [], ls = fe.shownText.split("\n")
-        const re = /^(\s*)(?:pub(?:\([^)]*\))?\s+|export\s+|async\s+|static\s+|default\s+)*(fn|impl|struct|enum|trait|mod|type|class|def|function|interface|const fn)\s+([\w:<>, ]+?)\s*[({:<=\[]/
-        for (let i = 0; i < ls.length && out.length < 400; i++) {
-            const m = re.exec(ls[i]); if (!m) continue
-            out.push({ line: i, depth: Math.floor(m[1].replace(/\t/g, "    ").length / 4), kind: m[2], name: m[3].trim() })
-        }
-        return out
-    }
+    readonly property var items: visible && fe ? fe.outline : []
     readonly property int cur: { if (!fe) return -1; let c = -1; for (const it of items) if (it.line <= fe.curLine) c = it.line; return c }
     ColumnLayout {
         anchors { fill: parent; margins: 12 }
