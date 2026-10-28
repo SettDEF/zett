@@ -66,7 +66,7 @@ pub fn start(cwd: &str, cols: u16, rows: u16, palette: &str) -> i32 {
     env.insert("TERM".into(), "xterm-256color".into());
     env.insert("COLORTERM".into(), "truecolor".into());
     env.insert("ZETT_TERMINAL".into(), "1".into());
-    let opts = tty::Options { shell: None, working_directory: Some(cwd.into()).filter(|p: &std::path::PathBuf| p.is_dir()), drain_on_exit: true, env };
+    let opts = tty::Options { shell: user_shell().map(|s| tty::Shell::new(s, Vec::new())), working_directory: Some(cwd.into()).filter(|p: &std::path::PathBuf| p.is_dir()), drain_on_exit: true, env };
     let Ok(pty) = tty::new(&opts, ws(cols, rows), 0) else { return -1 };
     let Ok(ev) = EventLoop::new(term.clone(), l.clone(), pty, true, false) else { return -1 };
     let tx = ev.channel();
@@ -255,4 +255,12 @@ fn palette_for(over: &str) -> Vec<String> {
     if let Some(s) = o["fg"].as_str() { p[16] = s.into() }
     if let Some(s) = o["bg"].as_str() { p[17] = s.into() }
     p
+}
+
+/// The shell zash starts (zash.toml's `shell`), else $SHELL: not the login shell from passwd (bash here).
+fn user_shell() -> Option<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let toml = std::fs::read_to_string(format!("{home}/.config/zash/zash.toml")).unwrap_or_default();
+    let from_toml = toml.lines().map(str::trim).find(|l| l.starts_with("shell") && l.contains('=')).and_then(|l| l.split('"').nth(1)).map(str::to_string);
+    from_toml.or_else(|| std::env::var("SHELL").ok()).filter(|s| std::path::Path::new(s).exists())
 }
