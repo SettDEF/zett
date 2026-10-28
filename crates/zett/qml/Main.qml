@@ -17,7 +17,26 @@ ApplicationWindow {
     Zett { id: app }
     // ZETT_SHOT_ENGINE=timing: the time of the first frame on stdout, then quit (start-up measured from outside)
     property bool firstFrame: false
-    onFrameSwapped: if (!firstFrame) { firstFrame = true; if (app.shotEngine === "timing") { console.log("zett-probe: frame " + Date.now()); Qt.quit() } }
+    // ZETT_SHOT_ENGINE=typing:N types 60 letters into block N, one per frame, and prints the time from each
+    // letter to the frame that shows it (median, 95th, worst)
+    property var typeTimes: []
+    property real typeAt: 0
+    property int typeBlock: -1
+    function typeNext() {
+        if (typeTimes.length >= 60) {
+            const s = typeTimes.slice().sort((a, b) => a - b)
+            console.log(`zett-probe: typing block ${typeBlock}: median ${s[30].toFixed(1)} ms, p95 ${s[56].toFixed(1)} ms, worst ${s[59].toFixed(1)} ms`)
+            Qt.quit(); return
+        }
+        const d = list.itemAtIndex(typeBlock)
+        if (!d) { console.log("zett-probe: typing: no block " + typeBlock); Qt.quit(); return }
+        typeAt = Date.now()
+        d.insertForTest("abcdefghij"[typeTimes.length % 10])
+    }
+    onFrameSwapped: {
+        if (!firstFrame) { firstFrame = true; if (app.shotEngine === "timing") { console.log("zett-probe: frame " + Date.now()); Qt.quit() } }
+        if (typeAt > 0) { typeTimes = typeTimes.concat([Date.now() - typeAt]); typeAt = 0; Qt.callLater(typeNext) }
+    }
     // for the parts in their own files (Today, FileView, Details): `win: win` there would bind to itself
     readonly property var theme: t
     readonly property var engine: app
@@ -456,6 +475,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
+            if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
@@ -586,6 +606,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, edit, shown.visible ? shown.hoveredLink : "") }
                     function vimKeyForTest(k) { edit.applyVim(app.vimKey(k)) }
                     function typeForTest(s) { edit.forceActiveFocus(); edit.text = s }
+                    function insertForTest(s) { edit.forceActiveFocus(); edit.insert(edit.cursorPosition, s) }
 
                     function vimHere() {
                         edit.forceActiveFocus()

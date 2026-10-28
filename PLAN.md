@@ -407,3 +407,4 @@ Not VS Code: no activity rail, no square tabs or file-explorer look; pill tabs, 
 layers and rounding, Dotos rows. Everything reachable by key, with the key shown next to it.
 
 Measured 2026-10-28 (ZETT_SHOT_ENGINE=timing, offscreen, release): first frame 237-242 ms in 3 of 5 runs, 325 and 424 ms in two (machine busy); target < 300 ms.
+Typing (ZETT_SHOT_ENGINE=typing:N, 60 letters, letter -> frame): paragraph median 6 ms, worst 8 ms; 120-line Rust block (live colours) median 6 ms, worst 8 ms; target < 8 ms.
