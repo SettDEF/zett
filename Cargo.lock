@@ -2612,6 +2612,7 @@ dependencies = [
  "cxx-qt-lib",
  "loro",
  "regex",
+ "ropey",
  "serde_json",
  "syntect",
  "zett-core",

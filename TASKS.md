@@ -387,9 +387,9 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
    colours per line with cached parse states) + CodeView.qml (only the lines on screen, cursors from the mono
    grid). Stages: a) view + edit + save behind Settings > Editor > New editor core; b) everything FileView has
    (LSP, find, minimap, git gutter, completion, line keys); c) folding, wrap, huge files; d) default, old one gone
-2. [ ] Claude built in: inline edits as a diff to accept/reject, explain/fix/test on a selection, agent changes
+2. [x] (2026-10-28: Ctrl+I inline edits as a diff, quick fix/tests/document/simplify, explain to the panel; agent changes as a PR still open) Claude built in: inline edits as a diff to accept/reject, explain/fix/test on a selection, agent changes
    reviewed like a PR, the claude-ui sessions in one place
-3. [ ] Notes and code together: link a function to a note, live results in pages, a file's notes in its outline
+3. [x] (2026-10-28: [[code:…]] links, Ctrl+Alt+N notes beside the code, a file's notes in its outline; live results already in notebook blocks) Notes and code together: link a function to a note, live results in pages, a file's notes in its outline
 4. [ ] A real zash in the panel (zash as a library zett draws)
 5. [ ] Debugging (DAP): breakpoints in the gutter, variables, call stack, debug console
 6. [ ] Git: blame per line, side-by-side diff, merge conflicts, branches, stage single lines
