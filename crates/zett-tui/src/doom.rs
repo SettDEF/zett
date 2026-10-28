@@ -452,6 +452,7 @@ impl App {
         let w = self.wins[self.focus].clone().unwrap_or_default();
         self.wins.push(Some(w));
         let new = self.wins.len() - 1;
+        crate::draw::note_split(self.focus, new);
         // splitright, splitbelow: the new window after the old one (zett's default, Doom's), else before
         if self.flag(self.cur, if side { "splitright" } else { "splitbelow" }) {
             self.tree.split(self.focus, new, side);

@@ -1,5 +1,15 @@
 //! Drawing: the buffers, their text and line numbers, the tab line, the : line, the which-key menu.
 
+thread_local! {
+    /// each window's height in the last frame (splitkeep: a resize keeps the text in place)
+    static WIN_H: std::cell::RefCell<std::collections::HashMap<usize, usize>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// A split: the new window starts with the height its parent had (so it counts as resized too).
+pub(crate) fn note_split(from: usize, new: usize) {
+    WIN_H.with(|m| { let mut m = m.borrow_mut(); if let Some(h) = m.get(&from).copied() { m.insert(new, h); } });
+}
+
 use super::*;
 use crate::display::{ends_sentence, fold_cells, gut, spell_marks, Signs, TAB_FILL, TAB_FIRST, TAB_LAST};
 
@@ -501,6 +511,18 @@ impl App {
                 }
                 d.top = next;
             }
+        }
+        // splitkeep screen / topline: when the window's height changed (a split, a close) the text stays
+        // where it was and the cursor moves into view instead (cursor: the view follows the cursor)
+        let resized = WIN_H.with(|m| m.borrow_mut().insert(self.drawing_win, height).is_some_and(|h| h != height));
+        let spk = self.setting(di, "splitkeep");
+        let d = &mut self.docs[di];
+        if resized && d.top != was && (spk == "screen" || spk == "topline") {
+            d.top = was;
+            let lo = (was + margin).min(lines.saturating_sub(1));
+            let hi = (was + height).saturating_sub(1 + margin).max(lo).min(lines.saturating_sub(1));
+            let line = c.line.clamp(lo, hi);
+            d.ed.set_cursor(zett_core::Pos { line, col: c.col.min(d.ed.buf.line_len(line).saturating_sub(1)) });
         }
         // scrolljump: once the cursor has left the window, at least this many lines at a time
         // (negative: a percentage of the height)
@@ -1154,4 +1176,33 @@ pub(crate) struct FxMark {
     pub spec: &'static str,
     /// there only while the mouse or the cursor is (plain cells back when it goes)
     pub transient: bool,
+}
+
+#[cfg(test)]
+mod splitkeep_tests {
+    fn after_split(spk: &str) -> (usize, usize) {
+        let d = std::env::temp_dir().join(format!("zett-spk-{spk}-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("a.txt");
+        std::fs::write(&f, (1..=200).map(|i| format!("line {i}\n")).collect::<String>()).unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.open(&f);
+        app.command(&format!("set splitkeep={spk} scrolloff=0"));
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 40)).unwrap();
+        app.command("35");
+        term.draw(|f| app.draw(f)).unwrap();
+        app.command("split");
+        term.draw(|f| app.draw(f)).unwrap();
+        let _ = std::fs::remove_dir_all(&d);
+        (app.docs[app.cur].top, app.docs[app.cur].ed.cursor().line)
+    }
+    #[test]
+    fn splitkeep_topline_keeps_the_text_and_moves_the_cursor() {
+        let (top, line) = after_split("topline");
+        assert_eq!(top, 0, "the top line stayed");
+        assert!(line < 20, "the cursor came into the smaller window: {line}");
+        let (top, line) = after_split("cursor");
+        assert_eq!(line, 34, "cursor: the cursor stays");
+        assert!(top > 0, "and the view scrolled to it");
+    }
 }

@@ -78,7 +78,8 @@ impl App {
             dirs.push(match d {
                 "." => here.clone(),
                 "" => self.root.clone(),
-                d => PathBuf::from(d.trim_end_matches("/**").trim_end_matches("**")),
+                // a relative folder is the project's (zett's root stands for the current folder)
+                d => self.root.join(d.trim_end_matches("/**").trim_end_matches("**")),
             });
         }
         let sua = self.setting(self.cur, "suffixesadd");
