@@ -67,6 +67,11 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// the last change taken back / done again, across blocks; false when there is nothing
+        #[qinvokable]
+        fn undo(self: Pin<&mut Zett>) -> bool;
+        #[qinvokable]
+        fn redo(self: Pin<&mut Zett>) -> bool;
         /// another page's blocks (the side view): [{kind, level, checked, lang, text}]
         #[qinvokable]
         #[cxx_name = "pageBlocks"]
@@ -160,6 +165,8 @@ use zett_core::{markdown, BlockId, Kind};
 
 pub struct ZettRust {
     folder: Option<Folder>,
+    /// undo / redo across blocks and pages (Loro's, edits within 0.8 s are one step)
+    undo: Option<loro::UndoManager>,
     order: Vec<BlockId>,
     pages: QString,
     blocks: QString,
@@ -199,6 +206,7 @@ impl Default for ZettRust {
         let folder = Folder::open(&dir).ok();
         let mut z = ZettRust {
             folder,
+            undo: None,
             order: Vec::new(),
             pages: QString::default(),
             blocks: QString::default(),
@@ -225,6 +233,8 @@ impl Default for ZettRust {
                 z.refresh_page();
             }
         }
+        // from the start, so the first edit can be taken back
+        z.undo = z.folder.as_ref().map(|f| f.ws.undo_manager(800));
         z
     }
 }
@@ -312,6 +322,7 @@ impl ZettRust {
 
     fn save(&self) {
         if let (Some(f), Some(p)) = (&self.folder, self.page()) {
+            f.ws.commit();
             if let Err(e) = f.save_page(p) {
                 eprintln!("zett: could not save: {e}");
             }
@@ -1013,5 +1024,35 @@ impl qobject::Zett {
         if let Some(pid) = *RUNNING.lock().unwrap() {
             let _ = std::process::Command::new("kill").arg("--").arg(format!("-{pid}")).status();
         }
+    }
+}
+
+// ── undo / redo across blocks and pages ──
+impl qobject::Zett {
+    fn undo(self: Pin<&mut Self>) -> bool {
+        self.undo_step(false)
+    }
+
+    fn redo(self: Pin<&mut Self>) -> bool {
+        self.undo_step(true)
+    }
+
+    fn undo_step(mut self: Pin<&mut Self>, redo: bool) -> bool {
+        let done = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let (Some(f), Some(u)) = (r.folder.as_ref(), r.undo.as_mut()) else { return false };
+            f.ws.commit();   // what was typed last is a step of its own
+            let ok = if redo { u.redo() } else { u.undo() };
+            let ok = ok.unwrap_or(false);
+            if ok {
+                let _ = f.save_all();
+            }
+            ok
+        };
+        if done {
+            self.publish();
+        }
+        done
     }
 }

@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 zett-core.workspace = true
+loro.workspace = true
 zett-edit.workspace = true
 zett-script.workspace = true
 zett-tui.workspace = true

@@ -259,6 +259,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
+    // undo / redo across blocks (the engine); inside a block being typed in, its own undo comes first
+    Shortcut { sequences: ["Ctrl+Z"]; onActivated: if (!app.undo()) win.note("nothing to undo") }
+    Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; onActivated: if (!app.redo()) win.note("nothing to redo") }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
     Shortcut { sequence: "Ctrl+`"; onActivated: win.toggleDrawer() }
     // the palette: the window's own actions, then every engine command with its key
@@ -280,6 +283,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "ios_share", name: "Share page", desc: "the system share sheet", keys: "", run: () => win.sharePage() },
             { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) },
             { icon: "terminal", name: "Toggle shell drawer", desc: "a command in the workspace", keys: "Ctrl `", run: () => win.toggleDrawer() },
+            { icon: "undo", name: "Undo", desc: "the last change, across blocks", keys: "Ctrl Z", run: () => { if (!app.undo()) win.note("nothing to undo") } },
+            { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" }
         ].concat(win.hooks.palette.map(h => ({ icon: "extension", name: h.name, desc: (h.desc ?? "") + "  ·  init.lua", keys: h.keys ?? "", run: () => win.runHook(h.cmd) })))
         let binds = []
@@ -476,6 +481,15 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
+            if (app.shotEngine === "undo") {
+                const n0 = win.blocks.length
+                const b = app.addBlock(n0 - 1, "paragraph"); app.setText(b, "to be undone")
+                const n1 = win.blocks.length
+                const u = app.undo(); const n2 = win.blocks.length
+                const r = app.redo(); const n3 = win.blocks.length
+                console.log(`zett-probe: undo blocks ${n0} -> add ${n1} -> undo(${u}) ${n2} -> redo(${r}) ${n3}; last="${(win.blocks[n3 - 1] ?? {}).text}"`)
+                Qt.quit(); return
+            }
             if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }

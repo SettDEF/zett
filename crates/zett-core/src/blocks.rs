@@ -78,6 +78,19 @@ impl Workspace {
         Ok(ws)
     }
 
+    /// Ends the current change: one step for undo (the window calls it after every edit).
+    pub fn commit(&self) {
+        self.doc.commit();
+    }
+
+    /// Undo / redo over this workspace's own changes (edits within `merge_ms` are one step).
+    pub fn undo_manager(&self, merge_ms: i64) -> loro::UndoManager {
+        let mut u = loro::UndoManager::new(&self.doc);
+        u.set_merge_interval(merge_ms);
+        u.set_max_undo_steps(500);
+        u
+    }
+
     /// The whole workspace as bytes, history included.
     pub fn export(&self) -> Result<Vec<u8>> {
         self.doc.commit();
