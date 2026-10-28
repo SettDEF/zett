@@ -11,7 +11,7 @@ Rectangle {
     required property var t
     required property var app
     Layout.fillHeight: true
-    visible: !win.sidebarHidden
+    visible: !win.sidebarHidden && win.sideMode !== "git"
     implicitWidth: 260
     color: "transparent"
     // files dropped anywhere on the sidebar land in the workspace folder

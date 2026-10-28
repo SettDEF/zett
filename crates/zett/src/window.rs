@@ -73,6 +73,9 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "gitLines"]
         fn git_lines(self: &Zett, path: &QString) -> QString;
+        /// git in the workspace (Source Control): args as a JSON array; {code, out} with stdout and stderr
+        #[qinvokable]
+        fn git(self: &Zett, args: &QString) -> QString;
         /// the language server for a file opened / changed in the file editor (one server per language, started once)
         #[qinvokable]
         #[cxx_name = "lspOpen"]
@@ -956,6 +959,16 @@ impl qobject::Zett {
         let o: serde_json::Value = serde_json::from_str(&opts.to_string()).unwrap_or_default();
         let only: Vec<String> = serde_json::from_str(&rels.to_string()).unwrap_or_default();
         crate::grep::replace(&workspace_dir(), &query.to_string(), &with.to_string(), &o, &only) as i32
+    }
+
+    fn git(&self, args: &QString) -> QString {
+        let args: Vec<String> = serde_json::from_str(&args.to_string()).unwrap_or_default();
+        let out = std::process::Command::new("git").arg("-C").arg(workspace_dir()).args(&args).stdin(std::process::Stdio::null()).output();
+        let v = match out {
+            Ok(o) => serde_json::json!({ "code": o.status.code().unwrap_or(-1), "out": format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr)) }),
+            Err(e) => serde_json::json!({ "code": -1, "out": e.to_string() }),
+        };
+        QString::from(&v.to_string())
     }
 
     fn git_lines(&self, path: &QString) -> QString {

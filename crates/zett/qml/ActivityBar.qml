@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // The activity bar, left of the sidebar as in VS Code: what the sidebar shows (pages, files, both) and the
-// views (search, today, outline, Claude); settings at the foot. The active one has a bar on its left.
+// views (search, today, outline, Claude); settings at the foot. The active one sits in a soft pill.
 Rectangle {
     id: bar
     required property var win
@@ -15,6 +15,7 @@ Rectangle {
     readonly property var items: [
         { icon: "description", tip: "Pages", on: win.sideMode === "pages", run: () => pick("pages") },
         { icon: "folder_open", tip: "Files", on: win.sideMode === "files", run: () => pick("files") },
+        { icon: "commit", tip: "Source Control  Ctrl ⇧ G", on: win.sideMode === "git", run: () => pick("git") },
         { icon: "search", tip: "Search everything  Ctrl ⇧ F", on: win.view === "search", run: () => win.openSearch() },
         { icon: "home", tip: "Home  Ctrl ⇧ D", on: win.view === "today", run: () => win.view = "today" },
         { icon: "toc", tip: "Outline and links  Ctrl \\", on: win.detailsShown, run: () => win.detailsShown = !win.detailsShown },

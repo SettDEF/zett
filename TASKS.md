@@ -373,7 +373,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 6. [~] LSP: go to definition (F12), references list (Shift F12), rename across files (F2, a small field at the cursor), hover, format (Shift Alt F) done; left: signature help, code actions (Ctrl .) — need new client requests
 7. [~] Go to symbol (Ctrl Shift O): the server's symbols as a list, Enter jumps — done; left: the outline in the details panel
 8. [ ] Split editor (Ctrl \ in a file): two files side by side, both editable
-9. [ ] Source control view: changed files, stage/unstage, commit message + commit, diff view of a file (side by side, rounded)
+9. [~] Source control view (Ctrl Shift G): branch, message + Commit (all when nothing is staged), staged and changed files, stage/unstage per file and all — done; left: the diff view, discard with a confirm
 10. [ ] Panel at the bottom with tabs: Terminal, Problems (all files), Output
 11. [ ] Multi-cursor: Alt click adds a cursor, Ctrl Alt Up/Down, column select (Shift Alt drag)
 12. [ ] Keyboard shortcuts page in Settings (searchable list of every key, rebind)
