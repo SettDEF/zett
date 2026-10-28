@@ -2610,10 +2610,13 @@ dependencies = [
  "cxx-qt",
  "cxx-qt-build",
  "cxx-qt-lib",
+ "loro",
+ "regex",
  "serde_json",
  "syntect",
  "zett-core",
  "zett-edit",
+ "zett-lsp",
  "zett-script",
  "zett-tui",
 ]
@@ -2624,6 +2627,7 @@ version = "0.1.0"
 dependencies = [
  "loro",
  "ropey",
+ "serde_json",
 ]
 
 [[package]]

@@ -366,7 +366,7 @@ Rule from the user: zett builds in only what Neovim builds in; the rest stays pl
 Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless shots + scripts/gui-check.sh for each.
 
 1. [x] Activity bar without the stripe: the active item is a soft filled pill
-2. [x] Sidebar editor first: Explorer on top (folder name as the header, new file/folder, collapse all), notes things (Today, Templates, Import, Trash) in a folded "Notes" section at the bottom
+2. [~] Sidebar editor first: Explorer on top (folder name + branch as the header, Go to file, collapse all), the notes things hidden in the Explorer — done; left: new file / new folder buttons, the notes things in a folded section instead of hidden
 3. [x] Quick open files (Ctrl P finds files too, fuzzy), recent files
 4. [x] Editor: bracket pair highlight, trim trailing whitespace + final newline on save, auto save, word wrap (Alt Z), minimap setting; indent guides skipped (stripes); render whitespace left out (the coloured copy is HTML, dots would break its tags)
 5. [x] Sticky scroll (the enclosing lines at the top); folding by indent: still open
