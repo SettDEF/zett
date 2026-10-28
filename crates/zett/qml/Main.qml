@@ -899,6 +899,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             spacing: 0
 
             // toolbar: title, and the tools below the window-button corner
+            Header { visible: !ApplicationWindow.window.zen; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
             Toolbar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // ───────── a file from the tree, read-only and highlighted ─────────

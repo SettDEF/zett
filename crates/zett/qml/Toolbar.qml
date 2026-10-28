@@ -7,11 +7,11 @@ Item {
     required property var t
     required property var app
     Layout.fillWidth: true
-    implicitHeight: 64
+    implicitHeight: 48
     // the open pages as pill tabs
     ListView {
         id: tabList
-        anchors { left: parent.left; right: toolRow.left; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 24 }
+        anchors { left: parent.left; right: toolRow.left; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 8 }
         height: 34
         orientation: ListView.Horizontal
         spacing: 6
@@ -90,7 +90,7 @@ Item {
     RowLayout {
         id: toolRow
         visible: win.view === "page"
-        anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 28 }
+        anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 10 }
         spacing: 6
         // the page width: narrow (680) → wide (960) → full; Settings has the exact width
         Rectangle {
