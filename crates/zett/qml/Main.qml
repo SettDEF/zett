@@ -91,7 +91,11 @@ ApplicationWindow {
     readonly property var slashItems: [
         { k: "paragraph", label: "Text", hint: "" }, { k: "h1", label: "Heading 1", hint: "#" }, { k: "h2", label: "Heading 2", hint: "##" },
         { k: "h3", label: "Heading 3", hint: "###" }, { k: "todo", label: "To-do", hint: "[ ]" }, { k: "bullet", label: "Bullet", hint: "-" },
-        { k: "quote", label: "Quote", hint: ">" }, { k: "code", label: "Code", hint: "```" }
+        { k: "quote", label: "Quote", hint: ">" }, { k: "code", label: "Code", hint: "```" },
+        // standard Markdown forms drawn as their own block (Main: look, special)
+        { k: "callout", kind: "quote", text: "[!NOTE] ", label: "Callout", hint: "> [!NOTE]" }, { k: "divider", kind: "paragraph", text: "---", label: "Divider", hint: "---" },
+        { k: "table", kind: "paragraph", text: "| Column | Column |\n|---|---|\n| | |", label: "Table", hint: "| |" },
+        { k: "image", kind: "paragraph", text: "![](picture.png)", label: "Image", hint: "![]()" }, { k: "embed", kind: "paragraph", text: "![[Page]]", label: "Embed a page", hint: "![[ ]]" }
     ]
     readonly property var slashMatches: slashItems.filter(i => i.label.toLowerCase().includes(slashQuery.toLowerCase()) || i.k.startsWith(slashQuery.toLowerCase()))
     onSlashQueryChanged: slashSel = 0
@@ -101,8 +105,8 @@ ApplicationWindow {
         slashFor = -1
         if (!m || b < 0) return
         focusAfter = b
-        app.setText(b, "")
-        app.setKind(b, m.k)
+        app.setText(b, m.text ?? "")
+        app.setKind(b, m.kind ?? m.k)
     }
 
     function vimEnter(i) {
@@ -369,7 +373,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     function selMenu(x, y) {
         const n = selBlocks.length
         ctx.show(x, y, clipRow(selBlocks.map(i => blockMd(win.blocks[i])).join("\n"), () => { win.selCopy(); win.selDelete() }, null, null).slice(0, 2), [
-            { icon: "transform", label: `Turn ${n} into`, sub: win.slashItems.map(s => ({ label: s.label, key: s.hint, run: () => win.selKind(s.k) })) },
+            { icon: "transform", label: `Turn ${n} into`, sub: win.slashItems.filter(s => !s.text).map(s => ({ label: s.label, key: s.hint, run: () => win.selKind(s.k) })) },
             { icon: "format_indent_increase", label: "Nest", key: "Tab", run: () => win.selNest(false) },
             { icon: "format_indent_decrease", label: "Un-nest", key: "⇧ Tab", run: () => win.selNest(true) },
             { icon: "arrow_upward", label: "Move up", key: "Alt ↑", run: () => win.selMove(-1) },
@@ -420,7 +424,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { sep: true }
         ] : []
         ctx.show(x, y, row, fmt.concat([
-            { icon: "transform", label: "Turn into", sub: win.slashItems.map(s => ({ icon: { paragraph: "notes", h1: "title", h2: "title", h3: "title", todo: "check_box", bullet: "format_list_bulleted", quote: "format_quote", code: "code" }[s.k], label: s.label, key: s.hint, enabled: s.k !== kindName(b), run: () => app.setKind(i, s.k) })) },
+            { icon: "transform", label: "Turn into", sub: win.slashItems.filter(s => !s.text).map(s => ({ icon: { paragraph: "notes", h1: "title", h2: "title", h3: "title", todo: "check_box", bullet: "format_list_bulleted", quote: "format_quote", code: "code" }[s.k], label: s.label, key: s.hint, enabled: s.k !== kindName(b), run: () => app.setKind(i, s.k) })) },
             { icon: "play_arrow", label: "Run in the drawer", enabled: b.kind === "code" && /^(sh|bash|zsh|shell|console)?$/.test(b.lang ?? ""), run: () => { win.drawerShown = true; drawer.run(b.text) } },
             { icon: "add", label: "Add block below", key: "Enter", run: () => win.focusAfter = app.addBlock(i, "paragraph") },
             { icon: "arrow_upward", label: "Move up", key: "Alt ↑", enabled: i > 0, run: () => { if (app.moveBlock(i, i - 1)) win.focusAfter = i - 1 } },
@@ -778,6 +782,18 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
                     // nested list items step in, 26 px a level
                     readonly property int depth: modelData.depth ?? 0
+    // a standard Markdown form drawn as its own block (see `special`): "" for plain text
+                    readonly property string look: {
+                        const s = (modelData.text ?? "").trim()
+                        if (modelData.kind === "quote") return /^\[!(note|tip|important|warning|caution)\]/i.test(s) ? "callout" : ""
+                        if (modelData.kind !== "paragraph") return ""
+                        if (/^(-{3,}|\*{3,}|_{3,})$/.test(s)) return "divider"
+                        if (/^!\[\[[^\]]+\]\]$/.test(s)) return "embed"
+                        if (/^!\[[^\]]*\]\([^)]+\)$/.test(s)) return "image"
+                        const ls = s.split("\n")
+                        if (ls.length >= 2 && ls.every(l => l.trim().startsWith("|")) && /^\|?\s*:?-{2,}/.test(ls[1].trim())) return "table"
+                        return ""
+                    }
                     RowLayout {
                         id: body
                         x: (list.width - list.column) / 2 + blockItem.depth * 26
@@ -804,15 +820,125 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                             }
                             Rectangle { visible: blockItem.kind === "bullet"; anchors.centerIn: parent; width: 6; height: 6; radius: 3; color: t.dim }
-                            Rectangle { visible: blockItem.kind === "quote"; anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: 6 } width: 3; radius: 1.5; color: t.accent }
+                            Rectangle { visible: blockItem.kind === "quote" && blockItem.look !== "callout"; anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: 6 } width: 3; radius: 1.5; color: t.accent }
                         }
 
                         Rectangle {
                             Layout.fillWidth: true
-                            implicitHeight: edit.implicitHeight + (blockItem.kind === "code" ? 24 : 0)
+                            implicitHeight: special.visible ? special.implicitHeight : edit.implicitHeight + (blockItem.kind === "code" ? 24 : 0)
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
+                            // standard Markdown forms drawn as their own block while not typed in: a divider (---),
+                            // an image (![alt](path)), a table (| a | b |), a callout (> [!NOTE] …), an embedded
+                            // page (![[Page]]); a click brings the Markdown back for editing
+                            Loader {
+                                id: special
+                                anchors { left: parent.left; right: parent.right; top: parent.top }
+                                active: blockItem.look !== "" && !edit.activeFocus
+                                visible: active
+                                z: 3
+                                sourceComponent: ({ divider: divC, image: imageC, table: tableC, callout: calloutC, embed: embedC })[blockItem.look] ?? null
+                                TapHandler { onTapped: edit.forceActiveFocus() }
+                                HoverHandler { cursorShape: Qt.IBeamCursor }
+                            }
+                            Component {
+                                id: divC
+                                Item { implicitHeight: 22; Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 1; color: t.rule } }
+                            }
+                            Component {
+                                id: imageC
+                                Column {
+                                    readonly property var m: blockItem.modelData.text.trim().match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
+                                    readonly property string src: !m ? "" : /^[a-z]+:/i.test(m[2]) ? m[2] : "file://" + (m[2].startsWith("/") ? m[2] : app.dir + "/" + m[2])
+                                    spacing: 4
+                                    Image {
+                                        id: pic
+                                        source: parent.src
+                                        width: Math.min(parent.width, sourceSize.width || parent.width)
+                                        height: sourceSize.width > 0 ? width * sourceSize.height / sourceSize.width : 60
+                                        fillMode: Image.PreserveAspectFit
+                                        asynchronous: true
+                                        Rectangle { anchors.fill: parent; visible: pic.status !== Image.Ready; radius: 10; color: t.card
+                                            Text { anchors.centerIn: parent; text: pic.status === Image.Error ? "image not found: " + (parent.parent.parent.m ? parent.parent.parent.m[2] : "") : "loading…"; color: t.faint; font.family: t.sans; font.pixelSize: 12 } }
+                                    }
+                                    Text { visible: !!(parent.m && parent.m[1]); text: parent.m ? parent.m[1] : ""; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                                }
+                            }
+                            Component {
+                                id: tableC
+                                Column {
+                                    // rows of cells; the second line (|---|) only marks the header
+                                    readonly property var rows: blockItem.modelData.text.split("\n").filter((l, i) => i !== 1 && l.trim()).map(l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim()))
+                                    readonly property int cols: Math.max(1, ...rows.map(r => r.length))
+                                    Repeater {
+                                        model: parent.rows
+                                        delegate: Row {
+                                            id: tr
+                                            required property var modelData
+                                            required property int index
+                                            Repeater {
+                                                model: tr.parent.cols
+                                                delegate: Rectangle {
+                                                    required property int index
+                                                    width: tr.parent.width / tr.parent.cols; height: cell.implicitHeight + 14
+                                                    color: tr.index === 0 ? t.card : "transparent"
+                                                    border.width: 1; border.color: Qt.alpha(t.rule, 0.7)
+                                                    Text { id: cell; x: 8; width: parent.width - 16; anchors.verticalCenter: parent.verticalCenter; wrapMode: Text.Wrap; textFormat: Text.StyledText
+                                                        text: win.linkify(tr.modelData[index] ?? ""); color: t.text; linkColor: t.accent; onLinkActivated: (l) => win.openLink(l)
+                                                        font.family: t.sans; font.pixelSize: Math.round(14 * t.scale); font.weight: tr.index === 0 ? Font.DemiBold : Font.Normal }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Component {
+                                id: calloutC
+                                Rectangle {
+                                    readonly property var m: blockItem.modelData.text.match(/^\[!(\w+)\]\s*([\s\S]*)$/)
+                                    readonly property string type: m ? m[1].toUpperCase() : "NOTE"
+                                    readonly property color tint: type === "WARNING" || type === "CAUTION" ? t.removed : type === "TIP" ? t.added : type === "IMPORTANT" ? t.changed : t.accent
+                                    implicitHeight: ct.implicitHeight + 24
+                                    radius: 12
+                                    color: Qt.alpha(tint, 0.12)
+                                    border.width: 1; border.color: Qt.alpha(tint, 0.4)
+                                    Row {
+                                        x: 12; y: 12; spacing: 10
+                                        Text { text: ({ NOTE: "info", TIP: "lightbulb", IMPORTANT: "priority_high", WARNING: "warning", CAUTION: "dangerous" })[parent.parent.type] ?? "info"; color: parent.parent.tint; font.family: t.icons; font.pixelSize: 20 }
+                                        Text { id: ct; width: parent.parent.width - 56; wrapMode: Text.Wrap; textFormat: Text.StyledText
+                                            text: win.linkify(parent.parent.m ? parent.parent.m[2] : ""); color: t.text; linkColor: t.accent; onLinkActivated: (l) => win.openLink(l)
+                                            font.family: t.sans; font.pixelSize: Math.round(15 * t.scale) }
+                                    }
+                                }
+                            }
+                            Component {
+                                id: embedC
+                                Rectangle {
+                                    readonly property string title: (blockItem.modelData.text.trim().match(/^!\[\[([^\]]+)\]\]$/) ?? ["", ""])[1]
+                                    readonly property int pi: win.pages.findIndex(p => (p.title || "").toLowerCase() === title.toLowerCase())
+                                    readonly property var bs: { win.pages; try { return pi >= 0 ? JSON.parse(app.pageBlocks(pi)).slice(0, 8) : [] } catch (e) { return [] } }
+                                    implicitHeight: ec.implicitHeight + 24
+                                    radius: 12
+                                    color: t.card
+                                    border.width: 1; border.color: Qt.alpha(t.rule, 0.6)
+                                    Column {
+                                        id: ec
+                                        x: 14; y: 12; width: parent.width - 28; spacing: 4
+                                        Row { spacing: 6
+                                            Text { text: "description"; color: t.accent; font.family: t.icons; font.pixelSize: 16 }
+                                            Text { text: parent.parent.parent.pi >= 0 ? parent.parent.parent.title : parent.parent.parent.title + " (no such page)"; color: t.accent; font.family: t.sans; font.pixelSize: 13; font.weight: Font.DemiBold
+                                                TapHandler { enabled: parent.parent.parent.parent.pi >= 0; onTapped: win.openPage(parent.parent.parent.parent.pi) }
+                                                HoverHandler { cursorShape: Qt.PointingHandCursor } } }
+                                        Repeater {
+                                            model: parent.parent.bs
+                                            delegate: Text { required property var modelData; width: ec.width; wrapMode: Text.Wrap; textFormat: Text.StyledText; elide: Text.ElideRight; maximumLineCount: 3
+                                                text: (modelData.kind === "todo" ? (modelData.checked ? "☑ " : "☐ ") : modelData.kind === "bullet" ? "• " : "") + win.linkify(modelData.text)
+                                                color: modelData.kind === "heading" ? t.text : t.dim; font.family: t.sans; font.pixelSize: modelData.kind === "heading" ? 15 : 13; font.weight: modelData.kind === "heading" ? Font.DemiBold : Font.Normal }
+                                        }
+                                    }
+                                }
+                            }
                             // a code block, coloured by its language; while it is edited it lies under the (then
                             // transparent) editor, which keeps the cursor and the selection: colours as you type
                             Text {
@@ -839,7 +965,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             Text {
                                 id: shown
                                 anchors.fill: edit
-                                visible: !edit.activeFocus && win.inlineMarks.test(edit.text) && blockItem.kind !== "code"
+                                visible: !edit.activeFocus && win.inlineMarks.test(edit.text) && blockItem.kind !== "code" && blockItem.look === ""
                                 text: win.linkify(edit.text)
                                 textFormat: Text.StyledText
                                 wrapMode: Text.Wrap
@@ -854,7 +980,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
                             TextEdit {
                                 id: edit
-                                opacity: shown.visible || (codeShown.visible && !edit.activeFocus) ? 0 : 1
+                                opacity: shown.visible || special.visible || (codeShown.visible && !edit.activeFocus) ? 0 : 1
                                 anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0 }
                                 text: blockItem.modelData.text
                                 wrapMode: blockItem.kind === "code" ? TextEdit.NoWrap : TextEdit.Wrap   // code: lines as in the coloured copy under it
