@@ -120,6 +120,21 @@ impl App {
     pub(crate) fn reload_doc_as(&mut self, i: usize, encoding: Option<&str>) -> Result<PathBuf, String> {
         let p = self.docs[i].abs_path().ok_or("no file to reload")?;
         let mut nd = Doc::open_as(&p, &self.ss, encoding).map_err(|e| e.to_string())?;
+        // undoreload: a file of at most that many lines comes back as one change, so u gets the old
+        // text back (its undo history kept); a bigger one (or 0) starts a new history
+        let keep = self.num(i, "undoreload");
+        if keep > 0 && nd.ed.buf.len_lines() <= keep && encoding.is_none() {
+            let text = nd.ed.text();
+            let at = self.docs[i].ed.cursor();
+            let d = &mut self.docs[i];
+            let n = d.ed.buf.len_chars();
+            d.ed.replace_text(0, n, &text);
+            d.ed.buf.set_dirty(false);
+            d.ed.set_cursor(at);
+            d.mtime = nd.mtime;
+            self.lsp_open(i);
+            return Ok(p);
+        }
         let old = &self.docs[i];
         nd.name = old.name.clone();
         nd.top = old.top;
@@ -405,5 +420,28 @@ impl App {
                 Err(e) => self.say(format!("sudo: {e}")),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod undoreload_tests {
+    #[test]
+    fn edit_bang_keeps_the_undo_history() {
+        let d = std::env::temp_dir().join(format!("zett-ur-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("a.txt");
+        std::fs::write(&f, "one\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.open(&f);
+        std::fs::write(&f, "two\n").unwrap();
+        app.command("e!");
+        assert_eq!(app.docs[app.cur].ed.text(), "two\n");
+        app.docs[app.cur].ed.feed("u");
+        assert_eq!(app.docs[app.cur].ed.text(), "one\n", "u brings the text before the reload back");
+        app.command("set undoreload=0");
+        app.command("e!");
+        app.docs[app.cur].ed.feed("u");
+        assert_eq!(app.docs[app.cur].ed.text(), "two\n", "undoreload=0: a new history");
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
