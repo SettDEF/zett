@@ -198,6 +198,9 @@ ApplicationWindow {
     property bool codeLigatures: prefs.codeLigatures ?? false
     property int runFirst: -1      // tests: the block whose Run is pressed
     property int selectFirst: -1   // tests: the block whose first word gets selected
+    // the clipboard's text, read through a hidden field
+    TextEdit { id: clipRead; visible: false }
+    function clipboardText() { clipRead.text = ""; clipRead.paste(); return clipRead.text }
     // code blocks' Run: output gathered here by block (their delegates are rebuilt meanwhile), then a code block under it
     property var runBuf: ({})
     function runStart(i) { const b = Object.assign({}, runBuf); b[i] = ""; runBuf = b }
@@ -1501,6 +1504,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                         app.setText(blockItem.index, "")
                                         app.setKind(blockItem.index, fence[1] ? "code:" + fence[1] : "code")
                                         e.accepted = true; return
+                                    }
+                                    // Ctrl+V in text: an image on the clipboard goes into the workspace as ![](assets/…); a URL over
+                                    // selected text makes it a link; anything else pastes as always
+                                    if (!code && ((e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier) && !(e.modifiers & Qt.ShiftModifier)) || (e.key === Qt.Key_Insert && (e.modifiers & Qt.ShiftModifier)))) {
+                                        const img = app.pasteImage()
+                                        if (img) { edit.remove(edit.selectionStart, edit.selectionEnd); edit.insert(edit.cursorPosition, `![](${img})`); e.accepted = true; return }
+                                        const url = win.clipboardText().trim()
+                                        if (edit.selectedText && /^https?:\/\/\S+$/.test(url)) { win.wrapSel(edit, "[", `](${url})`); e.accepted = true; return }
                                     }
                                     // text with a selection: Ctrl+B bold, Ctrl+I italic, Ctrl+E code, Ctrl+K link (without one they stay Emacs motions)
                                     if (!code && edit.selectedText && (e.modifiers & Qt.ControlModifier) && !(e.modifiers & Qt.ShiftModifier)) {

@@ -119,6 +119,10 @@ pub mod qobject {
         fn move_path(self: Pin<&mut Zett>, from: &QString, to_dir: &QString) -> bool;
         /// copies dropped files (file:// URLs, one per line) into a folder of the workspace; how many
         #[qinvokable]
+        /// an image on the clipboard saved into the workspace (assets/paste-TIME.png); its path from the workspace, or ""
+        #[qinvokable]
+        #[cxx_name = "pasteImage"]
+        fn paste_image(self: &Zett) -> QString;
         #[cxx_name = "importFiles"]
         fn import_files(self: Pin<&mut Zett>, urls: &QString, to_dir: &QString) -> i32;
         #[qinvokable]
@@ -958,6 +962,20 @@ impl qobject::Zett {
         if std::fs::rename(&from, &to).is_err() { return false }
         self.as_mut().disk_changed();
         true
+    }
+
+    fn paste_image(&self) -> QString {
+        let types = std::process::Command::new("wl-paste").arg("--list-types").output().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+        let Some(ty) = ["image/png", "image/jpeg", "image/webp", "image/gif"].into_iter().find(|t| types.lines().any(|l| l.trim() == *t)) else { return QString::default() };
+        let Ok(out) = std::process::Command::new("wl-paste").args(["--no-newline", "-t", ty]).output() else { return QString::default() };
+        if out.stdout.is_empty() { return QString::default() }
+        let ext = ty.trim_start_matches("image/").replace("jpeg", "jpg");
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let rel = format!("assets/paste-{secs}.{ext}");
+        let path = workspace_dir().join(&rel);
+        if let Some(d) = path.parent() { let _ = std::fs::create_dir_all(d); }
+        if std::fs::write(&path, &out.stdout).is_err() { return QString::default() }
+        QString::from(&rel)
     }
 
     fn import_files(mut self: Pin<&mut Self>, urls: &QString, to_dir: &QString) -> i32 {
