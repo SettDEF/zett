@@ -130,6 +130,57 @@ Rectangle {
     function copy(cut) { const s = doc.selectedText(); if (!s) return; clip.text = s; clip.selectAll(); clip.copy(); if (cut) doc.key(0x01000007, "", 0) }
     function paste() { clip.text = ""; clip.paste(); if (clip.text) doc.insert(clip.text) }
 
+    // git blame of the line the cursor rests on (after a pause): who, when, the commit's summary
+    property int blameLine: -1
+    property string blameText: ""
+    readonly property int caretLine: carets.length ? carets[0][0] : -1
+    onCaretLineChanged: { blameText = ""; blameT.restart() }
+    Connections { target: cv.win; function onFilePathChanged() { cv.blameText = ""; blameT.restart() } }
+    Component.onCompleted: blameT.restart()
+    Timer {
+        id: blameT; interval: 450
+        onTriggered: {
+            const path = cv.win.filePath
+            if (!path || cv.caretLine < 0 || (cv.win.prefs?.blame ?? true) === false) return
+            let r; try { r = JSON.parse(cv.app.git(JSON.stringify(["blame", "--porcelain", "-L", `${cv.caretLine + 1},${cv.caretLine + 1}`, "--", path]))) } catch (e) { return }
+            if (r.code !== 0) return
+            const get = k => (r.out.split("\n").find(l => l.startsWith(k + " ")) || "").slice(k.length + 1)
+            const sha = r.out.slice(0, 40)
+            cv.blameLine = cv.caretLine
+            if (/^0+$/.test(sha)) { cv.blameText = "You · not committed yet"; return }
+            const ago = cv.ago(Number(get("author-time")))
+            cv.blameText = `${get("author")} · ${ago} · ${get("summary")}`
+        }
+    }
+    function ago(t) {
+        const s = Date.now() / 1000 - t
+        const u = [[31536000, "year"], [2592000, "month"], [604800, "week"], [86400, "day"], [3600, "hour"], [60, "minute"]]
+        for (const [n, w] of u) if (s >= n) { const k = Math.floor(s / n); return `${k} ${w}${k > 1 ? "s" : ""} ago` }
+        return "just now"
+    }
+
+    // merge conflicts: <<<<<<< ours (||||||| base) ======= theirs >>>>>>>; a block becomes one side or both
+    function conflictAt(line) {
+        if (!doc.lineText(line).startsWith("<<<<<<<")) return null
+        let base = -1, mid = -1
+        for (let l = line + 1; l < Math.min(doc.lines, line + 20000); l++) {
+            const s = doc.lineText(l)
+            if (s.startsWith("|||||||") && mid < 0) base = l
+            else if (s.startsWith("=======") && mid < 0) mid = l
+            else if (s.startsWith(">>>>>>>") && mid >= 0) return { a: line, base, mid, e: l }
+        }
+        return null
+    }
+    function resolve(line, which) {
+        const c = conflictAt(line); if (!c) return
+        const take = (from, to) => { const o = []; for (let l = from; l < to; l++) o.push(doc.lineText(l)); return o }
+        const ours = take(c.a + 1, c.base >= 0 ? c.base : c.mid), theirs = take(c.mid + 1, c.e)
+        const keep = which === "ours" ? ours : which === "theirs" ? theirs : ours.concat(theirs)
+        const last = c.e + 1 < doc.lines
+        const text = keep.length ? keep.join("\n") + (last ? "\n" : "") : ""
+        doc.applyEdits(JSON.stringify([last ? [c.a, 0, c.e + 1, 0, text] : [c.a, 0, c.e, doc.lineText(c.e).length, text.replace(/\n$/, "")]]))
+    }
+
     // the rows on screen
     Repeater {
         model: Math.min(cv.shown, Math.max(0, doc.rows - cv.firstRow))
@@ -179,6 +230,33 @@ Rectangle {
                 width: 30; height: 16; radius: 8; color: Qt.alpha(cv.t.accent, 0.18)
                 Text { anchors.centerIn: parent; text: "⋯"; color: cv.t.accent; font.pixelSize: 12 }
                 TapHandler { onTapped: doc.toggleFold(parent.parent.line) }
+            }
+            // blame, faint after the text of the line the cursor rests on
+            Text {
+                visible: parent.cur && cv.blameLine === parent.line && cv.blameText.length > 0 && !parent.conflict
+                x: code.x + code.implicitWidth + 28; height: parent.height; verticalAlignment: Text.AlignVCenter
+                width: Math.max(0, cv.width - x - 24); elide: Text.ElideRight
+                text: cv.blameText
+                color: Qt.alpha(cv.t.faint, 0.8)
+                font.family: cv.t.sans; font.pixelSize: 12; font.italic: true
+            }
+            // a conflict's first line: keep ours, theirs or both
+            readonly property bool conflict: (doc.version, doc.lineText(line).startsWith("<<<<<<<"))
+            Row {
+                visible: parent.conflict
+                x: code.x + code.implicitWidth + 16; anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Repeater {
+                    model: [["ours", "Keep current"], ["theirs", "Keep incoming"], ["both", "Keep both"]]
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ct.implicitWidth + 18; height: 18; radius: 9
+                        color: ch.hovered ? Qt.alpha(cv.t.accent, 0.3) : Qt.alpha(cv.t.accent, 0.16)
+                        Text { id: ct; anchors.centerIn: parent; text: modelData[1]; color: cv.t.accent; font.family: cv.t.sans; font.pixelSize: 11 }
+                        HoverHandler { id: ch; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: cv.resolve(parent.parent.parent.line, modelData[0]) }
+                    }
+                }
             }
         }
     }
