@@ -75,15 +75,22 @@ Rectangle {
         color: tm.t.faint; font.family: tm.t.sans; font.pixelSize: 12
     }
 
-    Item {
+    // keys come here: a hidden text field, so letters an input method delivers (Wayland: as committed text,
+    // not key presses) reach the shell at once too; it is emptied after each
+    TextInput {
         id: keys
         anchors.fill: parent
         focus: true
+        opacity: 0
+        cursorVisible: false
+        onTextChanged: if (text.length) { if (tm.sid >= 0) tm.app.termWrite(tm.sid, text); text = "" }
         Keys.onPressed: (e) => {
             if (tm.sid < 0) return
             // Ctrl+Shift+V pastes, Ctrl+Shift+C is left to the window
             if (e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier) && (e.modifiers & Qt.ShiftModifier)) { paste.text = ""; paste.paste(); tm.app.termWrite(tm.sid, paste.text); e.accepted = true; return }
             if (e.key === Qt.Key_Shift || e.key === Qt.Key_Control || e.key === Qt.Key_Alt || e.key === Qt.Key_Meta) return
+            // plain printable text: left to the field (onTextChanged), so key and input-method text go one way
+            if (e.text.length && e.text >= " " && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) return
             tm.app.termKey(tm.sid, e.key, e.text, e.modifiers)
             e.accepted = true
         }

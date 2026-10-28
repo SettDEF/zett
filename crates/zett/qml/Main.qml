@@ -903,6 +903,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
             // gitbranch: the branch list open, a new branch made from it
+            // githunk:FILE: its diff, the first change staged
+            if (app.shotEngine.startsWith("githunk:")) { const f = app.shotEngine.slice(8); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.showDiff = true; Qt.callLater(() => { const h = fileView.diffRows.find(r => r.k === "hunk"); fileView.applyHunk(h.body, "stage"); console.log("zett-probe: staged [" + JSON.parse(app.git(JSON.stringify(["diff", "--cached", "--stat"]))).out.trim() + "] left " + fileView.diffRows.filter(r => r.k === "hunk").length); grabLater.start() }) }); return }
             if (app.shotEngine === "gitbranch") { win.sideMode = "git"; Qt.callLater(() => { sourceControl.branchesOpen = true; sourceControl.loadBranches(); sourceControl.switchTo("feature-x", true); sourceControl.branchesOpen = true; sourceControl.loadBranches(); console.log("zett-probe: branch " + sourceControl.branch + " of " + JSON.stringify(sourceControl.branches)); grabLater.start() }); return }
             if (app.shotEngine === "acttip") { activityBar.tipTest = true; grabLater.start(); return }
             if (app.shotEngine.startsWith("core:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(5), rel: app.shotEngine.slice(5) }); coreT.start(); return }
@@ -940,6 +942,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "term") { win.drawerShown = true; termT.start(); return }
+            // termtype:TEXT: TEXT typed into the terminal without Enter, then the picture (and the row as text)
+            if (app.shotEngine.startsWith("termtype:")) { win.drawerShown = true; termTypeT.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
@@ -1025,6 +1029,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     // corelsp:FILE:act:L:C or corelsp:FILE:rename:L:C:NEW, once the server has reported (diagnostics in)
     Timer { id: coreLspT; property var spec: []; property int tries: 0; interval: 1500; onTriggered: { if (!fileView.diags.length && ++tries < 10) { restart(); return } const s = spec, l = +s[3], c = +s[4]; fileView.codeDoc.click(l, c, false, false); if (s[2] === "act") fileView.askActions(l, c); else { fileView.renameAsked = true; app.lspChange(fileView.win.filePath, fileView.codeDoc.text()); fileView.askAt("rename:" + s[5], l, c) } claudeShot.start() } }
     // the real terminal: a colourful command typed in, then the picture
+    Timer { id: termTypeT; interval: 2500; onTriggered: { if (app.shotEngine.startsWith("termtype:keys:")) drawer.termKeys(app.shotEngine.slice(14)); else drawer.termType(app.shotEngine.slice(9)); Qt.callLater(() => { termShowT.start() }) } }
+    Timer { id: termShowT; interval: 800; onTriggered: { console.log("zett-probe: termrows " + drawer.termScreen()); grabLater.start() } }
     Timer { id: termT; interval: 1500; onTriggered: { drawer.termType("printf \x27\\033[1;32mgreen\\033[0m \\033[44mblue bg\\033[0m\\n\x27; ls --color=always /; echo cols=$COLUMNS\r"); claudeShot.interval = 1500; claudeShot.start() } }
     Timer { id: gitT; interval: 900; onTriggered: { const cv = fileView.coreView; console.log("zett-probe: blame [" + cv.blameText + "]"); const before = fileView.codeDoc.lines; cv.resolve(2, "theirs"); console.log("zett-probe: resolved " + before + " -> " + fileView.codeDoc.lines + " [" + fileView.codeDoc.text().replace(/\n/g, "|") + "]"); grabLater.start() } }
     Timer { id: stickyT; interval: 1200; onTriggered: fileView.testSticky() }

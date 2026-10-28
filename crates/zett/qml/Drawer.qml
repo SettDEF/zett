@@ -17,6 +17,9 @@ Rectangle {
     property string tab: "term"           // term (a real shell) | shell (one command, its output) | problems
     // text typed into the real terminal (tests, "run in terminal")
     function termType(s) { if (termLoader.item && termLoader.item.sid >= 0) app.termWrite(termLoader.item.sid, s) }
+    // keys as typed: each character, then Return (tests)
+    function termKeys(s) { const tm = termLoader.item; if (!tm || tm.sid < 0) return; for (const ch of s) app.termKey(tm.sid, ch.toUpperCase().charCodeAt(0), ch, 0); app.termKey(tm.sid, 0x01000004, "\r", 0) }
+    function termScreen() { return termLoader.item && termLoader.item.sid >= 0 ? app.termScreen(termLoader.item.sid) : "" }
     // cargo and rustc style errors in what a command printed: error[E0308]: … / --> src/main.rs:4:9
     function readProblems(text) {
         const found = []; let last = null

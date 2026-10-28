@@ -185,13 +185,40 @@ ColumnLayout {
         const rows = []; let a = 0, b = 0
         for (const l of r.out.split("\n")) {
             const h = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(l)
-            if (h) { a = +h[1]; b = +h[2]; rows.push({ k: "hunk", text: l.replace(/^@@[^@]*@@ ?/, "") || "…" }); continue }
+            if (h) { a = +h[1]; b = +h[2]; rows.push({ k: "hunk", text: l.replace(/^@@[^@]*@@ ?/, "") || "…", body: [] }); continue }
             if (!rows.length || /^(\+\+\+|---) /.test(l)) continue
+            // each change keeps its own lines, to find it again in the index diff (stage, discard)
+            for (let i = rows.length - 1; i >= 0; i--) if (rows[i].k === "hunk") { if (/^[-+ ]/.test(l)) rows[i].body.push(l); break }
             if (l[0] === "+") rows.push({ k: "add", b: b++, text: l.slice(1) })
             else if (l[0] === "-") rows.push({ k: "del", a: a++, text: l.slice(1) })
             else if (l[0] === " ") rows.push({ k: "same", a: a++, b: b++, text: l.slice(1) })
         }
         diffRows = rows
+    }
+    // one change (hunk) of the diff: stage it (git apply --cached), or throw it away in the file (git apply -R);
+    // found in the index's diff by its lines, so changes staged before do not shift it
+    property string hunkNote: ""
+    onHunkNoteChanged: if (hunkNote) { note = hunkNote; noteT.restart(); hunkNote = "" }
+    function applyHunk(body, mode) {
+        if (mode !== "stage" && fv.dirty) { hunkNote = "Save first: discarding works on the file on disk"; return }
+        let r; try { r = JSON.parse(app.git(JSON.stringify(["diff", "--no-color", "-U3", "--", win.filePath]))) } catch (e) { return }
+        const lines = r.out.split("\n"), head = [], hunks = []
+        for (const l of lines) {
+            if (l.startsWith("@@")) hunks.push([l])
+            else if (hunks.length) { if (/^[-+ \\]/.test(l)) hunks[hunks.length - 1].push(l) }
+            else head.push(l)
+        }
+        const want = body.join("\n")
+        const h = hunks.find(x => x.slice(1).filter(l => !l.startsWith("\\")).join("\n") === want)
+        if (!h) { hunkNote = mode === "stage" ? "Already staged" : "Not in the working copy any more"; loadDiff(); return }
+        // in the repository's own .git folder (writeFile keeps to the workspace)
+        const gd = JSON.parse(app.git(JSON.stringify(["rev-parse", "--absolute-git-dir"]))).out.trim()
+        const patch = gd + "/zett-hunk.patch"
+        app.writeFile(patch, head.join("\n") + "\n" + h.join("\n") + "\n")
+        const res = JSON.parse(app.git(JSON.stringify(mode === "stage" ? ["apply", "--cached", patch] : ["apply", "-R", patch])))
+        hunkNote = res.code === 0 ? (mode === "stage" ? "Staged" : "Discarded") : res.out.trim().split("\n").pop()
+        if (mode !== "stage" && res.code === 0) { win.fileText = app.readFile(win.filePath); if (fv.newCore) codeView.openHere(win.filePath) }
+        loadDiff()
     }
     onShowDiffChanged: if (showDiff) loadDiff()
     Connections { target: fv.win; function onFilePathChanged() { fv.showDiff = false } }
@@ -284,6 +311,32 @@ ColumnLayout {
                     Text { width: 36; horizontalAlignment: Text.AlignRight; text: modelData.b !== undefined && modelData.k !== "del" ? modelData.b : ""; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                     Text { width: 14; text: modelData.k === "add" ? "+" : modelData.k === "del" ? "−" : ""; color: modelData.k === "add" ? t.added : t.removed; font.family: t.mono; font.pixelSize: 12 }
                     Text { text: modelData.k === "hunk" ? modelData.text : modelData.text.replace(/\t/g, "    "); color: modelData.k === "hunk" ? t.accent : t.text; font.family: modelData.k === "hunk" ? t.sans : t.mono; font.pixelSize: 12 }
+                }
+                // a change: Stage it, or Discard it in the file (asks once: a second click within 3 s)
+                Row {
+                    visible: modelData.k === "hunk"
+                    anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                    spacing: 6
+                    Repeater {
+                        model: [["stage", "add", "Stage"], ["discard", "undo", "Discard"]]
+                        delegate: Rectangle {
+                            required property var modelData
+                            property bool armed: false
+                            Timer { id: disarmT; interval: 3000; onTriggered: parent.armed = false }
+                            width: hr.implicitWidth + 18; height: 22; radius: 11
+                            color: armed ? Qt.alpha(t.removed, 0.25) : hh.hovered ? t.raised : Qt.alpha(t.text, 0.06)
+                            Row { id: hr; anchors.centerIn: parent; spacing: 4
+                                Text { text: modelData[1]; color: parent.parent.armed ? t.removed : t.dim; font.family: t.icons; font.pixelSize: 14 }
+                                Text { text: parent.parent.armed ? "Discard?" : modelData[2]; color: parent.parent.armed ? t.removed : t.dim; font.family: t.sans; font.pixelSize: 11 } }
+                            HoverHandler { id: hh; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: {
+                                const body = parent.parent.parent.parent.modelData.body
+                                if (modelData[0] === "stage") fv.applyHunk(body, "stage")
+                                else if (parent.armed) { parent.armed = false; fv.applyHunk(body, "discard") }
+                                else { parent.armed = true; disarmT.restart() }
+                            } }
+                        }
+                    }
                 }
             }
             Text { visible: !fv.diffRows.length; anchors.centerIn: parent; text: "No changes since the last commit"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
