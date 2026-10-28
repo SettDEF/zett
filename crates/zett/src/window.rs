@@ -50,6 +50,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "newPage"]
         fn new_page(self: Pin<&mut Zett>, title: &QString);
+        /// a page to the trash (gio trash; restorable), then the list again
+        #[qinvokable]
+        #[cxx_name = "trashPage"]
+        fn trash_page(self: Pin<&mut Zett>, index: i32) -> bool;
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
         /// opens the page with this title, making it if there is none ([[links]], quick open)
@@ -209,7 +213,7 @@ impl ZettRust {
         let Some(f) = &self.folder else { return self.pages.clone() };
         let mut pages: Vec<BlockId> = f.ws.pages();
         pages.sort_by_key(|p| f.ws.text(*p).to_lowercase());
-        let list: Vec<_> = pages.iter().map(|p| serde_json::json!({ "title": f.ws.text(*p), "blocks": f.ws.children(*p).len() })).collect();
+        let list: Vec<_> = pages.iter().map(|p| serde_json::json!({ "title": f.ws.text(*p), "blocks": f.ws.children(*p).len(), "path": f.path_of(*p).map(|x| x.to_string_lossy().to_string()).unwrap_or_default() })).collect();
         self.order = pages;
         QString::from(&serde_json::Value::Array(list).to_string())
     }
@@ -382,6 +386,29 @@ impl qobject::Zett {
         };
         self.as_mut().set_current(idx);
         self.publish();
+    }
+
+    fn trash_page(mut self: Pin<&mut Self>, index: i32) -> bool {
+        let ok = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let Some(p) = usize::try_from(index).ok().and_then(|i| r.order.get(i).copied()) else { return false };
+            let Some(f) = r.folder.as_mut() else { return false };
+            let Some(path) = f.path_of(p).map(|x| x.to_path_buf()) else { return false };
+            let ok = std::process::Command::new("gio").arg("trash").arg(&path).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success()) || {
+                // no desktop trash there (tmpfs, no gio): the workspace's own .trash folder
+                let bin = path.parent().unwrap_or(std::path::Path::new(".")).join(".trash");
+                std::fs::create_dir_all(&bin).is_ok() && std::fs::rename(&path, bin.join(path.file_name().unwrap_or_default())).is_ok()
+            };
+            if ok { f.sync_from_disk(); }
+            ok
+        };
+        if ok {
+            let cur = self.current;
+            self.as_mut().set_current(if cur >= index { (cur - 1).max(0) } else { cur });
+            self.publish();
+        }
+        ok
     }
 
     fn markdown(&self) -> QString {

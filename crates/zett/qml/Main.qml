@@ -120,6 +120,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) app.open(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
+    Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
 
     // ── context menus: one component, each place passes its own items ──
     TextEdit { id: clip; visible: false }
@@ -147,38 +148,70 @@ ApplicationWindow {
             { icon: "description", label: "Copy whole page", run: () => win.copyText(win.pageMd()) }
         ]
     }
-    function blockMenu(i, x, y, ed) {
+    property int renameReq: 0
+    // wraps the selection in a Markdown mark (bold, italic, code, link)
+    function wrapSel(ed, a, z) {
+        const s = ed.selectionStart, e = ed.selectionEnd, t = ed.selectedText
+        ed.remove(s, e); ed.insert(s, a + t + z)
+    }
+    function blockMenu(i, x, y, ed, link) {
         const b = win.blocks[i]
         if (!b) return
+        // on a [[link]]: what to do with that page
+        if (link) {
+            const title = decodeURIComponent(link)
+            ctx.show(x, y, clipRow(`[[${title}]]`, null, null, null).slice(0, 1), [
+                { icon: "open_in_new", label: "Open " + title, run: () => app.openTitle(title) },
+                { icon: "tab", label: "Open in a tab", run: () => { app.openTitle(title); win.addTab(app.current) } },
+                { icon: "link_off", label: "Remove link, keep text", run: () => app.setText(i, b.text.split(`[[${title}]]`).join(title)) }
+            ])
+            return
+        }
         const sel = ed && ed.selectedText.length ? ed.selectedText : ""
         const row = clipRow(sel || b.text,
             () => { if (sel) { ed.cut() } else { win.copyText(b.text); app.remove(i) } },
             () => { const s = win.pasteText(); if (ed) ed.insert(ed.cursorPosition, s); else app.setText(i, b.text + s) },
             shareItems(blockMd(b), `[[${app.title}]]`))
         row[3].run = () => ctx.run(row[3])
-        ctx.show(x, y, row, [
+        // with a selection: format it first
+        const fmt = sel ? [
+            { icon: "format_bold", label: "Bold", key: "**", run: () => win.wrapSel(ed, "**", "**") },
+            { icon: "format_italic", label: "Italic", key: "*", run: () => win.wrapSel(ed, "*", "*") },
+            { icon: "code", label: "Code", key: "`", run: () => win.wrapSel(ed, "`", "`") },
+            { icon: "link", label: "Link to a page", key: "[[ ]]", run: () => win.wrapSel(ed, "[[", "]]") },
+            { icon: "search", label: "Search for it", run: () => { quickField.text = sel; quick.open(); quickField.forceActiveFocus() } },
+            { sep: true }
+        ] : []
+        ctx.show(x, y, row, fmt.concat([
             { icon: "transform", label: "Turn into", sub: win.slashItems.map(s => ({ icon: { paragraph: "notes", h1: "title", h2: "title", h3: "title", todo: "check_box", bullet: "format_list_bulleted", quote: "format_quote", code: "code" }[s.k], label: s.label, key: s.hint, enabled: s.k !== kindName(b), run: () => app.setKind(i, s.k) })) },
             { icon: "add", label: "Add block below", key: "Enter", run: () => win.focusAfter = app.addBlock(i, "paragraph") },
             { icon: "content_copy", label: "Duplicate", run: () => { const n = app.addBlock(i, kindName(b)); app.setText(n, b.text) } },
             { icon: "check_box", label: b.kind === "todo" ? (b.checked ? "Mark not done" : "Mark done") : "Make a to-do", run: () => b.kind === "todo" ? app.toggle(i) : app.setKind(i, "todo") },
             { sep: true },
             { icon: "delete", label: "Delete block", danger: true, run: () => app.remove(i) }
-        ])
+        ]))
     }
     function pageMenu(i, x, y) {
         const p = win.pages[i] ?? {}
         const title = p.title || "Untitled"
         const row = clipRow(title, null, null, [
             { icon: "link", label: "Copy link", key: "[[ ]]", run: () => win.copyText(`[[${title}]]`) },
-            { icon: "folder", label: "Copy folder path", run: () => win.copyText(app.dir) }
+            { icon: "draft", label: "Copy file path", enabled: !!p.path, run: () => win.copyText(p.path) },
+            { icon: "markdown", label: "Copy as Markdown", enabled: i === app.current, run: () => win.copyText(win.pageMd()) }
         ])
         row[3].run = () => ctx.run(row[3])
         ctx.show(x, y, row, [
             { icon: "open_in_new", label: "Open", run: () => app.open(i) },
             { icon: "tab", label: "Keep in a tab", enabled: !win.tabs.includes(i), run: () => win.addTab(i) },
+            { icon: "edit", label: "Rename", key: "F2", run: () => { app.open(i); win.renameReq++ } },
+            { icon: "folder_open", label: "Show in folder", run: () => Qt.openUrlExternally("file://" + app.dir) },
             { icon: "add", label: "New page", run: () => { app.newPage("Untitled"); win.focusAfter = 0 } },
             { sep: true },
-            { icon: "close", label: "Close tab", enabled: win.tabs.includes(i), run: () => win.closeTab(i) }
+            { icon: "close", label: "Close tab", enabled: win.tabs.includes(i), run: () => win.closeTab(i) },
+            { icon: "delete", label: "Move to trash", danger: true, run: () => {
+                if (app.trashPage(i)) { win.tabs = win.tabs.filter(x => x !== i).map(x => x > i ? x - 1 : x); win.note(`"${title}" moved to the trash`) }
+                else win.note(`could not move "${title}" to the trash`)
+            } }
         ])
     }
     function tabMenu(i, x, y) {
@@ -262,6 +295,8 @@ ApplicationWindow {
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
+            if (app.shotEngine === "trash") { const n = win.pages.length; const ok = app.trashPage(n - 1); console.log(`zett-probe: trash ok=${ok} pages ${n} -> ${win.pages.length}`); grabLater.start(); return }
+            if (app.shotEngine === "selmenu") { const d = list.itemAtIndex(1); win.blockMenu(1, 340, 150, null, ""); grabLater.start(); return }
             if (app.shotEngine.length > 0) {
                 for (const k of app.shotEngine.split(" ")) win.engineTok(k, null)
                 keyWait.stop()
@@ -497,6 +532,7 @@ ApplicationWindow {
                     height: titleEdit.implicitHeight + 18
                     TextInput {
                         id: titleEdit
+                        Connections { target: win; function onRenameReqChanged() { titleEdit.forceActiveFocus(); titleEdit.selectAll() } }
                         x: (list.width - list.column) / 2
                         width: list.column
                         text: app.title
@@ -516,7 +552,7 @@ ApplicationWindow {
                     width: list.width
                     height: body.implicitHeight + (modelData.kind === "heading" ? 14 : 6)
 
-                    TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, edit) }
+                    TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, edit, shown.visible ? shown.hoveredLink : "") }
                     function vimKeyForTest(k) { edit.applyVim(app.vimKey(k)) }
                     function typeForTest(s) { edit.forceActiveFocus(); edit.text = s }
 
