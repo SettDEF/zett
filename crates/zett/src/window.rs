@@ -300,6 +300,8 @@ fn kind_from(s: &str) -> Kind {
         "bullet" => Kind::Bullet,
         "quote" => Kind::Quote,
         "code" => Kind::Code { lang: String::new() },
+        // "code:lua": a code block in that language
+        k if k.starts_with("code:") => Kind::Code { lang: k[5..].trim().to_string() },
         _ => Kind::Paragraph,
     }
 }

@@ -6,10 +6,13 @@ Rectangle {
     required property var win
     required property var t
     required property var app
-    visible: win.detailsShown && win.pages.length > 0 && win.view === "page" && win.sidePage < 0
+    // narrow windows leave it out rather than cut it off
+    visible: win.detailsShown && win.pages.length > 0 && win.view === "page" && win.sidePage < 0 && win.width >= 900
     Layout.fillHeight: true
     Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
     implicitWidth: 248
+    Layout.minimumWidth: 248
+    Layout.maximumWidth: 248
     radius: t.rCard
     color: t.panel
     border.width: 1; border.color: Qt.alpha(t.rule, 0.35)

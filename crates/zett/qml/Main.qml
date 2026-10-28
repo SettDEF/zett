@@ -166,6 +166,8 @@ ApplicationWindow {
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
     property bool detailsShown: prefs.details ?? true
+    // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
+    property bool codeLigatures: prefs.codeLigatures ?? false
     // a second page beside the editor, read-only (SidePage.qml); -1 when none
     property int sidePage: -1
     // Claude beside the page: claude-ui's panel, from its install (Ctrl+Shift+A)
@@ -1101,13 +1103,41 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 TapHandler { enabled: !edit.activeFocus; onTapped: edit.forceActiveFocus() }
                                 z: edit.activeFocus ? 0 : 2   // editing: under the editor (declared after it), over the block's fill
                             }
-                            // the language, top right of a code block
-                            Text {
-                                visible: blockItem.kind === "code" && (blockItem.modelData.lang ?? "").length > 0
-                                anchors { right: parent.right; top: parent.top; margins: 8 }
-                                text: blockItem.modelData.lang ?? ""
-                                color: t.faint; font.family: t.mono; font.pixelSize: 11
-                                z: 3
+                            // the language, top right of a code block: a chip that opens the list of languages
+                            Rectangle {
+                                id: langChip
+                                visible: blockItem.kind === "code"
+                                property bool open: false
+                                anchors { right: parent.right; top: parent.top; margins: 6 }
+                                width: langRow.implicitWidth + 14; height: 22; radius: 11
+                                color: langHover.hovered || open ? Qt.alpha(t.text, 0.1) : Qt.alpha(t.text, 0.04)
+                                z: 5
+                                Row { id: langRow; anchors.centerIn: parent; spacing: 2
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: (blockItem.modelData.lang ?? "") || "text"; color: t.dim; font.family: t.mono; font.pixelSize: 11 }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: "expand_more"; color: t.faint; font.family: t.icons; font.pixelSize: 14 } }
+                                HoverHandler { id: langHover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: langChip.open = !langChip.open }
+                                Rectangle {
+                                    visible: langChip.open
+                                    anchors { right: parent.right; top: parent.bottom; topMargin: 4 }
+                                    width: 150; height: Math.min(langList.contentHeight + 8, 260); radius: 10
+                                    color: t.raised; border.width: 1; border.color: Qt.alpha(t.rule, 0.4)
+                                    ListView {
+                                        id: langList
+                                        anchors { fill: parent; margins: 4 }
+                                        clip: true
+                                        model: ["text", "sh", "bash", "lua", "rust", "python", "javascript", "typescript", "json", "toml", "yaml", "qml", "c", "cpp", "go", "java", "html", "css", "markdown", "sql", "diff", "zig", "nix"]
+                                        delegate: Rectangle {
+                                            required property string modelData
+                                            width: ListView.view.width; height: 26; radius: 6
+                                            readonly property bool cur: modelData === ((blockItem.modelData.lang ?? "") || "text")
+                                            color: lh.hovered ? Qt.alpha(t.accent, 0.16) : "transparent"
+                                            Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: parent.modelData; color: parent.cur ? t.accent : t.text; font.family: t.mono; font.pixelSize: 12 }
+                                            HoverHandler { id: lh; cursorShape: Qt.PointingHandCursor }
+                                            TapHandler { onTapped: { langChip.open = false; app.setKind(blockItem.index, modelData === "text" ? "code" : "code:" + modelData) } }
+                                        }
+                                    }
+                                }
                             }
                             // shown instead of the raw text while not editing: [[links]] are clickable
                             Text {
@@ -1138,6 +1168,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 color: blockItem.kind === "code" && activeFocus ? "transparent" : blockItem.kind === "todo" && blockItem.checked ? t.faint : blockItem.kind === "quote" ? t.dim : t.text
                                 cursorDelegate: Rectangle { width: 2; color: t.accent; visible: edit.cursorVisible }
                                 font.family: blockItem.kind === "code" ? t.mono : t.sans
+                                // code shows what was typed: => stays =>, no ligatures (Settings: Ligatures in code)
+                                font.features: blockItem.kind === "code" && !win.codeLigatures ? { "liga": 0, "calt": 0, "dlig": 0 } : {}
                                 font.pixelSize: Math.round((blockItem.kind === "heading" ? [0, 28, 22, 18, 16, 15, 14][blockItem.level] : blockItem.kind === "code" ? 14 : 16) * t.scale)
                                 font.weight: blockItem.kind === "heading" ? Font.DemiBold : Font.Normal
                                 font.italic: blockItem.kind === "quote"
@@ -1222,8 +1254,16 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                     } else if (win.slashFor === blockItem.index) {
                                         win.slashFor = -1
                                     }
+                                    // a whole fenced block typed or pasted into a paragraph: a code block, fences gone, the language kept
+                                    const whole = blockItem.kind === "paragraph" ? text.match(/^```([\w+#.-]*)[ \t]*\n([\s\S]*?)\n?```\s*$/) : null
+                                    if (whole) {
+                                        win.focusAfter = blockItem.index
+                                        app.setText(blockItem.index, whole[2])
+                                        app.setKind(blockItem.index, whole[1] ? "code:" + whole[1] : "code")
+                                        return
+                                    }
                                     // Markdown shortcuts at the start of an empty block turn it into another kind
-                                    const shortcuts = [["# ", "h1"], ["## ", "h2"], ["### ", "h3"], ["- [ ] ", "todo"], ["[] ", "todo"], ["- ", "bullet"], ["* ", "bullet"], ["> ", "quote"], ["```", "code"]]
+                                    const shortcuts = [["# ", "h1"], ["## ", "h2"], ["### ", "h3"], ["- [ ] ", "todo"], ["[] ", "todo"], ["- ", "bullet"], ["* ", "bullet"], ["> ", "quote"]]   // ``` waits for a language and Enter (above)
                                     if (blockItem.kind === "paragraph") {
                                         for (const [p, k] of shortcuts) {
                                             if (text === p) {
@@ -1280,6 +1320,15 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                         return
                                     }
                                     const code = blockItem.kind === "code"
+                                    // ```lang + Enter in a paragraph: a code block in that language
+                                    const fence = blockItem.kind === "paragraph" ? edit.text.match(/^```([\w+#.-]*)\s*$/) : null
+                                    if (fence && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)) {
+                                        saveLater.stop()
+                                        win.focusAfter = blockItem.index
+                                        app.setText(blockItem.index, "")
+                                        app.setKind(blockItem.index, fence[1] ? "code:" + fence[1] : "code")
+                                        e.accepted = true; return
+                                    }
                                     if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier) && !code) {
                                         // Enter: a new block after this one (a list continues as a list)
                                         saveLater.stop()

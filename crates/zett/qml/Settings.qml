@@ -137,6 +137,10 @@ Flickable {
                 label: "Font"; hint: "for the page and the window"
                 Choice { options: [["Google Sans Flex", "Google Sans"], ["Inter", "Inter"], ["Noto Serif", "Serif"]]; value: win.prefs.sans ?? "Google Sans Flex"; onPicked: (v) => win.setPref("sans", v) }
             }
+            Row1 {
+                label: "Ligatures in code"; hint: "=> drawn as ⇒ in code blocks"
+                Choice { options: [[false, "Off"], [true, "On"]]; value: win.prefs.codeLigatures ?? false; onPicked: (v) => win.setPref("codeLigatures", v) }
+            }
         }
 
         Section {
