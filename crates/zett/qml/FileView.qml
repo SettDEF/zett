@@ -257,7 +257,7 @@ ColumnLayout {
         // errors and find hits as marks on its edge
         Item {
             id: miniMap
-            visible: ed.lineCount > 40 && parent.width > 700
+            visible: (fv.win.prefs.minimap ?? true) && ed.lineCount > 40 && parent.width > 700
             anchors { right: parent.right; top: parent.top; bottom: parent.bottom; margins: 10 }
             width: 86
             clip: true

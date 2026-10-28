@@ -1845,6 +1845,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
         }
         Details { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+        FileOutline { win: ApplicationWindow.window; t: ApplicationWindow.window.theme }
     }
     }
 

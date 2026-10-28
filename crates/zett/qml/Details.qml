@@ -36,7 +36,6 @@ Rectangle {
                 // the section the page is scrolled to: the last heading at or above the top block
                 readonly property bool cur: modelData.i === parent.parent.curHead
                 color: cur ? Qt.alpha(t.accent, 0.12) : olHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
-                Rectangle { visible: parent.cur; x: 0; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 16; radius: 1.5; color: t.accent }
                 Text {
                     anchors { fill: parent; leftMargin: 10 + ((modelData.b.level ?? 1) - 1) * 12; rightMargin: 8 }
                     verticalAlignment: Text.AlignVCenter

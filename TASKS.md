@@ -368,15 +368,15 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 1. [x] Activity bar without the stripe: the active item is a soft filled pill
 2. [x] Sidebar editor first: Explorer on top (folder name as the header, new file/folder, collapse all), notes things (Today, Templates, Import, Trash) in a folded "Notes" section at the bottom
 3. [x] Quick open files (Ctrl P finds files too, fuzzy), recent files
-4. [~] Editor: bracket pair highlight, trim trailing whitespace + final newline on save, auto save (setting) done; left: word wrap (the coloured copy must wrap the same), render whitespace; indent guides skipped (stripes)
-5. [ ] Editor: sticky scroll (the enclosing lines at the top), code folding by indent in files
-6. [~] LSP: go to definition (F12), references list (Shift F12), rename across files (F2, a small field at the cursor), hover, format (Shift Alt F) done; left: signature help, code actions (Ctrl .) — need new client requests
-7. [~] Go to symbol (Ctrl Shift O): the server's symbols as a list, Enter jumps — done; left: the outline in the details panel
-8. [ ] Split editor (Ctrl \ in a file): two files side by side, both editable
-9. [~] Source control view (Ctrl Shift G): branch, message + Commit (all when nothing is staged), staged and changed files, stage/unstage per file and all — done; left: the diff view, discard with a confirm
-10. [ ] Panel at the bottom with tabs: Terminal, Problems (all files), Output
-11. [ ] Multi-cursor: Alt click adds a cursor, Ctrl Alt Up/Down, column select (Shift Alt drag)
-12. [ ] Keyboard shortcuts page in Settings (searchable list of every key, rebind)
-13. [~] Zen mode (Ctrl K Z, Esc leaves) done; left: breadcrumbs with the symbol, a minimap toggle
-14. [~] Tasks: Cargo, npm scripts and make targets found and run from the palette in the shell drawer — done; left: their problems into the problems list
+4. [x] Editor: bracket pair highlight, trim trailing whitespace + final newline on save, auto save, word wrap (Alt Z), minimap setting; indent guides skipped (stripes); render whitespace left out (the coloured copy is HTML, dots would break its tags)
+5. [x] Sticky scroll (the enclosing lines at the top); folding by indent: still open
+6. [x] LSP: definition (F12), references (Shift F12), rename (F2), hover, signature help, code actions (Ctrl .), format (Shift Alt F)
+7. [x] Outline: the file's declarations in the details card; Go to symbol (Ctrl Shift O)
+8. [x] Split editor (Ctrl \ in a file): two files side by side, both editable
+9. [x] Source control (Ctrl Shift G): stage/unstage, commit, diff view, discard with a confirm
+10. [x] Panel under the editor: Terminal and Problems (every file, tasks' errors) tabs
+11. [x] Multi-cursor: Alt click, Ctrl Alt Up/Down; column select (Shift Alt drag) still open
+12. [~] Keyboard shortcuts page: the searchable list is in Settings; rebinding from it still open
+13. [x] Zen mode (Ctrl K Z), minimap setting; breadcrumbs with the symbol still open
+14. [x] Tasks from Cargo/npm/make in the palette, their errors in Problems
 15. [ ] Debug: later (DAP) — planned only
