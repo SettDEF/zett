@@ -1610,6 +1610,31 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             }
                         }
                         Text { text: "or type  /  in a block for every kind,  [[  to link a page"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                        // the pages changed last, to go on with one of them
+                        Text { visible: recentRep.count > 0; Layout.topMargin: 18; text: "Recent"; color: t.faint; font.family: t.sans; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        Repeater {
+                            id: recentRep
+                            model: win.pages.map((p, i) => ({ p, i })).filter(o => o.i !== app.current && o.p.title).sort((a, b) => (b.p.modified ?? 0) - (a.p.modified ?? 0)).slice(0, 5)
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: 36; radius: 10
+                                color: rpH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                                RowLayout {
+                                    anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                                    spacing: 10
+                                    Text { text: "description"; color: t.dim; font.family: t.icons; font.pixelSize: 17 }
+                                    Text { Layout.fillWidth: true; text: modelData.p.title; elide: Text.ElideRight; color: t.text; font.family: t.sans; font.pixelSize: 14 }
+                                    Text {
+                                        readonly property int ago: Math.max(0, Date.now() / 1000 - (modelData.p.modified ?? 0))
+                                        text: (ago < 3600 ? Math.round(ago / 60) + " min" : ago < 86400 ? Math.round(ago / 3600) + " h" : Math.round(ago / 86400) + " d") + "  ·  " + modelData.p.blocks + " blocks"
+                                        color: t.faint; font.family: t.mono; font.pixelSize: 11
+                                    }
+                                }
+                                HoverHandler { id: rpH; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: win.openPage(modelData.i) }
+                            }
+                        }
                     }
                     ColumnLayout {
                         id: backCol
