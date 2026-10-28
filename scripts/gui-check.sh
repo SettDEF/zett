@@ -19,7 +19,7 @@ printf 'int add(int a, int b);\nint main(void) {\n    add(1, 2);\n    return 0;\
 printf 'int main(void) {\n    int x = 1\n    return x;\n}\n' > "$W/fix.c"
 printf 'a\nb\nc\n' > "$W/lines.rs"
 printf 'fn main() {\n    let a = 1;\n    let b = 2;\n}\n' > "$W/core.rs"
-cp "$W/core.rs" "$W/core2.rs"
+cp "$W/core.rs" "$W/core2.rs"; cp "$W/core.rs" "$W/core3.rs"; cp "$W/core.rs" "$W/core4.rs"
 for i in $(seq 1 1000); do echo "impl T$i {"; for j in $(seq 1 98); do echo "    fn f$j(&self) -> u32 { $j }"; done; echo "}"; done > "$W/big.rs"
 cp "$W/fix.c" "$W/fix2.c"; cp "$W/bad.c" "$W/bad2.c"   # untouched copies for the new core's server checks
 mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
@@ -59,6 +59,8 @@ check core core:core.rs "grep -q 'core rows 3 lines 5 fold 2' \"\$OUT/core.log\"
 # speed: a 100,000 line file opens in under 300 ms, five keys at its end in under 200 ms
 check corebig corebig:big.rs "awk '/corebig open/ { o = \$5; k = \$(NF-1) } END { exit !(o < 300 && k < 200) }' \"\$OUT/corebig.log\""
 check core2 core2:core2.rs "grep -q 'core2 found 2 replaced 2' \"\$OUT/core2.log\" && [ \"\$(sed -n 3p '$W/core2.rs')\" = '    // var a = 1;' ]"
+check core3 core3:core3.rs "grep -q 'core3 word \\[a\\] indented \\[        let a = 1;\\] cursors 2' \"\$OUT/core3.log\" && grep -q '^    xlet a' '$W/core3.rs' && grep -q '^    xlet b' '$W/core3.rs'"
+check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \"\$(tail -c1 '$W/core4.rs' | od -An -c | tr -d ' ')\" = '\\n' ] && tail -1 '$W/core4.rs' | grep -q tail"
 check welcome welcome
 check lines filelines:lines.rs "[ \"\$(tr '\\n' '|' < '$W/lines.rs')\" = 'b|// a|// a|c|' ]"
 check tooltip acttip

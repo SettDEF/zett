@@ -318,11 +318,20 @@ Rectangle {
         }
         TapHandler {
             acceptedModifiers: Qt.KeyboardModifierMask
-            onTapped: (ev) => {
+            // one click places (Shift extends, Alt adds a cursor), two select the word, three the line
+            onTapped: (ev, button) => {
                 input.forceActiveFocus()
                 const [l, c] = cv.rowColAt(ev.position.x, ev.position.y)
-                doc.click(l, c, (ev.modifiers & Qt.ShiftModifier) !== 0, (ev.modifiers & Qt.AltModifier) !== 0)
+                if (tapCount >= 3) doc.selectUnit(l, c, true)
+                else if (tapCount === 2) doc.selectUnit(l, c, false)
+                else doc.click(l, c, (ev.modifiers & Qt.ShiftModifier) !== 0, (ev.modifiers & Qt.AltModifier) !== 0)
             }
+        }
+        // Shift+Alt drag: a cursor on every line, at the column the pointer is in
+        DragHandler {
+            target: null
+            acceptedModifiers: Qt.ShiftModifier | Qt.AltModifier
+            onCentroidChanged: if (active) { const [l0] = cv.rowColAt(centroid.pressPosition.x, centroid.pressPosition.y); const [l1, c1] = cv.rowColAt(centroid.position.x, centroid.position.y); doc.columns(l0, l1, c1) }
         }
         DragHandler {
             target: null

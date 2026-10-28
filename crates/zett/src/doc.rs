@@ -66,6 +66,13 @@ pub mod qobject {
         /// the lines that open the scope around a line (less indented, ending in { ( [ : or a declaration), 3 at most
         #[qinvokable]
         fn scope(self: &CodeDoc, line: i32) -> QString;
+        /// double click: the word there; triple: the line
+        #[qinvokable]
+        #[cxx_name = "selectUnit"]
+        fn select_unit(self: Pin<&mut CodeDoc>, line: i32, col: i32, whole_line: bool);
+        /// Shift+Alt drag: a cursor on each line from l0 to l1 at column col
+        #[qinvokable]
+        fn columns(self: Pin<&mut CodeDoc>, l0: i32, l1: i32, col: i32);
         #[qinvokable]
         #[cxx_name = "lineText"]
         fn line_text(self: &CodeDoc, line: i32) -> QString;
@@ -548,7 +555,25 @@ impl qobject::CodeDoc {
                 self.replace_all(&format!("\n{ind}"), "");
                 true
             }
-            0x0100_0001 if !ctrl => { self.replace_all("    ", ""); true }
+            0x0100_0001 | 0x0100_0002 if !ctrl => {
+                // Tab: four spaces, or with a selection over lines (or Shift+Tab) the lines in or out by four
+                let multi = { let r = self.rust(); let (a, b) = r.carets[0].range(); r.line_col(a).0 != r.line_col(b).0 };
+                if key == 0x0100_0001 && !shift && !multi { self.replace_all("    ", ""); return true }
+                let (a, b) = { let r = self.rust(); let (x, y) = r.carets[0].range(); let (la, _) = r.line_col(x); let (mut lb, cb) = r.line_col(y); if lb > la && cb == 0 { lb -= 1 } (la, lb) };
+                let out = key == 0x0100_0002 || shift;
+                self.as_mut().checkpoint("");
+                {
+                    let mut r = self.as_mut().rust_mut();
+                    for l in (a..=b).rev() {
+                        let s = r.rope.line_to_char(l);
+                        if out { let n = r.line_str(l).chars().take(4).take_while(|c| *c == ' ').count(); r.rope.remove(s..s + n); } else if !r.line_str(l).is_empty() { r.rope.insert(s, "    "); }
+                    }
+                    let (sa, sb) = (r.rope.line_to_char(a), r.pos(b, usize::MAX));
+                    r.carets = vec![Caret { head: sb, anchor: sa, goal: None }];
+                }
+                self.changed(a);
+                true
+            }
             0x0100_0000 => {
                 // Esc: back to one cursor, nothing selected
                 {
@@ -679,7 +704,7 @@ fn pattern(q: &str, opts: &str) -> Option<regex::Regex> {
     }
     let src = if o["regex"] == true { q.to_string() } else { regex::escape(q) };
     let src = if o["word"] == true { format!(r"\b{src}\b") } else { src };
-    regex::RegexBuilder::new(&src).case_insensitive(o["case"] != true).build().ok()
+    regex::RegexBuilder::new(&src).case_insensitive(o["case"] != true).multi_line(o["multiline"] == true).build().ok()
 }
 
 impl qobject::CodeDoc {
@@ -867,5 +892,36 @@ impl qobject::CodeDoc {
         }
         out.reverse();
         QString::from(&format!("[{}]", out.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")))
+    }
+}
+
+impl qobject::CodeDoc {
+    pub fn select_unit(mut self: Pin<&mut Self>, line: i32, col: i32, whole_line: bool) {
+        {
+            let mut r = self.as_mut().rust_mut();
+            let l = (line.max(0) as usize).min(r.rope.len_lines().saturating_sub(1));
+            let c = if whole_line {
+                let a = r.rope.line_to_char(l);
+                let b = if l + 1 < r.rope.len_lines() { r.rope.line_to_char(l + 1) } else { r.rope.len_chars() };
+                Caret { head: b, anchor: a, goal: None }
+            } else {
+                let p = r.pos(l, col.max(0) as usize);
+                let a = Self::word_edge(&r, (p + 1).min(r.rope.len_chars()), -1).min(p);
+                let b = Self::word_edge(&r, a, 1).max(a);
+                Caret { head: b, anchor: a, goal: None }
+            };
+            r.carets = vec![c];
+        }
+        self.publish();
+    }
+    pub fn columns(mut self: Pin<&mut Self>, l0: i32, l1: i32, col: i32) {
+        {
+            let mut r = self.as_mut().rust_mut();
+            let (a, b) = (l0.min(l1).max(0) as usize, l0.max(l1).max(0) as usize);
+            let b = b.min(r.rope.len_lines().saturating_sub(1));
+            let cs: Vec<Caret> = (a..=b).map(|l| Caret::at(r.pos(l, col.max(0) as usize))).collect();
+            if !cs.is_empty() { r.carets = cs; }
+        }
+        self.publish();
     }
 }

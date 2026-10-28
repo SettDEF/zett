@@ -36,7 +36,11 @@ ColumnLayout {
     // `auto`: written by auto save, so the text under the cursor is left as typed (no trimming)
     function write(auto) {
         // the new core: its text is the one to write (the old editor's would be stale)
-        if (newCore) { if (codeView.doc.save()) { note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"; noteT.restart(); return }
+        if (newCore) {
+            // the same tidying as the classic editor: trailing spaces, a final newline (Settings > Editor)
+            if (!auto && (win.prefs.trimOnSave ?? true)) codeView.doc.replaceAll("[ \\t]+$", "", JSON.stringify({ regex: true, multiline: true, case: true }))
+            if (!auto && (win.prefs.finalNewline ?? true)) { const n = codeView.doc.lines, last = codeView.doc.lineText(n - 1); if (last.length) codeView.doc.applyEdits(JSON.stringify([[n - 1, last.length, n - 1, last.length, "\n"]])) }
+            if (codeView.doc.save()) { note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"; noteT.restart(); return }
         if (!auto && (win.prefs.trimOnSave ?? true)) {
             let s = ed.text.replace(/[ \t]+$/gm, "")
             if ((win.prefs.finalNewline ?? true) && s.length && !s.endsWith("\n")) s += "\n"
@@ -288,7 +292,8 @@ ColumnLayout {
     // the new editor core (Settings > Editor > New editor core): CodeView over CodeDoc, in place of the TextEdit
     readonly property alias codeDoc: codeView.doc
     readonly property alias coreView: codeView
-    readonly property bool newCore: (win.prefs.newCore ?? false) || app.shotEngine.startsWith("core")
+    // the default now; Settings can go back to the classic editor. Headless checks use the classic one unless they test the core
+    readonly property bool newCore: app.shot.length ? app.shotEngine.startsWith("core") : (win.prefs.newCore ?? true)
     CodeView {
         id: codeView
         visible: fv.newCore && !fv.showDiff

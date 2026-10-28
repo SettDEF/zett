@@ -383,7 +383,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 
 ## zett: the best editor out there (planned 2026-10-28)
 
-1. [~] Editor core (stage a done 2026-10-28; stage b part 1: line keys, find/replace, git and problem marks, the server (sync, F12, references, symbols, format, edits); part 2: completion, signature, hover, rename, code actions, saving through the core; stage c: Ctrl+Alt cursors, bracket pairs, sticky scroll, a 100,000 line file opens in ~40 ms and types at ~8 ms a key (checked): CodeDoc + CodeView, cursors, undo, folds, colours, save, behind the setting): drawn by zett itself, not a Qt TextEdit. CodeDoc (Rust: rope, cursors, undo, folds, syntect
+1. [x] Editor core (stage a done 2026-10-28; stage b part 1: line keys, find/replace, git and problem marks, the server (sync, F12, references, symbols, format, edits); part 2: completion, signature, hover, rename, code actions, saving through the core; stage c: Ctrl+Alt cursors, bracket pairs, sticky scroll, a 100,000 line file opens in ~40 ms and types at ~8 ms a key (checked); stage d: word/line/column select, Tab indent, trim on save — the default since 2026-10-28 (Settings > Editor > Classic goes back); left: minimap, word wrap, snippets in the new core: CodeDoc + CodeView, cursors, undo, folds, colours, save, behind the setting): drawn by zett itself, not a Qt TextEdit. CodeDoc (Rust: rope, cursors, undo, folds, syntect
    colours per line with cached parse states) + CodeView.qml (only the lines on screen, cursors from the mono
    grid). Stages: a) view + edit + save behind Settings > Editor > New editor core; b) everything FileView has
    (LSP, find, minimap, git gutter, completion, line keys); c) folding, wrap, huge files; d) default, old one gone
