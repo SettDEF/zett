@@ -1002,6 +1002,8 @@ impl qobject::Zett {
             "symbols" => crate::lsp::with(&p, |cl| cl.symbols(&p)),
             "format" => crate::lsp::with(&p, |cl| cl.format(&p, 4)),
             "save" => crate::lsp::with(&p, |cl| cl.did_save(&p)),
+            // "rename:NEW": the symbol at the cursor renamed everywhere (the edits come back as an event)
+            k if k.starts_with("rename:") => crate::lsp::with(&p, |cl| cl.rename(&p, l, c, &k[7..])),
             _ => {}
         }
     }

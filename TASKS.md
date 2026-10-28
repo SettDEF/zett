@@ -370,8 +370,8 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 3. [x] Quick open files (Ctrl P finds files too, fuzzy), recent files
 4. [~] Editor: bracket pair highlight, trim trailing whitespace + final newline on save, auto save (setting) done; left: word wrap (the coloured copy must wrap the same), render whitespace; indent guides skipped (stripes)
 5. [ ] Editor: sticky scroll (the enclosing lines at the top), code folding by indent in files
-6. [ ] LSP: go to definition (F12), find references (Shift F12) as a list, rename symbol (F2), hover, signature help, code actions (Ctrl .), format document (Shift Alt F)
-7. [ ] Outline for files (LSP document symbols, else headings/fn lines) in the details panel; Go to symbol (Ctrl Shift O)
+6. [~] LSP: go to definition (F12), references list (Shift F12), rename across files (F2, a small field at the cursor), hover, format (Shift Alt F) done; left: signature help, code actions (Ctrl .) — need new client requests
+7. [~] Go to symbol (Ctrl Shift O): the server's symbols as a list, Enter jumps — done; left: the outline in the details panel
 8. [ ] Split editor (Ctrl \ in a file): two files side by side, both editable
 9. [ ] Source control view: changed files, stage/unstage, commit message + commit, diff view of a file (side by side, rounded)
 10. [ ] Panel at the bottom with tabs: Terminal, Problems (all files), Output

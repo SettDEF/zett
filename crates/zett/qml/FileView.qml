@@ -67,6 +67,13 @@ ColumnLayout {
     function testEdit(s) { ed.forceActiveFocus(); ed.cursorPosition = 0; ed.insert(0, s); save() }
     function testFind(q) { findBar.open("find"); findBar.q.text = q }
     function testProblems() { showProblems = true }
+    // gui-check: the server asked once it has the file (symbols, or rename:LINE:COL:NEW); what comes back is logged
+    function testLsp(spec) { lspTest.spec = spec; lspTest.start() }
+    Timer {
+        id: lspTest; property string spec; interval: 1800
+        onTriggered: { const p = spec.split(":"); if (p[0] === "symbols") fv.ask("symbols", 0); else { fv.goTo(+p[1], +p[2]); renameField.text = p[3]; renameBox.done(true) } }
+    }
+    onJumpsChanged: if (app.shot.length && jumps.length) console.log("zett-probe: jumps " + JSON.stringify(jumps.map(j => j.name ?? j.line)))
     // the cursor to a 0-based line and column (search results, problems)
     function goTo(line, col) { ed.cursorPosition = posOf(line, col); ed.forceActiveFocus() }
     Timer { id: noteT; interval: 1800; onTriggered: fv.note = "" }
@@ -112,7 +119,15 @@ ColumnLayout {
             else if (e.type === "edits") for (const f of e.files) if (f.path === fv.win.filePath) {
                 // from the end, so earlier positions stay right
                 for (const x of f.edits.slice().reverse()) { const a = fv.posOf(x[0], x[1]), b = fv.posOf(x[2], x[3]); ed.remove(a, b); ed.insert(a, x[4]) }
+            } else {
+                // another file (a rename reaching it): changed on disk
+                let s = fv.app.readFile(f.path)
+                const at = (l, c) => { const ls = s.split("\n"); let p = 0; for (let i = 0; i < Math.min(l, ls.length - 1); i++) p += ls[i].length + 1; return p + c }
+                for (const x of f.edits.slice().reverse()) { const a = at(x[0], x[1]), b = at(x[2], x[3]); s = s.slice(0, a) + x[4] + s.slice(b) }
+                if (fv.app.writeFile(f.path, s)) fv.renamedFiles++
             }
+            if (e.type === "edits" && fv.renameAsked) { fv.renameAsked = false; if (fv.app.shot.length) { console.log("zett-probe: renamed"); fv.write() } fv.note = fv.renamedFiles ? `Renamed, ${fv.renamedFiles + 1} files changed` : "Renamed"; fv.renamedFiles = 0; noteT.restart() }
+            if (e.type === "references" || e.type === "symbols") { fv.jumpKind = e.type; fv.jumps = e.items; fv.jumpSel = 0 }
             if (e.type === "edits" && fv.savePending) { fv.savePending = false; saveWait.stop(); fv.write() }
         }
     }
@@ -307,6 +322,26 @@ ColumnLayout {
                 z: 50
                 Text { id: hoverT; x: 12; y: 8; width: Math.min(536, implicitWidth); text: fv.hoverText; wrapMode: Text.Wrap; color: t.text; font.family: t.mono; font.pixelSize: 12 }
             }
+            // F2: the new name for the symbol at the cursor, in a small field over it
+            Rectangle {
+                id: renameBox
+                visible: false
+                function open() { const w = fv.wordStart(ed.cursorPosition); let b = ed.cursorPosition; while (b < ed.text.length && /[\w$]/.test(ed.text[b])) b++; renameField.text = ed.text.slice(w, b); renameField.selectAll(); visible = true; renameField.forceActiveFocus() }
+                function done(ok) { visible = false; if (ok && renameField.text.trim()) { fv.renameAsked = true; fv.app.lspChange(fv.win.filePath, ed.text); fv.ask("rename:" + renameField.text.trim(), ed.cursorPosition) } ed.forceActiveFocus() }
+                x: ed.x + ed.cursorRectangle.x - 8; y: ed.cursorRectangle.y + ed.cursorRectangle.height + 4
+                width: 240; height: 34; radius: 12; z: 60
+                color: t.raised; border.width: 1; border.color: Qt.alpha(t.accent, 0.5)
+                TextInput {
+                    id: renameField
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: t.text; font.family: t.mono; font.pixelSize: 13; selectionColor: Qt.alpha(t.accent, 0.4); clip: true
+                    Keys.onReturnPressed: renameBox.done(true)
+                    Keys.onEnterPressed: renameBox.done(true)
+                    Keys.onEscapePressed: renameBox.done(false)
+                    onActiveFocusChanged: if (!activeFocus && renameBox.visible) renameBox.done(false)
+                }
+            }
             // the bracket pair at the cursor: two soft rounded boxes
             Repeater {
                 model: ed.activeFocus ? fv.bracketPair : []
@@ -357,6 +392,19 @@ ColumnLayout {
                         if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Tab) { fv.takeComp(fv.compSel); e.accepted = true; return }
                         if (e.key === Qt.Key_Escape) { fv.comps = []; e.accepted = true; return }
                     }
+                    // the jump list takes ↑ ↓ Enter Esc while open
+                    if (fv.jumps.length) {
+                        if (e.key === Qt.Key_Down) { fv.jumpSel = (fv.jumpSel + 1) % fv.jumps.length; e.accepted = true; return }
+                        if (e.key === Qt.Key_Up) { fv.jumpSel = (fv.jumpSel - 1 + fv.jumps.length) % fv.jumps.length; e.accepted = true; return }
+                        if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { fv.jumpTo(fv.jumps[fv.jumpSel]); e.accepted = true; return }
+                        if (e.key === Qt.Key_Escape) { fv.jumps = []; e.accepted = true; return }
+                    }
+                    // the language server's keys, as in VS Code
+                    if (e.key === Qt.Key_F12 && (e.modifiers & Qt.ShiftModifier)) { fv.ask("references", ed.cursorPosition); e.accepted = true; return }
+                    if (e.key === Qt.Key_F12) { fv.ask("definition", ed.cursorPosition); e.accepted = true; return }
+                    if (e.key === Qt.Key_F2 && fv.lsp) { renameBox.open(); e.accepted = true; return }
+                    if (e.key === Qt.Key_F && (e.modifiers & Qt.ShiftModifier) && (e.modifiers & Qt.AltModifier)) { fv.ask("format", 0); e.accepted = true; return }
+                    if (e.key === Qt.Key_O && (e.modifiers & Qt.ControlModifier) && (e.modifiers & Qt.ShiftModifier)) { fv.ask("symbols", 0); e.accepted = true; return }
                     if (e.key === Qt.Key_Space && (e.modifiers & Qt.ControlModifier)) { fv.compFrom = fv.wordStart(ed.cursorPosition); fv.ask("completion", ed.cursorPosition); e.accepted = true; return }
                     // Ctrl+D: the next occurrence of the selection (or of the word at the cursor) selected; Ctrl+Shift+L: all of
                     // them into find & replace, so one Replace all changes every place (a TextEdit has one cursor)
@@ -377,6 +425,56 @@ ColumnLayout {
                     }
                     if (e.key === Qt.Key_Escape && findBar.mode) { findBar.close(); e.accepted = true; return }
                     if (!e.modifiers || (e.modifiers & Qt.ShiftModifier)) fv.win.codeKey(ed, e)
+                }
+            }
+        }
+    }
+    // references (Shift F12) or the file's symbols (Ctrl Shift O): a list under the editor, Enter or a click jumps
+    property var jumps: []
+    property string jumpKind: ""
+    property int jumpSel: 0
+    property bool renameAsked: false
+    property int renamedFiles: 0
+    function jumpTo(j) {
+        if (!j) return
+        if (j.path && j.path !== win.filePath) win.openFileAt({ path: j.path, rel: j.path }, j.line, j.col)
+        else goTo(j.line, j.col)
+        jumps = []
+    }
+    Rectangle {
+        visible: fv.jumps.length > 0
+        Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16
+        implicitHeight: Math.min(220, jumpCol.implicitHeight + 44)
+        radius: 14; color: t.card
+        RowLayout {
+            id: jumpHead
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 14 }
+            Text { text: fv.jumpKind === "symbols" ? "data_object" : "link"; color: t.accent; font.family: t.icons; font.pixelSize: 16 }
+            Text { Layout.fillWidth: true; text: fv.jumpKind === "symbols" ? `${fv.jumps.length} symbols` : `${fv.jumps.length} references`; color: t.text; font.family: t.sans; font.pixelSize: 13; font.weight: Font.DemiBold }
+            Text { text: "↑ ↓  Enter  Esc"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+            Text { text: "close"; color: t.dim; font.family: t.icons; font.pixelSize: 16; TapHandler { onTapped: fv.jumps = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+        }
+        Flickable {
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: jumpHead.bottom; margins: 8; topMargin: 6 }
+            clip: true; contentHeight: jumpCol.implicitHeight
+            Column {
+                id: jumpCol
+                width: parent.width
+                Repeater {
+                    model: fv.jumps
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        width: jumpCol.width; height: 28; radius: 8
+                        color: index === fv.jumpSel ? Qt.alpha(t.accent, 0.16) : jH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        Row {
+                            x: 8 + (modelData.depth ?? 0) * 14; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                            Text { text: `${modelData.line + 1}`; color: t.faint; font.family: t.mono; font.pixelSize: 11; width: 34; horizontalAlignment: Text.AlignRight }
+                            Text { text: modelData.name ?? (modelData.path ?? "").replace(fv.app.dir + "/", ""); color: t.text; font.family: t.mono; font.pixelSize: 12 }
+                        }
+                        HoverHandler { id: jH; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: fv.jumpTo(modelData) }
+                    }
                 }
             }
         }
