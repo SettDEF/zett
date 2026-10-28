@@ -29,6 +29,7 @@ ColumnLayout {
     }
     function revert() { ed.text = saved; shownText = saved }
     function testEdit(s) { ed.forceActiveFocus(); ed.cursorPosition = 0; ed.insert(0, s); save() }
+    function testFind(q) { findBar.open("find"); findBar.q.text = q }
     Timer { id: noteT; interval: 1800; onTriggered: fv.note = "" }
 
     RowLayout {
@@ -53,6 +54,8 @@ ColumnLayout {
             }
         }
     }
+    // find / replace / go to line (FindBar.qml)
+    FindBar { id: findBar; t: fv.t; editor: ed; Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16 }
     Rectangle {
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -96,6 +99,19 @@ ColumnLayout {
                     }
                 }
             }
+            // the matches of the find bar, the current one stronger
+            Repeater {
+                model: findBar.matches.slice(0, 500)
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    readonly property rect a: ed.positionToRectangle(modelData[0])
+                    readonly property rect b: ed.positionToRectangle(modelData[1])
+                    x: ed.x + a.x; y: a.y; width: Math.max(2, b.x - a.x); height: a.height
+                    radius: 3
+                    color: index === findBar.cur ? Qt.alpha(t.accent, 0.45) : Qt.alpha(t.accent, 0.18)
+                }
+            }
             // the coloured copy, under the editor
             Text {
                 x: 54
@@ -124,6 +140,11 @@ ColumnLayout {
                 onCursorRectangleChanged: fileFlick.follow(cursorRectangle)
                 Keys.onPressed: (e) => {
                     if (e.key === Qt.Key_S && (e.modifiers & Qt.ControlModifier)) { fv.save(); e.accepted = true; return }
+                    if (e.modifiers & Qt.ControlModifier) {
+                        const m = { [Qt.Key_F]: "find", [Qt.Key_H]: "replace", [Qt.Key_G]: "line" }[e.key]
+                        if (m) { findBar.open(m); e.accepted = true; return }
+                    }
+                    if (e.key === Qt.Key_Escape && findBar.mode) { findBar.close(); e.accepted = true; return }
                     if (!e.modifiers || (e.modifiers & Qt.ShiftModifier)) fv.win.codeKey(ed, e)
                 }
             }

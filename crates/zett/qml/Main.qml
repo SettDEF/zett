@@ -689,10 +689,11 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
-            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:")) {
-                const rel = app.shotEngine.slice(app.shotEngine.indexOf(":") + 1)
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:")) {
+                const rel = app.shotEngine.split(":")[1]
                 win.openFile({ path: app.dir + "/" + rel, rel })
                 if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
+                if (app.shotEngine.startsWith("filefind:")) Qt.callLater(() => fileView.testFind(app.shotEngine.split(":")[2] ?? ""))
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
@@ -1068,8 +1069,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             Layout.fillWidth: true
                             // a long code block folds to 12 lines while not edited ("Show N more lines")
                             readonly property int codeLines: blockItem.kind === "code" ? edit.text.split("\n").length : 0
-                            // the line height as drawn (the coloured copy spaces lines wider than the editor)
-                            readonly property real lineH: blockItem.kind === "code" && codeShown.contentHeight > 0 ? codeShown.contentHeight / Math.max(1, codeLines) : edit.contentHeight / Math.max(1, edit.lineCount)
+                            // the editor's line height (the coloured copy, a div with <br>, draws lines the same)
+                            readonly property real lineH: edit.contentHeight / Math.max(1, edit.lineCount)
                             readonly property bool folded: codeLines > 15 && !edit.activeFocus && !blockItem.unfolded
                             clip: blockItem.kind === "code"
                             implicitHeight: special.visible ? special.implicitHeight : folded ? 12 * lineH + 12 + 34 : edit.implicitHeight + (blockItem.kind === "code" ? 24 + (codeLines > 15 ? 30 : 0) : 0)
