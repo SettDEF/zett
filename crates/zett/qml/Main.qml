@@ -935,6 +935,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
+            if (app.shotEngine === "term") { win.drawerShown = true; termT.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
@@ -1019,6 +1020,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Timer { id: core2T; interval: 600; onTriggered: { const d = fileView.codeDoc; d.click(1, 0, false, false); d.lineOp("comment://"); d.lineOp("down"); const n = JSON.parse(d.find("let", "{}")).length; const r = d.replaceAll("let", "var", "{}"); console.log("zett-probe: core2 found " + n + " replaced " + r); d.save(); fileView.coreView.findBarOpen(); grabLater.start() } }
     // corelsp:FILE:act:L:C or corelsp:FILE:rename:L:C:NEW, once the server has reported (diagnostics in)
     Timer { id: coreLspT; property var spec: []; property int tries: 0; interval: 1500; onTriggered: { if (!fileView.diags.length && ++tries < 10) { restart(); return } const s = spec, l = +s[3], c = +s[4]; fileView.codeDoc.click(l, c, false, false); if (s[2] === "act") fileView.askActions(l, c); else { fileView.renameAsked = true; app.lspChange(fileView.win.filePath, fileView.codeDoc.text()); fileView.askAt("rename:" + s[5], l, c) } claudeShot.start() } }
+    // the real terminal: a colourful command typed in, then the picture
+    Timer { id: termT; interval: 1500; onTriggered: { drawer.termType("printf \x27\\033[1;32mgreen\\033[0m \\033[44mblue bg\\033[0m\\n\x27; ls --color=always /; echo cols=$COLUMNS\r"); claudeShot.interval = 1500; claudeShot.start() } }
     Timer { id: stickyT; interval: 1200; onTriggered: fileView.testSticky() }
     // the page sits in one card on the background, like the shell's panels
     Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.color: pageDrop.containsDrag ? t.accent : Qt.alpha(t.rule, 0.35)

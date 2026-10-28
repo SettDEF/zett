@@ -390,7 +390,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 2. [x] (2026-10-28: Ctrl+I inline edits as a diff, quick fix/tests/document/simplify, explain to the panel; agent changes as a PR still open) Claude built in: inline edits as a diff to accept/reject, explain/fix/test on a selection, agent changes
    reviewed like a PR, the claude-ui sessions in one place
 3. [x] (2026-10-28: [[code:…]] links, Ctrl+Alt+N notes beside the code, a file's notes in its outline; live results already in notebook blocks) Notes and code together: link a function to a note, live results in pages, a file's notes in its outline
-4. [ ] A real zash in the panel (zash as a library zett draws)
+4. [x] (2026-10-28: the drawer's Terminal tab: a shell in a pty on zash's engine, alacritty_terminal, its colours from tinct; drawn by zett as rich-text rows; keys, paste (Ctrl+Shift+V), wheel scrollback, resize; still to do: mouse selection, zash's graphics/effects) A real zash in the panel (zash as a library zett draws)
 5. [ ] Debugging (DAP): breakpoints in the gutter, variables, call stack, debug console
 6. [ ] Git: blame per line, side-by-side diff, merge conflicts, branches, stage single lines
 7. [ ] Speed budgets enforced: open < 100 ms, typing latency < 8 ms, checked by gui-check

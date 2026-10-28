@@ -215,6 +215,36 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "stopShell"]
         fn stop_shell(self: Pin<&mut Zett>);
+        /// a real terminal (a shell in a pty) in folder; its id, -1 on failure. palette: 18 hex colours (16, fg, bg)
+        #[qinvokable]
+        #[cxx_name = "termStart"]
+        fn term_start(self: &Zett, cwd: &QString, cols: i32, rows: i32, palette: &QString) -> i32;
+        /// a key for it: Qt key code, its text, modifiers
+        #[qinvokable]
+        #[cxx_name = "termKey"]
+        fn term_key(self: &Zett, id: i32, key: i32, text: &QString, mods: i32);
+        /// text for it as typed (paste)
+        #[qinvokable]
+        #[cxx_name = "termWrite"]
+        fn term_write(self: &Zett, id: i32, text: &QString);
+        #[qinvokable]
+        #[cxx_name = "termResize"]
+        fn term_resize(self: &Zett, id: i32, cols: i32, rows: i32);
+        /// scroll back (positive) or forward by lines
+        #[qinvokable]
+        #[cxx_name = "termScroll"]
+        fn term_scroll(self: &Zett, id: i32, lines: i32);
+        /// changes so far: draw again when it moved (-1: gone)
+        #[qinvokable]
+        #[cxx_name = "termRev"]
+        fn term_rev(self: &Zett, id: i32) -> i32;
+        /// the screen as JSON: rows of rich text, cursor, title, dead
+        #[qinvokable]
+        #[cxx_name = "termScreen"]
+        fn term_screen(self: &Zett, id: i32) -> QString;
+        #[qinvokable]
+        #[cxx_name = "termClose"]
+        fn term_close(self: &Zett, id: i32);
         /// a piece of a command's output; done with its exit code at the end
         #[qsignal]
         #[cxx_name = "runOutput"]
@@ -967,6 +997,15 @@ impl qobject::Zett {
         let only: Vec<String> = serde_json::from_str(&rels.to_string()).unwrap_or_default();
         crate::grep::replace(&workspace_dir(), &query.to_string(), &with.to_string(), &o, &only) as i32
     }
+
+    fn term_start(&self, cwd: &QString, cols: i32, rows: i32, palette: &QString) -> i32 { crate::term::start(&cwd.to_string(), cols.clamp(2, 1000) as u16, rows.clamp(1, 500) as u16, &palette.to_string()) }
+    fn term_key(&self, id: i32, key: i32, text: &QString, mods: i32) { crate::term::key(id, key, &text.to_string(), mods) }
+    fn term_write(&self, id: i32, text: &QString) { crate::term::write(id, text.to_string().as_bytes()) }
+    fn term_resize(&self, id: i32, cols: i32, rows: i32) { crate::term::resize(id, cols.clamp(2, 1000) as u16, rows.clamp(1, 500) as u16) }
+    fn term_scroll(&self, id: i32, lines: i32) { crate::term::scroll(id, lines) }
+    fn term_rev(&self, id: i32) -> i32 { crate::term::rev(id) }
+    fn term_screen(&self, id: i32) -> QString { QString::from(&crate::term::screen(id)) }
+    fn term_close(&self, id: i32) { crate::term::close(id) }
 
     fn git(&self, args: &QString) -> QString {
         let args: Vec<String> = serde_json::from_str(&args.to_string()).unwrap_or_default();

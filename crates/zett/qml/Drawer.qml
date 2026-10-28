@@ -14,7 +14,9 @@ Rectangle {
     property int lastCode: 0
     property var history: []
     property int back: -1
-    property string tab: "shell"          // shell | problems
+    property string tab: "term"           // term (a real shell) | shell (one command, its output) | problems
+    // text typed into the real terminal (tests, "run in terminal")
+    function termType(s) { if (termLoader.item && termLoader.item.sid >= 0) app.termWrite(termLoader.item.sid, s) }
     // cargo and rustc style errors in what a command printed: error[E0308]: … / --> src/main.rs:4:9
     function readProblems(text) {
         const found = []; let last = null
@@ -78,7 +80,7 @@ Rectangle {
                 Row {
                     id: segRow; anchors.centerIn: parent; spacing: 2
                     Repeater {
-                        model: [["shell", "terminal", "Terminal"], ["problems", "error", d.win.problems.length ? `Problems  ${d.win.problems.length}` : "Problems"]]
+                        model: [["term", "terminal", "Terminal"], ["shell", "play_arrow", "Run"], ["problems", "error", d.win.problems.length ? `Problems  ${d.win.problems.length}` : "Problems"]]
                         delegate: Rectangle {
                             required property var modelData
                             readonly property bool on: d.tab === modelData[0]
@@ -132,6 +134,14 @@ Rectangle {
                     }
                 }
             }
+        }
+        // the real terminal: made when first shown, kept while the drawer lives
+        Loader {
+            id: termLoader
+            Layout.fillWidth: true; Layout.fillHeight: true
+            visible: d.tab === "term"
+            active: d.tab === "term" || item !== null
+            sourceComponent: Terminal { app: d.app; t: d.t }
         }
         // Problems: every file's, a click opens the file there
         ListView {

@@ -49,6 +49,7 @@ check select select
 check run run "grep -q 'hi 3' '$W/check.md'"
 check run-again run "[ \$(grep -c '^\`\`\`output' '$W/check.md') -eq 1 ]"
 check file file:main.rs
+check term term
 check find filefind:main.rs:line
 check filesearch filesearch:println
 check replace filereplace:println:print_line "grep -q 'print_line' '$W/main.rs' && ! grep -q 'println' '$W/main.rs'"
