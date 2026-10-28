@@ -168,6 +168,23 @@ ApplicationWindow {
     property bool detailsShown: prefs.details ?? true
     // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
     property bool codeLigatures: prefs.codeLigatures ?? false
+    property int runFirst: -1      // tests: the block whose Run is pressed
+    // code blocks' Run: output gathered here by block (their delegates are rebuilt meanwhile), then a code block under it
+    property var runBuf: ({})
+    function runStart(i) { const b = Object.assign({}, runBuf); b[i] = ""; runBuf = b }
+    function addResult(after, text) { const n = app.addBlock(after, "code"); if (n >= 0) app.setText(n, text) }
+    Connections {
+        target: app
+        function onRunOutput(id, chunk, done, code) {
+            if (id < 100000) return
+            const i = id - 100000, b = Object.assign({}, win.runBuf)
+            b[i] = (b[i] ?? "") + chunk
+            if (!done) { win.runBuf = b; return }
+            const out = b[i].replace(/\n+$/, "") + (code !== 0 ? `\n[exit ${code}]` : "")
+            delete b[i]; win.runBuf = b
+            win.addResult(i, out || "(no output)")
+        }
+    }
     // a second page beside the editor, read-only (SidePage.qml); -1 when none
     property int sidePage: -1
     // Claude beside the page: claude-ui's panel, from its install (Ctrl+Shift+A)
@@ -604,6 +621,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
+            if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
@@ -846,6 +864,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
                 delegate: Item {
                     id: blockItem
+                    property bool unfolded: false    // a long code block opened past its 12 lines
                     required property var modelData
                     required property int index
                     width: list.width
@@ -975,7 +994,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
                         Rectangle {
                             Layout.fillWidth: true
-                            implicitHeight: special.visible ? special.implicitHeight : edit.implicitHeight + (blockItem.kind === "code" ? 24 : 0)
+                            // a long code block folds to 12 lines while not edited ("Show N more lines")
+                            readonly property int codeLines: blockItem.kind === "code" ? edit.text.split("\n").length : 0
+                            // the line height as drawn (the coloured copy spaces lines wider than the editor)
+                            readonly property real lineH: blockItem.kind === "code" && codeShown.contentHeight > 0 ? codeShown.contentHeight / Math.max(1, codeLines) : edit.contentHeight / Math.max(1, edit.lineCount)
+                            readonly property bool folded: codeLines > 15 && !edit.activeFocus && !blockItem.unfolded
+                            clip: blockItem.kind === "code"
+                            implicitHeight: special.visible ? special.implicitHeight : folded ? 12 * lineH + 12 + 34 : edit.implicitHeight + (blockItem.kind === "code" ? 24 + (codeLines > 15 ? 30 : 0) : 0)
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
@@ -1103,6 +1128,85 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 TapHandler { enabled: !edit.activeFocus; onTapped: edit.forceActiveFocus() }
                                 z: edit.activeFocus ? 0 : 2   // editing: under the editor (declared after it), over the block's fill
                             }
+                            // ── code: the current line, line numbers, Copy / Run, the fold bar ──
+                            Rectangle {
+                                visible: blockItem.kind === "code" && edit.activeFocus
+                                x: 0; width: parent.width
+                                y: edit.y + edit.cursorRectangle.y; height: edit.cursorRectangle.height
+                                color: Qt.alpha(t.text, 0.05)
+                                z: 0
+                            }
+                            Column {
+                                visible: blockItem.kind === "code"
+                                x: 8; y: edit.y; width: 30
+                                z: 3
+                                readonly property int cur: edit.activeFocus ? edit.text.slice(0, edit.cursorPosition).split("\n").length - 1 : -1
+                                Repeater {
+                                    model: blockItem.kind === "code" ? Math.min(parent.parent.codeLines, parent.parent.folded ? 12 : 100000) : 0
+                                    delegate: Text {
+                                        required property int index
+                                        width: 30; height: parent.parent.lineH
+                                        horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
+                                        text: index + 1
+                                        color: index === parent.cur ? t.accent : Qt.alpha(t.faint, 0.7)
+                                        font.family: t.mono; font.pixelSize: Math.round(12 * t.scale)
+                                    }
+                                }
+                            }
+                            Row {
+                                visible: blockItem.kind === "code" && (codeHover.hovered || edit.activeFocus)
+                                anchors { right: langChip.left; rightMargin: 6; top: parent.top; topMargin: 6 }
+                                spacing: 6
+                                z: 5
+                                // Copy: the code as it is
+                                Rectangle {
+                                    width: cpRow.implicitWidth + 14; height: 22; radius: 11
+                                    color: cpH.hovered ? Qt.alpha(t.text, 0.1) : Qt.alpha(t.text, 0.04)
+                                    property bool copied: false
+                                    Row { id: cpRow; anchors.centerIn: parent; spacing: 4
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.copied ? "check" : "content_copy"; color: t.dim; font.family: t.icons; font.pixelSize: 13 }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.copied ? "Copied" : "Copy"; color: t.dim; font.family: t.sans; font.pixelSize: 11 } }
+                                    HoverHandler { id: cpH; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: { clipCopy.text = edit.text; clipCopy.selectAll(); clipCopy.copy(); parent.copied = true; cpReset.restart() } }
+                                    Timer { id: cpReset; interval: 1500; onTriggered: parent.copied = false }
+                                    TextEdit { id: clipCopy; visible: false }
+                                }
+                                // Run: sh, lua, python, js; the output becomes a block under this one
+                                Rectangle {
+                                    readonly property var runner: ({ sh: "bash", bash: "bash", zsh: "zsh", shell: "bash", lua: "lua", python: "python3", py: "python3", javascript: "node", js: "node" })[(blockItem.modelData.lang ?? "")] ?? ""
+                                    visible: runner.length > 0
+                                    width: rnRow.implicitWidth + 14; height: 22; radius: 11
+                                    color: rnH.hovered ? Qt.alpha(t.accent, 0.22) : Qt.alpha(t.accent, 0.12)
+                                    Row { id: rnRow; anchors.centerIn: parent; spacing: 4
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: win.runBuf[blockItem.index] !== undefined ? "hourglass_top" : "play_arrow"; color: t.accent; font.family: t.icons; font.pixelSize: 14 }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Run"; color: t.accent; font.family: t.sans; font.pixelSize: 11 } }
+                                    HoverHandler { id: rnH; cursorShape: Qt.PointingHandCursor }
+                                    id: runBtn
+                                    function run() {
+                                        app.setText(blockItem.index, edit.text)
+                                        win.runStart(blockItem.index)
+                                        app.runShell(100000 + blockItem.index, `{ ${runner} <<'ZETT_RUN_EOF'\n${edit.text}\nZETT_RUN_EOF\n}`)   // { } so the 2>&1 zett adds stays outside the heredoc
+                                    }
+                                    TapHandler { onTapped: runBtn.run() }
+                                    // headless: ZETT_SHOT_ENGINE=run presses Run on the first code block that can run
+                                    Connections { target: win; function onRunFirstChanged() { if (runBtn.runner && win.runFirst === blockItem.index) runBtn.run() } }
+                                }
+                            }
+                            HoverHandler { id: codeHover; enabled: blockItem.kind === "code" }
+                            Rectangle {
+                                visible: blockItem.kind === "code" && parent.codeLines > 15
+                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                                height: 30
+                                color: parent.folded ? t.card : "transparent"
+                                z: 4
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: parent.parent.folded ? `Show ${parent.parent.codeLines - 12} more lines` : "Fold"
+                                    color: t.accent; font.family: t.sans; font.pixelSize: 12
+                                }
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: blockItem.unfolded = !blockItem.unfolded }
+                            }
                             // the language, top right of a code block: a chip that opens the list of languages
                             Rectangle {
                                 id: langChip
@@ -1161,7 +1265,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             TextEdit {
                                 id: edit
                                 opacity: shown.visible || special.visible || (codeShown.visible && !edit.activeFocus) ? 0 : 1
-                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0 }
+                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0; leftMargin: blockItem.kind === "code" ? 48 : 0; bottomMargin: blockItem.kind === "code" && parent.codeLines > 15 ? 42 : (blockItem.kind === "code" ? 12 : 0) }
                                 text: blockItem.modelData.text
                                 wrapMode: blockItem.kind === "code" ? TextEdit.NoWrap : TextEdit.Wrap   // code: lines as in the coloured copy under it
                                 selectByMouse: true
@@ -1328,6 +1432,30 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                         app.setText(blockItem.index, "")
                                         app.setKind(blockItem.index, fence[1] ? "code:" + fence[1] : "code")
                                         e.accepted = true; return
+                                    }
+                                    // code: Tab / Shift+Tab indent, Enter keeps the indent (one more after { ( [ then do :),
+                                    // brackets and quotes close themselves, a typed closer steps over the one already there
+                                    if (code && !e.modifiers || code && (e.modifiers & Qt.ShiftModifier)) {
+                                        const pos = edit.cursorPosition, txt = edit.text
+                                        const ls = txt.lastIndexOf("\n", pos - 1) + 1
+                                        const line = txt.slice(ls, pos)
+                                        const ind = (line.match(/^[ \t]*/) ?? [""])[0]
+                                        if (e.key === Qt.Key_Tab) { edit.insert(pos, "  "); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Backtab) { if (txt.slice(ls, ls + 2) === "  ") edit.remove(ls, ls + 2); e.accepted = true; return }
+                                        if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) {
+                                            const more = /([{(\[]|\bthen|\bdo|\bfunction\b.*\)|:)\s*$/.test(line) ? "  " : ""
+                                            const closer = /[}\])]/.test(txt[pos] ?? "") && more
+                                            edit.insert(pos, "\n" + ind + more + (closer ? "\n" + ind : ""))
+                                            edit.cursorPosition = pos + 1 + ind.length + more.length
+                                            e.accepted = true; return
+                                        }
+                                        const pairs = { "(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'", "`": "`" }
+                                        if ([")", "]", "}", "\"", "'", "`"].includes(e.text) && txt[pos] === e.text && !edit.selectedText) { edit.cursorPosition = pos + 1; e.accepted = true; return }
+                                        if (pairs[e.text] && !edit.selectedText && (!/[\w]/.test(txt[pos] ?? "") )) {
+                                            if ((e.text === "'" || e.text === "\"") && /\w/.test(txt[pos - 1] ?? "")) return   // it's, don't
+                                            edit.insert(pos, e.text + pairs[e.text]); edit.cursorPosition = pos + 1; e.accepted = true; return
+                                        }
+                                        if (e.key === Qt.Key_Backspace && pairs[txt[pos - 1]] === txt[pos] && !edit.selectedText) { edit.remove(pos - 1, pos + 1); e.accepted = true; return }
                                     }
                                     if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier) && !code) {
                                         // Enter: a new block after this one (a list continues as a list)
