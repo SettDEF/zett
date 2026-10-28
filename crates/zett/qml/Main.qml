@@ -89,15 +89,43 @@ ApplicationWindow {
     property real slashX: 0
     property real slashY: 0
     readonly property var slashItems: [
-        { k: "paragraph", label: "Text", hint: "" }, { k: "h1", label: "Heading 1", hint: "#" }, { k: "h2", label: "Heading 2", hint: "##" },
-        { k: "h3", label: "Heading 3", hint: "###" }, { k: "todo", label: "To-do", hint: "[ ]" }, { k: "bullet", label: "Bullet", hint: "-" },
-        { k: "quote", label: "Quote", hint: ">" }, { k: "code", label: "Code", hint: "```" },
+        { k: "paragraph", label: "Text", hint: "", icon: "notes", desc: "Plain writing" },
+        { k: "h1", label: "Heading 1", hint: "#", icon: "format_h1", desc: "A big section title" },
+        { k: "h2", label: "Heading 2", hint: "##", icon: "format_h2", desc: "A section title" },
+        { k: "h3", label: "Heading 3", hint: "###", icon: "format_h3", desc: "A small title" },
+        { k: "todo", label: "To-do", hint: "[ ]", icon: "check_box", desc: "Something to tick off" },
+        { k: "bullet", label: "Bullet", hint: "-", icon: "format_list_bulleted", desc: "A list item; Tab nests it" },
+        { k: "quote", label: "Quote", hint: ">", icon: "format_quote", desc: "Words from someone else" },
+        { k: "code", label: "Code", hint: "```", icon: "code", desc: "A code block; pick its language on it" },
         // standard Markdown forms drawn as their own block (Main: look, special)
-        { k: "callout", kind: "quote", text: "[!NOTE] ", label: "Callout", hint: "> [!NOTE]" }, { k: "divider", kind: "paragraph", text: "---", label: "Divider", hint: "---" },
-        { k: "table", kind: "paragraph", text: "| Column | Column |\n|---|---|\n| | |", label: "Table", hint: "| |" },
-        { k: "image", kind: "paragraph", text: "![](picture.png)", label: "Image", hint: "![]()" }, { k: "embed", kind: "paragraph", text: "![[Page]]", label: "Embed a page", hint: "![[ ]]" }
-    ]
-    readonly property var slashMatches: slashItems.filter(i => i.label.toLowerCase().includes(slashQuery.toLowerCase()) || i.k.startsWith(slashQuery.toLowerCase()))
+        { k: "callout", kind: "quote", text: "[!NOTE] ", label: "Callout", hint: "> [!NOTE]", icon: "info", desc: "A note that stands out" },
+        { k: "divider", kind: "paragraph", text: "---", label: "Divider", hint: "---", icon: "horizontal_rule", desc: "A line across the page" },
+        { k: "table", kind: "paragraph", text: "| Column | Column |\n|---|---|\n| | |", label: "Table", hint: "| |", icon: "table", desc: "Rows and columns" },
+        { k: "image", kind: "paragraph", text: "![](picture.png)", label: "Image", hint: "![]()", icon: "image", desc: "A picture from the workspace" },
+        { k: "embed", kind: "paragraph", text: "![[Page]]", label: "Embed a page", hint: "![[ ]]", icon: "article", desc: "Another page shown inside this one" }
+    ].concat(["lua", "rust", "python", "sh", "javascript", "typescript", "json", "toml", "yaml", "qml", "c", "cpp", "go", "html", "css", "sql", "diff"].map(l =>
+        ({ k: "code:" + l, label: "Code · " + l, hint: "```" + l, icon: "code", desc: "A " + l + " code block", lang: true })))
+    // ranked: the start of a word > anywhere > the letters in order; languages only when typed; 9 at most
+    // the typed letters, in order, lit in the label
+    function slashLit(s) {
+        const q = slashQuery.toLowerCase()
+        let out = "", j = 0
+        for (const ch of s) { if (j < q.length && ch.toLowerCase() === q[j]) { out += `<font color="${t.accent}"><b>${ch}</b></font>`; j++ } else out += ch }
+        return out
+    }
+    function slashScore(i, q) {
+        const s = (i.label + " " + i.k).toLowerCase()
+        if (!q) return i.lang ? -1 : 1
+        if (s.startsWith(q) || s.includes(" " + q) || s.includes(":" + q)) return 3
+        if (s.includes(q)) return 2
+        let j = 0
+        for (const c of s) if (c === q[j]) j++
+        return j === q.length && !i.lang ? 1 : -1
+    }
+    readonly property var slashMatches: {
+        const q = slashQuery.toLowerCase()
+        return slashItems.map((i, n) => [slashScore(i, q), i, n]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0] || a[2] - b[2]).slice(0, 9).map(x => x[1])
+    }
     onSlashQueryChanged: slashSel = 0
     // [[ while typing: pages that match, the best first; a new page when none is called that
     property int linkFor: -1
@@ -1768,7 +1796,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         visible: win.slashFor >= 0 && win.slashMatches.length > 0
         x: win.slashX
         y: win.slashY
-        width: 240
+        width: 320
         height: slashCol.implicitHeight + 12
         radius: 12
         color: t.raised
@@ -1785,13 +1813,20 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     required property var modelData
                     required property int index
                     Layout.fillWidth: true
-                    implicitHeight: 32
-                    radius: 8
+                    implicitHeight: 42
+                    radius: 10
                     color: index === win.slashSel ? Qt.alpha(t.accent, 0.18) : "transparent"
                     RowLayout {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        Text { Layout.fillWidth: true; text: modelData.label; color: t.text; font.family: t.sans; font.pixelSize: 14 }
-                        Text { text: modelData.hint; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
+                        spacing: 10
+                        Text { text: modelData.icon ?? "notes"; color: index === win.slashSel ? t.accent : t.dim; font.family: t.icons; font.pixelSize: 19 }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            Text { Layout.fillWidth: true; textFormat: Text.StyledText; text: win.slashLit(modelData.label); color: t.text; font.family: t.sans; font.pixelSize: 14; elide: Text.ElideRight }
+                            Text { Layout.fillWidth: true; text: modelData.desc ?? ""; color: t.faint; font.family: t.sans; font.pixelSize: 11; elide: Text.ElideRight }
+                        }
+                        Text { text: modelData.hint; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) win.slashSel = index }
                     TapHandler { onTapped: win.slashApply(index) }
