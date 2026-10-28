@@ -622,3 +622,19 @@ mod formatlistpat_tests {
         assert_eq!(e.text(), "1) one two three\n   four five six\n   seven eight nine\n   ten\n");
     }
 }
+
+
+#[cfg(test)]
+mod delcombine_tests {
+    use crate::Editor;
+    #[test]
+    fn x_takes_a_letter_with_its_marks_and_delcombine_one_mark() {
+        let mut e = Editor::from_str("e\u{301}\u{323}z\n");
+        e.feed("x");
+        assert_eq!(e.text(), "z\n", "the letter and both marks");
+        let mut e = Editor::from_str("e\u{301}\u{323}z\n");
+        e.set_opt("delcombine", "true");
+        e.feed("x");
+        assert_eq!(e.text(), "e\u{301}z\n", "delcombine: the last mark only");
+    }
+}

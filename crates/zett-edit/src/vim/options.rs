@@ -13,7 +13,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
     "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions", "equalprg", "formatprg", "incsearch",
-    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr", "cinwords", "window", "varsofttabstop", "virtualedit", "formatlistpat",
+    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr", "cinwords", "window", "varsofttabstop", "virtualedit", "formatlistpat", "delcombine",
 ];
 
 impl Editor {

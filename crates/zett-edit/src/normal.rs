@@ -241,7 +241,21 @@ impl Editor {
             }
 
             // shortcuts
-            'x' => { let n = self.take_count(); let e = (self.cursor + n).min(self.line_end(line)); if e > self.cursor { self.apply(Op::Delete, Span::Chars(self.cursor, e)); } }
+            'x' => {
+                let n = self.take_count();
+                let end = self.line_end(line);
+                // a letter goes with its combining marks; delcombine: only the last mark of the one here
+                let marks = |mut i: usize| { while i < end && self.char(i).is_some_and(is_combining) { i += 1 } i };
+                let after = marks(self.cursor + 1);
+                if self.opt_on("delcombine", false) && after > self.cursor + 1 && n == 1 {
+                    self.apply(Op::Delete, Span::Chars(after - 1, after));
+                    self.cursor = self.cursor.min(self.line_end(line).saturating_sub(1));
+                } else {
+                    let mut e = self.cursor;
+                    for _ in 0..n { if e < end { e = marks(e + 1) } }
+                    if e > self.cursor { self.apply(Op::Delete, Span::Chars(self.cursor, e)); }
+                }
+            }
             'X' => { let n = self.take_count(); let s = self.cursor.saturating_sub(n).max(self.line_start(line)); if s < self.cursor { self.apply(Op::Delete, Span::Chars(s, self.cursor)); } }
             'D' => { let e = self.line_end(line); self.apply(Op::Delete, Span::Chars(self.cursor, e)); }
             'C' => { let e = self.line_end(line); self.apply(Op::Change, Span::Chars(self.cursor, e)); }
@@ -267,4 +281,9 @@ impl Editor {
         }
     }
 
+}
+
+/// A combining mark (accents written after their letter).
+pub(crate) fn is_combining(c: char) -> bool {
+    matches!(c as u32, 0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F)
 }
