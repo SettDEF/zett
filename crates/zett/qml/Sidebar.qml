@@ -42,13 +42,15 @@ Rectangle {
     required property var app
     Layout.fillHeight: true
     visible: !win.sidebarHidden && win.sideMode !== "git"
-    implicitWidth: 260
+    implicitWidth: 268
     color: "transparent"
     // files dropped anywhere on the sidebar land in the workspace folder
     DropArea { id: sideDrop; anchors.fill: parent; onDropped: (d) => win.dropInto(d, app.dir) }
+    // the sidebar sits in its own card, as the page does: the dark gaps round both off
+    Rectangle { anchors { fill: parent; topMargin: 8; bottomMargin: 8; rightMargin: 8 } radius: t.rCard; color: t.panel; border.width: 1; border.color: Qt.alpha(t.rule, 0.35) }
     Rectangle { anchors.fill: parent; anchors.margins: 4; radius: t.rCard; color: "transparent"; border.width: sideDrop.containsDrag ? 2 : 0; border.color: Qt.alpha(t.accent, 0.6) }
     ColumnLayout {
-        anchors { fill: parent; margins: 12; topMargin: 16 }
+        anchors { fill: parent; margins: 14; topMargin: 18; rightMargin: 20; bottomMargin: 16 }
         spacing: 4
         // the header: a card with the workspace (its initial, name, folder) and its state as soft chips
         Rectangle {

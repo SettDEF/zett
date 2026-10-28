@@ -56,7 +56,7 @@ ApplicationWindow {
         id: t
         readonly property var c: { try { return JSON.parse(app.theme) } catch (e) { return {} } }
         function pick(k, d) { return c[k] ?? d }
-        readonly property color bg: pick("surface", "#1a1c1e")
+        readonly property color bg: pick("surface_container_lowest", "#111315")   // the gaps between the cards
         readonly property color panel: pick("surface_container_low", "#1e2023")
         readonly property color card: pick("surface_container", "#232528")
         readonly property color raised: pick("surface_container_high", "#2a2c30")

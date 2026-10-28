@@ -10,7 +10,7 @@ Rectangle {
     required property var app
     Layout.fillHeight: true
     visible: !win.sidebarHidden && win.sideMode === "git"
-    implicitWidth: 260
+    implicitWidth: 268
     color: "transparent"
 
     property string branch: ""
@@ -113,8 +113,9 @@ Rectangle {
         TapHandler { onTapped: if (row.item.code !== "D") { sc.win.openFile({ path: sc.app.dir + "/" + row.item.path, rel: row.item.path }); if (row.item.code !== "U") Qt.callLater(() => sc.win.fileEditor.showDiff = true) } }
     }
 
+    Rectangle { anchors { fill: parent; topMargin: 8; bottomMargin: 8; rightMargin: 8 } radius: sc.t.rCard; color: sc.t.panel; border.width: 1; border.color: Qt.alpha(sc.t.rule, 0.35) }
     ColumnLayout {
-        anchors { fill: parent; margins: 12; topMargin: 16 }
+        anchors { fill: parent; margins: 14; topMargin: 18; rightMargin: 20; bottomMargin: 16 }
         spacing: 4
         RowLayout {
             Layout.leftMargin: 6; Layout.bottomMargin: 10
