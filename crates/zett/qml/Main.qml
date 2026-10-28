@@ -419,6 +419,31 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     property int renameReq: 0
     // wraps the selection in a Markdown mark (bold, italic, code, link)
+    // code editing keys, for code blocks and the file editor: Tab / Shift+Tab indent, Enter keeps the indent (one
+    // more after { ( [ then do :), brackets and quotes close themselves, a typed closer steps over its twin; true = handled
+    function codeKey(edit, e) {
+        const pos = edit.cursorPosition, txt = edit.text
+        const ls = txt.lastIndexOf("\n", pos - 1) + 1
+        const line = txt.slice(ls, pos)
+        const ind = (line.match(/^[ \t]*/) ?? [""])[0]
+        if (e.key === Qt.Key_Tab) { edit.insert(pos, "  "); e.accepted = true; return true }
+        if (e.key === Qt.Key_Backtab) { if (txt.slice(ls, ls + 2) === "  ") edit.remove(ls, ls + 2); e.accepted = true; return true }
+        if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) {
+            const more = /([{(\[]|\bthen|\bdo|\bfunction\b.*\)|:)\s*$/.test(line) ? "  " : ""
+            const closer = /[}\])]/.test(txt[pos] ?? "") && more
+            edit.insert(pos, "\n" + ind + more + (closer ? "\n" + ind : ""))
+            edit.cursorPosition = pos + 1 + ind.length + more.length
+            e.accepted = true; return true
+        }
+        const pairs = { "(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'", "`": "`" }
+        if ([")", "]", "}", "\"", "'", "`"].includes(e.text) && txt[pos] === e.text && !edit.selectedText) { edit.cursorPosition = pos + 1; e.accepted = true; return true }
+        if (pairs[e.text] && !edit.selectedText && (!/[\w]/.test(txt[pos] ?? "") )) {
+            if ((e.text === "'" || e.text === "\"") && /\w/.test(txt[pos - 1] ?? "")) return false   // it's, don't
+            edit.insert(pos, e.text + pairs[e.text]); edit.cursorPosition = pos + 1; e.accepted = true; return true
+        }
+        if (e.key === Qt.Key_Backspace && pairs[txt[pos - 1]] === txt[pos] && !edit.selectedText) { edit.remove(pos - 1, pos + 1); e.accepted = true; return true }
+        return false
+    }
     function wrapSel(ed, a, z) {
         const s = ed.selectionStart, e = ed.selectionEnd, t = ed.selectedText
         ed.remove(s, e); ed.insert(s, a + t + z)
@@ -663,6 +688,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "select") { win.selectFirst = win.blocks.findIndex(b => b.kind === "paragraph" && b.text.length > 3); claudeShot.start(); return }
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
+            // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:")) {
+                const rel = app.shotEngine.slice(app.shotEngine.indexOf(":") + 1)
+                win.openFile({ path: app.dir + "/" + rel, rel })
+                if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
+                claudeShot.start(); return
+            }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
@@ -770,7 +802,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             Toolbar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // ───────── a file from the tree, read-only and highlighted ─────────
-            FileView { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+            FileView { id: fileView; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // ───────── Today: the start screen ─────────
             Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
@@ -1524,30 +1556,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                         const w = { [Qt.Key_B]: ["**", "**"], [Qt.Key_I]: ["*", "*"], [Qt.Key_E]: ["`", "`"], [Qt.Key_K]: ["[[", "]]"] }[e.key]
                                         if (w) { win.wrapSel(edit, w[0], w[1]); e.accepted = true; return }
                                     }
-                                    // code: Tab / Shift+Tab indent, Enter keeps the indent (one more after { ( [ then do :),
-                                    // brackets and quotes close themselves, a typed closer steps over the one already there
-                                    if (code && !e.modifiers || code && (e.modifiers & Qt.ShiftModifier)) {
-                                        const pos = edit.cursorPosition, txt = edit.text
-                                        const ls = txt.lastIndexOf("\n", pos - 1) + 1
-                                        const line = txt.slice(ls, pos)
-                                        const ind = (line.match(/^[ \t]*/) ?? [""])[0]
-                                        if (e.key === Qt.Key_Tab) { edit.insert(pos, "  "); e.accepted = true; return }
-                                        if (e.key === Qt.Key_Backtab) { if (txt.slice(ls, ls + 2) === "  ") edit.remove(ls, ls + 2); e.accepted = true; return }
-                                        if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) {
-                                            const more = /([{(\[]|\bthen|\bdo|\bfunction\b.*\)|:)\s*$/.test(line) ? "  " : ""
-                                            const closer = /[}\])]/.test(txt[pos] ?? "") && more
-                                            edit.insert(pos, "\n" + ind + more + (closer ? "\n" + ind : ""))
-                                            edit.cursorPosition = pos + 1 + ind.length + more.length
-                                            e.accepted = true; return
-                                        }
-                                        const pairs = { "(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'", "`": "`" }
-                                        if ([")", "]", "}", "\"", "'", "`"].includes(e.text) && txt[pos] === e.text && !edit.selectedText) { edit.cursorPosition = pos + 1; e.accepted = true; return }
-                                        if (pairs[e.text] && !edit.selectedText && (!/[\w]/.test(txt[pos] ?? "") )) {
-                                            if ((e.text === "'" || e.text === "\"") && /\w/.test(txt[pos - 1] ?? "")) return   // it's, don't
-                                            edit.insert(pos, e.text + pairs[e.text]); edit.cursorPosition = pos + 1; e.accepted = true; return
-                                        }
-                                        if (e.key === Qt.Key_Backspace && pairs[txt[pos - 1]] === txt[pos] && !edit.selectedText) { edit.remove(pos - 1, pos + 1); e.accepted = true; return }
-                                    }
+                                    // code: Tab, Enter, brackets (win.codeKey, shared with the file editor)
+                                    if (code && (!e.modifiers || (e.modifiers & Qt.ShiftModifier)) && win.codeKey(edit, e)) return
                                     if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier) && !code) {
                                         // Enter: a new block after this one (a list continues as a list)
                                         saveLater.stop()

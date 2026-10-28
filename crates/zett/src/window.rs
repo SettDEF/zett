@@ -64,6 +64,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "readFile"]
         fn read_file(self: &Zett, path: &QString) -> QString;
+        /// a file of the workspace written (the file view saving); false outside the workspace or on an error
+        #[qinvokable]
+        #[cxx_name = "writeFile"]
+        fn write_file(self: &Zett, path: &QString, text: &QString) -> bool;
         /// an environment variable (empty when unset), for views that need HOME or XDG_RUNTIME_DIR
         #[qinvokable]
         fn env(self: &Zett, name: &QString) -> QString;
@@ -845,16 +849,17 @@ fn highlight_html(lang: &str, code: &str) -> String {
     });
     let syn = (!lang.is_empty()).then(|| ss.find_syntax_by_token(lang)).flatten().unwrap_or_else(|| ss.find_syntax_plain_text());
     let mut h = HighlightLines::new(syn, th);
-    let mut out = String::from("<pre style=\"margin:0\">");
+    // a div with <br>, not <pre>: <pre> spaces lines a pixel tighter than the editor laid over it, so the cursor drifted
+    let mut out = String::from("<div style=\"white-space:pre\">");
     for line in syntect::util::LinesWithEndings::from(code) {
-        let Ok(parts) = h.highlight_line(line, ss) else { out += &esc(line); continue };
+        let Ok(parts) = h.highlight_line(line, ss) else { out += &esc(line).replace('\n', "<br>"); continue };
         for (st, s) in parts {
             let f = st.foreground;
             let (b, i) = (st.font_style.contains(FontStyle::BOLD), st.font_style.contains(FontStyle::ITALIC));
-            out += &format!("<span style=\"color:#{:02x}{:02x}{:02x}\">{}{}{}{}{}</span>", f.r, f.g, f.b, if b { "<b>" } else { "" }, if i { "<i>" } else { "" }, esc(s), if i { "</i>" } else { "" }, if b { "</b>" } else { "" });
+            out += &format!("<span style=\"color:#{:02x}{:02x}{:02x}\">{}{}{}{}{}</span>", f.r, f.g, f.b, if b { "<b>" } else { "" }, if i { "<i>" } else { "" }, esc(s).replace('\n', "<br>"), if i { "</i>" } else { "" }, if b { "</b>" } else { "" });
         }
     }
-    out + "</pre>"
+    out + "</div>"
 }
 
 fn esc(s: &str) -> String {
@@ -913,6 +918,13 @@ impl qobject::Zett {
             Ok(mut c) => { std::thread::spawn(move || { let _ = c.wait(); }); true }
             Err(_) => false,
         }
+    }
+
+    fn write_file(&self, path: &QString, text: &QString) -> bool {
+        let p = std::path::PathBuf::from(path.to_string());
+        let root = std::fs::canonicalize(workspace_dir()).unwrap_or_else(|_| workspace_dir());
+        let inside = p.parent().and_then(|d| std::fs::canonicalize(d).ok()).is_some_and(|d| d.starts_with(&root));
+        inside && std::fs::write(&p, text.to_string()).is_ok()
     }
 
     fn read_file(&self, path: &QString) -> QString {
