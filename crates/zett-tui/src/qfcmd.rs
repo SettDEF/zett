@@ -366,7 +366,12 @@ impl App {
     /// The list as text, for its window.
     fn qf_text(&mut self, loc: bool) -> String {
         let l = self.qf_stack(loc).current().cloned().unwrap_or_default();
-        let mut t = l.items.iter().map(line_of).collect::<Vec<_>>().join("\n");
+        // 'quickfixtextfunc': its lines in place of the default ones (an empty one keeps the default)
+        let spec = self.setting(self.cur, "quickfixtextfunc");
+        let custom: Vec<String> = if spec.is_empty() || l.items.is_empty() { Vec::new() } else {
+            self.engine.eval(&format!("vim._zett_qftf({spec:?}, {}, {})", u8::from(!loc), l.items.len())).map(|r| r.0.split('\n').map(str::to_string).collect()).unwrap_or_default()
+        };
+        let mut t = l.items.iter().enumerate().map(|(i, it)| custom.get(i).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| line_of(it))).collect::<Vec<_>>().join("\n");
         t.push('\n');
         t
     }
@@ -532,5 +537,20 @@ mod tests {
         assert_eq!(super::qf_name("cd"), None, ":cd is not one of them");
         assert_eq!(super::qf_name("le"), None, ":le is :left");
         assert_eq!(super::qf_name("lc"), None, ":lc is :lcd");
+    }
+}
+
+#[cfg(test)]
+mod qftf_tests {
+    #[test]
+    fn quickfixtextfunc_writes_the_lines() {
+        let mut app = crate::App::new(Vec::new());
+        app.command("cexpr 'a.rs:3:1: one'");
+        app.command("caddexpr 'b.rs:5:2: two'");
+        app.command("lua function _G.qf(i) local r = {} for k = i.start_idx, i.end_idx do r[#r + 1] = k == 1 and ('item ' .. k) or '' end return r end");
+        app.command("set quickfixtextfunc=v:lua.qf");
+        let t = app.qf_text(false);
+        assert_eq!(t.lines().next(), Some("item 1"));
+        assert!(t.lines().nth(1).is_some_and(|l| l.starts_with("b.rs|5")), "{t}");
     }
 }

@@ -67,7 +67,7 @@ impl App {
 
     /// An included file by the name after the include: in 'path' ("." the file's folder, "" the
     /// current one), with 'suffixesadd' tried too.
-    fn include_file(&self, name: &str, from: Option<&Path>) -> Option<PathBuf> {
+    pub(crate) fn include_file(&self, name: &str, from: Option<&Path>) -> Option<PathBuf> {
         let here = from.and_then(Path::parent).map(Path::to_path_buf).unwrap_or_else(|| self.root.clone());
         let p = Path::new(name);
         let mut dirs: Vec<PathBuf> = Vec::new();

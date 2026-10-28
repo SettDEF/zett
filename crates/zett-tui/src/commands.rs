@@ -288,6 +288,19 @@ impl App {
                 let p = if Path::new(arg).is_absolute() { PathBuf::from(arg) } else { self.root.join(arg) };
                 self.open(&p);
             }
+            // :find NAME: 'findfunc' first, then 'path' (with 'suffixesadd')
+            "find" | "fin" if !arg.is_empty() => {
+                let name = arg.trim();
+                let spec = self.setting(self.cur, "findfunc");
+                let from_func = if spec.is_empty() { None } else {
+                    self.engine.eval(&format!("vim._zett_findfunc({spec:?}, {name:?})")).ok().map(|r| r.0).filter(|s| !s.is_empty())
+                };
+                let from = self.docs[self.cur].abs_path();
+                match from_func.map(|s| PathBuf::from(s.lines().next().unwrap_or_default())).or_else(|| self.include_file(name, from.as_deref())) {
+                    Some(p) => { let p = if p.is_absolute() { p } else { self.root.join(p) }; self.open(&p) }
+                    None => self.say(format!("E345: Can't find file \"{name}\" in path")),
+                }
+            }
             "e" | "edit" | "find" | "files" => self.open_picker(),
             "bn" | "bnext" => self.show_doc((self.cur + 1) % self.docs.len()),
             "bp" | "bprevious" => self.show_doc((self.cur + self.docs.len() - 1) % self.docs.len()),

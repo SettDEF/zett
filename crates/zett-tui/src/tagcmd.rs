@@ -198,9 +198,25 @@ impl App {
         }
     }
 
+    /// 'tagfunc' set: its matches (None when it is unset or says v:null, so the tags files are read)
+    fn tagfunc_tags(&mut self, name: &str) -> Option<Vec<Tag>> {
+        let spec = self.setting(self.cur, "tagfunc");
+        if spec.is_empty() { return None }
+        let q = |s: &str| format!("{s:?}");
+        let out = self.engine.eval(&format!("vim._zett_tagfunc({}, {}, 'c')", q(&spec), q(name))).ok()?.0;
+        if out == "NONE" { return None }
+        let cwd = std::env::current_dir().unwrap_or_default();
+        Some(out.lines().filter_map(|l| {
+            let mut f = l.split('\t');
+            let (n, file, addr, kind) = (f.next()?, f.next()?, f.next()?, f.next().unwrap_or(""));
+            let p = PathBuf::from(file);
+            Some(Tag { name: n.into(), file: if p.is_absolute() { p } else { cwd.join(p) }, addr: addr.into(), kind: kind.into() })
+        }).collect())
+    }
+
     /// A new jump to `name` from here: onto the stack (or in place of its top with 'notagstack').
     fn tag_jump(&mut self, name: &str, pick: bool) {
-        let matches = self.find_tags(name);
+        let matches = self.tagfunc_tags(name).unwrap_or_else(|| self.find_tags(name));
         if matches.is_empty() {
             return self.say(format!("E426: Tag not found: {name}"));
         }
@@ -406,5 +422,48 @@ mod tests {
         assert_eq!(tag_files("./tags;", &deep, &deep), vec![d.join("tags")], "found above");
         assert_eq!(tag_files("tags", &deep, &d), vec![d.join("tags")], "in the current folder");
         std::fs::remove_dir_all(&d).ok();
+    }
+}
+
+#[cfg(test)]
+mod tagfunc_tests {
+    #[test]
+    fn tagfunc_gives_the_matches() {
+        let d = std::env::temp_dir().join(format!("zett-tagfunc-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("a.rs");
+        std::fs::write(&f, "use x;\n\nfn target() {}\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("lua function _G.my_tf(p) if p == 'target' then return {{ {{ name = p, filename = {:?}, cmd = '/^fn target/', kind = 'f' }} }} end return vim.NIL end", f.display().to_string()));
+        app.command("set tagfunc=v:lua.my_tf");
+        app.command("tag target");
+        assert_eq!(app.docs[app.cur].abs_path().as_deref(), Some(f.as_path()));
+        assert_eq!(app.docs[app.cur].ed.cursor().line, 2);
+        // v:null: the tags files, none here
+        app.command("tag other");
+        assert!(app.msg.as_ref().is_some_and(|(m, _)| m.contains("E426")), "{:?}", app.msg);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod findfunc_tests {
+    #[test]
+    fn find_uses_findfunc_then_path() {
+        let d = std::env::temp_dir().join(format!("zett-findfunc-{}", std::process::id()));
+        std::fs::create_dir_all(d.join("src")).unwrap();
+        let (a, b) = (d.join("src/lib.rs"), d.join("other.txt"));
+        std::fs::write(&a, "x\n").unwrap();
+        std::fs::write(&b, "y\n").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.root = d.clone();
+        app.command("set path=src suffixesadd=.rs");
+        app.command("find lib");
+        assert_eq!(app.docs[app.cur].abs_path().as_deref(), Some(a.as_path()), "path + suffixesadd");
+        app.command(&format!("lua function _G.ff(n) return {{ {:?} }} end", b.display().to_string()));
+        app.command("set findfunc=v:lua.ff");
+        app.command("find anything");
+        assert_eq!(app.docs[app.cur].abs_path().as_deref(), Some(b.as_path()), "findfunc");
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

@@ -3762,3 +3762,55 @@ do
   -- vim.fn.nvim_*: every api function is also a Vim function
   for k, v in pairs(api) do if rawget(vim.fn, k) == nil then fn[k] = v rawset(vim.fn, k, v) end end
 end
+
+-- 'tagfunc' for :tag and CTRL-]: the function it names ("v:lua.x.y", a Vim or Lua function) called as Neovim
+-- does (pattern, flags, info); its matches as "name\tfile\tcmd\tkind" lines, "NONE" when it gives v:null
+function vim._zett_tagfunc(spec, pattern, flags)
+  local f
+  local lua_path = spec:match("^v:lua%.(.+)$")
+  if lua_path then
+    f = _G
+    for part in lua_path:gmatch("[^%.]+") do f = type(f) == "table" and f[part] or nil end
+  elseif type(_G[spec]) == "function" then f = _G[spec]
+  else f = function(...) return vim.fn[spec](...) end end
+  if type(f) ~= "function" then return "NONE" end
+  local ok, r = pcall(f, pattern, flags or "c", { buf_ffname = vim.api.nvim_buf_get_name(0) })
+  if not ok or r == nil or r == vim.NIL then return "NONE" end
+  local out = {}
+  for _, t in ipairs(r) do
+    out[#out + 1] = table.concat({ t.name or pattern, t.filename or "", t.cmd or "1", t.kind or "" }, "\t")
+  end
+  return table.concat(out, "\n")
+end
+
+-- 'findfunc' for :find: the files it gives for the name (the first is opened)
+function vim._zett_findfunc(spec, name)
+  local f = spec:match("^v:lua%.(.+)$")
+  local fn_
+  if f then
+    fn_ = _G
+    for part in f:gmatch("[^%.]+") do fn_ = type(fn_) == "table" and fn_[part] or nil end
+  elseif type(_G[spec]) == "function" then fn_ = _G[spec]
+  else fn_ = function(...) return vim.fn[spec](...) end end
+  if type(fn_) ~= "function" then return "" end
+  local ok, r = pcall(fn_, name, false)
+  if not ok or type(r) ~= "table" then return "" end
+  return table.concat(r, "\n")
+end
+
+-- 'quickfixtextfunc': called as Neovim does ({quickfix, winid, id, start_idx, end_idx}); its lines, one per item
+function vim._zett_qftf(spec, quickfix, n)
+  local f = spec:match("^v:lua%.(.+)$")
+  local fn_
+  if f then
+    fn_ = _G
+    for part in f:gmatch("[^%.]+") do fn_ = type(fn_) == "table" and fn_[part] or nil end
+  elseif type(_G[spec]) == "function" then fn_ = _G[spec]
+  else fn_ = function(...) return vim.fn[spec](...) end end
+  if type(fn_) ~= "function" then return "" end
+  local ok, r = pcall(fn_, { quickfix = quickfix, winid = 0, id = 0, start_idx = 1, end_idx = n })
+  if not ok or type(r) ~= "table" then return "" end
+  local out = {}
+  for i = 1, n do out[i] = tostring(r[i] or ""):gsub("\n", " ") end
+  return table.concat(out, "\n")
+end
