@@ -67,6 +67,8 @@ ColumnLayout {
     function testEdit(s) { ed.forceActiveFocus(); ed.cursorPosition = 0; ed.insert(0, s); save() }
     function testFind(q) { findBar.open("find"); findBar.q.text = q }
     function testProblems() { showProblems = true }
+    // gui-check: cursors on lines 1-3 at column 0, "// " typed at all, saved
+    function testMulti() { ed.forceActiveFocus(); ed.cursorPosition = posOf(1, 0); addCursorLine(1); addCursorLine(1); multiEdit("// ", 0); multiEdit("", -1); multiEdit(" ", 0); save() }
     // gui-check: the server asked once it has the file (symbols, or rename:LINE:COL:NEW); what comes back is logged
     function testLsp(spec) { lspTest.spec = spec; lspTest.start() }
     Timer {
@@ -99,6 +101,31 @@ ColumnLayout {
     property var gitMarks: []
     function loadGit() { try { gitMarks = visible && win.filePath ? JSON.parse(app.gitLines(win.filePath)) : [] } catch (e) { gitMarks = [] } }
     // the file's changes since the last commit, as a diff (Changes in the header, or a click in Source Control)
+    // more cursors than the TextEdit's one (Alt+click, Ctrl+Alt+Up/Down): positions; typing, Backspace and Delete act at all
+    property var extra: []
+    function addCursor(p) { if (p >= 0 && p !== ed.cursorPosition && !extra.includes(p)) extra = extra.concat([p]) }
+    function addCursorLine(d) {
+        const from = extra.length ? extra[extra.length - 1] : ed.cursorPosition
+        const [l, c] = lineCol(from), ls = ed.text.split("\n"), to = l + d
+        if (to < 0 || to >= ls.length) return
+        addCursor(posOf(to, Math.min(c, ls[to].length)))
+    }
+    // one edit at every cursor, from the last so earlier positions stay right: ins text, or del -1 / +1 chars
+    function multiEdit(ins, del) {
+        const all = extra.concat([ed.cursorPosition]).filter((p, i, a) => a.indexOf(p) === i).sort((a, b) => a - b)
+        const main = ed.cursorPosition
+        for (let i = all.length - 1; i >= 0; i--) {
+            const p = all[i]
+            if (del < 0 && p > 0) ed.remove(p - 1, p)
+            else if (del > 0 && p < ed.text.length) ed.remove(p, p + 1)
+            else if (ins) ed.insert(p, ins)
+        }
+        const step = ins ? ins.length : del < 0 ? -1 : 0
+        const moved = all.map((p, i) => p + step * (i + 1) - (del < 0 && p === 0 ? step : 0))
+        const mi = all.indexOf(main)
+        ed.cursorPosition = Math.max(0, moved[mi])
+        extra = moved.filter((_, i) => i !== mi).map(p => Math.max(0, p))
+    }
     property bool showDiff: false
     property var diffRows: []
     function loadDiff() {
@@ -388,6 +415,11 @@ ColumnLayout {
                     onActiveFocusChanged: if (!activeFocus && renameBox.visible) renameBox.done(false)
                 }
             }
+            // the extra cursors
+            Repeater {
+                model: fv.extra
+                delegate: Rectangle { required property int modelData; readonly property rect r: ed.positionToRectangle(modelData); x: ed.x + r.x; y: r.y; width: 2; height: r.height; radius: 1; color: t.accent; z: 40 }
+            }
             // the bracket pair at the cursor: two soft rounded boxes
             Repeater {
                 model: ed.activeFocus ? fv.bracketPair : []
@@ -427,6 +459,8 @@ ColumnLayout {
                 // hover: the mouse resting on a word asks the server about it
                 HoverHandler { id: edHover; onPointChanged: { fv.hoverText = ""; hoverAsk.restart() } }
                 Timer { id: hoverAsk; interval: 650; onTriggered: if (edHover.hovered && fv.lsp) { const pt = edHover.point.position; fv.hoverAt = Qt.point(ed.x + pt.x, pt.y); fv.ask("hover", ed.positionAt(pt.x, pt.y)) } }
+                // Alt+click: one more cursor there
+                TapHandler { acceptedModifiers: Qt.AltModifier; onTapped: (ev) => fv.addCursor(ed.positionAt(ev.position.x, ev.position.y)) }
                 // Ctrl+click: go to the definition
                 TapHandler { acceptedModifiers: Qt.ControlModifier; onTapped: (ev) => fv.ask("definition", ed.positionAt(ev.position.x, ev.position.y)) }
                 onCursorRectangleChanged: fileFlick.follow(cursorRectangle)
@@ -437,6 +471,15 @@ ColumnLayout {
                         if (e.key === Qt.Key_Up) { fv.compSel = (fv.compSel - 1 + fv.comps.length) % fv.comps.length; e.accepted = true; return }
                         if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Tab) { fv.takeComp(fv.compSel); e.accepted = true; return }
                         if (e.key === Qt.Key_Escape) { fv.comps = []; e.accepted = true; return }
+                    }
+                    // more cursors: new ones with Ctrl+Alt+Up/Down; text, Backspace, Delete at all; Esc or an arrow back to one
+                    if ((e.modifiers & Qt.ControlModifier) && (e.modifiers & Qt.AltModifier) && (e.key === Qt.Key_Up || e.key === Qt.Key_Down)) { fv.addCursorLine(e.key === Qt.Key_Up ? -1 : 1); e.accepted = true; return }
+                    if (fv.extra.length) {
+                        if (e.key === Qt.Key_Escape || e.key === Qt.Key_Left || e.key === Qt.Key_Right || e.key === Qt.Key_Up || e.key === Qt.Key_Down) { fv.extra = []; if (e.key === Qt.Key_Escape) { e.accepted = true; return } }
+                        else if (e.key === Qt.Key_Backspace) { fv.multiEdit("", -1); e.accepted = true; return }
+                        else if (e.key === Qt.Key_Delete) { fv.multiEdit("", 1); e.accepted = true; return }
+                        else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { fv.multiEdit("\n", 0); e.accepted = true; return }
+                        else if (e.text.length && !(e.modifiers & Qt.ControlModifier) && e.text.charCodeAt(0) >= 32) { fv.multiEdit(e.text, 0); e.accepted = true; return }
                     }
                     // the jump list takes ↑ ↓ Enter Esc while open
                     if (fv.jumps.length) {
