@@ -67,6 +67,10 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// the system share sheet (~/.scripts/apps/share/share) with these items, one per line
+        #[qinvokable]
+        #[cxx_name = "shareItems"]
+        fn share_items(self: &Zett, items: &QString) -> bool;
         /// moves a file or folder into a folder of the workspace (drag and drop); the page list follows
         #[qinvokable]
         #[cxx_name = "movePath"]
@@ -899,4 +903,14 @@ fn percent_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).to_string()
+}
+
+// ── the system share sheet ──
+impl qobject::Zett {
+    fn share_items(&self, items: &QString) -> bool {
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
+        let bin = home.join(".scripts/apps/share/share");
+        let items: Vec<String> = items.to_string().lines().filter(|l| !l.is_empty()).map(String::from).collect();
+        !items.is_empty() && bin.is_file() && std::process::Command::new(bin).args(items).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().is_ok()
+    }
 }

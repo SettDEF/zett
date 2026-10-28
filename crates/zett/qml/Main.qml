@@ -189,6 +189,35 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
+    Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
+    // the palette: the window's own actions, then every engine command with its key
+    // the page's file into the system share sheet (apps, phone, Telegram…)
+    function sharePage() {
+        const p = win.pages[app.current] ?? {}
+        if (!p.path || !app.shareItems(p.path)) win.note("the share sheet is not installed (~/.scripts/apps/share/share)")
+    }
+    function openPalette() {
+        const own = [
+            { icon: "wb_sunny", name: "Today", desc: "the start screen", keys: "Ctrl ⇧ D", run: () => win.view = "today" },
+            { icon: "search", name: "Go to page", desc: "quick open", keys: "Ctrl P", run: () => { quickField.text = ""; quick.open(); quickField.forceActiveFocus() } },
+            { icon: "add", name: "New page", desc: "an empty page", keys: "", run: () => { app.newPage("Untitled"); win.focusAfter = 0 } },
+            { icon: "edit", name: "Rename page", desc: "the open page", keys: "F2", run: () => win.renameReq++ },
+            { icon: "right_panel_open", name: "Toggle details", desc: "outline, links, info", keys: "Ctrl \\", run: () => win.detailsShown = !win.detailsShown },
+            { icon: "left_panel_close", name: "Toggle sidebar", desc: "", keys: "", run: () => win.sidebarHidden = !win.sidebarHidden },
+            { icon: "close", name: "Close tab", desc: "", keys: "Ctrl W", run: () => win.closeTab(app.current) },
+            { icon: "markdown", name: "Show Markdown", desc: "the file as on disk", keys: "", run: () => win.showSource = !win.showSource },
+            { icon: "ios_share", name: "Share page", desc: "the system share sheet", keys: "", run: () => win.sharePage() },
+            { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) }
+        ]
+        let binds = []
+        try { binds = JSON.parse(app.bindingList()).bindings || [] } catch (e) {}
+        const keyOf = {}
+        for (const b of binds) if (b.desc && !keyOf[b.desc]) keyOf[b.desc] = b.keys
+        let cmds = []
+        try { cmds = JSON.parse(app.commandList()).commands || [] } catch (e) {}
+        palette.entries = own.concat(cmds.map(c => ({ icon: c.source === "zett" ? "bolt" : "extension", name: c.name, desc: c.desc + (c.source && c.source !== "zett" ? `  ·  ${c.source}` : ""), keys: keyOf[c.desc] ?? keyOf[c.name] ?? "", run: () => win.applyScript(JSON.parse(app.runCommand(c.name))) })))
+        palette.show()
+    }
     Shortcut { sequence: "Ctrl+Shift+D"; onActivated: win.view = "today" }
 
     // ── context menus: one component, each place passes its own items ──
@@ -215,6 +244,7 @@ ApplicationWindow {
             { icon: "markdown", label: "Copy as Markdown", run: () => win.copyText(text) },
             { icon: "link", label: "Copy link", key: "[[ ]]", run: () => win.copyText(link) },
             { icon: "description", label: "Copy whole page", run: () => win.copyText(win.pageMd()) }
+,            { icon: "ios_share", label: "Share sheet…", key: "apps, phone", run: () => { if (!app.shareItems(text)) win.note("the share sheet is not installed") } }
         ]
     }
     property int renameReq: 0
@@ -364,6 +394,7 @@ ApplicationWindow {
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
+            if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
             if (app.shotEngine === "trash") { const n = win.pages.length; const ok = app.trashPage(n - 1); console.log(`zett-probe: trash ok=${ok} pages ${n} -> ${win.pages.length}`); grabLater.start(); return }
@@ -399,6 +430,7 @@ ApplicationWindow {
         border.width: pageDrop.containsDrag ? 2 : 1
     }
     ContextMenu { id: ctx; theme: t; z: 1000 }
+    Palette { id: palette; theme: t }
 
     RowLayout {
         anchors.fill: parent
