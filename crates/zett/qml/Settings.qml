@@ -113,6 +113,7 @@ Item {
         { cat: "Editor", key: "autoSave", label: "Auto save", hint: "a file is written a second after the last change", type: "choice", options: [[false, "Off"], [true, "After a second"]], def: false },
         { cat: "Editor", key: "wordWrap", label: "Word wrap", hint: "long lines wrap at the window's edge (Alt+Z)", type: "choice", options: [[false, "Off"], [true, "On"]], def: false },
         { cat: "Editor", key: "minimap", label: "Minimap", hint: "the whole file small at the right of the editor", type: "choice", options: [[true, "On"], [false, "Off"]], def: true },
+        { cat: "Editor", key: "terminal", label: "Terminal", hint: "what Ctrl+` opens: the panel under the editor, or a real zash window in the workspace folder", type: "choice", options: [["panel", "Panel"], ["zash", "zash"]], def: "panel" },
         { cat: "Appearance", key: "scale", label: "Text size", hint: "the page's text, headings with it", type: "stepper", from: 0.8, to: 1.5, step: 0.05, suffix: "×", def: 1 },
         { cat: "Appearance", key: "width", label: "Page width", hint: "the longest a line gets; about 70 characters reads best (the toolbar button: narrow, wide, full)", type: "stepper", from: 480, to: 1400, step: 40, suffix: " px", def: 760 },
         { cat: "Appearance", key: "sans", label: "Font", hint: "for the page and the window", type: "choice", options: [["Google Sans Flex", "Google Sans"], ["Inter", "Inter"], ["Noto Serif", "Serif"]], def: "Google Sans Flex" },

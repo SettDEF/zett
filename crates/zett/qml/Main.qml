@@ -239,7 +239,9 @@ ApplicationWindow {
     // the focus leaves the block first, so what was just typed is saved before the move
     function moveCur(d) { const c = curBlock; if (c < 0) return; rootRow.forceActiveFocus(); if (app.moveBlock(c, c + d)) win.focusAfter = c + d }
     property bool drawerShown: false
-    function toggleDrawer() { drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
+    // Settings > Terminal: "zash" opens a real zash in the workspace folder instead of the panel's command runner
+    function openZash() { app.runShell(-1, 'setsid -f "$HOME/.local/bin/zash" >/dev/null 2>&1') }
+    function toggleDrawer() { if ((prefs.terminal ?? "panel") === "zash") { openZash(); return } drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
     property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : app.shotEngine.startsWith("search:") ? "search" : "page") : (prefs.start === "page" ? "page" : "today")
     // ── hooks from init.lua: zett.gui = { status = {...}, sidebar = {...}, palette = {...} } ──
