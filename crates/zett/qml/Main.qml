@@ -902,6 +902,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
+            // gitbranch: the branch list open, a new branch made from it
+            if (app.shotEngine === "gitbranch") { win.sideMode = "git"; Qt.callLater(() => { sourceControl.branchesOpen = true; sourceControl.loadBranches(); sourceControl.switchTo("feature-x", true); sourceControl.branchesOpen = true; sourceControl.loadBranches(); console.log("zett-probe: branch " + sourceControl.branch + " of " + JSON.stringify(sourceControl.branches)); grabLater.start() }); return }
             if (app.shotEngine === "acttip") { activityBar.tipTest = true; grabLater.start(); return }
             if (app.shotEngine.startsWith("core:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(5), rel: app.shotEngine.slice(5) }); coreT.start(); return }
             if (app.shotEngine.startsWith("core2:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(6), rel: app.shotEngine.slice(6) }); core2T.start(); return }
@@ -1042,7 +1044,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         // ───────── sidebar ─────────
         ActivityBar { id: activityBar; win: ApplicationWindow.window; t: ApplicationWindow.window.theme }
         Sidebar { id: sidebar; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
-        SourceControl { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+        SourceControl { id: sourceControl; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
         // ───────── the page ─────────
         ColumnLayout {

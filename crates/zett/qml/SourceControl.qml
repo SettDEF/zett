@@ -18,6 +18,10 @@ Rectangle {
     property var changes: []
     property string note: ""
     property bool isRepo: true
+    property bool branchesOpen: false
+    property var branches: []
+    function loadBranches() { const r = git(["branch", "--format=%(refname:short)"]); branches = r.code === 0 ? r.out.split("\n").filter(s => s.length) : [] }
+    function switchTo(name, create) { branchesOpen = false; run(create ? ["switch", "-c", name] : ["switch", name], create ? `On new branch ${name}` : `On ${name}`) }
     function git(args) { try { return JSON.parse(app.git(JSON.stringify(args))) } catch (e) { return { code: -1, out: "" } } }
     function refresh() {
         const r = git(["status", "--porcelain=v1", "-b", "-uall"])
@@ -128,7 +132,54 @@ Rectangle {
             ColumnLayout {
                 spacing: 0
                 Text { text: "Source Control"; color: sc.t.text; font.family: sc.t.sans; font.pixelSize: 17; font.weight: Font.DemiBold }
-                Text { text: sc.isRepo ? sc.branch : "not a git repository"; color: sc.t.faint; font.family: sc.t.mono; font.pixelSize: 11 }
+                // the branch: a click lists the others (switch, or a new one)
+                Row {
+                    spacing: 4
+                    Text { text: sc.isRepo ? sc.branch : "not a git repository"; color: brH.hovered && sc.isRepo ? sc.t.accent : sc.t.faint; font.family: sc.t.mono; font.pixelSize: 11 }
+                    Text { visible: sc.isRepo; text: sc.branchesOpen ? "expand_less" : "expand_more"; color: sc.t.faint; font.family: sc.t.icons; font.pixelSize: 13 }
+                    HoverHandler { id: brH; cursorShape: sc.isRepo ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                    TapHandler { onTapped: if (sc.isRepo) { sc.branchesOpen = !sc.branchesOpen; if (sc.branchesOpen) sc.loadBranches() } }
+                }
+            }
+        }
+        // the branches: the current one marked, a click switches; a name typed and Enter makes a new one
+        Rectangle {
+            visible: sc.branchesOpen && sc.isRepo
+            Layout.fillWidth: true; Layout.bottomMargin: 8
+            implicitHeight: brCol.implicitHeight + 12; radius: 14; color: sc.t.card
+            ColumnLayout {
+                id: brCol
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
+                spacing: 2
+                Repeater {
+                    model: sc.branches
+                    delegate: Rectangle {
+                        required property string modelData
+                        readonly property bool here: modelData === sc.branch
+                        Layout.fillWidth: true; implicitHeight: 28; radius: sc.t.rRow
+                        color: bH.hovered && !here ? Qt.alpha(sc.t.text, 0.06) : here ? Qt.alpha(sc.t.accent, 0.14) : "transparent"
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
+                            spacing: 8
+                            Text { text: parent.parent.here ? "check" : "commit"; color: parent.parent.here ? sc.t.accent : sc.t.faint; font.family: sc.t.icons; font.pixelSize: 14 }
+                            Text { Layout.fillWidth: true; text: modelData; elide: Text.ElideRight; color: parent.parent.here ? sc.t.text : sc.t.dim; font.family: sc.t.mono; font.pixelSize: 12 }
+                        }
+                        HoverHandler { id: bH; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: if (!parent.here) sc.switchTo(modelData, false) }
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true; implicitHeight: 30; radius: 15; color: sc.t.raised
+                    TextInput {
+                        id: newBranch
+                        anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: sc.t.text; font.family: sc.t.mono; font.pixelSize: 12
+                        onAccepted: { const n = text.trim(); if (n) { sc.switchTo(n, true); text = "" } }
+                        Keys.onEscapePressed: sc.branchesOpen = false
+                        Text { visible: !newBranch.text; anchors.verticalCenter: parent.verticalCenter; text: "New branch (Enter)"; color: sc.t.faint; font: newBranch.font }
+                    }
+                }
             }
         }
         // the message and Commit
