@@ -247,6 +247,19 @@ ApplicationWindow {
     //   sidebar: { title = "Links", items = { {label=, icon=, cmd=} } }   (cmd: a command or `lua …`)
     //   palette: { {name=, desc=, keys=, cmd=} }
     property var hooks: ({ status: [], sidebar: [], palette: [] })
+    // snippets: ~/.config/zett/snippets.json, {"prefix": "body"}; a prefix + Tab in code expands it ($0 = the cursor)
+    property var snippets: { try { return JSON.parse(app.readFile(app.configPath().replace(/init\.lua$/, "snippets.json"))) } catch (e) { return {} } }
+    function expandSnippet(edit) {
+        const pos = edit.cursorPosition, t = edit.text
+        let s = pos; while (s > 0 && /[\w.-]/.test(t[s - 1])) s--
+        const body = snippets[t.slice(s, pos)]
+        if (typeof body !== "string") return false
+        const ls = t.lastIndexOf("\n", s - 1) + 1, ind = (t.slice(ls, s).match(/^[ \t]*/) ?? [""])[0]
+        const text = body.replace(/\n/g, "\n" + ind), cur = text.indexOf("$0")
+        edit.remove(s, pos); edit.insert(s, text.replace("$0", ""))
+        edit.cursorPosition = s + (cur >= 0 ? cur : text.length)
+        return true
+    }
     readonly property string hooksLua: `local g = zett.gui or {}
 local function val(x) if type(x) == "function" then local ok, r = pcall(x); if ok then return r end return nil end return x end
 local st, sb, pl = {}, {}, {}
@@ -439,6 +452,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const ls = txt.lastIndexOf("\n", pos - 1) + 1
         const line = txt.slice(ls, pos)
         const ind = (line.match(/^[ \t]*/) ?? [""])[0]
+        if (e.key === Qt.Key_Tab && expandSnippet(edit)) { e.accepted = true; return true }
         if (e.key === Qt.Key_Tab) { edit.insert(pos, "  "); e.accepted = true; return true }
         if (e.key === Qt.Key_Backtab) { if (txt.slice(ls, ls + 2) === "  ") edit.remove(ls, ls + 2); e.accepted = true; return true }
         if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) {
@@ -457,6 +471,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         if (e.key === Qt.Key_Backspace && pairs[txt[pos - 1]] === txt[pos] && !edit.selectedText) { edit.remove(pos - 1, pos + 1); e.accepted = true; return true }
         return false
     }
+    // Claude beside the page with `s` in its input (claude-ui's panel)
+    function askClaude(s) { claudeShown = true; askLater.text = s; askLater.restart() }
+    Timer { id: askLater; property string text; interval: 400; onTriggered: if (claudeView.item && claudeView.item.ask) claudeView.item.ask(text) }
     function wrapSel(ed, a, z) {
         const s = ed.selectionStart, e = ed.selectionEnd, t = ed.selectedText
         ed.remove(s, e); ed.insert(s, a + t + z)
@@ -1246,7 +1263,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                             { icon: "format_strikethrough", tip: "Strike", a: "~~", z: "~~" },
                                             { icon: "code", tip: "Code  Ctrl+E", a: "`", z: "`" },
                                             { icon: "ink_highlighter", tip: "Highlight", a: "==", z: "==" },
-                                            { icon: "link", tip: "Link to a page  Ctrl+K", a: "[[", z: "]]" }
+                                            { icon: "link", tip: "Link to a page  Ctrl+K", a: "[[", z: "]]" },
+                                            { icon: "auto_awesome", tip: "Ask Claude about it", ask: true }
                                         ]
                                         delegate: Rectangle {
                                             required property var modelData
@@ -1254,7 +1272,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                             color: sbH.hovered ? Qt.alpha(t.accent, 0.18) : "transparent"
                                             Text { anchors.centerIn: parent; text: modelData.icon; color: sbH.hovered ? t.accent : t.text; font.family: t.icons; font.pixelSize: 17 }
                                             HoverHandler { id: sbH; cursorShape: Qt.PointingHandCursor }
-                                            TapHandler { onTapped: win.wrapSel(edit, modelData.a, modelData.z) }
+                                            TapHandler { onTapped: modelData.ask ? win.askClaude("Explain this:\n\n" + edit.selectedText) : win.wrapSel(edit, modelData.a, modelData.z) }
                                         }
                                     }
                                 }

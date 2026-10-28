@@ -52,7 +52,24 @@ Rectangle {
         Line { visible: parent.parent.links.length === 0; text: "Nothing links here yet" }
         Repeater {
             model: parent.parent.links
-            delegate: Line { required property var modelData; text: "↳  " + (modelData.title ?? modelData.page ?? ""); color: t.dim }
+            // each: the page and the sentence the link is in, the link lit; a click opens the page
+            delegate: Rectangle {
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: blCol.implicitHeight + 12; radius: t.rRow
+                color: blH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                Column {
+                    id: blCol
+                    x: 8; y: 6; width: parent.width - 16
+                    spacing: 2
+                    Text { width: parent.width; text: "↳  " + (modelData.title ?? ""); elide: Text.ElideRight; color: t.text; font.family: t.sans; font.pixelSize: 12; font.weight: Font.DemiBold }
+                    Text { width: parent.width; wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight; textFormat: Text.StyledText
+                        text: (modelData.text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\[\[([^\]]+)\]\]/g, `<font color="${t.accent}">$1</font>`)
+                        color: t.dim; font.family: t.sans; font.pixelSize: 11 }
+                }
+                HoverHandler { id: blH; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: { const i = win.pages.findIndex(p => p.title === modelData.title); if (i >= 0) win.openPage(i) } }
+            }
         }
         Head { text: "INFO" }
         Line { text: `${win.blocks.length} blocks  ·  ${parent.parent.words} words` }

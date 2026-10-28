@@ -118,7 +118,7 @@ Item {
         { cat: "Advanced", key: "", label: "Workspace", hint: app.dir, type: "action", actions: [["folder_open", "Show folder", () => Qt.openUrlExternally("file://" + app.dir)]] },
         { cat: "Advanced", key: "", label: "Commands", hint: "everything zett can do, with its key", type: "action", actions: [["terminal", "Palette  Ctrl ⇧ P", () => win.openPalette()]] }
     ]
-    readonly property var cats: [["Editor", "edit_note"], ["Appearance", "palette"], ["Window", "dashboard"], ["Advanced", "tune"], ["Keyboard Shortcuts", "keyboard"]]
+    readonly property var cats: [["Editor", "edit_note"], ["Appearance", "palette"], ["Window", "dashboard"], ["Advanced", "tune"], ["Keyboard Shortcuts", "keyboard"], ["Extensions", "extension"], ["Snippets", "data_object"]]
     property string cat: ""                     // "" = all
     property bool jsonView: false
     function valueOf(x) { return win.prefs[x.key] ?? x.def }
@@ -188,7 +188,7 @@ Item {
 
     // ── the settings ──
     Flickable {
-        visible: !s.jsonView && s.cat !== "Keyboard Shortcuts"
+        visible: !s.jsonView && ["Keyboard Shortcuts", "Extensions", "Snippets"].indexOf(s.cat) < 0
         x: searchBox.x; y: searchBox.y + searchBox.height + 16
         width: searchBox.width; height: s.height - y - 16
         clip: true
@@ -283,6 +283,21 @@ Item {
                 }
             }
         }
+    }
+
+    // ── Extensions (init.lua hooks) and Snippets (snippets.json): lists of what is there, the file to change them ──
+    readonly property var extRows: s.cat === "Extensions" ? [].concat(win.hooks.palette.map(h => ({ a: h.name, b: "palette" + (h.keys ? "  ·  " + h.keys : "") })), win.hooks.sidebar.map(h => ({ a: h.name ?? h.label ?? "sidebar item", b: "sidebar" })), win.hooks.status.map(h => ({ a: h.text ?? h.name ?? "status item", b: "status bar" }))) : s.cat === "Snippets" ? Object.keys(win.snippets).map(k => ({ a: k, b: win.snippets[k].split("\n")[0] })) : []
+    ColumnLayout {
+        visible: !s.jsonView && (s.cat === "Extensions" || s.cat === "Snippets")
+        x: searchBox.x; y: searchBox.y + searchBox.height + 16; width: searchBox.width
+        spacing: 4
+        Text { Layout.fillWidth: true; wrapMode: Text.Wrap; color: t.faint; font.family: t.sans; font.pixelSize: 12
+            text: s.cat === "Extensions" ? "Lua hooks from init.lua: zett.gui.palette, zett.gui.sidebar, zett.gui.status" : "snippets.json: {\"prefix\": \"body\"}; type the prefix in code, then Tab (-e = where the cursor lands)" }
+        Button1 { icon: "edit"; label: s.cat === "Extensions" ? "Open init.lua" : "Open snippets.json"; onClicked: { const p = s.cat === "Extensions" ? app.configPath() : app.configPath().replace(/init\.lua$/, "snippets.json"); if (s.cat === "Snippets" && !app.readFile(p).startsWith("{")) app.writeFile(p, "{\n  \"fn\": \"fn $0() {\\n}\"\n}\n"); win.openFile({ path: p, rel: p }) } }
+        Text { visible: s.extRows.length === 0; text: "None yet"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+        Repeater { model: s.extRows; delegate: RowLayout { required property var modelData; Layout.fillWidth: true; spacing: 12
+            Text { text: modelData.a; color: t.text; font.family: t.mono; font.pixelSize: 13 }
+            Text { Layout.fillWidth: true; text: modelData.b; elide: Text.ElideRight; color: t.faint; font.family: t.sans; font.pixelSize: 12 } } }
     }
 
     // ── the JSON view: what is stored, as it is ──
