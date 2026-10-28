@@ -696,7 +696,7 @@ api.nvim_get_runtime_file = function(name, all)
   return {}
 end
 api.nvim_get_chan_info = function() return {} end
-api.nvim_list_uis = function() return { { width = 80, height = 24, rgb = true } } end
+api.nvim_list_uis = function() return { { width = tonumber(z.opt.columns) or 80, height = tonumber(z.opt.lines) or 24, rgb = true } } end   -- the real size, as the terminal draws it
 api.nvim_get_color_by_name = function(n)
   local h = n:match("^#(%x%x%x%x%x%x)$")
   return h and tonumber(h, 16) or -1

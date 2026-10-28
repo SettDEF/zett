@@ -8,7 +8,7 @@ Rectangle {
     required property var win
     required property var t
     readonly property var fe: win.fileEditor
-    visible: win.detailsShown && win.view === "file" && !win.sideFile && win.width >= (win.claudeShown ? 1600 : 900) && !win.zen   // beside Claude only when there is room
+    visible: win.detailsShown && win.view === "file" && !win.sideFile && win.sidePage < 0 && win.width >= (win.claudeShown ? 1600 : 900) && !win.zen   // beside Claude only when there is room; a note beside the code takes its place
     Layout.fillHeight: true
     Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
     implicitWidth: 248; Layout.minimumWidth: 248; Layout.maximumWidth: 248
@@ -16,10 +16,35 @@ Rectangle {
     color: t.panel
     border.width: 1; border.color: Qt.alpha(t.rule, 0.35)
     readonly property var items: visible && fe ? fe.outline : []
+    // the pages that link to this file ([[code:…]]), read when the file changes or a page is saved
+    readonly property var notes: { win.pages; return visible && win.filePath ? win.notesFor(win.filePath) : [] }
     readonly property int cur: { if (!fe) return -1; let c = -1; for (const it of items) if (it.line <= fe.curLine) c = it.line; return c }
     ColumnLayout {
         anchors { fill: parent; margins: 12 }
         spacing: 2
+        // notes about this file: a click opens one beside the code; + makes one for the symbol at the cursor
+        RowLayout {
+            Layout.fillWidth: true; Layout.topMargin: 4
+            Text { Layout.fillWidth: true; text: "NOTES  " + fo.notes.length; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8; Layout.leftMargin: 8 }
+            Rectangle { implicitWidth: 22; implicitHeight: 22; radius: 11; color: nH.hovered ? t.raised : "transparent"
+                Text { anchors.centerIn: parent; text: "add"; color: t.dim; font.family: t.icons; font.pixelSize: 15 }
+                HoverHandler { id: nH; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: fo.win.noteAboutCode() } }
+        }
+        Text { visible: !fo.notes.length; Layout.leftMargin: 8; text: "None yet: Ctrl+Alt+N writes one"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+        Repeater {
+            model: fo.notes
+            delegate: Rectangle {
+                required property string modelData
+                Layout.fillWidth: true; implicitHeight: 28; radius: t.rRow
+                color: noH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                Row { x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                    Text { text: "edit_note"; color: t.accent; font.family: t.icons; font.pixelSize: 15 }
+                    Text { text: modelData; color: t.dim; font.family: t.sans; font.pixelSize: 12; elide: Text.ElideRight; width: fo.width - 70 } }
+                HoverHandler { id: noH; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: fo.win.sidePage = fo.win.pages.findIndex(p => p.title === modelData) }
+            }
+        }
         Text { text: "OUTLINE  " + fo.items.length; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8; Layout.leftMargin: 8; Layout.topMargin: 4 }
         Text { visible: !fo.items.length; text: "No declarations found"; color: t.faint; font.family: t.sans; font.pixelSize: 12; Layout.leftMargin: 8 }
         ListView {

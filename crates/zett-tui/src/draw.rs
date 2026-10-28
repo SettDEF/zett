@@ -7,6 +7,11 @@ impl App {
     // ── drawing ──
 
     pub(crate) fn draw(&mut self, f: &mut Frame) {
+        // the screen's real size as Neovim's columns / lines (plugins place their windows by them: fidget's bottom
+        // right was column 80 of a wide terminal, in the middle); set only when it changes
+        let a = f.area();
+        if self.engine.opt("columns").as_deref() != Some(&a.width.to_string()) { let _ = self.engine.set_opt("columns", &a.width.to_string(), 'i'); }
+        if self.engine.opt("lines").as_deref() != Some(&a.height.to_string()) { let _ = self.engine.set_opt("lines", &a.height.to_string(), 'i'); }
         // a highlight group changed (zett.hl, :hi): new styles, and the syntax colours again
         if hl::sync(&self.engine) {
             self.theme = palette_theme();

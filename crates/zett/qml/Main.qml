@@ -508,6 +508,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     onZenChanged: { sidebarHidden = zen; if (zen) detailsShown = false }
     Shortcut { sequence: "Ctrl+K, Z"; onActivated: win.zen = !win.zen }
     Shortcut { sequence: "Ctrl+K, O"; onActivated: win.openFolderPick() }
+    Shortcut { enabled: win.view === "file"; sequence: "Ctrl+Alt+N"; onActivated: win.noteAboutCode() }
     Shortcut { enabled: win.zen; sequence: "Escape"; onActivated: win.zen = false }
     // every command: the window's own, init.lua's hooks, the engine's; the palette and Settings > Keyboard Shortcuts show it
     function paletteEntries() {
@@ -532,6 +533,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" },
             { icon: "folder_open", name: "Open Folder…", desc: "opens here", keys: "Ctrl K O", run: () => win.openFolderPick() },
+            { icon: "edit_note", name: "Note about this code", desc: "a page linking back, beside the code", keys: "Ctrl Alt N", run: () => win.noteAboutCode() },
             { icon: "commit", name: "Source Control", desc: "changes, stage, commit", keys: "Ctrl ⇧ G", run: () => { win.sideMode = "git"; win.sidebarHidden = false } },
             { icon: "center_focus_strong", name: "Zen mode", desc: "only the editor", keys: "Ctrl K Z", run: () => win.zen = !win.zen },
             { icon: "arrow_forward", name: "Go to definition", desc: "the language server", keys: "F12", run: () => fileView.ask("definition", fileView.cursorPos()) },
@@ -828,7 +830,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         // links next, kept aside too: an _ in a URL is not italics
         const links = []
         const keep = a => { links.push(a); return `\u0001${links.length - 1}\u0001` }
-        h = h.replace(/\[\[([^\]]+)\]\]/g, (m, title) => keep(`<a href="${encodeURIComponent(title)}">${title}</a>`))
+        // [[code:path#name]] and [[code:path:line]] read as the place in the code, in the code font
+        h = h.replace(/\[\[([^\]]+)\]\]/g, (m, title) => keep(title.startsWith("code:") ? `<a href="${encodeURIComponent(title)}"><code>${title.slice(5).replace("#", " › ")}</code></a>` : `<a href="${encodeURIComponent(title)}">${title}</a>`))
              .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => keep(`<a href="ext:${url}">${text}</a>`))
         h = h.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
              .replace(/(^|[^*\w])\*([^*\s][^*\n]*?)\*(?!\w)/g, "$1<i>$2</i>")
@@ -839,7 +842,40 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         return h.replace(/\u0001(\d+)\u0001/g, (m, i) => links[+i])
                 .replace(/\u0000(\d+)\u0000/g, (m, i) => `<font face="${t.mono}" color="${t.accent}">${code[+i]}</font>`)
     }
-    function openLink(l) { if (l.startsWith("ext:")) Qt.openUrlExternally(l.slice(4)); else app.openTitle(decodeURIComponent(l)) }
+    // links: ext: the browser; [[code:path:line]] or [[code:path#name]] the file there; anything else a page
+    function openLink(l) {
+        if (l.startsWith("ext:")) { Qt.openUrlExternally(l.slice(4)); return }
+        const t = decodeURIComponent(l)
+        if (t.startsWith("code:")) { openCodeRef(t.slice(5)); return }
+        app.openTitle(t)
+    }
+    function openCodeRef(r) {
+        let path = r, line = 0, name = ""
+        const h = r.indexOf("#"), m = /:(\d+)$/.exec(r)
+        if (h >= 0) { path = r.slice(0, h); name = r.slice(h + 1) } else if (m) { path = r.slice(0, m.index); line = +m[1] - 1 }
+        const full = path.startsWith("/") ? path : app.dir + "/" + path
+        if (name) { const ls = app.readFile(full).split("\n"); const i = ls.findIndex(s => s.includes(name)); line = Math.max(0, i) }
+        openFileAt({ path: full, rel: path }, line, 0)
+    }
+    // a note about the code at the cursor: a page named after the file and its symbol, linking back, beside the code
+    function noteAboutCode() {
+        if (view !== "file") return
+        const rel = filePath.replace(app.dir + "/", ""), fe = fileEditor, sp = fe.symbolPath
+        const line = fe.curLine, sym = sp.length ? sp[sp.length - 1].name : ""
+        const title = rel + (sym ? " › " + sym : ":" + (line + 1))
+        const back = filePath
+        const had = pages.findIndex(p => p.title === title)
+        app.openTitle(title)
+        if (had < 0) { const n = app.addBlock(blocks.length - 1, "paragraph"); app.setText(n, "About [[code:" + rel + (sym ? "#" + sym : ":" + (line + 1)) + "]]") }
+        const pi = pages.findIndex(p => p.title === title)
+        Qt.callLater(() => { openFile({ path: back, rel: rel }); sidePage = pi })
+    }
+    // the notes that link to a file ([[code:its path…]]): page titles
+    function notesFor(path) {
+        const rel = path.replace(app.dir + "/", "")
+        let hits = []; try { hits = JSON.parse(app.search("code:" + rel)) } catch (e) {}
+        return hits.map(h => h.title).filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 12)
+    }
 
     function focusBlock(i, end) {
         const d = list.itemAtIndex(i)
@@ -873,6 +909,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine.startsWith("coresave:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(9), rel: app.shotEngine.slice(9) }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(1, 99, false, false); for (const ch of "   ") d.key(0, ch, 0); d.click(4, 0, false, false); for (const ch of "tail") d.key(0, ch, 0); fileView.save(); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corewords:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(10), rel: app.shotEngine.slice(10) }); Qt.callLater(() => { console.log("zett-probe: corewords " + fileView.codeDoc.words("le") + " " + fileView.codeDoc.words("ma")); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corekeep:")) { const p = app.shotEngine.slice(9).split(","); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(0, 0, false, false); for (const ch of "kept ") d.key(0, ch, 0); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); Qt.callLater(() => { const list = win.unsavedList(); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { console.log("zett-probe: corekeep away " + list.length + " back [" + d.lineText(0) + "] dirty " + d.dirty); grabLater.start() }) }) }); return }
+            if (app.shotEngine.startsWith("corenote:")) { const f = app.shotEngine.slice(9); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.codeDoc.click(2, 4, false, false); Qt.callLater(() => { win.noteAboutCode(); noteT2.start() }) }); return }
             if (app.shotEngine.startsWith("corebig:")) { const t0 = Date.now(); win.openFile({ path: app.dir + "/" + app.shotEngine.slice(8), rel: app.shotEngine.slice(8) }); Qt.callLater(() => { const t1 = Date.now(); const d = fileView.codeDoc; d.click(99990, 0, false, false); for (const ch of "// end") d.key(0, ch, 0); const t2 = Date.now(); for (const ch of " more") d.key(0, ch, 0); console.log("zett-probe: corebig open " + (t1 - t0) + " ms, lines " + d.lines + ", first typing at the end " + (t2 - t1) + " ms, five more keys " + (Date.now() - t2) + " ms"); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corelsp:")) { const p = app.shotEngine.split(":"); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); claudeShot.interval = 20000; coreLspT.spec = p; coreLspT.start(); return }
             if (app.shotEngine === "explorer") { win.sideMode = "files"; grabLater.start(); return }
@@ -977,6 +1014,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })  }
     Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }  // the panel polls cui first
     Timer { id: probT; interval: 1500; onTriggered: { console.log("zett-probe: problems " + JSON.stringify(win.problems.map(p => p.path.replace(app.dir + "/", "") + ":" + (p.line + 1) + " " + p.message))); claudeShot.start() } }
+    Timer { id: noteT2; interval: 1500; onTriggered: { const t = win.pages.map(p => p.title).filter(x => x.includes("›")); console.log("zett-probe: corenote pages " + JSON.stringify(t) + " notes " + JSON.stringify(win.notesFor(win.filePath)) + " side " + win.sidePage); grabLater.start() } }
     Timer { id: coreT; interval: 600; onTriggered: { const d = fileView.codeDoc; d.click(1, 4, false, false); d.click(2, 4, false, true); d.key(0, "x", 0); d.key(0x5a, "", 0x04000000); d.key(0, "y", 0); d.toggleFold(0); console.log("zett-probe: core rows " + d.rows + " lines " + d.lines + " fold " + d.foldAt(0) + " cursors " + d.cursors); d.save(); grabLater.start() } }
     Timer { id: core2T; interval: 600; onTriggered: { const d = fileView.codeDoc; d.click(1, 0, false, false); d.lineOp("comment://"); d.lineOp("down"); const n = JSON.parse(d.find("let", "{}")).length; const r = d.replaceAll("let", "var", "{}"); console.log("zett-probe: core2 found " + n + " replaced " + r); d.save(); fileView.coreView.findBarOpen(); grabLater.start() } }
     // corelsp:FILE:act:L:C or corelsp:FILE:rename:L:C:NEW, once the server has reported (diagnostics in)
@@ -1955,9 +1993,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
         }
         SidePage {
-            visible: win.sidePage >= 0 && win.view === "page"
+            visible: win.sidePage >= 0 && (win.view === "page" || (win.view === "file" && !win.sideFile))   // a note beside the code too
             page: win.sidePage
-            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.preferredWidth: Math.max(320, rootRow.width * 0.32); Layout.fillHeight: true   // its own share: the editor beside it took it all
             Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
             win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
         }

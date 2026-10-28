@@ -17,7 +17,7 @@ ColumnLayout {
     readonly property string ext: win.filePath.slice(win.filePath.lastIndexOf(".") + 1)
     property string saved: win.fileText            // what is on disk
     readonly property bool dirty: newCore ? codeView.doc.dirty : ed.text !== saved   // the new core keeps its own text
-    readonly property int curLine: ed.line
+    readonly property int curLine: newCore ? coreView.carets[0][0] : ed.line   // the cursor of whichever editor is in use
     readonly property int curCol: ed.col
     readonly property int lineCount: lineStarts.length
     property string note: ""
@@ -177,7 +177,7 @@ ColumnLayout {
         return out
     }
     // the declaration the cursor is in, and the ones around it (impl › fn)
-    readonly property var symbolPath: { const p = []; for (const it of outline) { if (it.line > ed.line) break; while (p.length && p[p.length - 1].depth >= it.depth) p.pop(); p.push(it) } return p }
+    readonly property var symbolPath: { const p = []; for (const it of outline) { if (it.line > curLine) break; while (p.length && p[p.length - 1].depth >= it.depth) p.pop(); p.push(it) } return p }
     property bool showDiff: false
     property var diffRows: []
     function loadDiff() {

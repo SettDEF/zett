@@ -115,6 +115,7 @@ Rectangle {
     function maxTop() { return Math.max(0, doc.rows * lh - height + lh * 4) }
     // keep the main cursor in view
     function follow() {
+        if (height <= 0) return   // not laid out yet: following then scrolled the cursor out of view
         const y = doc.lineRow(carets[0][0]) * lh
         if (y < scrollY) scrollY = y
         else if (y + lh > scrollY + height) scrollY = y + lh - height
