@@ -696,11 +696,12 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
-            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:")) {
+            if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:")) {
                 const rel = app.shotEngine.split(":")[1]
                 win.openFile({ path: app.dir + "/" + rel, rel })
                 if (app.shotEngine.startsWith("fileedit:")) Qt.callLater(() => fileView.testEdit("// edited in zett\n"))
                 if (app.shotEngine.startsWith("filefind:")) Qt.callLater(() => fileView.testFind(app.shotEngine.split(":")[2] ?? ""))
+                if (app.shotEngine.startsWith("fileproblems:")) Qt.callLater(() => fileView.testProblems())
                 claudeShot.start(); return
             }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }

@@ -23,13 +23,21 @@ ColumnLayout {
     Timer { id: rehl; interval: 150; onTriggered: fv.shownText = ed.text }
     Connections { target: fv.win; function onFileTextChanged() { fv.saved = fv.win.fileText; fv.shownText = fv.win.fileText } }
 
+    // Ctrl+S: with Format on save (Settings) the server formats first, the save follows its edits (or 1.5 s)
+    property bool savePending: false
+    Timer { id: saveWait; interval: 1500; onTriggered: if (fv.savePending) { fv.savePending = false; fv.write() } }
     function save() {
+        if (win.prefs.formatOnSave && lsp && !savePending) { savePending = true; ask("format", 0); saveWait.restart(); return }
+        write()
+    }
+    function write() {
         if (app.writeFile(win.filePath, ed.text)) { saved = ed.text; note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"
         noteT.restart()
     }
     function revert() { ed.text = saved; shownText = saved }
     function testEdit(s) { ed.forceActiveFocus(); ed.cursorPosition = 0; ed.insert(0, s); save() }
     function testFind(q) { findBar.open("find"); findBar.q.text = q }
+    function testProblems() { showProblems = true }
     Timer { id: noteT; interval: 1800; onTriggered: fv.note = "" }
 
     // ── the language server (Rust: lsp.rs): diagnostics, completion, hover, definition, format ──
@@ -74,6 +82,7 @@ ColumnLayout {
                 // from the end, so earlier positions stay right
                 for (const x of f.edits.slice().reverse()) { const a = fv.posOf(x[0], x[1]), b = fv.posOf(x[2], x[3]); ed.remove(a, b); ed.insert(a, x[4]) }
             }
+            if (e.type === "edits" && fv.savePending) { fv.savePending = false; saveWait.stop(); fv.write() }
         }
     }
     function takeComp(i) {
@@ -90,7 +99,10 @@ ColumnLayout {
         Text { Layout.fillWidth: true; text: win.filePath.replace(app.dir + "/", "").split("/").join("  ›  ") + (fv.dirty ? "  ●" : ""); elide: Text.ElideMiddle; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
         Text { visible: fv.note.length > 0; text: fv.note; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
         // the server: its errors and warnings for this file
-        Text { visible: fv.lsp; text: fv.errors + fv.warnings ? `${fv.errors} errors  ${fv.warnings} warnings` : "no problems"; color: fv.errors ? t.removed : fv.warnings ? "#d8a54a" : t.faint; font.family: t.mono; font.pixelSize: 11 }
+        Text { visible: fv.lsp; text: fv.errors + fv.warnings ? `${fv.errors} errors  ${fv.warnings} warnings` : "no problems"; color: fv.errors ? t.removed : fv.warnings ? "#d8a54a" : t.faint; font.family: t.mono; font.pixelSize: 11 
+            HoverHandler { cursorShape: fv.diags.length ? Qt.PointingHandCursor : Qt.ArrowCursor }
+            TapHandler { onTapped: fv.showProblems = !fv.showProblems }
+        }
         Text { text: `Ln ${ed.line + 1}, Col ${ed.col + 1}  ·  ${ed.lineCount} lines  ·  ${fv.ext}`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
         Repeater {
             model: fv.dirty ? [["undo", "Revert", () => fv.revert()], ["save", "Save  Ctrl S", () => fv.save()]] : [["open_in_new", "Open with the system", () => Qt.openUrlExternally("file://" + fv.win.filePath)]]
@@ -273,6 +285,38 @@ ColumnLayout {
                     }
                     if (e.key === Qt.Key_Escape && findBar.mode) { findBar.close(); e.accepted = true; return }
                     if (!e.modifiers || (e.modifiers & Qt.ShiftModifier)) fv.win.codeKey(ed, e)
+                }
+            }
+        }
+    }
+    // the problems of this file (click the counts in the header): a click jumps there
+    property bool showProblems: false
+    Rectangle {
+        visible: fv.showProblems && fv.diags.length > 0
+        Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16
+        implicitHeight: Math.min(180, probCol.implicitHeight + 16)
+        radius: 14; color: t.card
+        Flickable {
+            anchors { fill: parent; margins: 8 }
+            clip: true; contentHeight: probCol.implicitHeight
+            Column {
+                id: probCol
+                width: parent.width
+                Repeater {
+                    model: fv.diags.slice().sort((a, b) => a.severity - b.severity || a.line - b.line)
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: probCol.width; height: 28; radius: 8
+                        color: pH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        Row {
+                            x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                            Text { text: modelData.severity === 1 ? "error" : modelData.severity === 2 ? "warning" : "info"; color: modelData.severity === 1 ? t.removed : modelData.severity === 2 ? "#d8a54a" : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                            Text { text: `${modelData.line + 1}:${modelData.col + 1}`; color: t.faint; font.family: t.mono; font.pixelSize: 11; width: 50 }
+                            Text { text: modelData.message.split("\n")[0]; color: t.text; font.family: t.sans; font.pixelSize: 12; elide: Text.ElideRight; width: probCol.width - 110 }
+                        }
+                        HoverHandler { id: pH; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: { ed.cursorPosition = fv.posOf(modelData.line, modelData.col); ed.forceActiveFocus() } }
+                    }
                 }
             }
         }

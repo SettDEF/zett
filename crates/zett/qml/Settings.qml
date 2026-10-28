@@ -141,6 +141,10 @@ Flickable {
                 label: "Ligatures in code"; hint: "=> drawn as ⇒ in code blocks"
                 Choice { options: [[false, "Off"], [true, "On"]]; value: win.prefs.codeLigatures ?? false; onPicked: (v) => win.setPref("codeLigatures", v) }
             }
+            Row1 {
+                label: "Format on save"; hint: "Ctrl+S in the file editor lets the language server format first"
+                Choice { options: [[false, "Off"], [true, "On"]]; value: win.prefs.formatOnSave ?? false; onPicked: (v) => win.setPref("formatOnSave", v) }
+            }
         }
 
         Section {
