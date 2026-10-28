@@ -3416,3 +3416,31 @@ end
 api.nvim__ns_set = api.nvim__ns_set or function() end
 api.nvim__ns_get = api.nvim__ns_get or function() return { wins = {} } end
 api.nvim__redraw = api.nvim__redraw or function() end
+
+-- every vim.uv handle gets what libuv gives them all: is_closing (true once closed), close(cb) calling cb,
+-- ref / unref / has_ref, get_type, and getpath on watchers (gitsigns' watcher calls is_closing first)
+for kind, name in pairs({ timer = "new_timer", fs_event = "new_fs_event", fs_poll = "new_fs_poll", check = "new_check",
+  idle = "new_idle", prepare = "new_prepare", async = "new_async", signal = "new_signal", pipe = "new_pipe",
+  tcp = "new_tcp", tty = "new_tty", udp = "new_udp", poll = "new_poll", process = "new_process" }) do
+  local make = vim.uv[name]
+  if type(make) == "function" then
+    vim.uv[name] = function(...)
+      local h = make(...)
+      if type(h) ~= "table" then return h end
+      local closing, refd, close = false, true, h.close
+      h.close = function(self, cb)
+        if closing then return end
+        closing = true
+        if close then close(self) end
+        if cb then z.defer(0, cb) end
+      end
+      h.is_closing = h.is_closing or function() return closing end
+      h.ref = h.ref or function() refd = true end
+      h.unref = h.unref or function() refd = false end
+      h.has_ref = h.has_ref or function() return refd end
+      h.get_type = h.get_type or function() return kind end
+      if kind == "fs_event" or kind == "fs_poll" then h.getpath = h.getpath or function(self) return self.path end end
+      return h
+    end
+  end
+end
