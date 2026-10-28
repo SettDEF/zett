@@ -71,6 +71,11 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "moveBlock"]
         fn move_block(self: Pin<&mut Zett>, from: i32, to: i32) -> bool;
+        /// a list item under the one above it / back out one level (Tab / Shift+Tab); false when it cannot
+        #[qinvokable]
+        fn indent(self: Pin<&mut Zett>, block: i32) -> bool;
+        #[qinvokable]
+        fn outdent(self: Pin<&mut Zett>, block: i32) -> bool;
         /// the last change taken back / done again, across blocks; false when there is nothing
         #[qinvokable]
         fn undo(self: Pin<&mut Zett>) -> bool;
@@ -243,6 +248,19 @@ impl Default for ZettRust {
     }
 }
 
+/// A page's blocks in reading order with their depth: nested list items follow their parent.
+fn flat(ws: &zett_core::Workspace, page: BlockId) -> Vec<(BlockId, usize)> {
+    fn walk(ws: &zett_core::Workspace, b: BlockId, depth: usize, out: &mut Vec<(BlockId, usize)>) {
+        for c in ws.children(b) {
+            out.push((c, depth));
+            walk(ws, c, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(ws, page, 0, &mut out);
+    out
+}
+
 fn kind_json(k: &Kind) -> serde_json::Value {
     match k {
         Kind::Page => serde_json::json!({ "kind": "page" }),
@@ -297,9 +315,10 @@ impl ZettRust {
     /// The open page for QML: blocks, title, backlinks (returned, not stored; see compute_pages)
     fn compute_page(&self) -> Option<(QString, QString, QString)> {
         let (Some(f), Some(p)) = (&self.folder, self.page()) else { return None };
-        let list: Vec<_> = f.ws.children(p).into_iter().map(|b| {
+        let list: Vec<_> = flat(&f.ws, p).into_iter().map(|(b, depth)| {
             let mut v = kind_json(&f.ws.kind(b));
             v["text"] = serde_json::Value::String(f.ws.text(b));
+            v["depth"] = depth.into();
             v
         }).collect();
         let title = QString::from(&f.ws.text(p));
@@ -309,7 +328,7 @@ impl ZettRust {
         let mut back = Vec::new();
         for q in f.ws.pages() {
             if q == p { continue; }
-            for b in f.ws.children(q) {
+            for (b, _) in flat(&f.ws, q) {
                 let t = f.ws.text(b);
                 if t.to_lowercase().contains(&needle) {
                     back.push(serde_json::json!({ "title": f.ws.text(q), "text": t }));
@@ -319,9 +338,10 @@ impl ZettRust {
         Some((blocks, title, QString::from(&serde_json::Value::Array(back).to_string())))
     }
 
+    /// block `i` of the open page, counting nested ones in reading order (as QML lists them)
     fn block(&self, i: i32) -> Option<BlockId> {
         let (f, p) = (self.folder.as_ref()?, self.page()?);
-        f.ws.children(p).get(usize::try_from(i).ok()?).copied()
+        flat(&f.ws, p).get(usize::try_from(i).ok()?).map(|(b, _)| *b)
     }
 
     fn save(&self) {
@@ -404,11 +424,18 @@ impl qobject::Zett {
         let at = {
             let r = self.as_mut().rust_mut();
             let (Some(f), Some(p)) = (r.folder.as_ref(), r.page()) else { return -1 };
-            let n = f.ws.children(p).len();
-            let at = if after < 0 { n } else { (after as usize + 1).min(n) };
-            let _ = f.ws.insert(p, at, kind_from(&kind.to_string()), "");
+            // after block `after`: its sibling right below it (at the same depth); else at the end of the page
+            let list = flat(&f.ws, p);
+            let made = match usize::try_from(after).ok().and_then(|i| list.get(i)).copied() {
+                Some((b, _)) => {
+                    let parent = f.ws.parent(b).unwrap_or(p);
+                    let at = f.ws.children(parent).iter().position(|x| *x == b).map(|i| i + 1).unwrap_or(0);
+                    f.ws.insert(parent, at, kind_from(&kind.to_string()), "")
+                }
+                None => f.ws.insert(p, f.ws.children(p).len(), kind_from(&kind.to_string()), ""),
+            };
             r.save();
-            at as i32
+            match made { Ok(id) => flat(&f.ws, p).iter().position(|(x, _)| *x == id).map(|i| i as i32).unwrap_or(-1), Err(_) => -1 }
         };
         self.publish();
         at
@@ -456,7 +483,7 @@ impl qobject::Zett {
         let Some(f) = &r.folder else { return QString::from("[]") };
         let mut out = Vec::new();
         for (pi, p) in r.order.iter().enumerate() {
-            for (bi, b) in f.ws.children(*p).into_iter().enumerate() {
+            for (bi, (b, _)) in flat(&f.ws, *p).into_iter().enumerate() {
                 if matches!(f.ws.kind(b), Kind::Todo { checked: false }) {
                     out.push(serde_json::json!({ "page": pi, "title": f.ws.text(*p), "block": bi, "text": f.ws.text(b) }));
                 }
@@ -864,7 +891,7 @@ impl qobject::Zett {
         let Some(f) = &r.folder else { return QString::from("[]") };
         let mut n: std::collections::BTreeMap<String, usize> = Default::default();
         for p in f.ws.pages() {
-            for b in f.ws.children(p) {
+            for (b, _) in flat(&f.ws, p) {
                 if matches!(f.ws.kind(b), Kind::Code { .. }) { continue }
                 for w in f.ws.text(b).split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')') {
                     let Some(t) = w.strip_prefix('#') else { continue };
@@ -976,9 +1003,10 @@ impl qobject::Zett {
     fn page_blocks(&self, index: i32) -> QString {
         let r = self.rust();
         let (Some(f), Some(p)) = (&r.folder, usize::try_from(index).ok().and_then(|i| r.order.get(i).copied())) else { return QString::from("[]") };
-        let list: Vec<_> = f.ws.children(p).into_iter().map(|b| {
+        let list: Vec<_> = flat(&f.ws, p).into_iter().map(|(b, depth)| {
             let mut v = kind_json(&f.ws.kind(b));
             v["text"] = serde_json::Value::String(f.ws.text(b));
+            v["depth"] = depth.into();
             v
         }).collect();
         QString::from(&serde_json::Value::Array(list).to_string())
@@ -1069,9 +1097,60 @@ impl qobject::Zett {
             let r = r.get_mut();
             let (Some(b), Some(p)) = (r.block(from), r.page()) else { return false };
             let Some(f) = r.folder.as_ref() else { return false };
-            let n = f.ws.children(p).len() as i32;
-            if to < 0 || to >= n || to == from { return false }
-            let ok = f.ws.move_to(b, p, to as usize).is_ok();
+            // `to` counts in reading order: the block takes that block's place among its siblings (with
+            // what is nested in it); never into itself
+            let Some(target) = r.block(to) else { return false };
+            if to == from || target == b { return false }
+            let mut up = f.ws.parent(target);
+            while let Some(a) = up { if a == b { return false } up = f.ws.parent(a); }
+            let parent = f.ws.parent(target).unwrap_or(p);
+            let sibs = f.ws.children(parent);
+            let at = sibs.iter().position(|x| *x == target).unwrap_or(0);
+            let ok = f.ws.move_to(b, parent, at).is_ok();
+            if ok { r.save() }
+            ok
+        };
+        if ok { self.publish() }
+        ok
+    }
+}
+
+// ── nesting list items (Tab / Shift+Tab): in the file as indented Markdown lists ──
+impl qobject::Zett {
+    fn indent(mut self: Pin<&mut Self>, block: i32) -> bool {
+        let ok = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let (Some(b), Some(p)) = (r.block(block), r.page()) else { return false };
+            let Some(f) = r.folder.as_ref() else { return false };
+            let list = |k: &Kind| matches!(k, Kind::Bullet | Kind::Todo { .. });
+            let parent = f.ws.parent(b).unwrap_or(p);
+            let sibs = f.ws.children(parent);
+            let i = sibs.iter().position(|x| *x == b).unwrap_or(0);
+            // under the list item just above it, at its end; only list items nest (Markdown lists)
+            let Some(prev) = i.checked_sub(1).map(|j| sibs[j]) else { return false };
+            if !list(&f.ws.kind(b)) || !list(&f.ws.kind(prev)) { return false }
+            let ok = f.ws.move_to(b, prev, f.ws.children(prev).len()).is_ok();
+            if ok { r.save() }
+            ok
+        };
+        if ok { self.publish() }
+        ok
+    }
+
+    fn outdent(mut self: Pin<&mut Self>, block: i32) -> bool {
+        let ok = {
+            let r = self.as_mut().rust_mut();
+            let r = r.get_mut();
+            let (Some(b), Some(p)) = (r.block(block), r.page()) else { return false };
+            let Some(f) = r.folder.as_ref() else { return false };
+            let Some(parent) = f.ws.parent(b).filter(|x| *x != p) else { return false };
+            let grand = f.ws.parent(parent).unwrap_or(p);
+            // right after its old parent; the items below it in that list come along, nested under it
+            let at = f.ws.children(grand).iter().position(|x| *x == parent).map(|i| i + 1).unwrap_or(0);
+            let below: Vec<_> = f.ws.children(parent).into_iter().skip_while(|x| *x != b).skip(1).collect();
+            let mut ok = f.ws.move_to(b, grand, at).is_ok();
+            for x in below { ok &= f.ws.move_to(x, b, f.ws.children(b).len()).is_ok(); }
             if ok { r.save() }
             ok
         };

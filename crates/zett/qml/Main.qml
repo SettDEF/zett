@@ -491,6 +491,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine === "nest") {
+                const d = () => win.blocks.map(b => b.text + ":" + (b.depth ?? 0)).join(" ")
+                const a = d(); const i1 = app.indent(1); const b = d(); const i2 = app.indent(2); const c = d(); const o = app.outdent(2); const e = d()
+                console.log(`zett-probe: nest ${a} | indent1 ${i1}: ${b} | indent2 ${i2}: ${c} | outdent2 ${o}: ${e}`)
+                console.log("zett-probe: md " + JSON.stringify(app.markdown()))
+                grabLater.start(); return
+            }
             if (app.shotEngine === "move") {
                 const before = win.blocks.map(b => b.text.slice(0, 12))
                 const ok = app.moveBlock(0, 1); const mid = win.blocks.map(b => b.text.slice(0, 12))
@@ -679,10 +686,12 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     }
                     Rectangle { visible: win.dropAt === blockItem.index; x: body.x; width: body.width; height: 2; radius: 1; color: t.accent; y: 0 }
 
+                    // nested list items step in, 26 px a level
+                    readonly property int depth: modelData.depth ?? 0
                     RowLayout {
                         id: body
-                        x: (list.width - list.column) / 2
-                        width: list.column
+                        x: (list.width - list.column) / 2 + blockItem.depth * 26
+                        width: list.column - blockItem.depth * 26
                         y: blockItem.kind === "heading" ? 10 : 2
                         spacing: 10
 
@@ -855,6 +864,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 } else win.curBlock = blockItem.index   // Alt+Up/Down move this one
 
                                 Keys.onPressed: (e) => {
+                                    // Tab / Shift+Tab: a list item nests under the one above / comes back out (saved first)
+                                    if ((e.key === Qt.Key_Tab || e.key === Qt.Key_Backtab) && (blockItem.kind === "bullet" || blockItem.kind === "todo")) {
+                                        const i = blockItem.index, out = e.key === Qt.Key_Backtab || (e.modifiers & Qt.ShiftModifier)
+                                        if (saveLater.running) { saveLater.stop(); app.setText(i, edit.text) }
+                                        if (out ? app.outdent(i) : app.indent(i)) win.focusAfter = i
+                                        e.accepted = true
+                                        return
+                                    }
                                     if (normal) {
                                         // the engine first (SPC tree, :, the user's own maps); what it leaves is Vim's
                                         win.engineKey(e, vimTok)

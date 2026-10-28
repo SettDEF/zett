@@ -35,8 +35,8 @@ pub fn to_markdown(ws: &Workspace, page: BlockId) -> String {
         prev_list = list;
         match kind {
             Kind::Heading(l) => out += &format!("{} {}\n", "#".repeat(l as usize), text),
-            Kind::Todo { checked } => out += &format!("- [{}] {}\n", if checked { "x" } else { " " }, text),
-            Kind::Bullet => out += &format!("- {text}\n"),
+            // a list item with its nested items under it, two spaces per level
+            Kind::Todo { .. } | Kind::Bullet => write_item(ws, b, 0, &mut out),
             Kind::Quote => {
                 for line in text.split('\n') {
                     out += &if line.is_empty() { ">\n".to_string() } else { format!("> {line}\n") };
@@ -51,6 +51,18 @@ pub fn to_markdown(ws: &Workspace, page: BlockId) -> String {
         }
     }
     out
+}
+
+/// One list item and, indented under it, the items nested in it.
+fn write_item(ws: &Workspace, b: BlockId, depth: usize, out: &mut String) {
+    let pad = "  ".repeat(depth);
+    match ws.kind(b) {
+        Kind::Todo { checked } => *out += &format!("{pad}- [{}] {}\n", if checked { "x" } else { " " }, ws.text(b)),
+        _ => *out += &format!("{pad}- {}\n", ws.text(b)),
+    }
+    for c in ws.children(b) {
+        write_item(ws, c, depth + 1, out);
+    }
 }
 
 /// Reads Markdown into a new page and returns it. A file without front matter
@@ -78,12 +90,18 @@ pub fn replace_page(ws: &Workspace, page: BlockId, md: &str) -> Result<()> {
 fn read_blocks(ws: &Workspace, page: BlockId, body: &str) -> Result<()> {
     let lines: Vec<&str> = body.lines().collect();
     let mut i = 0;
+    // the open list items by depth (2 spaces or a tab per level): an indented item goes under the
+    // last item one level up; anything that is not a list item ends the list
+    let mut items: Vec<(usize, BlockId)> = Vec::new();
     while i < lines.len() {
         let line = lines[i];
         let t = line.trim_start();
         if t.is_empty() {
             i += 1;
             continue;
+        }
+        if !(t.starts_with("- ") || t.starts_with("* ") || t.starts_with("+ ")) {
+            items.clear();
         }
         // fenced code
         if let Some(fence) = fence_of(t) {
@@ -107,13 +125,18 @@ fn read_blocks(ws: &Workspace, page: BlockId, body: &str) -> Result<()> {
         }
         // todo / bullet
         if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")).or_else(|| t.strip_prefix("+ ")) {
+            let indent = line.chars().take_while(|c| *c == ' ' || *c == '\t').map(|c| if c == '\t' { 2 } else { 1 }).sum::<usize>() / 2;
+            while items.last().is_some_and(|(d, _)| *d >= indent) { items.pop(); }
+            let parent = items.last().map(|(_, b)| *b).unwrap_or(page);
+            let depth = items.len();
             let lower = rest.to_ascii_lowercase();
-            if lower.starts_with("[ ] ") || lower.starts_with("[x] ") || lower == "[ ]" || lower == "[x]" {
+            let id = if lower.starts_with("[ ] ") || lower.starts_with("[x] ") || lower == "[ ]" || lower == "[x]" {
                 let checked = lower.starts_with("[x]");
-                ws.append(page, Kind::Todo { checked }, rest.get(4..).unwrap_or("").trim_end())?;
+                ws.append(parent, Kind::Todo { checked }, rest.get(4..).unwrap_or("").trim_end())?
             } else {
-                ws.append(page, Kind::Bullet, rest.trim_end())?;
-            }
+                ws.append(parent, Kind::Bullet, rest.trim_end())?
+            };
+            items.push((depth, id));
             i += 1;
             continue;
         }
@@ -258,5 +281,25 @@ mod replace_tests {
         assert_eq!(ws.text(p), "New");
         assert_eq!(ws.children(p).iter().map(|b| ws.kind(*b)).collect::<Vec<_>>(), vec![Kind::Todo { checked: true }]);
         assert_eq!(ws.pages(), vec![p]);
+    }
+}
+
+#[cfg(test)]
+mod nested_tests {
+    use super::*;
+
+    #[test]
+    fn nested_lists_round_trip() {
+        let md = "---\ntitle: N\n---\n\n- top\n  - child\n    - [ ] grandchild todo\n  - [x] second child\n- next top\n\nA paragraph.\n\n- new list\n";
+        let ws = Workspace::new();
+        let p = from_markdown(&ws, md, "N").unwrap();
+        let top = ws.children(p);
+        assert_eq!(top.len(), 4, "two items of the first list, the paragraph, the new list");
+        assert_eq!(ws.text(top[0]), "top");
+        let kids = ws.children(top[0]);
+        assert_eq!(kids.iter().map(|b| ws.text(*b)).collect::<Vec<_>>(), vec!["child", "second child"]);
+        assert_eq!(ws.text(ws.children(kids[0])[0]), "grandchild todo");
+        assert!(ws.children(top[3]).is_empty(), "a paragraph ends the list: the new list starts at the top");
+        assert_eq!(to_markdown(&ws, p), md, "written back the same");
     }
 }
