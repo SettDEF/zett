@@ -17,6 +17,9 @@ ColumnLayout {
     readonly property string ext: win.filePath.slice(win.filePath.lastIndexOf(".") + 1)
     property string saved: win.fileText            // what is on disk
     readonly property bool dirty: ed.text !== saved
+    readonly property int curLine: ed.line
+    readonly property int curCol: ed.col
+    readonly property int lineCount: ed.lineCount
     property string note: ""
     // the coloured copy follows the text a moment after typing (big files stay quick)
     property string shownText: win.fileText
@@ -105,7 +108,6 @@ ColumnLayout {
             HoverHandler { cursorShape: fv.diags.length ? Qt.PointingHandCursor : Qt.ArrowCursor }
             TapHandler { onTapped: fv.showProblems = !fv.showProblems }
         }
-        Text { text: `Ln ${ed.line + 1}, Col ${ed.col + 1}  ·  ${ed.lineCount} lines  ·  ${fv.ext}`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
         Repeater {
             model: fv.dirty ? [["undo", "Revert", () => fv.revert()], ["save", "Save  Ctrl S", () => fv.save()]] : [["open_in_new", "Open with the system", () => Qt.openUrlExternally("file://" + fv.win.filePath)]]
             delegate: Rectangle {

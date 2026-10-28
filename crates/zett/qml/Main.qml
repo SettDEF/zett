@@ -298,6 +298,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Timer { interval: 5000; running: win.active; repeat: true; onTriggered: win.refreshSide() }
     // a file: a .md page opens as a page, a folder folds, anything else in the file view
     property string filePath: ""
+    readonly property var fileEditor: fileView   // the status bar reads the editor's cursor and problems
     property string fileText: ""
     // a file opened in the editor at a 0-based line and column
     function openFileAt(x, line, col) { openFile(x); Qt.callLater(() => fileView.goTo(line, col)) }
@@ -306,7 +307,21 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const pi = win.pages.findIndex(p => p.path === x.path)
         if (pi >= 0) { win.openPage(pi); return }
         filePath = x.path; fileText = app.readFile(x.path); view = "file"
+        if (!fileTabs.includes(x.path)) fileTabs = fileTabs.concat([x.path])
+        if (!app.shot.length) setPref("lastFile", x.path)
     }
+    // the open files as tabs beside the pages'; closing the shown one shows its neighbour (or the page)
+    property var fileTabs: []
+    function closeFileTab(p) {
+        const at = fileTabs.indexOf(p)
+        fileTabs = fileTabs.filter(x => x !== p)
+        if (view !== "file" || filePath !== p) return
+        if (fileTabs.length) { const n = fileTabs[Math.min(at, fileTabs.length - 1)]; openFile({ path: n, rel: n }) } else view = "page"
+    }
+    // editor first: the last file opened comes back at start (Settings > start can still say page or today)
+    Timer { running: !app.shot.length; interval: 0; onTriggered: { const p = win.prefs.lastFile; if (p && p.startsWith(app.dir + "/") && win.prefs.start !== "page" && win.prefs.start !== "today" && app.readFile(p).length) win.openFile({ path: p, rel: p }) } }
+    // the branch for the status bar, from .git/HEAD
+    readonly property string gitBranch: { const h = app.readFile(app.dir + "/.git/HEAD").trim(); return h.startsWith("ref: refs/heads/") ? h.slice(16) : /^[0-9a-f]{40}$/.test(h) ? h.slice(0, 7) : "" }
     // drops: workspace files move into the folder, outside files are copied in
     function dropInto(d, dir) {
         let moved = 0, copied = 0
@@ -361,7 +376,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
     Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys(); readHooks() }
-    Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
+    Shortcut { sequence: "Ctrl+W"; onActivated: win.view === "file" ? win.closeFileTab(win.filePath) : win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }

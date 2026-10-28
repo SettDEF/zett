@@ -57,6 +57,36 @@ Item {
             opacity: tabDrag.active ? 0.85 : 1
         }
     }
+    // the open files, after the pages: a code icon, the file name; middle-click or × closes
+    Row {
+        id: fileTabRow
+        anchors { left: tabList.left; leftMargin: Math.min(tabList.contentWidth + (win.tabs.length ? 6 : 0), tabList.width); top: tabList.top }
+        spacing: 6
+        Repeater {
+            model: win.fileTabs
+            delegate: Rectangle {
+                required property string modelData
+                readonly property bool sel: win.view === "file" && win.filePath === modelData
+                width: Math.min(200, ftRow.implicitWidth + 24); height: 32; radius: 16
+                color: sel ? Qt.alpha(t.accent, 0.16) : ftHov.hovered ? t.raised : t.card
+                RowLayout {
+                    id: ftRow
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                    spacing: 6
+                    Text { text: "code"; color: parent.parent.sel ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                    Text { Layout.maximumWidth: 130; text: modelData.slice(modelData.lastIndexOf("/") + 1); elide: Text.ElideMiddle; color: parent.parent.sel ? t.text : t.dim; font.family: t.mono; font.pixelSize: 12; font.weight: parent.parent.sel ? Font.DemiBold : Font.Normal }
+                    Text {
+                        text: "close"; color: fcHov.hovered ? t.text : t.faint; font.family: t.icons; font.pixelSize: 14
+                        HoverHandler { id: fcHov; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: win.closeFileTab(modelData) }
+                    }
+                }
+                HoverHandler { id: ftHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: win.openFile({ path: modelData, rel: modelData }) }
+                TapHandler { acceptedButtons: Qt.MiddleButton; onTapped: win.closeFileTab(modelData) }
+            }
+        }
+    }
     RowLayout {
         id: toolRow
         visible: win.view === "page"
