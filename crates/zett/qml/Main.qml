@@ -265,8 +265,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
     // undo / redo across blocks (the engine); inside a block being typed in, its own undo comes first
-    Shortcut { sequence: "Alt+Up"; onActivated: win.moveCur(-1) }
-    Shortcut { sequence: "Alt+Down"; onActivated: win.moveCur(1) }
+    Shortcut { sequence: "Alt+Up"; onActivated: win.selecting ? win.selMove(-1) : win.moveCur(-1) }
+    Shortcut { sequence: "Alt+Down"; onActivated: win.selecting ? win.selMove(1) : win.moveCur(1) }
     Shortcut { sequences: ["Ctrl+Z"]; onActivated: if (!app.undo()) win.note("nothing to undo") }
     Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; onActivated: if (!app.redo()) win.note("nothing to redo") }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
@@ -338,9 +338,61 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const s = ed.selectionStart, e = ed.selectionEnd, t = ed.selectedText
         ed.remove(s, e); ed.insert(s, a + t + z)
     }
+    // ── several blocks at once: selected with Shift/Ctrl+click on the grip or Ctrl+A ──
+    property var selBlocks: []          // indices in reading order, sorted
+    property int selAnchor: -1
+    Connections { target: win; function onBlocksChanged() { if (win.selBlocks.some(i => i >= win.blocks.length)) win.selBlocks = win.selBlocks.filter(i => i < win.blocks.length) } }
+    function selectBlock(i, how) {
+        rootRow.forceActiveFocus()      // out of the text: keys act on the selection (what was typed is saved)
+        if (how === "range" && selAnchor >= 0) {
+            const a = Math.min(selAnchor, i), b = Math.max(selAnchor, i)
+            selBlocks = Array.from({ length: b - a + 1 }, (_, k) => a + k)
+        } else if (how === "toggle") {
+            selBlocks = selBlocks.includes(i) ? selBlocks.filter(x => x !== i) : selBlocks.concat([i]).sort((x, y) => x - y)
+            selAnchor = i
+        } else { selBlocks = [i]; selAnchor = i }
+    }
+    function clearSel() { selBlocks = []; selAnchor = -1 }
+    readonly property bool selecting: selBlocks.length > 0
+    // the actions; indices shift as blocks go, so deletes run from the last one up
+    function selDelete() { for (const i of selBlocks.slice().reverse()) app.remove(i); clearSel() }
+    function selKind(k) { for (const i of selBlocks) app.setKind(i, k) }
+    function selCopy() { win.copyText(selBlocks.map(i => blockMd(win.blocks[i])).join("\n")); win.note(`${selBlocks.length} blocks copied as Markdown`) }
+    function selMove(d) {
+        const s = selBlocks
+        if (d < 0 && s[0] === 0 || d > 0 && s[s.length - 1] >= blocks.length - 1) return
+        const order = d < 0 ? s : s.slice().reverse()
+        for (const i of order) app.moveBlock(i, i + d)
+        selBlocks = s.map(i => i + d)
+    }
+    function selNest(out) { for (const i of (out ? selBlocks.slice().reverse() : selBlocks)) out ? app.outdent(i) : app.indent(i) }
+    function selMenu(x, y) {
+        const n = selBlocks.length
+        ctx.show(x, y, clipRow(selBlocks.map(i => blockMd(win.blocks[i])).join("\n"), () => { win.selCopy(); win.selDelete() }, null, null).slice(0, 2), [
+            { icon: "transform", label: `Turn ${n} into`, sub: win.slashItems.map(s => ({ label: s.label, key: s.hint, run: () => win.selKind(s.k) })) },
+            { icon: "format_indent_increase", label: "Nest", key: "Tab", run: () => win.selNest(false) },
+            { icon: "format_indent_decrease", label: "Un-nest", key: "⇧ Tab", run: () => win.selNest(true) },
+            { icon: "arrow_upward", label: "Move up", key: "Alt ↑", run: () => win.selMove(-1) },
+            { icon: "arrow_downward", label: "Move down", key: "Alt ↓", run: () => win.selMove(1) },
+            { icon: "deselect", label: "Clear selection", key: "Esc", run: () => win.clearSel() },
+            { sep: true },
+            { icon: "delete", label: `Delete ${n} blocks`, key: "Del", danger: true, run: () => win.selDelete() }
+        ])
+    }
+    // the keys while blocks are selected (no text has the focus then)
+    Shortcut { enabled: win.selecting; sequences: ["Delete", "Backspace"]; onActivated: win.selDelete() }
+    Shortcut { enabled: win.selecting; sequence: "Escape"; onActivated: win.clearSel() }
+    Shortcut { enabled: win.selecting; sequence: "Ctrl+C"; onActivated: win.selCopy() }
+    Shortcut { enabled: win.selecting; sequence: "Ctrl+X"; onActivated: { win.selCopy(); win.selDelete() } }
+    Shortcut { enabled: win.selecting; sequence: "Tab"; onActivated: win.selNest(false) }
+    Shortcut { enabled: win.selecting; sequence: "Shift+Tab"; onActivated: win.selNest(true) }
+    // Ctrl+A while no text has the focus: every block
+    Shortcut { enabled: !(win.activeFocusItem instanceof TextEdit) && win.view === "page"; sequence: "Ctrl+A"; onActivated: { win.selBlocks = win.blocks.map((_, i) => i); win.selAnchor = 0 } }
+
     function blockMenu(i, x, y, ed, link) {
         const b = win.blocks[i]
         if (!b) return
+        if (win.selBlocks.length > 1 && win.selBlocks.includes(i)) { win.selMenu(x, y); return }
         // on a [[link]]: what to do with that page
         if (link) {
             const title = decodeURIComponent(link)
@@ -491,6 +543,16 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine === "multisel") { win.selectBlock(1, "one"); win.selectBlock(2, "range"); grabLater.start(); return }
+            if (app.shotEngine === "multi") {
+                const d = () => win.blocks.map(b => b.text + ":" + (b.depth ?? 0)).join(" ")
+                const a = d(); win.selectBlock(1, "one"); win.selectBlock(2, "range"); const s1 = JSON.stringify(win.selBlocks)
+                win.selMove(1); const b = d() + " sel " + JSON.stringify(win.selBlocks)
+                win.selNest(false); const c = d()
+                win.selDelete(); const e = d()
+                console.log(`zett-probe: multi ${a} | select ${s1} | down: ${b} | nest: ${c} | delete: ${e}`)
+                Qt.quit(); return
+            }
             if (app.shotEngine === "nest") {
                 const d = () => win.blocks.map(b => b.text + ":" + (b.depth ?? 0)).join(" ")
                 const a = d(); const i1 = app.indent(1); const b = d(); const i2 = app.indent(2); const c = d(); const o = app.outdent(2); const e = d()
@@ -660,6 +722,14 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     readonly property int level: modelData.level ?? 1
                     readonly property bool checked: modelData.checked ?? false
 
+                    // a selected block (Shift/Ctrl+click on its grip, Ctrl+A): a tint behind it
+                    Rectangle {
+                        visible: win.selBlocks.includes(blockItem.index)
+                        x: body.x - 8; y: body.y - 3; width: body.width + 16; height: body.height + 6
+                        radius: t.rRow
+                        color: Qt.alpha(t.accent, 0.14)
+                        border.width: 1; border.color: Qt.alpha(t.accent, 0.35)
+                    }
                     // the grip left of the block (on hover): drag it onto another block to move it there
                     HoverHandler { id: blockHov }
                     Rectangle {
@@ -675,7 +745,10 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                         Drag.active: gripDrag.active
                         Drag.keys: ["zett-block"]
                         Drag.hotSpot.x: 10; Drag.hotSpot.y: 12
-                        TapHandler { onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, null, "") }
+                        // a click: the block menu; Shift+click: select from the last selected block to here; Ctrl+click: add / remove this one
+                        TapHandler { acceptedModifiers: Qt.NoModifier; onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, null, "") }
+                        TapHandler { acceptedModifiers: Qt.ShiftModifier; onTapped: win.selectBlock(blockItem.index, "range") }
+                        TapHandler { acceptedModifiers: Qt.ControlModifier; onTapped: win.selectBlock(blockItem.index, "toggle") }
                     }
                     // where a dragged block would land: a line above this one
                     DropArea {
