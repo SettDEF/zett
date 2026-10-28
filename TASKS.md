@@ -380,3 +380,18 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 13. [x] Zen mode (Ctrl K Z), minimap setting, breadcrumbs with the symbol the cursor is in
 14. [x] Tasks from Cargo/npm/make in the palette, their errors in Problems
 15. [ ] Debug: later (DAP) — planned only
+
+## zett: the best editor out there (planned 2026-10-28)
+
+1. [ ] Editor core: drawn by zett itself, not a Qt TextEdit. CodeDoc (Rust: rope, cursors, undo, folds, syntect
+   colours per line with cached parse states) + CodeView.qml (only the lines on screen, cursors from the mono
+   grid). Stages: a) view + edit + save behind Settings > Editor > New editor core; b) everything FileView has
+   (LSP, find, minimap, git gutter, completion, line keys); c) folding, wrap, huge files; d) default, old one gone
+2. [ ] Claude built in: inline edits as a diff to accept/reject, explain/fix/test on a selection, agent changes
+   reviewed like a PR, the claude-ui sessions in one place
+3. [ ] Notes and code together: link a function to a note, live results in pages, a file's notes in its outline
+4. [ ] A real zash in the panel (zash as a library zett draws)
+5. [ ] Debugging (DAP): breakpoints in the gutter, variables, call stack, debug console
+6. [ ] Git: blame per line, side-by-side diff, merge conflicts, branches, stage single lines
+7. [ ] Speed budgets enforced: open < 100 ms, typing latency < 8 ms, checked by gui-check
+8. [ ] Extensions: Lua + WASM plugins, a small store
