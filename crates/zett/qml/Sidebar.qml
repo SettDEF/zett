@@ -3,7 +3,11 @@ import QtQuick.Layouts
 
 // The sidebar: search, Today, the pages, the workspace folder with git status, tags, settings; drops land here.
 Rectangle {
+    id: side
     required property var win
+    // the foot's templates (templates/*.md become a new page)
+    property bool templatesOpen: false
+    readonly property var templates: win.files.filter(x => !x.dir && /^templates\/[^/]+\.md$/.test(x.rel))
     required property var t
     required property var app
     Layout.fillHeight: true
@@ -67,6 +71,7 @@ Rectangle {
         }
         // section header with the new-page button
         RowLayout {
+            visible: win.sideMode !== "files"   // the activity bar picks what the sidebar shows
             Layout.fillWidth: true
             Layout.leftMargin: 8
             Layout.bottomMargin: 2
@@ -83,6 +88,7 @@ Rectangle {
         }
         ListView {
             id: pageList
+            visible: win.sideMode !== "files"
             Layout.fillWidth: true
             // as tall as its pages, up to half the sidebar; the file tree takes the rest
             Layout.preferredHeight: Math.min(contentHeight, Math.max(120, (parent.height - 200) * 0.5))
@@ -139,10 +145,10 @@ Rectangle {
             TapHandler { onTapped: parent.toggled() }
             HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
-        SectionHead { label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen }
+        SectionHead { visible: win.sideMode !== "pages"; label: "FILES"; count: win.files.filter(x => !x.dir).length; open: win.filesOpen; onToggled: win.filesOpen = !win.filesOpen }
         ListView {
             id: fileList
-            visible: win.filesOpen
+            visible: win.filesOpen && win.sideMode !== "pages"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 60
@@ -185,9 +191,9 @@ Rectangle {
         }
 
         // ── TAGS ──
-        SectionHead { visible: win.tagList.length > 0; label: "TAGS"; count: win.tagList.length; open: win.tagsOpen; onToggled: win.tagsOpen = !win.tagsOpen }
+        SectionHead { visible: win.tagList.length > 0 && win.sideMode !== "files"; label: "TAGS"; count: win.tagList.length; open: win.tagsOpen; onToggled: win.tagsOpen = !win.tagsOpen }
         Flow {
-            visible: win.tagsOpen && win.tagList.length > 0
+            visible: win.tagsOpen && win.tagList.length > 0 && win.sideMode !== "files"
             Layout.fillWidth: true
             Layout.leftMargin: 8
             Layout.bottomMargin: 6
@@ -232,6 +238,43 @@ Rectangle {
                         TapHandler { onTapped: win.runHook(modelData.cmd) }
                     }
                 }
+            }
+        }
+        // the foot, as in Notion: templates (templates/*.md become a new page), import, trash
+        Repeater {
+            model: [
+                { icon: "auto_awesome_mosaic", label: "Templates", hint: side.templates.length ? `${side.templates.length}` : "", run: () => side.templatesOpen = !side.templatesOpen },
+                { icon: "download", label: "Import", hint: "drop files here", run: () => Qt.openUrlExternally("file://" + app.dir) },
+                { icon: "delete", label: "Trash", hint: "", run: () => Qt.openUrlExternally("trash:///") }
+            ]
+            delegate: Rectangle {
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: 32; radius: t.rRow
+                color: footHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                    spacing: 10
+                    Text { text: modelData.icon; color: t.faint; font.family: t.icons; font.pixelSize: 18 }
+                    Text { Layout.fillWidth: true; text: modelData.label; color: t.dim; font.family: t.sans; font.pixelSize: 14 }
+                    Text { text: modelData.hint; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                }
+                HoverHandler { id: footHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: modelData.run() }
+            }
+        }
+        // the templates, when open: a click copies one into the workspace as a new page
+        Text { visible: side.templatesOpen && !side.templates.length; Layout.leftMargin: 38; Layout.fillWidth: true; wrapMode: Text.Wrap; text: "Put .md files in templates/ to start pages from them"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+        Repeater {
+            model: side.templatesOpen ? side.templates : []
+            delegate: Rectangle {
+                required property var modelData
+                Layout.fillWidth: true; Layout.leftMargin: 28
+                implicitHeight: 28; radius: t.rRow
+                color: tplHov.hovered ? Qt.alpha(t.accent, 0.12) : "transparent"
+                Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.name.replace(/\.md$/, ""); color: t.text; font.family: t.sans; font.pixelSize: 13 }
+                HoverHandler { id: tplHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: { app.importFiles("file://" + modelData.path, app.dir); side.templatesOpen = false } }
             }
         }
         // settings, at the foot of the sidebar

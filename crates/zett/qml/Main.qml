@@ -193,6 +193,8 @@ ApplicationWindow {
     property var whichKey: []        // what can follow them
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
+    // what the sidebar shows, picked in the activity bar: all, pages (Notion-like), files (an explorer)
+    property string sideMode: prefs.sideMode ?? "all"
     property bool detailsShown: prefs.details ?? true
     // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
     property bool codeLigatures: prefs.codeLigatures ?? false
@@ -207,7 +209,12 @@ ApplicationWindow {
     // code blocks' Run: output gathered here by block (their delegates are rebuilt meanwhile), then a code block under it
     property var runBuf: ({})
     function runStart(i) { const b = Object.assign({}, runBuf); b[i] = ""; runBuf = b }
-    function addResult(after, text) { const n = app.addBlock(after, "code"); if (n >= 0) app.setText(n, text) }
+    // the output block right under it is reused (one per code block), else one is made
+    function addResult(after, text) {
+        const next = win.blocks[after + 1]
+        if (next && next.kind === "code" && next.lang === "output") { app.setText(after + 1, text); return }
+        const n = app.addBlock(after, "code:output"); if (n >= 0) app.setText(n, text)
+    }
     Connections {
         target: app
         function onRunOutput(id, chunk, done, code) {
@@ -789,6 +796,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         spacing: 0
 
         // ───────── sidebar ─────────
+        ActivityBar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme }
         Sidebar { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
         // ───────── the page ─────────
@@ -938,6 +946,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 delegate: Item {
                     id: blockItem
                     property bool unfolded: false    // a long code block opened past its 12 lines
+                    // a Run's output (code with lang "output"): no numbers, no chips, quiet text
+                    readonly property bool isOutput: modelData.kind === "code" && modelData.lang === "output"
                     required property var modelData
                     required property int index
                     width: list.width
@@ -1073,7 +1083,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             readonly property real lineH: edit.contentHeight / Math.max(1, edit.lineCount)
                             readonly property bool folded: codeLines > 15 && !edit.activeFocus && !blockItem.unfolded
                             clip: blockItem.kind === "code"
-                            implicitHeight: special.visible ? special.implicitHeight : folded ? 12 * lineH + 40 + 34 : edit.implicitHeight + (blockItem.kind === "code" ? 52 + (codeLines > 15 ? 30 : 0) : 0)
+                            implicitHeight: special.visible ? special.implicitHeight : folded ? 12 * lineH + 34 + 34 : edit.implicitHeight + (blockItem.kind === "code" ? 46 + (codeLines > 15 ? 30 : 0) : 0)
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
@@ -1248,7 +1258,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 z: 0
                             }
                             Column {
-                                visible: blockItem.kind === "code"
+                                visible: blockItem.kind === "code" && !blockItem.isOutput
                                 x: 8; y: edit.y; width: 30
                                 z: 3
                                 readonly property int cur: edit.activeFocus ? edit.text.slice(0, edit.cursorPosition).split("\n").length - 1 : -1
@@ -1318,10 +1328,25 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                                 TapHandler { onTapped: blockItem.unfolded = !blockItem.unfolded }
                             }
+                            // a Run's output: a small label, × takes it away
+                            Row {
+                                visible: blockItem.isOutput
+                                x: 14; y: 8
+                                spacing: 6
+                                z: 5
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "terminal"; color: t.faint; font.family: t.icons; font.pixelSize: 14 }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Output"; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "close"; color: oxH.hovered ? t.text : t.faint; font.family: t.icons; font.pixelSize: 14
+                                    HoverHandler { id: oxH; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: app.remove(blockItem.index) }
+                                }
+                            }
                             // the language, top right of a code block: a chip that opens the list of languages
                             Rectangle {
                                 id: langChip
-                                visible: blockItem.kind === "code"
+                                visible: blockItem.kind === "code" && !blockItem.isOutput
                                 property bool open: false
                                 anchors { right: parent.right; top: parent.top; margins: 6 }
                                 width: langRow.implicitWidth + 14; height: 22; radius: 11
@@ -1376,7 +1401,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             TextEdit {
                                 id: edit
                                 opacity: shown.visible || special.visible || (codeShown.visible && !edit.activeFocus) ? 0 : 1
-                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0; leftMargin: blockItem.kind === "code" ? 48 : 0; topMargin: blockItem.kind === "code" ? 40 : 0; bottomMargin: blockItem.kind === "code" && parent.codeLines > 15 ? 42 : (blockItem.kind === "code" ? 12 : 0) }
+                                anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0; leftMargin: blockItem.kind === "code" ? (blockItem.isOutput ? 14 : 48) : 0; topMargin: blockItem.kind === "code" ? (blockItem.isOutput ? 30 : 34) : 0; bottomMargin: blockItem.kind === "code" && parent.codeLines > 15 ? 42 : (blockItem.kind === "code" ? 12 : 0) }
                                 text: blockItem.modelData.text
                                 wrapMode: blockItem.kind === "code" ? TextEdit.NoWrap : TextEdit.Wrap   // code: lines as in the coloured copy under it
                                 selectByMouse: true
