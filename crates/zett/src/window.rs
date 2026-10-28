@@ -67,6 +67,12 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// the window's own settings (~/.config/zett/gui.json), "{}" when there are none
+        #[qinvokable]
+        fn settings(self: &Zett) -> QString;
+        #[qinvokable]
+        #[cxx_name = "saveSettings"]
+        fn save_settings(self: &Zett, json: &QString) -> bool;
         /// the system share sheet (~/.scripts/apps/share/share) with these items, one per line
         #[qinvokable]
         #[cxx_name = "shareItems"]
@@ -912,5 +918,23 @@ impl qobject::Zett {
         let bin = home.join(".scripts/apps/share/share");
         let items: Vec<String> = items.to_string().lines().filter(|l| !l.is_empty()).map(String::from).collect();
         !items.is_empty() && bin.is_file() && std::process::Command::new(bin).args(items).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().is_ok()
+    }
+}
+
+// ── the window's settings: ~/.config/zett/gui.json (the editor's own options stay in init.lua) ──
+impl qobject::Zett {
+    fn settings(&self) -> QString {
+        let p = zett_script::config_dir().join("gui.json");
+        QString::from(&std::fs::read_to_string(p).ok().filter(|s| serde_json::from_str::<serde_json::Value>(s).is_ok()).unwrap_or_else(|| "{}".into()))
+    }
+
+    fn save_settings(&self, json: &QString) -> bool {
+        let s = json.to_string();
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { return false };
+        let dir = zett_script::config_dir();
+        let tmp = dir.join(".gui.json.tmp");
+        std::fs::create_dir_all(&dir).is_ok()
+            && std::fs::write(&tmp, serde_json::to_string_pretty(&v).unwrap_or(s)).is_ok()
+            && std::fs::rename(&tmp, dir.join("gui.json")).is_ok()
     }
 }

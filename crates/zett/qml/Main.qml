@@ -18,6 +18,14 @@ ApplicationWindow {
     // for the parts in their own files (Today, FileView, Details): `win: win` there would bind to itself
     readonly property var theme: t
     readonly property var engine: app
+    // the window's settings (Settings.qml): ~/.config/zett/gui.json, applied as they change
+    property var prefs: { try { return JSON.parse(app.settings()) } catch (e) { return {} } }
+    function setPref(k, v) {
+        const p = Object.assign({}, prefs); p[k] = v; prefs = p
+        app.saveSettings(JSON.stringify(p))
+        if (k === "keys") applyKeys()
+    }
+    function applyKeys() { if (prefs.keys) app.evalLua(`zett.opt.keys = "${prefs.keys}"`) }
 
     // ── colours from tinct (same file the shell and the other apps read) ──
     QtObject {
@@ -34,7 +42,8 @@ ApplicationWindow {
         readonly property color accent: pick("primary", "#a8caeb")
         readonly property color onAccent: pick("on_primary", "#0b334e")
         readonly property color rule: pick("outline_variant", "#42474d")
-        readonly property string sans: "Google Sans Flex"
+        readonly property string sans: win.prefs.sans ?? "Google Sans Flex"
+        readonly property real scale: win.prefs.scale ?? 1
         readonly property string mono: "MonaspiceNe Nerd Font"
         readonly property string icons: "Material Symbols Rounded"
         readonly property int rCard: 23
@@ -109,9 +118,9 @@ ApplicationWindow {
     property var whichKey: []        // what can follow them
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
-    property bool detailsShown: true
+    property bool detailsShown: prefs.details ?? true
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
-    property string view: app.shot.length > 0 && app.shotEngine !== "today" ? "page" : "today"
+    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : "page") : (prefs.start === "page" ? "page" : "today")
     function openPage(i) { win.view = "page"; app.open(i) }
     function jumpToBlock(i) { list.positionViewAtIndex(i, ListView.Beginning); win.focusAfter = i }
     // the sidebar's Files and Tags, read again when pages change and every few seconds
@@ -188,12 +197,13 @@ ApplicationWindow {
         if (i === app.current && tabs.length) win.openPage(tabs[Math.min(at, tabs.length - 1)])
     }
     Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
-    Component.onCompleted: { addTab(app.current); refreshSide() }
+    Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys() }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: win.openPalette() }
+    Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
     // the palette: the window's own actions, then every engine command with its key
     // the page's file into the system share sheet (apps, phone, Telegram…)
     function sharePage() {
@@ -211,7 +221,8 @@ ApplicationWindow {
             { icon: "close", name: "Close tab", desc: "", keys: "Ctrl W", run: () => win.closeTab(app.current) },
             { icon: "markdown", name: "Show Markdown", desc: "the file as on disk", keys: "", run: () => win.showSource = !win.showSource },
             { icon: "ios_share", name: "Share page", desc: "the system share sheet", keys: "", run: () => win.sharePage() },
-            { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) }
+            { icon: "refresh", name: "Reload config", desc: "init.lua again", keys: "", run: () => win.applyScript(JSON.parse(app.reloadConfig())) },
+            { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" }
         ]
         let binds = []
         try { binds = JSON.parse(app.bindingList()).bindings || [] } catch (e) {}
@@ -642,6 +653,22 @@ ApplicationWindow {
                         }
                     }
                 }
+                // settings, at the foot of the sidebar
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 34; radius: t.rRow
+                    readonly property bool sel: win.view === "settings"
+                    color: sel ? Qt.alpha(t.accent, 0.16) : setHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                        spacing: 10
+                        Text { text: "settings"; color: parent.parent.sel ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 18 }
+                        Text { Layout.fillWidth: true; text: "Settings"; color: parent.parent.sel ? t.text : t.dim; font.family: t.sans; font.pixelSize: 14 }
+                        Text { text: "Ctrl ,"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                    HoverHandler { id: setHov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: win.view = "settings" }
+                }
                 Text {
                     Layout.fillWidth: true
                     text: app.dir
@@ -716,6 +743,7 @@ ApplicationWindow {
 
             // ───────── Today: the start screen ─────────
             Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+            Settings { visible: win.view === "settings"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // empty workspace
             ColumnLayout {
@@ -754,7 +782,7 @@ ApplicationWindow {
                 bottomMargin: 120
                 model: win.blocks
                 boundsBehavior: Flickable.StopAtBounds
-                readonly property real column: Math.min(760, width - 96)
+                readonly property real column: Math.min(win.prefs.width ?? 760, width - 96)
 
                 header: Item {
                     width: list.width
@@ -881,7 +909,7 @@ ApplicationWindow {
                                 selectByMouse: true
                                 color: blockItem.kind === "todo" && blockItem.checked ? t.faint : blockItem.kind === "quote" ? t.dim : t.text
                                 font.family: blockItem.kind === "code" ? t.mono : t.sans
-                                font.pixelSize: blockItem.kind === "heading" ? [0, 28, 22, 18, 16, 15, 14][blockItem.level] : blockItem.kind === "code" ? 14 : 16
+                                font.pixelSize: Math.round((blockItem.kind === "heading" ? [0, 28, 22, 18, 16, 15, 14][blockItem.level] : blockItem.kind === "code" ? 14 : 16) * t.scale)
                                 font.weight: blockItem.kind === "heading" ? Font.DemiBold : Font.Normal
                                 font.italic: blockItem.kind === "quote"
                                 font.strikeout: blockItem.kind === "todo" && blockItem.checked
