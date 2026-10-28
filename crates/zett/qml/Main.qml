@@ -762,6 +762,18 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     x: (list.width - list.column) / 2
                     width: list.column
                     spacing: 6
+                    // where you are: the workspace, the page, the heading the cursor is under
+                    RowLayout {
+                        spacing: 4
+                        readonly property string heading: { let h = ""; for (let i = 0; i <= win.curBlock && i < win.blocks.length; i++) if (win.blocks[i].kind === "heading") h = win.blocks[i].text; return h }
+                        Text { text: "folder"; color: t.faint; font.family: t.icons; font.pixelSize: 14 }
+                        Text { text: app.dir.slice(app.dir.lastIndexOf("/") + 1); color: t.faint; font.family: t.sans; font.pixelSize: 12
+                            TapHandler { onTapped: win.view = "today" } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+                        Text { text: "›"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                        Text { text: (pageHead.icon ? pageHead.icon + " " : "") + (app.title || "Untitled"); color: t.dim; font.family: t.sans; font.pixelSize: 12 }
+                        Text { visible: parent.heading.length > 0; text: "›"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                        Text { visible: parent.heading.length > 0; text: parent.heading; elide: Text.ElideRight; Layout.maximumWidth: 260; color: t.dim; font.family: t.sans; font.pixelSize: 12 }
+                    }
                     // the page's icon (its "icon" property); without one, "Add icon" on hover
                     Text {
                         visible: pageHead.icon.length > 0
