@@ -847,8 +847,8 @@ ApplicationWindow {
                     Chip { visible: win.vimMode.length > 0; label: win.vimMode; tint: win.vimMode === "INSERT" ? t.dim : t.accent }
                     Chip { icon: "check_circle"; label: "saved"; tint: t.accent }
                     Chip { icon: "notes"; label: `${win.blocks.length} blocks` }
-                    Item { Layout.fillWidth: true }
-                    Text { text: "Ctrl P go to  ·  Ctrl \\ details  ·  / block kinds  ·  Esc Vim"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    // the hints take what is left and shorten, so nothing runs past the card
+                    Text { Layout.fillWidth: true; Layout.minimumWidth: 0; horizontalAlignment: Text.AlignRight; elide: Text.ElideLeft; text: "Ctrl P go to  ·  Ctrl \\ details  ·  / block kinds  ·  Esc Vim"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
                     Rectangle {
                         implicitWidth: 28; implicitHeight: 24; radius: 12
                         color: detHov.hovered ? t.raised : t.card
