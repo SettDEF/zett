@@ -114,13 +114,13 @@ Item {
                 readonly property var it: parent ? parent.it : ({})
                 readonly property bool on: it.enabled !== false
                 implicitHeight: 34; radius: 10
-                color: on && hov.hovered ? (it.danger ? Qt.alpha("#ffb4ab", 0.12) : Qt.alpha(m.theme.text, 0.08)) : "transparent"
+                color: on && hov.hovered ? (it.danger ? Qt.alpha(m.theme.removed, 0.12) : Qt.alpha(m.theme.text, 0.08)) : "transparent"
                 opacity: on ? 1 : 0.38
                 RowLayout {
                     anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                     spacing: 10
-                    Text { text: it.icon ?? ""; color: it.danger ? "#ffb4ab" : m.theme.dim; font.family: m.theme.icons; font.pixelSize: 18 }
-                    Text { Layout.fillWidth: true; text: it.label ?? ""; elide: Text.ElideRight; color: it.danger ? "#ffb4ab" : m.theme.text; font.family: m.theme.sans; font.pixelSize: 13 }
+                    Text { text: it.icon ?? ""; color: it.danger ? m.theme.removed : m.theme.dim; font.family: m.theme.icons; font.pixelSize: 18 }
+                    Text { Layout.fillWidth: true; text: it.label ?? ""; elide: Text.ElideRight; color: it.danger ? m.theme.removed : m.theme.text; font.family: m.theme.sans; font.pixelSize: 13 }
                     Text { visible: !!it.key; text: it.key ?? ""; color: m.theme.faint; font.family: m.theme.mono; font.pixelSize: 11 }
                     Text { visible: !!it.sub; text: "chevron_right"; color: m.theme.faint; font.family: m.theme.icons; font.pixelSize: 18 }
                 }

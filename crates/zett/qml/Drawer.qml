@@ -45,7 +45,7 @@ Rectangle {
             spacing: 6
             Text { text: "terminal"; color: t.accent; font.family: t.icons; font.pixelSize: 17 }
             Text { text: "Shell"; color: t.text; font.family: t.sans; font.pixelSize: 13; font.weight: Font.DemiBold }
-            Text { text: d.running ? "running…" : d.history.length ? (d.lastCode === 0 ? "ok" : `exit ${d.lastCode}`) : app.dir; elide: Text.ElideLeft; Layout.fillWidth: true; color: d.running ? t.accent : d.lastCode === 0 ? t.faint : "#ffb4ab"; font.family: t.mono; font.pixelSize: 11 }
+            Text { text: d.running ? "running…" : d.history.length ? (d.lastCode === 0 ? "ok" : `exit ${d.lastCode}`) : app.dir; elide: Text.ElideLeft; Layout.fillWidth: true; color: d.running ? t.accent : d.lastCode === 0 ? t.faint : t.removed; font.family: t.mono; font.pixelSize: 11 }
             Repeater {
                 // [icon, label, action]
                 model: [["stop_circle", "Stop", "stop"], ["delete_sweep", "Clear", "clear"], ["open_in_new", "zash here", "zash"], ["close", "", "close"]]
@@ -55,7 +55,7 @@ Rectangle {
                     implicitWidth: bRow.implicitWidth + (modelData[1] ? 20 : 10); implicitHeight: 26; radius: 13
                     color: bh.hovered ? t.raised : "transparent"
                     RowLayout { id: bRow; anchors.centerIn: parent; spacing: 4
-                        Text { text: modelData[0]; color: modelData[2] === "stop" ? "#ffb4ab" : t.dim; font.family: t.icons; font.pixelSize: 15 }
+                        Text { text: modelData[0]; color: modelData[2] === "stop" ? t.removed : t.dim; font.family: t.icons; font.pixelSize: 15 }
                         Text { visible: !!modelData[1]; text: modelData[1]; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
                     HoverHandler { id: bh; cursorShape: Qt.PointingHandCursor }
                     TapHandler {

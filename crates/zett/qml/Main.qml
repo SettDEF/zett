@@ -42,6 +42,10 @@ ApplicationWindow {
         readonly property color accent: pick("primary", "#a8caeb")
         readonly property color onAccent: pick("on_primary", "#0b334e")
         readonly property color rule: pick("outline_variant", "#42474d")
+        // states (git in the file tree): from the theme, like the rest
+        readonly property color changed: pick("tertiary", "#d4bee6")
+        readonly property color added: pick("primary", "#a8caeb")
+        readonly property color removed: pick("error", "#ffb4ab")
         readonly property string sans: win.prefs.sans ?? "Google Sans Flex"
         readonly property real scale: win.prefs.scale ?? 1
         readonly property string mono: "MonaspiceNe Nerd Font"
@@ -448,6 +452,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
+            if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
@@ -676,18 +681,19 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
-                            // a code block, coloured by its language while not being edited
+                            // a code block, coloured by its language; while it is edited it lies under the (then
+                            // transparent) editor, which keeps the cursor and the selection: colours as you type
                             Text {
                                 id: codeShown
                                 anchors.fill: edit
-                                visible: !edit.activeFocus && blockItem.kind === "code"
+                                visible: blockItem.kind === "code"
                                 text: visible ? app.highlight(blockItem.modelData.lang ?? "", edit.text) : ""
                                 textFormat: Text.RichText
                                 font: edit.font
                                 color: edit.color
                                 HoverHandler { cursorShape: Qt.IBeamCursor }
-                                TapHandler { onTapped: edit.forceActiveFocus() }
-                                z: 2
+                                TapHandler { enabled: !edit.activeFocus; onTapped: edit.forceActiveFocus() }
+                                z: edit.activeFocus ? 0 : 2   // editing: under the editor (declared after it), over the block's fill
                             }
                             // the language, top right of a code block
                             Text {
@@ -716,12 +722,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
                             TextEdit {
                                 id: edit
-                                opacity: shown.visible || codeShown.visible ? 0 : 1
+                                opacity: shown.visible || (codeShown.visible && !edit.activeFocus) ? 0 : 1
                                 anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0 }
                                 text: blockItem.modelData.text
-                                wrapMode: TextEdit.Wrap
+                                wrapMode: blockItem.kind === "code" ? TextEdit.NoWrap : TextEdit.Wrap   // code: lines as in the coloured copy under it
                                 selectByMouse: true
-                                color: blockItem.kind === "todo" && blockItem.checked ? t.faint : blockItem.kind === "quote" ? t.dim : t.text
+                                color: blockItem.kind === "code" && activeFocus ? "transparent" : blockItem.kind === "todo" && blockItem.checked ? t.faint : blockItem.kind === "quote" ? t.dim : t.text
+                                cursorDelegate: Rectangle { width: 2; color: t.accent; visible: edit.cursorVisible }
                                 font.family: blockItem.kind === "code" ? t.mono : t.sans
                                 font.pixelSize: Math.round((blockItem.kind === "heading" ? [0, 28, 22, 18, 16, 15, 14][blockItem.level] : blockItem.kind === "code" ? 14 : 16) * t.scale)
                                 font.weight: blockItem.kind === "heading" ? Font.DemiBold : Font.Normal
@@ -729,7 +736,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 font.strikeout: blockItem.kind === "todo" && blockItem.checked
                                 readonly property bool visualSel: win.vimMode === "VISUAL" || win.vimMode === "V-LINE"
                                 selectionColor: visualSel ? Qt.alpha(t.accent, 0.42) : normal ? t.accent : Qt.alpha(t.accent, 0.4)
-                                selectedTextColor: normal && !visualSel ? t.onAccent : t.text
+                                selectedTextColor: blockItem.kind === "code" ? t.text : normal && !visualSel ? t.onAccent : t.text
                                 // Vim normal mode: keys go to zett-edit (window.rs), the cursor is a block
                                 property bool normal: false
                                 property bool applying: false

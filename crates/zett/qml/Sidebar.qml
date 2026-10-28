@@ -160,7 +160,7 @@ Rectangle {
                     anchors { fill: parent; leftMargin: 8 + modelData.depth * 14; rightMargin: 10 }
                     spacing: 6
                     Text { text: modelData.dir ? (parent.parent.shut ? "folder" : "folder_open") : modelData.name.endsWith(".md") ? "description" : "draft"; color: modelData.dir ? t.dim : t.faint; font.family: t.icons; font.pixelSize: 16 }
-                    Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; color: modelData.git === "M" ? "#e5c07b" : modelData.git === "U" || modelData.git === "A" ? "#98c379" : modelData.git === "D" ? "#e06c75" : t.dim; font.family: t.sans; font.pixelSize: 13 }
+                    Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; color: modelData.git === "M" ? t.changed : modelData.git === "U" || modelData.git === "A" ? t.added : modelData.git === "D" ? t.removed : t.dim; font.family: t.sans; font.pixelSize: 13 }
                     Text { visible: modelData.git.length > 0; text: modelData.git; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                 }
                 // drag: a real system drag (into a folder here, onto the page, or out to other apps)
