@@ -1890,13 +1890,21 @@ local function place(h)
   local f = floats[h]
   local c = f.config
   local L = float_lines(h)
+  -- Neovim's row/col are where the `anchor` corner goes (fidget: "SE", the bottom right); the panel takes
+  -- its top left, so the window is moved back by its size
+  local w, hgt = math.floor(tonumber(c.width) or 40), math.floor(tonumber(c.height) or #L)
+  local row, col = math.floor(tonumber(c.row) or 0), math.floor(tonumber(c.col) or 0)
+  local a = (c.anchor or "NW"):upper()
+  local bd = (c.border and c.border ~= "none" and c.border ~= "") and 2 or 0
+  if a:find("S") then row = row - hgt - bd end
+  if a:find("E") then col = col - w - bd end
+  row, col = math.max(0, row), math.max(0, col)
   local title = c.title
   if type(title) == "table" then local t = {} for _, x in ipairs(title) do t[#t + 1] = type(x) == "table" and x[1] or tostring(x) end title = table.concat(t) end
   z.panel.open({
     id = f.panel, side = "float",
     relative = (c.relative and c.relative ~= "") and c.relative or "editor",
-    row = math.floor(tonumber(c.row) or 0), col = math.floor(tonumber(c.col) or 0),
-    width = math.floor(tonumber(c.width) or 40), height = math.floor(tonumber(c.height) or #L),
+    row = row, col = col, width = w, height = hgt,
     title = title or "", focus = f.enter and true or false,
     on_key = function(key) return float_key(h, key) end,
     on_close = function() floats[h] = nil end,

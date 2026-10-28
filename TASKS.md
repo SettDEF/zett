@@ -395,3 +395,8 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 6. [ ] Git: blame per line, side-by-side diff, merge conflicts, branches, stage single lines
 7. [ ] Speed budgets enforced: open < 100 ms, typing latency < 8 ms, checked by gui-check
 8. [ ] Extensions: Lua + WASM plugins, a small store
+
+## Terminal zett: floats
+- [ ] Glass floats (fidget, hover, completion): a blurred, see-through background under a float. A terminal cannot blur
+      part of its cell grid, so zash draws it: zett tells zash the float's rectangle (an escape sequence zash knows),
+      zash blurs what is under it; plain terminals keep the solid background
