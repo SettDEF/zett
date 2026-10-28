@@ -107,20 +107,24 @@ ApplicationWindow {
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
     property bool detailsShown: true
+    // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
+    property string view: app.shot.length > 0 && app.shotEngine !== "today" ? "page" : "today"
+    function openPage(i) { win.view = "page"; app.open(i) }
     // the open pages (indices into pages), the focus stack's tabs
     property var tabs: []
     function addTab(i) { if (i >= 0 && !tabs.includes(i)) tabs = tabs.concat([i]) }
     function closeTab(i) {
         const at = tabs.indexOf(i)
         tabs = tabs.filter(x => x !== i)
-        if (i === app.current && tabs.length) app.open(tabs[Math.min(at, tabs.length - 1)])
+        if (i === app.current && tabs.length) win.openPage(tabs[Math.min(at, tabs.length - 1)])
     }
-    Connections { target: app; function onCurrentChanged() { win.addTab(app.current) } }
+    Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
     Component.onCompleted: addTab(app.current)
     Shortcut { sequence: "Ctrl+W"; onActivated: win.closeTab(app.current) }
-    Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) app.open(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
+    Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
     Shortcut { sequence: "Ctrl+\\"; onActivated: win.detailsShown = !win.detailsShown }
     Shortcut { sequence: "F2"; onActivated: win.renameReq++ }
+    Shortcut { sequence: "Ctrl+Shift+D"; onActivated: win.view = "today" }
 
     // ── context menus: one component, each place passes its own items ──
     TextEdit { id: clip; visible: false }
@@ -201,9 +205,9 @@ ApplicationWindow {
         ])
         row[3].run = () => ctx.run(row[3])
         ctx.show(x, y, row, [
-            { icon: "open_in_new", label: "Open", run: () => app.open(i) },
+            { icon: "open_in_new", label: "Open", run: () => win.openPage(i) },
             { icon: "tab", label: "Keep in a tab", enabled: !win.tabs.includes(i), run: () => win.addTab(i) },
-            { icon: "edit", label: "Rename", key: "F2", run: () => { app.open(i); win.renameReq++ } },
+            { icon: "edit", label: "Rename", key: "F2", run: () => { win.openPage(i); win.renameReq++ } },
             { icon: "folder_open", label: "Show in folder", run: () => Qt.openUrlExternally("file://" + app.dir) },
             { icon: "add", label: "New page", run: () => { app.newPage("Untitled"); win.focusAfter = 0 } },
             { sep: true },
@@ -217,7 +221,7 @@ ApplicationWindow {
     function tabMenu(i, x, y) {
         ctx.show(x, y, [], [
             { icon: "close", label: "Close", key: "Ctrl W", run: () => win.closeTab(i) },
-            { icon: "tab_close_right", label: "Close others", enabled: win.tabs.length > 1, run: () => { win.tabs = [i]; app.open(i) } },
+            { icon: "tab_close_right", label: "Close others", enabled: win.tabs.length > 1, run: () => { win.tabs = [i]; win.openPage(i) } },
             { icon: "link", label: "Copy link", run: () => win.copyText(`[[${(win.pages[i] ?? {}).title || "Untitled"}]]`) }
         ])
     }
@@ -370,6 +374,23 @@ ApplicationWindow {
                     HoverHandler { id: searchHov; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: { quickField.text = ""; quick.open(); quickField.forceActiveFocus() } }
                 }
+                // places: Today
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 8
+                    implicitHeight: 36; radius: t.rRow
+                    readonly property bool sel: win.view === "today"
+                    color: sel ? Qt.alpha(t.accent, 0.16) : todayHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                        spacing: 10
+                        Text { text: "wb_sunny"; color: parent.parent.sel ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 18 }
+                        Text { Layout.fillWidth: true; text: "Today"; color: parent.parent.sel ? t.text : t.dim; font.family: t.sans; font.pixelSize: 14; font.weight: parent.parent.sel ? Font.DemiBold : Font.Normal }
+                        Text { text: "Ctrl ⇧ D"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                    HoverHandler { id: todayHov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: win.view = "today" }
+                }
                 // section header with the new-page button
                 RowLayout {
                     Layout.fillWidth: true
@@ -399,7 +420,7 @@ ApplicationWindow {
                         width: ListView.view.width
                         height: 36
                         radius: t.rRow
-                        readonly property bool sel: index === app.current
+                        readonly property bool sel: index === app.current && win.view === "page"
                         color: sel ? Qt.alpha(t.accent, 0.16) : rowHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
                         RowLayout {
                             anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
@@ -416,7 +437,7 @@ ApplicationWindow {
                             Text { text: modelData.blocks; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                         }
                         HoverHandler { id: rowHov; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: app.open(index) }
+                        TapHandler { onTapped: win.openPage(index) }
                         TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.pageMenu(index, ev.scenePosition.x, ev.scenePosition.y) }
                     }
                 }
@@ -452,7 +473,7 @@ ApplicationWindow {
                     model: win.tabs
                     delegate: Rectangle {
                         required property int modelData
-                        readonly property bool sel: modelData === app.current
+                        readonly property bool sel: modelData === app.current && win.view === "page"
                         readonly property var pg: win.pages[modelData] ?? {}
                         width: Math.min(200, tabRow.implicitWidth + 24); height: 32; radius: 16
                         color: sel ? Qt.alpha(t.accent, 0.16) : tabHov.hovered ? t.raised : t.card
@@ -469,7 +490,7 @@ ApplicationWindow {
                             }
                         }
                         HoverHandler { id: tabHov; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: app.open(modelData) }
+                        TapHandler { onTapped: win.openPage(modelData) }
                         TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.tabMenu(modelData, ev.scenePosition.x, ev.scenePosition.y) }
                         TapHandler { acceptedButtons: Qt.MiddleButton; onTapped: win.closeTab(modelData) }
                     }
@@ -488,9 +509,138 @@ ApplicationWindow {
                 }
             }
 
+            // ───────── Today: the start screen ─────────
+            Flickable {
+                id: today
+                visible: win.view === "today"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentHeight: todayCol.implicitHeight + 60
+                boundsBehavior: Flickable.StopAtBounds
+                readonly property string iso: Qt.formatDate(new Date(), "yyyy-MM-dd")
+                readonly property var recent: win.pages.map((p, i) => ({ p, i })).filter(o => o.p.modified > 0).sort((a, b) => b.p.modified - a.p.modified).slice(0, 6)
+                readonly property var todos: { win.pages; win.blocks; try { return JSON.parse(app.todos()) } catch (e) { return [] } }
+                readonly property int journal: win.pages.findIndex(p => p.title === iso)
+                function ago(s) {
+                    const d = Date.now() / 1000 - s
+                    return d < 60 ? "now" : d < 3600 ? `${Math.floor(d / 60)} min` : d < 86400 ? `${Math.floor(d / 3600)} h` : `${Math.floor(d / 86400)} d`
+                }
+                component Card: Rectangle {
+                    default property alias body: inner.data
+                    property string icon
+                    property string title
+                    property string extra
+                    Layout.fillWidth: true
+                    implicitHeight: inner.implicitHeight + 28
+                    radius: 17
+                    color: t.card
+                    ColumnLayout {
+                        id: inner
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
+                        spacing: 4
+                        RowLayout {
+                            spacing: 8
+                            Layout.bottomMargin: 4
+                            Text { text: icon; color: t.accent; font.family: t.icons; font.pixelSize: 18 }
+                            Text { text: title; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+                            Item { Layout.fillWidth: true }
+                            Text { text: extra; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                        }
+                    }
+                }
+                component Row2: Rectangle {
+                    property string icon
+                    property string label
+                    property string side
+                    property bool dim: false
+                    signal clicked
+                    Layout.fillWidth: true
+                    implicitHeight: 34; radius: t.rRow
+                    color: rHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        spacing: 10
+                        Text { text: icon; color: t.faint; font.family: t.icons; font.pixelSize: 17 }
+                        Text { Layout.fillWidth: true; text: label; elide: Text.ElideRight; color: dim ? t.faint : t.text; font.family: t.sans; font.pixelSize: 13 }
+                        Text { text: side; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                    HoverHandler { id: rHov; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: parent.clicked() }
+                }
+                ColumnLayout {
+                    id: todayCol
+                    x: Math.max(24, (today.width - width) / 2)
+                    y: 28
+                    width: Math.min(760, today.width - 48)
+                    spacing: 14
+                    Text { text: Qt.formatDate(new Date(), "dddd, d MMMM"); color: t.text; font.family: t.sans; font.pixelSize: 30; font.weight: Font.Bold }
+                    Text { Layout.topMargin: -8; text: `${win.pages.length} pages  ·  ${today.todos.length} open to-dos`; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: today.width > 720 ? 2 : 1
+                        columnSpacing: 14; rowSpacing: 14
+                        Card {
+                            icon: "edit_note"; title: "Journal"; extra: today.iso
+                            Layout.alignment: Qt.AlignTop
+                            Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: today.journal >= 0 ? `${win.pages[today.journal].blocks} blocks written today` : "Nothing written today yet"; color: t.dim; font.family: t.sans; font.pixelSize: 13 }
+                            Rectangle {
+                                Layout.topMargin: 6
+                                implicitWidth: jRow.implicitWidth + 28; implicitHeight: 34; radius: 17
+                                color: jHov.hovered ? Qt.lighter(t.accent, 1.08) : t.accent
+                                RowLayout { id: jRow; anchors.centerIn: parent; spacing: 6
+                                    Text { text: today.journal >= 0 ? "arrow_forward" : "add"; color: t.onAccent; font.family: t.icons; font.pixelSize: 16 }
+                                    Text { text: today.journal >= 0 ? "Open today" : "Start today"; color: t.onAccent; font.family: t.sans; font.pixelSize: 13; font.weight: Font.DemiBold } }
+                                HoverHandler { id: jHov; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: { win.view = "page"; app.openTitle(today.iso) } }
+                            }
+                        }
+                        Card {
+                            icon: "history"; title: "Recent"; extra: ""
+                            Layout.alignment: Qt.AlignTop
+                            Text { visible: today.recent.length === 0; text: "No pages yet"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+                            Repeater {
+                                model: today.recent
+                                delegate: Row2 { required property var modelData; icon: "description"; label: modelData.p.title || "Untitled"; side: today.ago(modelData.p.modified); onClicked: win.openPage(modelData.i) }
+                            }
+                        }
+                    }
+                    Card {
+                        icon: "check_box"; title: "Open to-dos"; extra: today.todos.length ? `${today.todos.length}` : ""
+                        Text { visible: today.todos.length === 0; text: "All done. Write  [ ]  in any page to add one."; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
+                        Repeater {
+                            model: today.todos.slice(0, 12)
+                            delegate: Row2 {
+                                required property var modelData
+                                icon: "check_box_outline_blank"; label: modelData.text || "(empty)"; side: modelData.title
+                                onClicked: { win.openPage(modelData.page); win.focusAfter = modelData.block }
+                            }
+                        }
+                    }
+                    Card {
+                        icon: "keyboard"; title: "Keys"; extra: ""
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Repeater {
+                                model: [["Ctrl P", "go to a page"], ["Ctrl \\", "details"], ["F2", "rename"], ["Ctrl W", "close tab"], ["Ctrl Tab", "next tab"], ["/", "block kinds"], ["Esc", "Vim keys"], ["right-click", "menus"]]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    implicitWidth: kr.implicitWidth + 20; implicitHeight: 28; radius: 14
+                                    color: t.raised
+                                    RowLayout { id: kr; anchors.centerIn: parent; spacing: 6
+                                        Text { text: modelData[0]; color: t.accent; font.family: t.mono; font.pixelSize: 11 }
+                                        Text { text: modelData[1]; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // empty workspace
             ColumnLayout {
-                visible: win.pages.length === 0
+                visible: win.pages.length === 0 && win.view === "page"
                 Layout.alignment: Qt.AlignCenter
                 Layout.fillHeight: true
                 spacing: 10
@@ -500,7 +650,7 @@ ApplicationWindow {
 
             // Markdown source (read-only view of what is on disk)
             ScrollView {
-                visible: win.showSource && win.pages.length > 0
+                visible: win.showSource && win.pages.length > 0 && win.view === "page"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 TextArea {
@@ -516,7 +666,7 @@ ApplicationWindow {
 
             ListView {
                 id: list
-                visible: !win.showSource && win.pages.length > 0
+                visible: !win.showSource && win.pages.length > 0 && win.view === "page"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -919,7 +1069,7 @@ ApplicationWindow {
 
         // ───────── details: outline, links, info ─────────
         Rectangle {
-            visible: win.detailsShown && win.pages.length > 0
+            visible: win.detailsShown && win.pages.length > 0 && win.view === "page"
             Layout.fillHeight: true
             Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
             implicitWidth: 248

@@ -54,6 +54,9 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "trashPage"]
         fn trash_page(self: Pin<&mut Zett>, index: i32) -> bool;
+        /// every open to-do in the workspace: [{page, title, block, text}]
+        #[qinvokable]
+        fn todos(self: &Zett) -> QString;
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
         /// opens the page with this title, making it if there is none ([[links]], quick open)
@@ -213,7 +216,7 @@ impl ZettRust {
         let Some(f) = &self.folder else { return self.pages.clone() };
         let mut pages: Vec<BlockId> = f.ws.pages();
         pages.sort_by_key(|p| f.ws.text(*p).to_lowercase());
-        let list: Vec<_> = pages.iter().map(|p| serde_json::json!({ "title": f.ws.text(*p), "blocks": f.ws.children(*p).len(), "path": f.path_of(*p).map(|x| x.to_string_lossy().to_string()).unwrap_or_default() })).collect();
+        let list: Vec<_> = pages.iter().map(|p| serde_json::json!({ "title": f.ws.text(*p), "blocks": f.ws.children(*p).len(), "path": f.path_of(*p).map(|x| x.to_string_lossy().to_string()).unwrap_or_default(), "modified": f.path_of(*p).and_then(|x| std::fs::metadata(x).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0) })).collect();
         self.order = pages;
         QString::from(&serde_json::Value::Array(list).to_string())
     }
@@ -386,6 +389,20 @@ impl qobject::Zett {
         };
         self.as_mut().set_current(idx);
         self.publish();
+    }
+
+    fn todos(&self) -> QString {
+        let r = self.rust();
+        let Some(f) = &r.folder else { return QString::from("[]") };
+        let mut out = Vec::new();
+        for (pi, p) in r.order.iter().enumerate() {
+            for (bi, b) in f.ws.children(*p).into_iter().enumerate() {
+                if matches!(f.ws.kind(b), Kind::Todo { checked: false }) {
+                    out.push(serde_json::json!({ "page": pi, "title": f.ws.text(*p), "block": bi, "text": f.ws.text(b) }));
+                }
+            }
+        }
+        QString::from(&serde_json::Value::Array(out).to_string())
     }
 
     fn trash_page(mut self: Pin<&mut Self>, index: i32) -> bool {
