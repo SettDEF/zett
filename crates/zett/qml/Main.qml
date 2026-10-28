@@ -119,6 +119,8 @@ ApplicationWindow {
     property var notes: []           // notices shown in the corner
     property bool sidebarHidden: false
     property bool detailsShown: prefs.details ?? true
+    // a second page beside the editor, read-only (SidePage.qml); -1 when none
+    property int sidePage: -1
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
     property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "settings" ? "settings" : "page") : (prefs.start === "page" ? "page" : "today")
     function openPage(i) { win.view = "page"; app.open(i) }
@@ -277,6 +279,7 @@ ApplicationWindow {
             ctx.show(x, y, clipRow(`[[${title}]]`, null, null, null).slice(0, 1), [
                 { icon: "open_in_new", label: "Open " + title, run: () => app.openTitle(title) },
                 { icon: "tab", label: "Open in a tab", run: () => { app.openTitle(title); win.addTab(app.current) } },
+            { icon: "splitscreen_right", label: "Open to the side", enabled: win.pages.some(p => p.title === title), run: () => win.sidePage = win.pages.findIndex(p => p.title === title) },
                 { icon: "link_off", label: "Remove link, keep text", run: () => app.setText(i, b.text.split(`[[${title}]]`).join(title)) }
             ])
             return
@@ -317,6 +320,7 @@ ApplicationWindow {
         ctx.show(x, y, row, [
             { icon: "open_in_new", label: "Open", run: () => win.openPage(i) },
             { icon: "tab", label: "Keep in a tab", enabled: !win.tabs.includes(i), run: () => win.addTab(i) },
+            { icon: "splitscreen_right", label: "Open to the side", enabled: i !== app.current, run: () => win.sidePage = i },
             { icon: "edit", label: "Rename", key: "F2", run: () => { win.openPage(i); win.renameReq++ } },
             { icon: "folder_open", label: "Show in folder", run: () => Qt.openUrlExternally("file://" + app.dir) },
             { icon: "add", label: "New page", run: () => { app.newPage("Untitled"); win.focusAfter = 0 } },
@@ -331,6 +335,7 @@ ApplicationWindow {
     function tabMenu(i, x, y) {
         ctx.show(x, y, [], [
             { icon: "close", label: "Close", key: "Ctrl W", run: () => win.closeTab(i) },
+            { icon: "splitscreen_right", label: "Open to the side", enabled: i !== app.current, run: () => win.sidePage = i },
             { icon: "tab_close_right", label: "Close others", enabled: win.tabs.length > 1, run: () => { win.tabs = [i]; win.openPage(i) } },
             { icon: "link", label: "Copy link", run: () => win.copyText(`[[${(win.pages[i] ?? {}).title || "Untitled"}]]`) }
         ])
@@ -409,6 +414,7 @@ ApplicationWindow {
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
+            if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "palette") { win.openPalette(); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
@@ -1175,6 +1181,13 @@ ApplicationWindow {
         }
 
         // ───────── details: outline, links, info ─────────
+        SidePage {
+            visible: win.sidePage >= 0 && win.view === "page"
+            page: win.sidePage
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
+            win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
+        }
         Details { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
     }
     }

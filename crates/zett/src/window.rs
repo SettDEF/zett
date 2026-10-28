@@ -67,6 +67,10 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// another page's blocks (the side view): [{kind, level, checked, lang, text}]
+        #[qinvokable]
+        #[cxx_name = "pageBlocks"]
+        fn page_blocks(self: &Zett, index: i32) -> QString;
         /// the window's own settings (~/.config/zett/gui.json), "{}" when there are none
         #[qinvokable]
         fn settings(self: &Zett) -> QString;
@@ -936,5 +940,19 @@ impl qobject::Zett {
         std::fs::create_dir_all(&dir).is_ok()
             && std::fs::write(&tmp, serde_json::to_string_pretty(&v).unwrap_or(s)).is_ok()
             && std::fs::rename(&tmp, dir.join("gui.json")).is_ok()
+    }
+}
+
+// ── the side view: any page's blocks, read-only ──
+impl qobject::Zett {
+    fn page_blocks(&self, index: i32) -> QString {
+        let r = self.rust();
+        let (Some(f), Some(p)) = (&r.folder, usize::try_from(index).ok().and_then(|i| r.order.get(i).copied())) else { return QString::from("[]") };
+        let list: Vec<_> = f.ws.children(p).into_iter().map(|b| {
+            let mut v = kind_json(&f.ws.kind(b));
+            v["text"] = serde_json::Value::String(f.ws.text(b));
+            v
+        }).collect();
+        QString::from(&serde_json::Value::Array(list).to_string())
     }
 }

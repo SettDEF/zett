@@ -6,7 +6,7 @@ Rectangle {
     required property var win
     required property var t
     required property var app
-    visible: win.detailsShown && win.pages.length > 0 && win.view === "page"
+    visible: win.detailsShown && win.pages.length > 0 && win.view === "page" && win.sidePage < 0
     Layout.fillHeight: true
     Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
     implicitWidth: 248
