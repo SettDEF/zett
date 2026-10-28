@@ -132,6 +132,36 @@ ApplicationWindow {
         if (pi >= 0) { win.openPage(pi); return }
         filePath = x.path; fileText = app.readFile(x.path); view = "file"
     }
+    // drops: workspace files move into the folder, outside files are copied in
+    function dropInto(d, dir) {
+        let moved = 0, copied = 0
+        const outside = []
+        for (const u of d.urls) {
+            const p = decodeURIComponent(String(u).replace(/^file:\/\//, ""))
+            if (p.startsWith(app.dir + "/")) { if (app.movePath(p, dir)) moved++ }
+            else outside.push(String(u))
+        }
+        if (outside.length) copied = app.importFiles(outside.join("\n"), dir)
+        d.acceptProposedAction()
+        win.refreshSide()
+        win.note(moved + copied > 0 ? `${moved ? moved + " moved" : ""}${moved && copied ? ", " : ""}${copied ? copied + " copied in" : ""}` : "nothing to move there")
+    }
+    // a page or file dropped on the open page: a [[link]] to it at the end
+    function dropLink(d) {
+        let names = []
+        if (d.hasFormat("application/x-zett-page")) names = [d.getDataAsString("application/x-zett-page")]
+        else for (const u of d.urls) {
+            let p = decodeURIComponent(String(u).replace(/^file:\/\//, ""))
+            if (!p.startsWith(app.dir + "/")) { if (app.importFiles(String(u), app.dir) > 0) p = app.dir + "/" + p.slice(p.lastIndexOf("/") + 1); else continue }
+            const pg = win.pages.find(x => x.path === p)
+            names.push(pg ? (pg.title || "Untitled") : p.slice(app.dir.length + 1))
+        }
+        if (!names.length) return
+        d.acceptProposedAction()
+        const n = app.addBlock(win.blocks.length - 1, "paragraph")
+        app.setText(n, names.map(x => `[[${x}]]`).join(" "))
+        win.refreshSide()
+    }
     function fileMenu(x, px, py) {
         const row = clipRow(x.rel, null, null, [
             { icon: "draft", label: "Copy path", run: () => win.copyText(x.path) },
@@ -333,6 +363,7 @@ ApplicationWindow {
                 win.focusAfter = app.addBlock(-1, "paragraph")
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
+            if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
             if (app.shotEngine === "file") { win.refreshSide(); const x = win.files.find(x => !x.dir && !x.name.endsWith(".md")); if (x) win.openFile(x); grabLater.start(); return }
             if (app.shotEngine === "pagemenu") { win.pageMenu(0, 120, 170); grabLater.start(); return }
             if (app.shotEngine === "trash") { const n = win.pages.length; const ok = app.trashPage(n - 1); console.log(`zett-probe: trash ok=${ok} pages ${n} -> ${win.pages.length}`); grabLater.start(); return }
@@ -362,7 +393,11 @@ ApplicationWindow {
     Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })  }
     // the page sits in one card on the background, like the shell's panels
-    Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.width: 1; border.color: Qt.alpha(t.rule, 0.35) }
+    Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.color: pageDrop.containsDrag ? t.accent : Qt.alpha(t.rule, 0.35)
+        // a page or file dropped on the open page becomes a [[link]]
+        DropArea { id: pageDrop; anchors.fill: parent; enabled: win.view === "page"; onDropped: (d) => win.dropLink(d) }
+        border.width: pageDrop.containsDrag ? 2 : 1
+    }
     ContextMenu { id: ctx; theme: t; z: 1000 }
 
     RowLayout {
@@ -375,6 +410,9 @@ ApplicationWindow {
             visible: !win.sidebarHidden
             implicitWidth: 260
             color: "transparent"
+            // files dropped anywhere on the sidebar land in the workspace folder
+            DropArea { id: sideDrop; anchors.fill: parent; onDropped: (d) => win.dropInto(d, app.dir) }
+            Rectangle { anchors.fill: parent; anchors.margins: 4; radius: t.rCard; color: "transparent"; border.width: sideDrop.containsDrag ? 2 : 0; border.color: Qt.alpha(t.accent, 0.6) }
             ColumnLayout {
                 anchors { fill: parent; margins: 12; topMargin: 16 }
                 spacing: 4
@@ -474,6 +512,11 @@ ApplicationWindow {
                             }
                             Text { text: modelData.blocks; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                         }
+                        DragHandler { id: pDrag; target: null }
+                        Drag.active: pDrag.active
+                        Drag.dragType: Drag.Automatic
+                        Drag.supportedActions: Qt.MoveAction | Qt.CopyAction
+                        Drag.mimeData: ({ "text/uri-list": "file://" + (modelData.path ?? ""), "text/plain": modelData.path ?? "", "application/x-zett-page": modelData.title || "Untitled" })
                         HoverHandler { id: rowHov; cursorShape: Qt.PointingHandCursor }
                         TapHandler { onTapped: win.openPage(index) }
                         TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.pageMenu(index, ev.scenePosition.x, ev.scenePosition.y) }
@@ -520,6 +563,21 @@ ApplicationWindow {
                             Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; color: modelData.git === "M" ? "#e5c07b" : modelData.git === "U" || modelData.git === "A" ? "#98c379" : modelData.git === "D" ? "#e06c75" : t.dim; font.family: t.sans; font.pixelSize: 13 }
                             Text { visible: modelData.git.length > 0; text: modelData.git; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                         }
+                        // drag: a real system drag (into a folder here, onto the page, or out to other apps)
+                        DragHandler { id: fDrag; target: null }
+                        Drag.active: fDrag.active
+                        Drag.dragType: Drag.Automatic
+                        Drag.supportedActions: Qt.MoveAction | Qt.CopyAction
+                        Drag.mimeData: ({ "text/uri-list": "file://" + modelData.path, "text/plain": modelData.path })
+                        // a folder takes drops
+                        DropArea {
+                            id: fDrop
+                            anchors.fill: parent
+                            enabled: modelData.dir
+                            onDropped: (d) => win.dropInto(d, modelData.path)
+                        }
+                        border.width: fDrop.containsDrag ? 1 : 0
+                        border.color: t.accent
                         HoverHandler { id: fHov; cursorShape: Qt.PointingHandCursor }
                         TapHandler { onTapped: win.openFile(modelData) }
                         TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.fileMenu(modelData, ev.scenePosition.x, ev.scenePosition.y) }

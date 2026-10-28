@@ -67,6 +67,14 @@ pub mod qobject {
         /// every #tag in the workspace with how many blocks carry it: [{tag, count}]
         #[qinvokable]
         fn tags(self: &Zett) -> QString;
+        /// moves a file or folder into a folder of the workspace (drag and drop); the page list follows
+        #[qinvokable]
+        #[cxx_name = "movePath"]
+        fn move_path(self: Pin<&mut Zett>, from: &QString, to_dir: &QString) -> bool;
+        /// copies dropped files (file:// URLs, one per line) into a folder of the workspace; how many
+        #[qinvokable]
+        #[cxx_name = "importFiles"]
+        fn import_files(self: Pin<&mut Zett>, urls: &QString, to_dir: &QString) -> i32;
         #[qinvokable]
         fn markdown(self: &Zett) -> QString;
         /// opens the page with this title, making it if there is none ([[links]], quick open)
@@ -829,4 +837,66 @@ impl qobject::Zett {
         v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         QString::from(&serde_json::Value::Array(v.into_iter().map(|(t, c)| serde_json::json!({ "tag": t, "count": c })).collect()).to_string())
     }
+}
+
+// ── drag and drop ──
+impl qobject::Zett {
+    /// inside the workspace only, never onto itself or into its own subfolder
+    fn inside(&self, p: &std::path::Path) -> bool {
+        let root = std::path::PathBuf::from(self.dir.to_string());
+        std::fs::canonicalize(p).ok().is_some_and(|c| std::fs::canonicalize(&root).ok().is_some_and(|r| c.starts_with(r)))
+    }
+
+    fn move_path(mut self: Pin<&mut Self>, from: &QString, to_dir: &QString) -> bool {
+        let (from, dir) = (std::path::PathBuf::from(from.to_string()), std::path::PathBuf::from(to_dir.to_string()));
+        let Some(name) = from.file_name() else { return false };
+        let to = dir.join(name);
+        if !self.inside(&from) || !self.inside(&dir) || !dir.is_dir() || to.exists() || dir.starts_with(&from) { return false }
+        if std::fs::rename(&from, &to).is_err() { return false }
+        self.as_mut().disk_changed();
+        true
+    }
+
+    fn import_files(mut self: Pin<&mut Self>, urls: &QString, to_dir: &QString) -> i32 {
+        let dir = std::path::PathBuf::from(to_dir.to_string());
+        if !self.inside(&dir) || !dir.is_dir() { return 0 }
+        let mut n = 0;
+        for u in urls.to_string().lines() {
+            let Some(p) = u.trim().strip_prefix("file://") else { continue };
+            let p = std::path::PathBuf::from(percent_decode(p));
+            let Some(name) = p.file_name() else { continue };
+            let mut to = dir.join(name);
+            // never overwrite: name (2).ext
+            let mut k = 2;
+            while to.exists() {
+                let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+                to = dir.join(format!("{stem} ({k}){ext}"));
+                k += 1;
+            }
+            if p.is_file() && std::fs::copy(&p, &to).is_ok() { n += 1 }
+        }
+        if n > 0 { self.as_mut().disk_changed() }
+        n
+    }
+
+    /// the folder changed under zett: pages in again, then QML
+    fn disk_changed(mut self: Pin<&mut Self>) {
+        if let Some(f) = self.as_mut().rust_mut().get_mut().folder.as_mut() { f.sync_from_disk(); }
+        self.publish();
+    }
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() + 0 && i + 2 <= b.len() - 1 {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) { out.push(v); i += 3; continue }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
 }
