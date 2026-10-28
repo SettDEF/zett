@@ -816,6 +816,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "git") { win.sideMode = "git"; grabLater.start(); return }
             if (app.shotEngine === "acttip") { activityBar.tipTest = true; grabLater.start(); return }
             if (app.shotEngine.startsWith("core:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(5), rel: app.shotEngine.slice(5) }); coreT.start(); return }
+            if (app.shotEngine.startsWith("core2:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(6), rel: app.shotEngine.slice(6) }); core2T.start(); return }
             if (app.shotEngine === "explorer") { win.sideMode = "files"; grabLater.start(); return }
             if (app.shotEngine === "newfile") { sidebar.newKind = "file"; sidebar.create("made/new.rs"); sidebar.newKind = "folder"; sidebar.create("emptydir"); claudeShot.start(); return }
             if (app.shotEngine === "problems-panel") { win.drawerShown = true; drawer.tab = "problems"; drawer.run("printf 'error[E0308]: mismatched types\\n  --> src/main.rs:2:5\\n'"); probT.start(); return }
@@ -919,6 +920,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }  // the panel polls cui first
     Timer { id: probT; interval: 1500; onTriggered: { console.log("zett-probe: problems " + JSON.stringify(win.problems.map(p => p.path.replace(app.dir + "/", "") + ":" + (p.line + 1) + " " + p.message))); claudeShot.start() } }
     Timer { id: coreT; interval: 600; onTriggered: { const d = fileView.codeDoc; d.click(1, 4, false, false); d.click(2, 4, false, true); d.key(0, "x", 0); d.key(0x5a, "", 0x04000000); d.key(0, "y", 0); d.toggleFold(0); console.log("zett-probe: core rows " + d.rows + " lines " + d.lines + " fold " + d.foldAt(0) + " cursors " + d.cursors); d.save(); grabLater.start() } }
+    Timer { id: core2T; interval: 600; onTriggered: { const d = fileView.codeDoc; d.click(1, 0, false, false); d.lineOp("comment://"); d.lineOp("down"); const n = JSON.parse(d.find("let", "{}")).length; const r = d.replaceAll("let", "var", "{}"); console.log("zett-probe: core2 found " + n + " replaced " + r); d.save(); fileView.coreView.findBarOpen(); grabLater.start() } }
     Timer { id: stickyT; interval: 1200; onTriggered: fileView.testSticky() }
     // the page sits in one card on the background, like the shell's panels
     Rectangle { x: pageCol.x; y: pageCol.y; width: pageCol.width; height: pageCol.height; radius: t.rCard; color: t.panel; border.color: pageDrop.containsDrag ? t.accent : Qt.alpha(t.rule, 0.35)

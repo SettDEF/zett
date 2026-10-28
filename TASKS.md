@@ -383,7 +383,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 
 ## zett: the best editor out there (planned 2026-10-28)
 
-1. [~] Editor core (stage a done 2026-10-28: CodeDoc + CodeView, cursors, undo, folds, colours, save, behind the setting): drawn by zett itself, not a Qt TextEdit. CodeDoc (Rust: rope, cursors, undo, folds, syntect
+1. [~] Editor core (stage a done 2026-10-28; stage b part 1: line keys, find/replace, git and problem marks, the server (sync, F12, references, symbols, format, edits): CodeDoc + CodeView, cursors, undo, folds, colours, save, behind the setting): drawn by zett itself, not a Qt TextEdit. CodeDoc (Rust: rope, cursors, undo, folds, syntect
    colours per line with cached parse states) + CodeView.qml (only the lines on screen, cursors from the mono
    grid). Stages: a) view + edit + save behind Settings > Editor > New editor core; b) everything FileView has
    (LSP, find, minimap, git gutter, completion, line keys); c) folding, wrap, huge files; d) default, old one gone

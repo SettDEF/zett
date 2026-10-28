@@ -9,11 +9,17 @@ Rectangle {
     required property var t
     required property var app
     property alias doc: doc
+    property var fv: null     // the FileView around it: its server, problems, git marks, comment mark, lists
     radius: 17
     color: t.card
     clip: true
 
     CodeDoc { id: doc }
+    // the server follows the text (a moment after typing stops)
+    Timer { id: lspSync; interval: 300; onTriggered: if (cv.fv && cv.fv.lsp) cv.app.lspChange(cv.file, doc.text()) }
+    Connections { target: doc; function onVersionChanged() { if (doc.dirty) lspSync.restart() } }
+    function findBarOpen() { findBar.open(false) }
+    function askHere(kind) { if (cv.fv) cv.fv.askAt(kind, cv.carets[0][0], cv.carets[0][1]) }
     readonly property string file: win.filePath
     onFileChanged: if (file && visible) doc.open(file)
     onVisibleChanged: if (visible && file && doc.path !== file) doc.open(file)
@@ -63,6 +69,11 @@ Rectangle {
                 color: parent.cur ? cv.t.accent : cv.t.faint
                 font.family: cv.t.mono; font.pixelSize: 12
             }
+            // git: a soft dot (added green, changed blue, removed red); a problem: a dot in its colour by the number
+            readonly property string git: cv.fv ? (cv.fv.gitMarks, cv.fv.gitAt(line)) : ""
+            Rectangle { visible: parent.git.length > 0; x: 2; anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: parent.git === "added" ? "#5fb98a" : parent.git === "changed" ? "#5b9bd5" : cv.t.removed }
+            readonly property int sev: { if (!cv.fv) return 9; let s = 9; for (const d of cv.fv.diags) if (d.line === line && d.severity < s) s = d.severity; return s }
+            Rectangle { visible: parent.sev <= 2; x: 12; anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: parent.sev === 1 ? cv.t.removed : "#d8a54a" }
             // fold: a chevron for a line that opens a block, "⋯" after one folded
             Text {
                 visible: parent.fold > 0
@@ -88,6 +99,24 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "⋯"; color: cv.t.accent; font.pixelSize: 12 }
                 TapHandler { onTapped: doc.toggleFold(parent.parent.line) }
             }
+        }
+    }
+    // find matches and problem ranges on the rows on screen: soft rounded bands under the text
+    readonly property var marks: {
+        doc.version; const out = []
+        for (const m of findBar.matches) out.push([m[0], m[1], Math.max(1, m[2]), 0])
+        if (cv.fv) for (const d of cv.fv.diags) if (d.severity <= 2) out.push([d.line, d.col, Math.max(1, (d.endLine === d.line ? d.endCol : d.col + 1) - d.col), d.severity])
+        return out.filter(m => { const r = doc.lineRow(m[0]); return doc.rowLine(r) === m[0] && r >= cv.firstRow && r < cv.firstRow + cv.shown }).slice(0, 600)
+    }
+    Repeater {
+        model: cv.marks
+        delegate: Rectangle {
+            required property var modelData
+            readonly property bool hit: modelData[3] === 0
+            x: cv.gutter + 12 + modelData[1] * cv.cw; width: modelData[2] * cv.cw
+            y: doc.lineRow(modelData[0]) * cv.lh - cv.scrollY + (hit ? 2 : cv.lh - 5); height: hit ? cv.lh - 4 : 3
+            radius: hit ? 4 : 1.5
+            color: hit ? Qt.alpha("#e5c46f", 0.28) : Qt.alpha(modelData[3] === 1 ? cv.t.removed : "#d8a54a", 0.85)
         }
     }
     // selections: for each cursor, a rounded band per row it covers
@@ -135,7 +164,18 @@ Rectangle {
         focus: true
         Keys.onPressed: (e) => {
             const ctrl = e.modifiers & Qt.ControlModifier
-            if (ctrl && e.key === Qt.Key_S) { doc.save(); e.accepted = true; return }
+            const shift = e.modifiers & Qt.ShiftModifier, alt = e.modifiers & Qt.AltModifier
+            if (ctrl && e.key === Qt.Key_S) { if (doc.save()) { cv.fv && cv.fv.lsp && cv.app.lspAsk("save", cv.file, 0, 0); cv.fv && cv.fv.loadGit() } e.accepted = true; return }
+            // line editing, find, the server's keys
+            if (ctrl && e.key === Qt.Key_Slash) { doc.lineOp("comment:" + (cv.fv ? cv.fv.commentMark : "//")); e.accepted = true; return }
+            if (alt && !ctrl && (e.key === Qt.Key_Up || e.key === Qt.Key_Down)) { doc.lineOp((shift ? "copy" : "") + (e.key === Qt.Key_Up ? "up" : "down")); e.accepted = true; return }
+            if (ctrl && shift && e.key === Qt.Key_K) { doc.lineOp("delete"); e.accepted = true; return }
+            if (ctrl && !shift && (e.key === Qt.Key_F || e.key === Qt.Key_H)) { findBar.open(e.key === Qt.Key_H); e.accepted = true; return }
+            if (e.key === Qt.Key_F3 || (ctrl && e.key === Qt.Key_G)) { findBar.step(shift ? -1 : 1); e.accepted = true; return }
+            if (e.key === Qt.Key_F12) { cv.askHere(shift ? "references" : "definition"); e.accepted = true; return }
+            if (ctrl && shift && e.key === Qt.Key_O) { cv.askHere("symbols"); e.accepted = true; return }
+            if (shift && alt && e.key === Qt.Key_F) { cv.askHere("format"); e.accepted = true; return }
+            if (e.key === Qt.Key_Escape && findBar.visible) { findBar.visible = false; e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_C) { cv.copy(false); e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_X) { cv.copy(true); e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_V) { cv.paste(); e.accepted = true; return }
@@ -159,6 +199,65 @@ Rectangle {
             onWheel: (ev) => { cv.scrollY = Math.max(0, Math.min(cv.maxTop(), cv.scrollY - ev.angleDelta.y / 120 * cv.lh * 3)) }
         }
         HoverHandler { cursorShape: Qt.IBeamCursor }
+    }
+    // find / replace (Ctrl+F, Ctrl+H): over the top right, matches lit in the text, Enter / F3 next, Shift previous
+    Rectangle {
+        id: findBar
+        visible: false
+        property bool replacing: false
+        property bool caseOn: false
+        property bool regexOn: false
+        property int cur: 0
+        readonly property string opts: JSON.stringify({ case: caseOn, regex: regexOn })
+        readonly property var matches: { doc.version; if (!visible || !q.text) return []; try { return JSON.parse(doc.find(q.text, opts)) } catch (e) { return [] } }
+        function open(rep) { replacing = rep; visible = true; const s = doc.selectedText(); if (s && !s.includes("\n")) q.text = s; q.forceActiveFocus(); q.selectAll() }
+        function step(d) { if (!matches.length) return; cur = (cur + d + matches.length) % matches.length; const m = matches[cur]; doc.select(m[0], m[1], m[2]) }
+        anchors { right: parent.right; top: parent.top; margins: 10 }
+        width: 380; height: col.implicitHeight + 16; radius: 14; z: 30
+        color: cv.t.raised; border.width: 1; border.color: Qt.alpha(cv.t.rule, 0.4)
+        component Tog: Rectangle {
+            property string label
+            property bool on
+            signal hit
+            width: 28; height: 24; radius: 8
+            color: on ? Qt.alpha(cv.t.accent, 0.24) : th.hovered ? Qt.alpha(cv.t.text, 0.08) : "transparent"
+            Text { anchors.centerIn: parent; text: parent.label; color: parent.on ? cv.t.accent : cv.t.dim; font.family: cv.t.mono; font.pixelSize: 11 }
+            HoverHandler { id: th; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: parent.hit() }
+        }
+        Column {
+            id: col
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+            spacing: 6
+            Row {
+                spacing: 6
+                Rectangle { width: 200; height: 28; radius: 9; color: cv.t.card
+                    TextInput { id: q; anchors { fill: parent; leftMargin: 10; rightMargin: 8 } verticalAlignment: TextInput.AlignVCenter; clip: true; color: cv.t.text; font.family: cv.t.mono; font.pixelSize: 12; selectionColor: Qt.alpha(cv.t.accent, 0.35)
+                        onTextChanged: findBar.cur = 0
+                        Keys.onReturnPressed: (e) => findBar.step(e.modifiers & Qt.ShiftModifier ? -1 : 1)
+                        Keys.onEscapePressed: { findBar.visible = false; input.forceActiveFocus() }
+                        Text { visible: !q.text; anchors.verticalCenter: parent.verticalCenter; text: "Find"; color: cv.t.faint; font: q.font } } }
+                Tog { label: "Aa"; on: findBar.caseOn; onHit: findBar.caseOn = !findBar.caseOn }
+                Tog { label: ".*"; on: findBar.regexOn; onHit: findBar.regexOn = !findBar.regexOn }
+                Text { anchors.verticalCenter: parent.verticalCenter; width: 50; text: findBar.matches.length ? `${findBar.cur + 1}/${findBar.matches.length}` : q.text ? "none" : ""; color: cv.t.faint; font.family: cv.t.mono; font.pixelSize: 10 }
+                Tog { label: "↑"; onHit: findBar.step(-1) }
+                Tog { label: "↓"; onHit: findBar.step(1) }
+            }
+            Row {
+                visible: findBar.replacing
+                spacing: 6
+                Rectangle { width: 200; height: 28; radius: 9; color: cv.t.card
+                    TextInput { id: rq; anchors { fill: parent; leftMargin: 10; rightMargin: 8 } verticalAlignment: TextInput.AlignVCenter; clip: true; color: cv.t.text; font.family: cv.t.mono; font.pixelSize: 12
+                        Keys.onReturnPressed: rall.hit()
+                        Keys.onEscapePressed: { findBar.visible = false; input.forceActiveFocus() }
+                        Text { visible: !rq.text; anchors.verticalCenter: parent.verticalCenter; text: "Replace"; color: cv.t.faint; font: rq.font } } }
+                Rectangle { id: rall; signal hit; onHit: { const n = doc.replaceAll(q.text, rq.text, findBar.opts); if (cv.fv) { cv.fv.note = `${n} replaced`; } }
+                    width: raT.implicitWidth + 22; height: 28; radius: 14; color: cv.t.accent
+                    Text { id: raT; anchors.centerIn: parent; text: "Replace all"; color: cv.t.onAccent; font.family: cv.t.sans; font.pixelSize: 12; font.weight: Font.DemiBold }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: rall.hit() } }
+            }
+        }
     }
     // the scrollbar: a slim rounded thumb
     Rectangle {

@@ -58,6 +58,24 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "selectedText"]
         fn selected_text(self: &CodeDoc) -> QString;
+        /// line editing: "comment://", "up", "down", "copyup", "copydown", "delete"
+        #[qinvokable]
+        #[cxx_name = "lineOp"]
+        fn line_op(self: Pin<&mut CodeDoc>, op: &QString);
+        /// every match of a search (opts JSON {case, regex, word}): [[line, col, len], …], 5000 at most
+        #[qinvokable]
+        fn find(self: &CodeDoc, query: &QString, opts: &QString) -> QString;
+        /// the main cursor on a range (a match, a definition): selects it
+        #[qinvokable]
+        fn select(self: Pin<&mut CodeDoc>, line: i32, col: i32, len: i32);
+        /// every match replaced; how many
+        #[qinvokable]
+        #[cxx_name = "replaceAll"]
+        fn replace_all_matches(self: Pin<&mut CodeDoc>, query: &QString, with: &QString, opts: &QString) -> i32;
+        /// edits from a server (format, rename, code action): [[l0, c0, l1, c1, text], …], applied from the last
+        #[qinvokable]
+        #[cxx_name = "applyEdits"]
+        fn apply_edits(self: Pin<&mut CodeDoc>, edits: &QString);
     }
 }
 
@@ -621,5 +639,135 @@ impl qobject::CodeDoc {
         let r = self.rust();
         let parts: Vec<String> = r.carets.iter().filter(|c| c.head != c.anchor).map(|c| { let (a, b) = c.range(); r.rope.slice(a..b).to_string() }).collect();
         QString::from(&parts.join("\n"))
+    }
+}
+
+fn pattern(q: &str, opts: &str) -> Option<regex::Regex> {
+    let o: serde_json::Value = serde_json::from_str(opts).unwrap_or_default();
+    if q.is_empty() {
+        return None;
+    }
+    let src = if o["regex"] == true { q.to_string() } else { regex::escape(q) };
+    let src = if o["word"] == true { format!(r"\b{src}\b") } else { src };
+    regex::RegexBuilder::new(&src).case_insensitive(o["case"] != true).build().ok()
+}
+
+impl qobject::CodeDoc {
+    pub fn line_op(mut self: Pin<&mut Self>, op: &QString) {
+        let op = op.to_string();
+        // the lines the cursors cover, each cursor's own range of lines
+        let (a, b) = {
+            let r = self.rust();
+            let c = r.carets[0];
+            let (s, e) = c.range();
+            let (la, _) = r.line_col(s);
+            let (mut lb, cb) = r.line_col(e);
+            if lb > la && cb == 0 { lb -= 1; }
+            (la, lb)
+        };
+        let n = self.rust().rope.len_lines();
+        let rows: Vec<String> = (a..=b).map(|l| self.rust().line_str(l)).collect();
+        let (new_rows, from, to, shift): (Vec<String>, usize, usize, i32) = if let Some(mark) = op.strip_prefix("comment:") {
+            let all = rows.iter().filter(|s| !s.trim().is_empty()).all(|s| s.trim_start().starts_with(mark));
+            let ind = rows.iter().filter(|s| !s.trim().is_empty()).map(|s| s.len() - s.trim_start().len()).min().unwrap_or(0);
+            (rows.iter().map(|s| {
+                if s.trim().is_empty() { return s.clone() }
+                if all { let t = s.trim_start(); let lead = &s[..s.len() - t.len()]; let rest = t[mark.len()..].strip_prefix(' ').unwrap_or(&t[mark.len()..]); format!("{lead}{rest}") }
+                else { format!("{}{mark} {}", &s[..ind], &s[ind..]) }
+            }).collect(), a, b, 0)
+        } else {
+            match op.as_str() {
+                "up" if a > 0 => { let mut v = rows.clone(); v.push(self.rust().line_str(a - 1)); (v, a - 1, b, -1) }
+                "down" if b + 1 < n && !(b + 2 == n && self.rust().line_str(b + 1).is_empty()) => { let mut v = vec![self.rust().line_str(b + 1)]; v.extend(rows.clone()); (v, a, b + 1, 1) }
+                "copyup" | "copydown" => { let mut v = rows.clone(); v.extend(rows.clone()); (v, a, b, if op == "copydown" { (b - a + 1) as i32 } else { 0 }) }
+                "delete" => (Vec::new(), a, b, 0),
+                _ => return,
+            }
+        };
+        self.as_mut().checkpoint("");
+        {
+            let mut r = self.as_mut().rust_mut();
+            let (_, col) = r.line_col(r.carets[0].head);
+            let start = r.rope.line_to_char(from);
+            let end = if to + 1 < r.rope.len_lines() { r.rope.line_to_char(to + 1) } else { r.rope.len_chars() };
+            let tail = if to + 1 < r.rope.len_lines() { "\n" } else { "" };
+            r.rope.remove(start..end);
+            if !new_rows.is_empty() {
+                r.rope.insert(start, &(new_rows.join("\n") + tail));
+            }
+            let nl = ((a as i32 + shift).max(0) as usize).min(r.rope.len_lines().saturating_sub(1));
+            let p = r.pos(nl, col);
+            r.carets = vec![Caret::at(p)];
+        }
+        self.changed(from);
+    }
+    pub fn find(&self, query: &QString, opts: &QString) -> QString {
+        let r = self.rust();
+        let Some(re) = pattern(&query.to_string(), &opts.to_string()) else { return QString::from("[]") };
+        let mut out = Vec::new();
+        for (l, line) in r.rope.lines().enumerate() {
+            let s = line.to_string();
+            for m in re.find_iter(s.trim_end_matches(['\n', '\r'])) {
+                out.push(format!("[{l},{},{}]", s[..m.start()].chars().count(), m.as_str().chars().count()));
+                if out.len() >= 5000 { return QString::from(&format!("[{}]", out.join(","))) }
+            }
+        }
+        QString::from(&format!("[{}]", out.join(",")))
+    }
+    pub fn select(mut self: Pin<&mut Self>, line: i32, col: i32, len: i32) {
+        {
+            let mut r = self.as_mut().rust_mut();
+            let a = r.pos(line.max(0) as usize, col.max(0) as usize);
+            // a folded line opens to show it
+            let l = line.max(0) as usize;
+            let opened: Vec<usize> = r.folded.iter().copied().filter(|f| *f < l && r.fold_end(*f).is_some_and(|e| e >= l)).collect();
+            for f in opened { r.folded.remove(&f); }
+            r.relayout();
+            r.carets = vec![Caret { head: a + len.max(0) as usize, anchor: a, goal: None }];
+        }
+        let rows = self.rust().visible.len() as i32;
+        self.as_mut().set_rows(rows);
+        self.publish();
+    }
+    pub fn replace_all_matches(mut self: Pin<&mut Self>, query: &QString, with: &QString, opts: &QString) -> i32 {
+        let o = opts.to_string();
+        let Some(re) = pattern(&query.to_string(), &o) else { return 0 };
+        let text = self.rust().rope.to_string();
+        let n = re.find_iter(&text).count();
+        if n == 0 { return 0 }
+        let regex = serde_json::from_str::<serde_json::Value>(&o).unwrap_or_default()["regex"] == true;
+        let w = with.to_string();
+        let out = if regex { re.replace_all(&text, w.as_str()).to_string() } else { re.replace_all(&text, regex::NoExpand(&w)).to_string() };
+        self.as_mut().checkpoint("");
+        {
+            let mut r = self.as_mut().rust_mut();
+            let head = r.carets[0].head.min(out.chars().count());
+            r.rope = Rope::from_str(&out);
+            r.carets = vec![Caret::at(head)];
+        }
+        self.changed(0);
+        n as i32
+    }
+    pub fn apply_edits(mut self: Pin<&mut Self>, edits: &QString) {
+        let v: Vec<(usize, usize, usize, usize, String)> = serde_json::from_str(&edits.to_string()).unwrap_or_default();
+        if v.is_empty() { return }
+        self.as_mut().checkpoint("");
+        let mut low = usize::MAX;
+        {
+            let mut r = self.as_mut().rust_mut();
+            let mut v = v;
+            v.sort_by(|a, b| (b.0, b.1).cmp(&(a.0, a.1)));
+            for (l0, c0, l1, c1, t) in v {
+                let a = r.pos(l0, c0);
+                let b = r.pos(l1, c1).max(a);
+                r.rope.remove(a..b);
+                r.rope.insert(a, &t);
+                low = low.min(l0);
+            }
+            let len = r.rope.len_chars();
+            for c in r.carets.iter_mut() { c.head = c.head.min(len); c.anchor = c.anchor.min(len); }
+        }
+        let n = self.rust().rope.len_lines();
+        self.changed(low.min(n));
     }
 }

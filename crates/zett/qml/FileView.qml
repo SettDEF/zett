@@ -83,7 +83,7 @@ ColumnLayout {
     onJumpsChanged: if (app.shot.length && jumps.length) console.log("zett-probe: jumps " + JSON.stringify(jumps.map(j => j.name ?? j.line)))
     // the cursor to a 0-based line and column (search results, problems)
     function cursorPos() { return ed.cursorPosition }
-    function goTo(line, col) { ed.cursorPosition = posOf(line, col); ed.forceActiveFocus() }
+    function goTo(line, col) { if (newCore) { codeView.doc.select(line, col, 0); return } ed.cursorPosition = posOf(line, col); ed.forceActiveFocus() }
     Timer { id: noteT; interval: 1800; onTriggered: fv.note = "" }
 
     // ── the language server (Rust: lsp.rs): diagnostics, completion, hover, definition, format ──
@@ -207,9 +207,10 @@ ColumnLayout {
             else if (e.type === "definition" && e.items.length) {
                 const d = e.items[0]
                 if (d.path !== fv.win.filePath) fv.win.openFile({ path: d.path, rel: d.path })
-                Qt.callLater(() => { ed.cursorPosition = fv.posOf(d.line, d.col); ed.forceActiveFocus() })
+                Qt.callLater(() => fv.goTo(d.line, d.col))
             }
             else if (e.type === "edits") for (const f of e.files) if (f.path === fv.win.filePath) {
+                if (fv.newCore) { codeView.doc.applyEdits(JSON.stringify(f.edits)); continue }
                 // from the end, so earlier positions stay right
                 for (const x of f.edits.slice().reverse()) { const a = fv.posOf(x[0], x[1]), b = fv.posOf(x[2], x[3]); ed.remove(a, b); ed.insert(a, x[4]) }
             } else {
@@ -284,14 +285,17 @@ ColumnLayout {
     }
     // the new editor core (Settings > Editor > New editor core): CodeView over CodeDoc, in place of the TextEdit
     readonly property alias codeDoc: codeView.doc
-    readonly property bool newCore: (win.prefs.newCore ?? false) || app.shotEngine.startsWith("core:")
+    readonly property alias coreView: codeView
+    readonly property bool newCore: (win.prefs.newCore ?? false) || app.shotEngine.startsWith("core")
     CodeView {
         id: codeView
         visible: fv.newCore && !fv.showDiff
         Layout.fillWidth: true; Layout.fillHeight: true
         Layout.leftMargin: 8; Layout.rightMargin: 8
-        win: fv.win; t: fv.t; app: fv.app
+        win: fv.win; t: fv.t; app: fv.app; fv: fv
     }
+    // a server question at a line and column (the new core has no TextEdit position)
+    function askAt(kind, l, c) { if (lsp) app.lspAsk(kind, win.filePath, l, c) }
     // find / replace / go to line (FindBar.qml)
     FindBar { id: findBar; t: fv.t; editor: ed; Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8 }
     Rectangle {
@@ -696,7 +700,7 @@ ColumnLayout {
     // edits per file: the open one in the buffer, others on disk
     function applyFiles(files) {
         for (const f of files) {
-            if (f.path === win.filePath) { for (const x of f.edits.slice().reverse()) { const a = posOf(x[0], x[1]), b = posOf(x[2], x[3]); ed.remove(a, b); ed.insert(a, x[4]) } continue }
+            if (f.path === win.filePath) { if (newCore) { codeView.doc.applyEdits(JSON.stringify(f.edits)); continue } for (const x of f.edits.slice().reverse()) { const a = posOf(x[0], x[1]), b = posOf(x[2], x[3]); ed.remove(a, b); ed.insert(a, x[4]) } continue }
             let s = app.readFile(f.path)
             const at = (l, c) => { const ls = s.split("\n"); let p = 0; for (let i = 0; i < Math.min(l, ls.length - 1); i++) p += ls[i].length + 1; return p + c }
             for (const x of f.edits.slice().reverse()) { const a = at(x[0], x[1]), b = at(x[2], x[3]); s = s.slice(0, a) + x[4] + s.slice(b) }
