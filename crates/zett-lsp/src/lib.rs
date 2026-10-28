@@ -123,7 +123,7 @@ pub fn server_for(path: &Path) -> Option<(Vec<String>, &'static str)> {
         "glsl" | "vert" | "frag" | "geom" | "comp" | "tesc" | "tese" => (&[&["glsl_analyzer"], &["glslls", "--stdin"]], "glsl"),
         "wgsl" => (&[&["wgsl-analyzer"]], "wgsl"),
         "hlsl" => (&[&["shader-language-server", "--stdio"]], "hlsl"),
-        "cmake" => (&[&["neocmakelsp", "--stdio"], &["cmake-language-server"]], "cmake"),
+        "cmake" => (&[&["neocmakelsp", "stdio"], &["neocmakelsp", "--stdio"], &["cmake-language-server"]], "cmake"),   // 0.11 takes "stdio"
         "dockerfile" => (&[&["docker-langserver", "--stdio"], &["docker-language-server", "start", "--stdio"]], "dockerfile"),
         "tf" | "tfvars" => (&[&["terraform-ls", "serve"], &["tofu-ls", "serve"]], "terraform"),
         "hcl" => (&[&["terraform-ls", "serve"]], "hcl"),
