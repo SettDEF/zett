@@ -80,6 +80,9 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "reloadConfig"]
         fn reload_config(self: Pin<&mut Zett>) -> QString;
+        /// a code block as rich text, coloured by language from the theme
+        #[qinvokable]
+        fn highlight(self: &Zett, lang: &QString, code: &QString) -> QString;
         #[qinvokable]
         #[cxx_name = "configPath"]
         fn config_path(self: &Zett) -> QString;
@@ -642,7 +645,63 @@ impl qobject::Zett {
         self.script(|e| (serde_json::json!({ "state": "ran", "plugins": e.plugins.clone() }), vec![Effect::Notify(format!("config reloaded ({} plugins)", e.plugins.len()))]))
     }
 
+    fn highlight(&self, lang: &QString, code: &QString) -> QString {
+        QString::from(&highlight_html(&lang.to_string(), &code.to_string()))
+    }
+
     fn config_path(&self) -> QString {
         QString::from(&zett_script::config_dir().join("init.lua").display().to_string())
     }
+}
+
+// ── code blocks: syntect (the terminal's languages) with colours from the theme ──
+fn highlight_html(lang: &str, code: &str) -> String {
+    use std::sync::OnceLock;
+    use syntect::easy::HighlightLines;
+    use syntect::highlighting::{Color, FontStyle, ScopeSelectors, StyleModifier, Theme, ThemeItem, ThemeSettings};
+    use syntect::parsing::SyntaxSet;
+    static SS: OnceLock<SyntaxSet> = OnceLock::new();
+    static TH: OnceLock<Theme> = OnceLock::new();
+    let ss = SS.get_or_init(zett_tui::syntax_set);
+    let th = TH.get_or_init(|| {
+        let c: serde_json::Value = serde_json::from_str(&theme_json()).unwrap_or_default();
+        let col = |k: &str, d: &str| {
+            let h = c.get(k).and_then(|v| v.as_str()).unwrap_or(d).trim_start_matches('#').to_string();
+            let p = |i: usize| u8::from_str_radix(h.get(i..i + 2).unwrap_or("cc"), 16).unwrap_or(204);
+            Color { r: p(0), g: p(2), b: p(4), a: 255 }
+        };
+        let item = |sel: &str, fg: Color, fs: Option<FontStyle>| ThemeItem {
+            scope: sel.parse::<ScopeSelectors>().unwrap_or_default(),
+            style: StyleModifier { foreground: Some(fg), background: None, font_style: fs },
+        };
+        Theme {
+            settings: ThemeSettings { foreground: Some(col("on_surface", "#e3e2e5")), ..Default::default() },
+            scopes: vec![
+                item("comment, punctuation.definition.comment", col("outline", "#8c9199"), Some(FontStyle::ITALIC)),
+                item("keyword, storage.modifier, storage.type, keyword.control, keyword.operator.word", col("primary", "#a8caeb"), None),
+                item("entity.name.type, support.type, entity.name.class, support.class", col("secondary", "#bac8da"), None),
+                item("string, string.quoted, punctuation.definition.string", col("tertiary", "#d4bee6"), None),
+                item("constant, constant.numeric, constant.language, constant.character", col("error", "#ffb4ab"), None),
+                item("entity.name.function, support.function, meta.function-call variable.function", col("on_surface", "#e3e2e5"), Some(FontStyle::BOLD)),
+                item("entity.name.tag, meta.attribute, entity.other.attribute-name", col("primary", "#a8caeb"), None),
+            ],
+            ..Default::default()
+        }
+    });
+    let syn = (!lang.is_empty()).then(|| ss.find_syntax_by_token(lang)).flatten().unwrap_or_else(|| ss.find_syntax_plain_text());
+    let mut h = HighlightLines::new(syn, th);
+    let mut out = String::from("<pre style=\"margin:0\">");
+    for line in syntect::util::LinesWithEndings::from(code) {
+        let Ok(parts) = h.highlight_line(line, ss) else { out += &esc(line); continue };
+        for (st, s) in parts {
+            let f = st.foreground;
+            let (b, i) = (st.font_style.contains(FontStyle::BOLD), st.font_style.contains(FontStyle::ITALIC));
+            out += &format!("<span style=\"color:#{:02x}{:02x}{:02x}\">{}{}{}{}{}</span>", f.r, f.g, f.b, if b { "<b>" } else { "" }, if i { "<i>" } else { "" }, esc(s), if i { "</i>" } else { "" }, if b { "</b>" } else { "" });
+        }
+    }
+    out + "</pre>"
+}
+
+fn esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }

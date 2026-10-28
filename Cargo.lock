@@ -2611,6 +2611,7 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "serde_json",
+ "syntect",
  "zett-core",
  "zett-edit",
  "zett-script",

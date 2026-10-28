@@ -569,11 +569,32 @@ ApplicationWindow {
                             radius: 10
                             color: blockItem.kind === "code" ? t.card : "transparent"
 
+                            // a code block, coloured by its language while not being edited
+                            Text {
+                                id: codeShown
+                                anchors.fill: edit
+                                visible: !edit.activeFocus && blockItem.kind === "code"
+                                text: visible ? app.highlight(blockItem.modelData.lang ?? "", edit.text) : ""
+                                textFormat: Text.RichText
+                                font: edit.font
+                                color: edit.color
+                                HoverHandler { cursorShape: Qt.IBeamCursor }
+                                TapHandler { onTapped: edit.forceActiveFocus() }
+                                z: 2
+                            }
+                            // the language, top right of a code block
+                            Text {
+                                visible: blockItem.kind === "code" && (blockItem.modelData.lang ?? "").length > 0
+                                anchors { right: parent.right; top: parent.top; margins: 8 }
+                                text: blockItem.modelData.lang ?? ""
+                                color: t.faint; font.family: t.mono; font.pixelSize: 11
+                                z: 3
+                            }
                             // shown instead of the raw text while not editing: [[links]] are clickable
                             Text {
                                 id: shown
                                 anchors.fill: edit
-                                visible: !edit.activeFocus && edit.text.indexOf("[[") >= 0
+                                visible: !edit.activeFocus && edit.text.indexOf("[[") >= 0 && blockItem.kind !== "code"
                                 text: win.linkify(edit.text)
                                 textFormat: Text.StyledText
                                 wrapMode: Text.Wrap
@@ -588,7 +609,7 @@ ApplicationWindow {
 
                             TextEdit {
                                 id: edit
-                                opacity: shown.visible ? 0 : 1
+                                opacity: shown.visible || codeShown.visible ? 0 : 1
                                 anchors { fill: parent; margins: blockItem.kind === "code" ? 12 : 0 }
                                 text: blockItem.modelData.text
                                 wrapMode: TextEdit.Wrap

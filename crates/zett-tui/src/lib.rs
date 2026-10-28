@@ -1583,7 +1583,7 @@ pub(crate) fn expand_tabs(s: &str) -> String {
 
 /// syntect's languages, the ones zett brings (QML), and any `.sublime-syntax` in
 /// ~/.config/zett/syntaxes (a language added without rebuilding zett).
-fn syntax_set() -> SyntaxSet {
+pub fn syntax_set() -> SyntaxSet {
     let mut b = SyntaxSet::load_defaults_newlines().into_builder();
     if let Ok(qml) = syntect::parsing::SyntaxDefinition::load_from_str(include_str!("../syntaxes/QML.sublime-syntax"), true, None) {
         b.add(qml);
