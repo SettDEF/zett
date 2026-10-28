@@ -9,6 +9,8 @@ Rectangle {
     property bool templatesOpen: false
     // the Explorer's New file / New folder: the name typed in a field under the head (a/b.rs makes the folders too)
     property string newKind: ""
+    property bool openOpen: true
+    property bool recentOpen: true
     function create(name) {
         name = name.trim().replace(/^\/+/, ""); const kind = newKind; newKind = ""
         if (!name || name.includes("..")) return
@@ -286,6 +288,45 @@ Rectangle {
             }
         }
 
+        // ── OPEN EDITORS: every open tab, a click shows it; RECENT: the files opened last ──
+        component QuickRow: Rectangle {
+            property string icon
+            property string label
+            property string sub
+            property bool on: false
+            signal hit
+            Layout.fillWidth: true
+            implicitHeight: 28; radius: t.rRow
+            color: on ? Qt.alpha(t.accent, 0.14) : qrH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+            RowLayout {
+                anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                spacing: 8
+                Text { text: parent.parent.icon; color: parent.parent.on ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 15 }
+                Text { text: parent.parent.label; color: parent.parent.on ? t.text : t.dim; font.family: t.sans; font.pixelSize: 12; elide: Text.ElideRight; Layout.maximumWidth: 150 }
+                Text { Layout.fillWidth: true; text: parent.parent.sub; elide: Text.ElideLeft; color: t.faint; font.family: t.sans; font.pixelSize: 10 }
+            }
+            HoverHandler { id: qrH; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: parent.hit() }
+        }
+        readonly property var openEditors: win.tabs.map(i => ({ page: i })).concat(win.fileTabs.map(p => ({ file: p })))
+        readonly property var recent: (win.prefs.recentFiles ?? []).filter(p => !win.fileTabs.includes(p) && p.startsWith(app.dir + "/")).slice(0, 6)
+        SectionHead { visible: parent.openEditors.length > 1; label: "OPEN EDITORS"; count: parent.openEditors.length; open: side.openOpen; onToggled: side.openOpen = !side.openOpen }
+        Repeater {
+            model: side.openOpen && parent.openEditors.length > 1 ? parent.openEditors : []
+            delegate: QuickRow {
+                required property var modelData
+                icon: modelData.file ? "code" : "description"
+                label: modelData.file ? modelData.file.slice(modelData.file.lastIndexOf("/") + 1) : (win.pages[modelData.page]?.title || "Untitled")
+                sub: modelData.file ? modelData.file.replace(app.dir + "/", "").split("/").slice(0, -1).join("/") : "page"
+                on: modelData.file ? (win.view === "file" && win.filePath === modelData.file) : (win.view === "page" && app.current === modelData.page)
+                onHit: modelData.file ? win.openFile({ path: modelData.file, rel: modelData.file }) : win.openPage(modelData.page)
+            }
+        }
+        SectionHead { visible: parent.recent.length > 0 && win.sideMode !== "pages"; label: "RECENT"; count: parent.recent.length; open: side.recentOpen; onToggled: side.recentOpen = !side.recentOpen }
+        Repeater {
+            model: side.recentOpen && win.sideMode !== "pages" ? parent.recent : []
+            delegate: QuickRow { required property string modelData; icon: "history"; label: modelData.slice(modelData.lastIndexOf("/") + 1); sub: modelData.replace(app.dir + "/", "").split("/").slice(0, -1).join("/"); onHit: win.openFile({ path: modelData, rel: modelData }) }
+        }
         // ── TAGS ──
         SectionHead { visible: win.tagList.length > 0 && win.sideMode !== "files"; label: "TAGS"; count: win.tagList.length; open: win.tagsOpen; onToggled: win.tagsOpen = !win.tagsOpen }
         Flow {

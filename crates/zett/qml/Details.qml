@@ -18,6 +18,7 @@ Rectangle {
     border.width: 1; border.color: Qt.alpha(t.rule, 0.35)
     readonly property var heads: win.blocks.map((b, i) => ({ i, b })).filter(o => /^(h[1-3]|heading)$/.test(o.b.kind) && (o.b.text ?? "").length)
     readonly property int curHead: { let c = -1; for (const h of heads) if (h.i <= win.topBlock) c = h.i; return c >= 0 ? c : (heads.length ? heads[0].i : -1) }
+    readonly property var todos: win.blocks.map((b, i) => ({ i, b })).filter(o => o.b.kind === "todo" && !o.b.checked && (o.b.text ?? "").length)
     readonly property var links: { try { return JSON.parse(app.backlinks) } catch (e) { return [] } }
     readonly property int words: win.blocks.reduce((n, b) => n + ((b.text ?? "").match(/\S+/g)?.length ?? 0), 0)
     component Head: Text { color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8; Layout.leftMargin: 8; Layout.topMargin: 10 }
@@ -44,6 +45,22 @@ Rectangle {
                     font.weight: parent.cur ? Font.DemiBold : Font.Normal
                 }
                 HoverHandler { id: olHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: win.jumpToBlock(modelData.i) }
+            }
+        }
+        // the page's open to-dos, a click jumps to one
+        Head { visible: parent.parent.todos.length > 0; text: "TO DO  " + parent.parent.todos.length }
+        Repeater {
+            model: parent.parent.todos.slice(0, 8)
+            delegate: Rectangle {
+                required property var modelData
+                Layout.fillWidth: true
+                implicitHeight: 28; radius: t.rRow
+                color: tdH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                Row { x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                    Text { text: "check_box_outline_blank"; color: t.accent; font.family: t.icons; font.pixelSize: 15 }
+                    Text { text: modelData.b.text; color: t.dim; font.family: t.sans; font.pixelSize: 12; elide: Text.ElideRight; width: 190 } }
+                HoverHandler { id: tdH; cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: win.jumpToBlock(modelData.i) }
             }
         }

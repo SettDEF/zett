@@ -310,6 +310,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         filePath = x.path; fileText = app.readFile(x.path); view = "file"
         if (!fileTabs.includes(x.path)) fileTabs = fileTabs.concat([x.path])
         if (!app.shot.length) setPref("lastFile", x.path)
+        if (!app.shot.length) setPref("recentFiles", [x.path].concat((prefs.recentFiles ?? []).filter(p => p !== x.path)).slice(0, 12))
     }
     // the open files as tabs beside the pages'; closing the shown one shows its neighbour (or the page)
     property var fileTabs: []
