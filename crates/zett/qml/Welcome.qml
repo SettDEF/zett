@@ -23,11 +23,11 @@ Flickable {
         property string title
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignTop
-        implicitHeight: inner.implicitHeight + 50
+        implicitHeight: inner.implicitHeight + 42
         radius: 18; color: wl.t.card
         border.width: 1; border.color: Qt.alpha(wl.t.rule, 0.25)
-        Text { x: 18; y: 16; text: parent.title; color: wl.t.faint; font.family: wl.t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
-        ColumnLayout { id: inner; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; topMargin: 38 } spacing: 2 }
+        Text { x: 16; y: 12; text: parent.title; color: wl.t.faint; font.family: wl.t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+        ColumnLayout { id: inner; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8; topMargin: 32 } spacing: 2 }
     }
     component Item_: Rectangle {
         property string icon
@@ -36,7 +36,7 @@ Flickable {
         property string keys
         signal hit
         Layout.fillWidth: true
-        implicitHeight: 36; radius: 12
+        implicitHeight: 32; radius: 10
         color: ih.hovered ? Qt.alpha(wl.t.text, 0.06) : "transparent"
         RowLayout {
             anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
@@ -57,27 +57,27 @@ Flickable {
 
     ColumnLayout {
         id: wcol
-        x: 40; y: 40
-        width: Math.min(1100, wl.width - 80)
-        spacing: 20
+        x: 24; y: 24
+        width: wl.width - 48
+        spacing: 14
         // the title: the icon, zett, this folder
         RowLayout {
             spacing: 16
-            Image { source: "file://" + wl.win.homeDir + "/.local/share/icons/hicolor/scalable/apps/zett.svg"; sourceSize: Qt.size(64, 64); Layout.preferredWidth: 64; Layout.preferredHeight: 64 }
+            Image { source: "file://" + wl.win.homeDir + "/.local/share/icons/hicolor/scalable/apps/zett.svg"; sourceSize: Qt.size(44, 44); Layout.preferredWidth: 44; Layout.preferredHeight: 44 }
             ColumnLayout {
                 spacing: 2
-                Text { text: "zett"; color: wl.t.text; font.family: wl.t.sans; font.pixelSize: 30; font.weight: Font.Bold }
+                Text { text: "zett"; color: wl.t.text; font.family: wl.t.sans; font.pixelSize: 22; font.weight: Font.Bold }
                 Text { text: "Editing " + wl.app.dir.replace(wl.win.homeDir, "~"); color: wl.t.faint; font.family: wl.t.mono; font.pixelSize: 12 }
             }
         }
         GridLayout {
             Layout.fillWidth: true
-            columns: wl.width > 900 ? 2 : 1
-            columnSpacing: 16; rowSpacing: 16
+            columns: wl.width > 1250 ? 3 : wl.width > 640 ? 2 : 1
+            columnSpacing: 12; rowSpacing: 12
             Card {
                 title: "START"
                 Item_ { icon: "note_add"; label: "New file…"; sub: "in this folder"; onHit: { wl.win.sideMode = "files"; wl.win.sidebarHidden = false; wl.win.newFileHere() } }
-                Item_ { icon: "folder_open"; label: "Open folder…"; sub: "a project in a new window"; keys: "Ctrl K O"; onHit: wl.win.openFolderPick() }
+                Item_ { icon: "folder_open"; label: "Open folder…"; sub: "opens here"; keys: "Ctrl K O"; onHit: wl.win.openFolderPick() }
                 Item_ { icon: "search"; label: "Go to file"; sub: "fuzzy, every file"; keys: "Ctrl P"; onHit: wl.win.openQuick("") }
                 Item_ { icon: "bolt"; label: "Command palette"; sub: "everything zett can do"; keys: "Ctrl ⇧ P"; onHit: wl.win.openPalette() }
                 Item_ { icon: "terminal"; label: "Terminal"; sub: "in this folder"; keys: "Ctrl `"; onHit: wl.win.toggleDrawer() }
@@ -100,12 +100,11 @@ Flickable {
                 Text { visible: !wl.recentFolders.length; Layout.leftMargin: 10; text: "Folders you open show here"; color: wl.t.faint; font.family: wl.t.sans; font.pixelSize: 12 }
                 Repeater { model: wl.recentFolders; delegate: Item_ { required property string modelData; icon: "folder"; label: modelData.slice(modelData.lastIndexOf("/") + 1); sub: modelData.replace(wl.win.homeDir, "~"); onHit: wl.win.openFolder(modelData) } }
             }
-        }
-        // the keys worth knowing, as chips
-        Card {
+            // the keys worth knowing, as chips
+            Card {
             title: "KEYS"
             Flow {
-                Layout.fillWidth: true; Layout.margins: 8
+                Layout.fillWidth: true; Layout.margins: 6
                 spacing: 8
                 Repeater {
                     model: [["Ctrl P", "go to file"], ["Ctrl ⇧ P", "commands"], ["Ctrl ⇧ F", "search"], ["F12", "definition"], ["F2", "rename"], ["Ctrl .", "quick fix"], ["Ctrl /", "comment"], ["Alt ↑↓", "move line"], ["Ctrl \\", "split"], ["Alt Z", "wrap"], ["Ctrl K Z", "zen"], ["Ctrl `", "terminal"]]
@@ -120,6 +119,7 @@ Flickable {
                 }
             }
         }
+    }
     }
     QtObject { id: drawerTab; function go() { wl.win.showProblemsTab() } }
 }

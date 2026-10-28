@@ -240,17 +240,36 @@ ApplicationWindow {
     property int curBlock: -1
     // the focus leaves the block first, so what was just typed is saved before the move
     function moveCur(d) { const c = curBlock; if (c < 0) return; rootRow.forceActiveFocus(); if (app.moveBlock(c, c + d)) win.focusAfter = c + d }
-    property bool drawerShown: false
+    property bool drawerShown: prefs.drawerPinned ?? false   // a pinned panel opens again at start
     // Settings > Terminal: "zash" opens a real zash in the workspace folder instead of the panel's command runner
     // Open Folder: a new window on another project (zett --gui FOLDER); the folders opened before are kept
     function openFolder(p) {
         p = String(p).replace(/^file:\/\//, "")
         if (!p) return
         setPref("recentFolders", [p].concat((prefs.recentFolders ?? []).filter(x => x !== p)).slice(0, 10))
-        app.spawn(JSON.stringify([app.env("HOME") + "/.local/bin/zett", "--gui", p]))
+        // the same window: a new one on the folder takes this one's place (the workspace is fixed at start)
+        if (app.spawn(JSON.stringify([app.env("HOME") + "/.local/bin/zett", "--gui", p]))) { setPref("sideMode", "files"); quitLater.start() }
     }
+    Timer { id: quitLater; interval: 600; onTriggered: { if (fileView.dirty) fileView.write(); Qt.quit() } }
     FolderDialog { id: folderPick; title: "Open Folder"; onAccepted: win.openFolder(decodeURIComponent(String(selectedFolder))) }
-    function openFolderPick() { folderPick.open() }
+    // the KDE folder picker (Dolphin's), its answer read back by id; Qt's own when kdialog is not there
+    property string pickOut: ""
+    function openFolderPick() { pickOut = ""; if (!app.runShell(99999, 'command -v kdialog >/dev/null && exec kdialog --title "Open Folder" --getexistingdirectory "$PWD" 2>/dev/null || echo __qt__')) folderPick.open() }
+    Connections {
+        target: app
+        function onRunOutput(id, chunk, done, code) {
+            if (id !== 99999) return   // under the code blocks' 100000+, above the drawer's count
+            win.pickOut += chunk
+            if (!done) return
+            const p = win.pickOut.trim()
+            if (p === "__qt__") folderPick.open(); else if (p) win.openFolder(p)
+        }
+    }
+    // the panel docked at the bottom: pinned (open again at start), maximized, its height (dragged)
+    readonly property bool drawerPinned: prefs.drawerPinned ?? false
+    property bool drawerMax: false
+    property real drawerH: prefs.drawerHeight ?? 0
+    onDrawerPinnedChanged: if (drawerPinned) drawerShown = true
     function newFileHere() { sidebar.newKind = "file" }
     function showProblemsTab() { drawerShown = true; drawer.tab = "problems" }
     function openZash() { app.runShell(-1, 'setsid -f "$HOME/.local/bin/zash" >/dev/null 2>&1') }
@@ -436,7 +455,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     property bool zen: false
     onZenChanged: { sidebarHidden = zen; if (zen) detailsShown = false }
     Shortcut { sequence: "Ctrl+K, Z"; onActivated: win.zen = !win.zen }
-    Shortcut { sequence: "Ctrl+K, O"; onActivated: folderPick.open() }
+    Shortcut { sequence: "Ctrl+K, O"; onActivated: win.openFolderPick() }
     Shortcut { enabled: win.zen; sequence: "Escape"; onActivated: win.zen = false }
     // every command: the window's own, init.lua's hooks, the engine's; the palette and Settings > Keyboard Shortcuts show it
     function paletteEntries() {
@@ -460,7 +479,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
             { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" },
-            { icon: "folder_open", name: "Open Folder…", desc: "a project in a new window", keys: "Ctrl K O", run: () => folderPick.open() },
+            { icon: "folder_open", name: "Open Folder…", desc: "opens here", keys: "Ctrl K O", run: () => win.openFolderPick() },
             { icon: "commit", name: "Source Control", desc: "changes, stage, commit", keys: "Ctrl ⇧ G", run: () => { win.sideMode = "git"; win.sidebarHidden = false } },
             { icon: "center_focus_strong", name: "Zen mode", desc: "only the editor", keys: "Ctrl K Z", run: () => win.zen = !win.zen },
             { icon: "arrow_forward", name: "Go to definition", desc: "the language server", keys: "F12", run: () => fileView.ask("definition", fileView.cursorPos()) },
@@ -1847,7 +1866,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 id: drawer
                 visible: win.drawerShown
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(160, pageCol.height * 0.32)
+                Layout.preferredHeight: win.drawerMax ? pageCol.height * 0.78 : win.drawerH > 0 ? Math.min(win.drawerH, pageCol.height * 0.85) : Math.max(160, pageCol.height * 0.32)
                 Layout.leftMargin: 12; Layout.rightMargin: 12
                 win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine
             }

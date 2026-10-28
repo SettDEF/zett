@@ -28,6 +28,23 @@ Rectangle {
     }
     radius: 17
     color: t.card
+    // docked at the bottom: drag the top edge to set its height (kept)
+    Rectangle {
+        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 4 }
+        width: 44; height: 4; radius: 2; z: 5
+        color: Qt.alpha(t.text, gripH.hovered || gripD.active ? 0.35 : 0.14)
+    }
+    Item {
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: 10; z: 6
+        HoverHandler { id: gripH; cursorShape: Qt.SizeVerCursor }
+        DragHandler {
+            id: gripD; target: null; yAxis.enabled: true; xAxis.enabled: false
+            property real from: 0
+            onActiveChanged: if (active) from = d.height; else d.win.setPref("drawerHeight", Math.round(d.height))
+            onTranslationChanged: if (active) d.win.drawerH = Math.max(120, from - translation.y)
+        }
+    }
 
     function run(cmd) {
         cmd = (cmd ?? "").trim()
@@ -77,25 +94,40 @@ Rectangle {
                 }
             }
             Text { text: d.running ? "running…" : d.history.length ? (d.lastCode === 0 ? "ok" : `exit ${d.lastCode}`) : app.dir; elide: Text.ElideLeft; Layout.fillWidth: true; color: d.running ? t.accent : d.lastCode === 0 ? t.faint : t.removed; font.family: t.mono; font.pixelSize: 11 }
-            Repeater {
-                // [icon, label, action]
-                model: [["stop_circle", "Stop", "stop"], ["delete_sweep", "Clear", "clear"], ["open_in_new", "zash here", "zash"], ["close", "", "close"]]
-                delegate: Rectangle {
-                    required property var modelData
-                    visible: modelData[2] !== "stop" || d.running
-                    implicitWidth: bRow.implicitWidth + (modelData[1] ? 20 : 10); implicitHeight: 26; radius: 13
-                    color: bh.hovered ? t.raised : "transparent"
-                    RowLayout { id: bRow; anchors.centerIn: parent; spacing: 4
-                        Text { text: modelData[0]; color: modelData[2] === "stop" ? t.removed : t.dim; font.family: t.icons; font.pixelSize: 15 }
-                        Text { visible: !!modelData[1]; text: modelData[1]; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
-                    HoverHandler { id: bh; cursorShape: Qt.PointingHandCursor }
-                    TapHandler {
-                        onTapped: {
-                            const a = modelData[2]
-                            if (a === "stop") app.stopShell()
-                            else if (a === "clear") out.text = ""
-                            else if (a === "zash") app.runShell(-1, 'setsid -f "$HOME/.local/bin/zash" >/dev/null 2>&1')
-                            else win.drawerShown = false
+            // the panel's buttons: icons in one soft pill (pin, maximize, clear, zash, close), the name on hover
+            Rectangle {
+                implicitWidth: pillRow.implicitWidth + 8; implicitHeight: 34; radius: 17
+                color: Qt.alpha(t.text, 0.05)
+                Row {
+                    id: pillRow; anchors.centerIn: parent; spacing: 2
+                    Repeater {
+                        // [icon, name, action, on]
+                        model: [["stop_circle", "Stop", "stop", false], ["keep", d.win.drawerPinned ? "Unpin" : "Pin: stays open, also at start", "pin", d.win.drawerPinned], [d.win.drawerMax ? "close_fullscreen" : "open_in_full", d.win.drawerMax ? "Restore" : "Maximize", "max", d.win.drawerMax], ["delete_sweep", "Clear", "clear", false], ["open_in_new", "zash here", "zash", false], ["close", "Close  Ctrl `", "close", false]]
+                        delegate: Rectangle {
+                            required property var modelData
+                            visible: modelData[2] !== "stop" || d.running
+                            width: 32; height: 28; radius: 14
+                            color: modelData[3] ? Qt.alpha(t.accent, 0.2) : bh.hovered ? Qt.alpha(t.text, 0.08) : "transparent"
+                            Text { anchors.centerIn: parent; text: modelData[0]; color: modelData[2] === "stop" ? t.removed : modelData[3] ? t.accent : bh.hovered ? t.text : t.dim; font.family: t.icons; font.pixelSize: 17 }
+                            HoverHandler { id: bh; cursorShape: Qt.PointingHandCursor }
+                            Rectangle {
+                                visible: bh.hovered; z: 100
+                                anchors { bottom: parent.top; bottomMargin: 6; horizontalCenter: parent.horizontalCenter }
+                                width: tipT.implicitWidth + 14; height: 22; radius: 8
+                                color: t.raised; border.width: 1; border.color: Qt.alpha(t.rule, 0.4)
+                                Text { id: tipT; anchors.centerIn: parent; text: modelData[1]; color: t.text; font.family: t.sans; font.pixelSize: 11 }
+                            }
+                            TapHandler {
+                                onTapped: {
+                                    const a = modelData[2]
+                                    if (a === "stop") app.stopShell()
+                                    else if (a === "pin") d.win.setPref("drawerPinned", !d.win.drawerPinned)
+                                    else if (a === "max") d.win.drawerMax = !d.win.drawerMax
+                                    else if (a === "clear") out.text = ""
+                                    else if (a === "zash") d.win.openZash()
+                                    else { d.win.drawerShown = false; d.win.drawerMax = false }
+                                }
+                            }
                         }
                     }
                 }

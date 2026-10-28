@@ -1,21 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="0 0 128 128">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="linear-gradient-1" x1="8" y1="8" x2="8" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#313244"/>
+      <stop offset="1" stop-color="#1e1e2e"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-2" x1="46" y1="42" x2="89.801" y2="81.819" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#cba6f7"/>
       <stop offset="1" stop-color="#89b4fa"/>
     </linearGradient>
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity=".28"/>
-      <stop offset=".55" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
   </defs>
-  <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#bg)"/>
-  <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#sheen)"/>
-  <!-- the code brackets -->
-  <path d="M34 46 L20 64 L34 82" fill="none" stroke="#1e1e2e" stroke-opacity=".55" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M94 46 L108 64 L94 82" fill="none" stroke="#1e1e2e" stroke-opacity=".55" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- the z -->
-  <path d="M46 44 H82 L46 84 H82" fill="none" stroke="#1e1e2e" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- the cursor -->
-  <rect x="86" y="74" width="5" height="16" rx="2.5" fill="#f5e0dc"/>
+  <title>zett.svg</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <path d="M38 8 L90 8 C106.569 8 120 21.431 120 38 L120 90 C120 106.569 106.569 120 90 120 L38 120 C21.431 120 8 106.569 8 90 L8 38 C8 21.431 21.431 8 38 8 Z" fill="url(#linear-gradient-1)"/>
+    <path d="M38 8.75 L90 8.75 C106.154 8.75 119.25 21.846 119.25 38 L119.25 90 C119.25 106.154 106.154 119.25 90 119.25 L38 119.25 C21.846 119.25 8.75 106.154 8.75 90 L8.75 38 C8.75 21.846 21.846 8.75 38 8.75 Z" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+    <path d="M33.2 42 C33.2 42.849 32.863 43.663 32.263 44.263 C31.663 44.863 30.849 45.2 30 45.2 C29.151 45.2 28.337 44.863 27.737 44.263 C27.137 43.663 26.8 42.849 26.8 42 C26.8 41.151 27.137 40.337 27.737 39.737 C28.337 39.137 29.151 38.8 30 38.8 C30.849 38.8 31.663 39.137 32.263 39.737 C32.863 40.337 33.2 41.151 33.2 42 Z" fill="#6c7086"/>
+    <path d="M33.2 64 C33.2 65.767 31.767 67.2 30 67.2 C28.233 67.2 26.8 65.767 26.8 64 C26.8 63.151 27.137 62.337 27.737 61.737 C28.337 61.137 29.151 60.8 30 60.8 C30.849 60.8 31.663 61.137 32.263 61.737 C32.863 62.337 33.2 63.151 33.2 64 Z" fill="#6c7086"/>
+    <path d="M33.2 86 C33.2 87.767 31.767 89.2 30 89.2 C28.233 89.2 26.8 87.767 26.8 86 C26.8 84.233 28.233 82.8 30 82.8 C31.767 82.8 33.2 84.233 33.2 86 Z" fill="#6c7086"/>
+    <path d="M46 42 L86 42 L46 86 L86 86" fill="none" stroke="url(#linear-gradient-2)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M96 70 L100 70 C101.657 70 103 71.343 103 73 L103 87 C103 88.657 101.657 90 100 90 L96 90 C94.343 90 93 88.657 93 87 L93 73 C93 71.343 94.343 70 96 70 Z" fill="#cba6f7" fill-opacity="0.85"/>
+  </g>
 </svg>

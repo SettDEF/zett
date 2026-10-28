@@ -8,6 +8,20 @@ Rectangle {
     // the foot's templates (templates/*.md become a new page)
     property bool templatesOpen: false
     // the Explorer's New file / New folder: the name typed in a field under the head (a/b.rs makes the folders too)
+    // a file's badge in the Explorer: a short name for its type and that language's usual colour
+    function fileBadge(name) {
+        const n = name.toLowerCase(), e = n.includes(".") ? n.slice(n.lastIndexOf(".") + 1) : n
+        const m = { rs: ["rs", "#e8916b"], toml: ["tm", "#b4a7d6"], lock: ["lk", "#8a8f98"], qml: ["qml", "#6fcf97"], js: ["js", "#f0d75a"], mjs: ["js", "#f0d75a"], ts: ["ts", "#5fa8f5"], tsx: ["tsx", "#5fa8f5"], jsx: ["jsx", "#5fd0f0"], json: ["{}", "#f0b45a"], md: ["md", "#9aa4b2"], py: ["py", "#f5d06e"], sh: ["sh", "#8fd18f"], bash: ["sh", "#8fd18f"], zsh: ["sh", "#8fd18f"], lua: ["lua", "#7a8cf5"], c: ["c", "#7fa7d9"], h: ["h", "#a58fd9"], cpp: ["c++", "#6f9bd9"], hpp: ["h++", "#a58fd9"], go: ["go", "#5fd0e0"], html: ["<>", "#f08a5a"], css: ["css", "#7a9cf5"], scss: ["scs", "#e58fb4"], yml: ["yml", "#e57a7a"], yaml: ["yml", "#e57a7a"], svg: ["svg", "#f0b45a"], png: ["img", "#c38fe5"], jpg: ["img", "#c38fe5"], txt: ["txt", "#9aa4b2"], nix: ["nix", "#7ab4f5"], makefile: ["mk", "#d9a06f"], dockerfile: ["dk", "#5fa8f5"], gitignore: ["git", "#e57a5a"], vue: ["vue", "#6fcf97"], java: ["jv", "#e5946f"], kt: ["kt", "#b48fe5"], rb: ["rb", "#e5605a"], php: ["php", "#8f9be5"], sql: ["sql", "#e5c46f"], conf: ["cfg", "#9aa4b2"], ini: ["cfg", "#9aa4b2"], env: ["env", "#e5c46f"] }
+        return m[e] ?? [e.slice(0, 3) || "·", "#9aa4b2"]
+    }
+    // the icon file for a type (~/.local/share/zett/icons/filetypes, from packaging/icons/filetypes)
+    function fileIcon(name) {
+        const n = name.toLowerCase(), e = n.includes(".") ? n.slice(n.lastIndexOf(".") + 1) : n
+        const alias = { mjs: "js", bash: "sh", zsh: "sh", hpp: "h", cc: "cpp", yaml: "yml", png: "img", jpg: "img", jpeg: "img", webp: "img", gif: "img", makefile: "make", gitignore: "git", ini: "conf", cfg: "conf" }
+        const have = ["rs", "toml", "lock", "qml", "js", "ts", "tsx", "jsx", "json", "md", "py", "sh", "lua", "c", "h", "cpp", "go", "html", "css", "yml", "svg", "img", "txt", "nix", "make", "git", "java", "rb", "sql", "conf"]
+        const k = alias[e] ?? e
+        return "file://" + win.homeDir + "/.local/share/zett/icons/filetypes/" + (have.includes(k) ? k : "file") + ".svg"
+    }
     property string newKind: ""
     property bool openOpen: true
     property bool recentOpen: true
@@ -264,7 +278,9 @@ Rectangle {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 8 + modelData.depth * 14; rightMargin: 10 }
                     spacing: 6
-                    Text { text: modelData.dir ? (parent.parent.shut ? "folder" : "folder_open") : modelData.name.endsWith(".md") ? "description" : "draft"; color: modelData.dir ? t.dim : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                Text { visible: modelData.dir; text: parent.parent.shut ? "folder" : "folder_open"; color: parent.parent.shut ? t.dim : t.accent; font.family: t.icons; font.pixelSize: 16 }
+                    // files: the type's vector icon (a page in its language's colour)
+                    Image { visible: !modelData.dir; source: modelData.dir ? "" : side.fileIcon(modelData.name); sourceSize: Qt.size(18, 18); Layout.preferredWidth: 18; Layout.preferredHeight: 18 }
                     Text { Layout.fillWidth: true; text: modelData.name; elide: Text.ElideRight; color: modelData.git === "M" ? t.changed : modelData.git === "U" || modelData.git === "A" ? t.added : modelData.git === "D" ? t.removed : t.dim; font.family: t.sans; font.pixelSize: 13 }
                     Text { visible: modelData.git.length > 0; text: modelData.git; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
                 }
