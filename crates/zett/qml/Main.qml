@@ -197,6 +197,7 @@ ApplicationWindow {
     // ligatures (=> as ⇒) in code blocks: off unless Settings turns them on
     property bool codeLigatures: prefs.codeLigatures ?? false
     property int runFirst: -1      // tests: the block whose Run is pressed
+    property int selectFirst: -1   // tests: the block whose first word gets selected
     // code blocks' Run: output gathered here by block (their delegates are rebuilt meanwhile), then a code block under it
     property var runBuf: ({})
     function runStart(i) { const b = Object.assign({}, runBuf); b[i] = ""; runBuf = b }
@@ -611,7 +612,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     // [[Page]] → a link (the text is escaped first: it is shown as StyledText)
     // a block's Markdown drawn (while it is not being typed in): **bold**, *italic*, `code`, ~~struck~~,
     // [[page]] and [text](url) links; code spans first, so nothing inside them is read as marks
-    readonly property var inlineMarks: /\[\[|\*\*|\*[^*\s]|`|~~|\]\(|(^|\W)_[^_\s]/
+    readonly property var inlineMarks: /==|\[\[|\*\*|\*[^*\s]|`|~~|\]\(|(^|\W)_[^_\s]/
     function linkify(s) {
         const esc = x => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         const code = []
@@ -625,6 +626,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
              .replace(/(^|[^*\w])\*([^*\s][^*\n]*?)\*(?!\w)/g, "$1<i>$2</i>")
              .replace(/(^|\W)_([^_\s][^_\n]*?)_(?!\w)/g, "$1<i>$2</i>")
              .replace(/~~([^~\n]+)~~/g, "<s>$1</s>")
+             .replace(/==([^=\n]+)==/g, `<font color="${t.accent}">$1</font>`)   // ==highlight== (StyledText has no background: the accent)
              .replace(/\n/g, "<br>")
         return h.replace(/\u0001(\d+)\u0001/g, (m, i) => links[+i])
                 .replace(/\u0000(\d+)\u0000/g, (m, i) => `<font face="${t.mono}" color="${t.accent}">${code[+i]}</font>`)
@@ -649,6 +651,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             }
             if (app.shotEngine === "menu") { win.blockMenu(1, 340, 180, null); console.log(`zett-probe: menu opened=${ctx.opened} visible=${ctx.visible} items=${ctx.shown.length} h=${ctx.implicitHeight} root=${win.contentItem.parent}`); grabLater.start(); return }
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
+            if (app.shotEngine === "select") { win.selectFirst = win.blocks.findIndex(b => b.kind === "paragraph" && b.text.length > 3); claudeShot.start(); return }
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
@@ -1156,6 +1159,44 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                 TapHandler { enabled: !edit.activeFocus; onTapped: edit.forceActiveFocus() }
                                 z: edit.activeFocus ? 0 : 2   // editing: under the editor (declared after it), over the block's fill
                             }
+                            // ── a selection in text: a small bar over it to format it ──
+                            Rectangle {
+                                id: selBar
+                                readonly property bool on: edit.activeFocus && edit.selectedText.length > 0 && blockItem.kind !== "code" && !edit.normal
+                                visible: on
+                                readonly property rect at: edit.positionToRectangle(edit.selectionStart)
+                                x: Math.max(0, Math.min(parent.width - width, edit.x + at.x - 8))
+                                y: edit.y + at.y - height - 8
+                                width: selRow.implicitWidth + 12; height: 34; radius: 12
+                                color: t.raised
+                                border.width: 1; border.color: Qt.alpha(t.rule, 0.4)
+                                z: 20
+                                Row {
+                                    id: selRow
+                                    anchors.centerIn: parent
+                                    spacing: 2
+                                    Repeater {
+                                        model: [
+                                            { icon: "format_bold", tip: "Bold  Ctrl+B", a: "**", z: "**" },
+                                            { icon: "format_italic", tip: "Italic  Ctrl+I", a: "*", z: "*" },
+                                            { icon: "format_strikethrough", tip: "Strike", a: "~~", z: "~~" },
+                                            { icon: "code", tip: "Code  Ctrl+E", a: "`", z: "`" },
+                                            { icon: "ink_highlighter", tip: "Highlight", a: "==", z: "==" },
+                                            { icon: "link", tip: "Link to a page  Ctrl+K", a: "[[", z: "]]" }
+                                        ]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            width: 28; height: 26; radius: 8
+                                            color: sbH.hovered ? Qt.alpha(t.accent, 0.18) : "transparent"
+                                            Text { anchors.centerIn: parent; text: modelData.icon; color: sbH.hovered ? t.accent : t.text; font.family: t.icons; font.pixelSize: 17 }
+                                            HoverHandler { id: sbH; cursorShape: Qt.PointingHandCursor }
+                                            TapHandler { onTapped: win.wrapSel(edit, modelData.a, modelData.z) }
+                                        }
+                                    }
+                                }
+                            }
+                            // tests: ZETT_SHOT_ENGINE=select selects the first word of the first text block
+                            Connections { target: win; function onSelectFirstChanged() { if (win.selectFirst === blockItem.index) { edit.forceActiveFocus(); edit.select(0, Math.max(1, edit.text.indexOf(" "))) } } }
                             // ── code: the current line, line numbers, Copy / Run, the fold bar ──
                             Rectangle {
                                 visible: blockItem.kind === "code" && edit.activeFocus
@@ -1460,6 +1501,11 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                         app.setText(blockItem.index, "")
                                         app.setKind(blockItem.index, fence[1] ? "code:" + fence[1] : "code")
                                         e.accepted = true; return
+                                    }
+                                    // text with a selection: Ctrl+B bold, Ctrl+I italic, Ctrl+E code, Ctrl+K link (without one they stay Emacs motions)
+                                    if (!code && edit.selectedText && (e.modifiers & Qt.ControlModifier) && !(e.modifiers & Qt.ShiftModifier)) {
+                                        const w = { [Qt.Key_B]: ["**", "**"], [Qt.Key_I]: ["*", "*"], [Qt.Key_E]: ["`", "`"], [Qt.Key_K]: ["[[", "]]"] }[e.key]
+                                        if (w) { win.wrapSel(edit, w[0], w[1]); e.accepted = true; return }
                                     }
                                     // code: Tab / Shift+Tab indent, Enter keeps the indent (one more after { ( [ then do :),
                                     // brackets and quotes close themselves, a typed closer steps over the one already there
