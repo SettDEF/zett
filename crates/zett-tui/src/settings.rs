@@ -96,6 +96,7 @@ const WORKS_ELSEWHERE: &[&str] = &[
     "maxmapdepth", "remap",
     "write", "backup", "writebackup", "backupdir", "backupext", "backupskip", "backupcopy", "fsync", "fileformat", "fileencoding",
     "bomb", "endofline", "endoffile", "fileformats", "fileencodings", "binary", "autoread", "autowrite", "autowriteall", "hidden", "autochdir",
+    "loadplugins",
     "laststatus", "rulerformat", "ruler", "cmdheight", "showtabline", "tabline", "winbar", "title", "titlestring", "titlelen",
 ];
 

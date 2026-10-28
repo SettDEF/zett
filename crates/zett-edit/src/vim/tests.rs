@@ -108,6 +108,28 @@ mod batch2 {
     }
 
     #[test]
+    fn window_and_cinwords() {
+        // a 40-row screen, window=6: CTRL-F moves 4 lines
+        let t: String = (1..=100).map(|i| format!("line {i}\n")).collect();
+        let mut e = Editor::from_str(&t);
+        e.set_screen(0, 40, 80);
+        e.set_opt("window", "6");
+        e.feed("<C-f>");
+        assert_eq!(e.take_requests(), vec![Request::Top(4)]);
+        // smartindent: after "if x" (no brace) the next line goes in
+        let mut e = Editor::from_str("if x\n");
+        for (k, v) in [("smartindent", "true"), ("shiftwidth", "4")] { e.set_opt(k, v) }
+        e.set_soft_tab(Some(4));
+        e.feed("oy<Esc>");
+        assert_eq!(e.text(), "if x\n    y\n");
+        let mut e = Editor::from_str("foo x\n");
+        for (k, v) in [("smartindent", "true"), ("shiftwidth", "4"), ("cinwords", "foo")] { e.set_opt(k, v) }
+        e.set_soft_tab(Some(4));
+        e.feed("oy<Esc>");
+        assert_eq!(e.text(), "foo x\n    y\n");
+    }
+
+    #[test]
     fn windows_scrolling_and_the_view() {
         let mut e = lines(100);
         e.feed("<C-w>v2<C-w>+<C-w><C-w><C-w>gf");

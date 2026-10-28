@@ -1,6 +1,6 @@
 # Emacs's commands
 
-Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 All 3163 interactive commands of a plain Emacs (`emacs -Q`), by their package's prefix. ✓ zett has it under
 the same name. Most are packages (mail, games, modes for other languages): zett's answer to many is a
@@ -1568,8 +1568,8 @@ plugin, not the core.
 ## expand
 
 - ✓ `expand-abbrev` Expand the abbrev before point, if there is an abbrev there.
-- · `expand-jump-to-next-slot` Move the cursor to the next slot in the last abbrev expansion.
-- · `expand-jump-to-previous-slot` Move the cursor to the previous slot in the last abbrev expansion.
+- ✓ `expand-jump-to-next-slot` Move the cursor to the next slot in the last abbrev expansion.
+- ✓ `expand-jump-to-previous-slot` Move the cursor to the previous slot in the last abbrev expansion.
 - · `expand-mail-aliases` Expand all mail aliases in suitable header fields found between BEG and END.
 - · `expand-region-abbrevs` For each abbrev occurrence in the region, offer to expand it.
 

@@ -91,7 +91,9 @@ impl Editor {
             }
             'f' | 'b' => {
                 let n = self.take_count();
-                let page = height.saturating_sub(2).max(1) * n;
+                // window: set below the screen's height, CTRL-F/CTRL-B move window - 2 lines (23 is the unset default)
+                let w = self.opt_num("window", 0);
+                let page = if w > 2 && w != 23 && (w as usize) < height.saturating_sub(1) { w as usize - 2 } else { height.saturating_sub(2).max(1) } * n;
                 let t = if c == 'f' { (top + page).min(last) } else { top.saturating_sub(page) };
                 self.vim_top(t);
                 let to = if c == 'f' { t } else { (t + height - 1).min(last) };

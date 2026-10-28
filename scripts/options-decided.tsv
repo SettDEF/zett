@@ -49,3 +49,33 @@ pastetoggle	the terminal tells a paste from typing (bracketed paste), so there i
 helpheight	help opens in the window itself, not a split of its own
 helpfile	zett's help is built in (:help), not a file to point at
 helplang	zett's help is in English
+autocompletetimeout	the decay timeout of Neovim's own completion search; zett's completion asks the servers and words at once, no timed search
+completetimeout	the decay timeout of Neovim's own CTRL-N search; zett's word list is built at once
+busy	a UI hint for plugins (a spinner per buffer); zett shows progress with fidget-style messages and its progress cards
+channel	the job channel of a terminal buffer; zett's terminal is its own panel, buffers have no channel
+charconvert	zett reads and writes UTF-8 (with fileencodings for the rest), no conversion expression
+casemap	zett changes case by Unicode's rules always (Rust's to_uppercase/to_lowercase)
+isprint	zett shows every Unicode character the terminal can draw; control characters are always shown as ^X
+langnoremap	langmap is applied by zett before mappings, the default Neovim also has
+langremap	langmap is applied by zett before mappings, the default Neovim also has
+debug	zett never hides an error: every one goes to the messages (:messages)
+diffanchors	zett's diff engine (similar) aligns by itself; no anchors
+diffexpr	zett diffs with its own engine, not an external diff program
+patchexpr	zett does not run patch; :diffpatch uses its own diff engine
+redrawtime	zett highlights search matches without a time limit (rope search is fast enough)
+prompt	zett has no "Press ENTER" prompt to turn off
+mousefocus	a terminal cannot move the keyboard focus with the pointer
+mousemoveevent	a terminal only reports moves while a button is held (zett asks for nothing more)
+tagbsearch	zett reads tags files whole; binary or linear search gives the same matches
+showfulltag	zett's completion menu shows the tag's kind and file instead of its pattern
+completeitemalign	zett's completion menu has its own fixed layout (icon, word, kind, source)
+cpoptions	zett behaves as Neovim's default 'cpoptions'; the Vi-compatible flags are not offered
+isident	only used by the \i pattern atom; zett's patterns treat identifiers as 'iskeyword'
+cinkeys	zett re-indents from the language server or the indent rules, not C-indent trigger keys
+cinoptions	C-indent's tuning; zett's indent comes from the language server or the language's rules
+cinscopedecls	C-indent's tuning; zett's indent comes from the language server or the language's rules
+indentkeys	zett re-indents from the language server or the indent rules, not trigger keys
+lisp	Lisp indenting: zett's indent for Lisp comes from its language rules
+lispoptions	Lisp indenting: zett's indent for Lisp comes from its language rules
+lispwords	Lisp indenting: zett's indent for Lisp comes from its language rules
+smoothscroll	zett scrolls by whole lines; wrapped lines scroll as one

@@ -1,8 +1,8 @@
 # Emacs's default keys in zett
 
-Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-464 of 500 bound commands, 34 — decided against (why in the last column), 2 · not yet. ✓ zett has the command under the same name (`M-x`).
+466 of 500 bound commands, 34 — decided against (why in the last column), 0 · not yet. ✓ zett has the command under the same name (`M-x`).
 
 | | key | command | |
 |---|---|---|---|
@@ -265,8 +265,8 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `C-x a -` | `inverse-add-global-abbrev` |  |
 | ✓ | `C-x a g` | `add-global-abbrev` |  |
 | ✓ | `C-x a i l` | `inverse-add-mode-abbrev` |  |
-| · | `C-x a n` | `expand-jump-to-next-slot` |  |
-| · | `C-x a p` | `expand-jump-to-previous-slot` |  |
+| ✓ | `C-x a n` | `expand-jump-to-next-slot` |  |
+| ✓ | `C-x a p` | `expand-jump-to-previous-slot` |  |
 | ✓ | `C-x b` | `switch-to-buffer` |  |
 | ✓ | `C-x d` | `dired` |  |
 | ✓ | `C-x e` | `kmacro-end-and-call-macro` |  |

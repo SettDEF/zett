@@ -1,8 +1,8 @@
 # Neovim's options in zett
 
-Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-276 ✓ do something in zett, 51 — decided against (why in the last column), 47 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
+279 ✓ do something in zett, 81 — decided against (why in the last column), 14 ◐ are kept by :set but do nothing yet, of 374 (`:set`, `zett.opt`, `zett.ft.<type>`; `:help settings`).
 
 | | option | short | type | scope | default | what it does | |
 |---|---|---|---|---|---|---|---|
@@ -14,7 +14,7 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `autochdir` | acd | boolean | global | `false` | change directory to the file in the current window |  |
 | ✓ | `autocomplete` | ac | boolean | buf | `false` | enable automatic completion in insert mode |  |
 | ✓ | `autocompletedelay` | acl | number | global | `0` | delay in msec before menu appears after typing |  |
-| ◐ | `autocompletetimeout` | act | number | global | `80` | initial decay timeout for autocompletion algorithm |  |
+| — | `autocompletetimeout` | act | number | global | `80` | initial decay timeout for autocompletion algorithm | the decay timeout of Neovim's own completion search; zett's completion asks the servers and words at once, no timed search |
 | ✓ | `autoindent` | ai | boolean | buf | `true` | take indent for new line from previous line |  |
 | ✓ | `autoread` | ar | boolean | buf | `true` | autom. read file when changed outside of Vim |  |
 | ✓ | `autowrite` | aw | boolean | global | `false` | automatically write file if changed |  |
@@ -36,19 +36,19 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `bufhidden` | bh | string | buf | `` | what to do when buffer is no longer in window |  |
 | ✓ | `buflisted` | bl | boolean | buf | `true` | whether the buffer shows up in the buffer list |  |
 | ✓ | `buftype` | bt | string | buf | `` | special type of buffer |  |
-| ◐ | `busy` |  | number | buf | `0` |  |  |
-| ◐ | `casemap` | cmp | string | global | `internal,keepascii` | specifies how case of letters is changed |  |
+| — | `busy` |  | number | buf | `0` |  | a UI hint for plugins (a spinner per buffer); zett shows progress with fidget-style messages and its progress cards |
+| — | `casemap` | cmp | string | global | `internal,keepascii` | specifies how case of letters is changed | zett changes case by Unicode's rules always (Rust's to_uppercase/to_lowercase) |
 | ✓ | `cdhome` | cdh | boolean | global | `true` | change directory to the home directory by ":cd" |  |
 | ✓ | `cdpath` | cd | string | global | `,,` | list of directories searched with ":cd" |  |
 | ✓ | `cedit` |  | string | global | `` | key used to open the command-line window |  |
-| ◐ | `channel` |  | number | buf | `0` |  |  |
-| ◐ | `charconvert` | ccv | string | global | `` | expression for character encoding conversion |  |
+| — | `channel` |  | number | buf | `0` |  | the job channel of a terminal buffer; zett's terminal is its own panel, buffers have no channel |
+| — | `charconvert` | ccv | string | global | `` | expression for character encoding conversion | zett reads and writes UTF-8 (with fileencodings for the rest), no conversion expression |
 | ✓ | `chistory` | chi | number | global | `10` | maximum number of quickfix lists in history |  |
 | ✓ | `cindent` | cin | boolean | buf | `false` | do C program indenting |  |
-| ◐ | `cinkeys` | cink | string | buf | `0{,0},0),0],:,0#,!^F,o,O,e` | keys that trigger indent when 'cindent' is set |  |
-| ◐ | `cinoptions` | cino | string | buf | `` | how to do indenting when 'cindent' is set |  |
-| ◐ | `cinscopedecls` | cinsd | string | buf | `public,protected,private` | words that are recognized by 'cino-g' |  |
-| ◐ | `cinwords` | cinw | string | buf | `if,else,while,do,for,switch` | words where 'si' and 'cin' add an indent |  |
+| — | `cinkeys` | cink | string | buf | `0{,0},0),0],:,0#,!^F,o,O,e` | keys that trigger indent when 'cindent' is set | zett re-indents from the language server or the indent rules, not C-indent trigger keys |
+| — | `cinoptions` | cino | string | buf | `` | how to do indenting when 'cindent' is set | C-indent's tuning; zett's indent comes from the language server or the language's rules |
+| — | `cinscopedecls` | cinsd | string | buf | `public,protected,private` | words that are recognized by 'cino-g' | C-indent's tuning; zett's indent comes from the language server or the language's rules |
+| ✓ | `cinwords` | cinw | string | buf | `if,else,while,do,for,switch` | words where 'si' and 'cin' add an indent |  |
 | ✓ | `clipboard` | cb | string | global | `` | use the clipboard as the unnamed register |  |
 | ✓ | `cmdheight` | ch | number | global | `1` | number of lines to use for the command-line |  |
 | ✓ | `cmdwinheight` | cwh | number | global | `7` | height of the command-line window |  |
@@ -59,26 +59,26 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `compatible` | cp | boolean | global | `false` |  |  |
 | ✓ | `complete` | cpt | string | buf | `.,w,b,u,t` | specify how Insert mode completion works |  |
 | ✓ | `completefunc` | cfu | string | buf | `` | function to be used for Insert mode completion |  |
-| ◐ | `completeitemalign` | cia | string | global | `abbr,kind,menu` |  |  |
+| — | `completeitemalign` | cia | string | global | `abbr,kind,menu` |  | zett's completion menu has its own fixed layout (icon, word, kind, source) |
 | ✓ | `completeopt` | cot | string | buf | `menu,popup` | options for Insert mode completion |  |
 | ✓ | `completeslash` | csl | string | buf | `` | like 'shellslash' for completion |  |
-| ◐ | `completetimeout` | cto | number | global | `0` | initial decay timeout for CTRL-N and CTRL-P |  |
+| — | `completetimeout` | cto | number | global | `0` | initial decay timeout for CTRL-N and CTRL-P | the decay timeout of Neovim's own CTRL-N search; zett's word list is built at once |
 | ✓ | `concealcursor` | cocu | string | win | `` | whether concealable text is hidden in cursor line |  |
 | ✓ | `conceallevel` | cole | number | win | `0` | whether concealable text is shown or hidden |  |
 | ✓ | `confirm` | cf | boolean | global | `false` | ask what to do about unsaved/read-only files |  |
 | ✓ | `copyindent` | ci | boolean | buf | `false` | make 'autoindent' use existing indent structure |  |
-| ◐ | `cpoptions` | cpo | string | global | `aABceFs_` | flags for Vi-compatible behavior |  |
+| — | `cpoptions` | cpo | string | global | `aABceFs_` | flags for Vi-compatible behavior | zett behaves as Neovim's default 'cpoptions'; the Vi-compatible flags are not offered |
 | ✓ | `cursorbind` | crb | boolean | win | `false` | move cursor in window as it moves in other windows |  |
 | ✓ | `cursorcolumn` | cuc | boolean | win | `false` | highlight the screen column of the cursor |  |
 | ✓ | `cursorline` | cul | boolean | win | `false` | highlight the screen line of the cursor |  |
 | ✓ | `cursorlineopt` | culopt | string | win | `both` | settings for 'cursorline' |  |
-| ◐ | `debug` |  | string | global | `` | set to "msg" to see all error messages |  |
+| — | `debug` |  | string | global | `` | set to "msg" to see all error messages | zett never hides an error: every one goes to the messages (:messages) |
 | ✓ | `define` | def | string | buf | `` | pattern to be used to find a macro definition |  |
 | ◐ | `delcombine` | deco | boolean | global | `false` | delete combining characters on their own |  |
 | ✓ | `dictionary` | dict | string | buf | `` | list of file names used for keyword completion |  |
 | ✓ | `diff` |  | boolean | win | `false` | use diff mode for the current window |  |
-| ◐ | `diffanchors` | dia | string | buf | `` | list of {address} to force anchoring of a diff |  |
-| ◐ | `diffexpr` | dex | string | global | `` | expression used to obtain a diff file |  |
+| — | `diffanchors` | dia | string | buf | `` | list of {address} to force anchoring of a diff | zett's diff engine (similar) aligns by itself; no anchors |
+| — | `diffexpr` | dex | string | global | `` | expression used to obtain a diff file | zett diffs with its own engine, not an external diff program |
 | ✓ | `diffopt` | dip | string | global | `internal,filler,closeoff,indent-heuristic,inline:char,linematch:40` | options for using diff mode |  |
 | ✓ | `digraph` | dg | boolean | global | `false` | enable the entering of digraphs in Insert mode |  |
 | — | `directory` | dir | string | global | `/home/caesar/.local/state/nvim/swap//` | list of directory names for the swap file | no swap files: every change is kept in the undo history on disk (time travel) |
@@ -155,13 +155,13 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `includeexpr` | inex | string | buf | `` | expression used to process an include line |  |
 | ✓ | `incsearch` | is | boolean | global | `true` | highlight match while typing search pattern |  |
 | ✓ | `indentexpr` | inde | string | buf | `` | expression used to obtain the indent of a line |  |
-| ◐ | `indentkeys` | indk | string | buf | `0{,0},0),0],:,0#,!^F,o,O,e` | keys that trigger indenting with 'indentexpr' |  |
+| — | `indentkeys` | indk | string | buf | `0{,0},0),0],:,0#,!^F,o,O,e` | keys that trigger indenting with 'indentexpr' | zett re-indents from the language server or the indent rules, not trigger keys |
 | ✓ | `infercase` | inf | boolean | buf | `false` | adjust case of match for keyword completion |  |
 | ✓ | `insertmode` | im | boolean | global | `false` |  |  |
 | ✓ | `isfname` | isf | string | global | `@,48-57,/,.,-,_,+,,,#,$,%,~,=` | characters included in file names and pathnames |  |
-| ◐ | `isident` | isi | string | global | `@,48-57,_,192-255` | characters included in identifiers |  |
+| — | `isident` | isi | string | global | `@,48-57,_,192-255` | characters included in identifiers | only used by the \i pattern atom; zett's patterns treat identifiers as 'iskeyword' |
 | ✓ | `iskeyword` | isk | string | buf | `@,48-57,_,192-255` | characters included in keywords |  |
-| ◐ | `isprint` | isp | string | global | `@,161-255` | printable characters |  |
+| — | `isprint` | isp | string | global | `@,161-255` | printable characters | zett shows every Unicode character the terminal can draw; control characters are always shown as ^X |
 | ✓ | `joinspaces` | js | boolean | global | `false` | two spaces after a period with a join command |  |
 | ✓ | `jumpoptions` | jop | string | global | `clean` | specifies how jumping is done |  |
 | ✓ | `keymap` | kmp | string | buf | `` | name of a keyboard mapping |  |
@@ -169,20 +169,20 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `keywordprg` | kp | string | buf | `:Man` | program to use for the "K" command |  |
 | ✓ | `langmap` | lmap | string | global | `` | alphabetic characters for other language mode |  |
 | ✓ | `langmenu` | lm | string | global | `` | language to be used for the menus |  |
-| ◐ | `langnoremap` | lnr | boolean | global | `true` |  |  |
-| ◐ | `langremap` | lrm | boolean | global | `false` | do apply 'langmap' to mapped characters |  |
+| — | `langnoremap` | lnr | boolean | global | `true` |  | langmap is applied by zett before mappings, the default Neovim also has |
+| — | `langremap` | lrm | boolean | global | `false` | do apply 'langmap' to mapped characters | langmap is applied by zett before mappings, the default Neovim also has |
 | ✓ | `laststatus` | ls | number | global | `2` | tells when last window has status lines |  |
 | — | `lazyredraw` | lz | boolean | global | `false` | don't redraw while executing macros | zett draws once a frame, after a whole macro or mapping has run (always lazy) |
 | ✓ | `lhistory` | lhi | number | win | `10` | maximum number of location lists in history |  |
 | ✓ | `linebreak` | lbr | boolean | win | `false` | wrap long lines at a blank |  |
 | — | `lines` |  | number | global | `24` | number of lines in the display | the terminal's size: zett follows it |
 | ✓ | `linespace` | lsp | number | global | `0` | number of pixel lines to use between characters |  |
-| ◐ | `lisp` |  | boolean | buf | `false` | automatic indenting for Lisp |  |
-| ◐ | `lispoptions` | lop | string | buf | `` | changes how Lisp indenting is done |  |
-| ◐ | `lispwords` | lw | string | buf | `defun,define,defmacro,set!,lambda,if,case,let,flet,let*,letrec,do,do*,define-syntax,let-syntax,letrec-syntax,destructuring-bind,defpackage,defparameter,defstruct,deftype,defvar,do-all-symbols,do-external-symbols,do-symbols,dolist,dotimes,ecase,etypecase,eval-when,labels,macrolet,multiple-value-bind,multiple-value-call,multiple-value-prog1,multiple-value-setq,prog1,progv,typecase,unless,unwind-protect,when,with-input-from-string,with-open-file,with-open-stream,with-output-to-string,with-package-iterator,define-condition,handler-bind,handler-case,restart-bind,restart-case,with-simple-restart,store-value,use-value,muffle-warning,abort,continue,with-slots,with-slots*,with-accessors,with-accessors*,defclass,defmethod,print-unreadable-object` | words that change how lisp indenting works |  |
+| — | `lisp` |  | boolean | buf | `false` | automatic indenting for Lisp | Lisp indenting: zett's indent for Lisp comes from its language rules |
+| — | `lispoptions` | lop | string | buf | `` | changes how Lisp indenting is done | Lisp indenting: zett's indent for Lisp comes from its language rules |
+| — | `lispwords` | lw | string | buf | `defun,define,defmacro,set!,lambda,if,case,let,flet,let*,letrec,do,do*,define-syntax,let-syntax,letrec-syntax,destructuring-bind,defpackage,defparameter,defstruct,deftype,defvar,do-all-symbols,do-external-symbols,do-symbols,dolist,dotimes,ecase,etypecase,eval-when,labels,macrolet,multiple-value-bind,multiple-value-call,multiple-value-prog1,multiple-value-setq,prog1,progv,typecase,unless,unwind-protect,when,with-input-from-string,with-open-file,with-open-stream,with-output-to-string,with-package-iterator,define-condition,handler-bind,handler-case,restart-bind,restart-case,with-simple-restart,store-value,use-value,muffle-warning,abort,continue,with-slots,with-slots*,with-accessors,with-accessors*,defclass,defmethod,print-unreadable-object` | words that change how lisp indenting works | Lisp indenting: zett's indent for Lisp comes from its language rules |
 | ✓ | `list` |  | boolean | win | `false` | show <Tab> and <EOL> |  |
 | ✓ | `listchars` | lcs | string | win | `tab:> ,trail:-,nbsp:+` | characters for displaying in list mode |  |
-| ◐ | `loadplugins` | lpl | boolean | global | `true` | load plugin scripts when starting up |  |
+| ✓ | `loadplugins` | lpl | boolean | global | `true` | load plugin scripts when starting up |  |
 | ✓ | `magic` |  | boolean | global | `true` |  |  |
 | — | `makeef` | mef | string | global | `` | name of the errorfile for ":make" | zett reads :make's output through a pipe, not an error file |
 | ✓ | `makeencoding` | menc | string | buf | `` | encoding of external make/grep commands |  |
@@ -204,10 +204,10 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `modified` | mod | boolean | buf | `false` | buffer has been modified |  |
 | — | `more` |  | boolean | global | `true` | pause listings when the whole screen is filled | long output opens in a popup to scroll and search, not a pager |
 | ✓ | `mouse` |  | string | global | `nvi` | enable the use of mouse clicks |  |
-| ◐ | `mousefocus` | mousef | boolean | global | `false` | keyboard focus follows the mouse |  |
+| — | `mousefocus` | mousef | boolean | global | `false` | keyboard focus follows the mouse | a terminal cannot move the keyboard focus with the pointer |
 | ✓ | `mousehide` | mh | boolean | global | `true` | hide mouse pointer while typing |  |
 | ✓ | `mousemodel` | mousem | string | global | `popup_setpos` | changes meaning of mouse buttons |  |
-| ◐ | `mousemoveevent` | mousemev | boolean | global | `false` | report mouse moves with <MouseMove> |  |
+| — | `mousemoveevent` | mousemev | boolean | global | `false` | report mouse moves with <MouseMove> | a terminal only reports moves while a button is held (zett asks for nothing more) |
 | ✓ | `mousescroll` |  | string | global | `ver:3,hor:6` | amount to scroll by when scrolling with a mouse |  |
 | ✓ | `mouseshape` | mouses | string | global | `` | shape of the mouse pointer in different modes |  |
 | ✓ | `mousetime` | mouset | number | global | `500` | max time between mouse double-click |  |
@@ -221,13 +221,13 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `paragraphs` | para | string | global | `IPLPPPQPP TPHPLIPpLpItpplpipbp` | nroff macros that separate paragraphs |  |
 | ✓ | `paste` |  | boolean | global | `false` |  |  |
 | — | `pastetoggle` | pt | string | global | `` |  | the terminal tells a paste from typing (bracketed paste), so there is no paste mode to toggle |
-| ◐ | `patchexpr` | pex | string | global | `` | expression used to patch a file |  |
+| — | `patchexpr` | pex | string | global | `` | expression used to patch a file | zett does not run patch; :diffpatch uses its own diff engine |
 | ✓ | `patchmode` | pm | string | global | `` | keep the oldest version of a file |  |
 | ✓ | `path` | pa | string | buf | `.,,` | list of directories searched with "gf" et.al. |  |
 | ✓ | `preserveindent` | pi | boolean | buf | `false` | preserve the indent structure when reindenting |  |
 | ✓ | `previewheight` | pvh | number | global | `12` | height of the preview window |  |
 | ✓ | `previewwindow` | pvw | boolean | win | `false` | identifies the preview window |  |
-| ◐ | `prompt` |  | boolean | global | `true` |  |  |
+| — | `prompt` |  | boolean | global | `true` |  | zett has no "Press ENTER" prompt to turn off |
 | — | `pumblend` | pb | number | global | `0` |  | see-through menus need a GUI: zett draws in the terminal's cells |
 | ✓ | `pumborder` |  | string | global | `` |  |  |
 | ✓ | `pumheight` | ph | number | global | `0` | maximum number of items to show in the popup menu |  |
@@ -238,7 +238,7 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `quoteescape` | qe | string | buf | `\` | escape characters used in a string |  |
 | ✓ | `readonly` | ro | boolean | buf | `false` | disallow writing the buffer |  |
 | — | `redrawdebug` | rdb | string | global | `` |  | Vim's redraw debugging |
-| ◐ | `redrawtime` | rdt | number | global | `2000` | timeout for 'hlsearch' and \|:match\| highlighting |  |
+| — | `redrawtime` | rdt | number | global | `2000` | timeout for 'hlsearch' and \|:match\| highlighting | zett highlights search matches without a time limit (rope search is fast enough) |
 | — | `regexpengine` | re | number | global | `0` | default regexp engine to use | Vim's choice between its two regex engines: zett has one |
 | ✓ | `relativenumber` | rnu | boolean | win | `false` | show relative line number in front of each line |  |
 | ✓ | `remap` |  | boolean | global | `true` |  |  |
@@ -277,7 +277,7 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `showbreak` | sbr | string | win | `` | string to use at the start of wrapped lines |  |
 | ✓ | `showcmd` | sc | boolean | global | `true` | show (partial) command somewhere |  |
 | ✓ | `showcmdloc` | sloc | string | global | `last` | where to show (partial) command |  |
-| ◐ | `showfulltag` | sft | boolean | global | `false` | show full tag pattern when completing tag |  |
+| — | `showfulltag` | sft | boolean | global | `false` | show full tag pattern when completing tag | zett's completion menu shows the tag's kind and file instead of its pattern |
 | ✓ | `showmatch` | sm | boolean | global | `false` | briefly jump to matching bracket if insert one |  |
 | ✓ | `showmode` | smd | boolean | global | `true` | message on status line to show current mode |  |
 | ✓ | `showtabline` | stal | number | global | `1` | tells when the tabpages line is displayed |  |
@@ -287,7 +287,7 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `smartcase` | scs | boolean | global | `false` | no ignore case when pattern has uppercase |  |
 | ✓ | `smartindent` | si | boolean | buf | `false` | smart autoindenting for C programs |  |
 | ✓ | `smarttab` | sta | boolean | global | `true` | <Tab> in leading whitespace indents by 'shiftwidth' |  |
-| ◐ | `smoothscroll` | sms | boolean | win | `false` | scroll by screen lines when 'wrap' is set |  |
+| — | `smoothscroll` | sms | boolean | win | `false` | scroll by screen lines when 'wrap' is set | zett scrolls by whole lines; wrapped lines scroll as one |
 | ✓ | `softtabstop` | sts | number | buf | `0` | number of columns between two soft tab stops |  |
 | ✓ | `spell` |  | boolean | win | `false` | enable spell checking |  |
 | ✓ | `spellcapcheck` | spc | string | buf | `[.?!]\_[\])'"\t ]\+` | pattern to locate end of a sentence |  |
@@ -311,7 +311,7 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `tabline` | tal | string | global | `` | custom format for the console tabpages line |  |
 | ✓ | `tabpagemax` | tpm | number | global | `50` | maximum number of tabpages for \|-p\| and "tab all" |  |
 | ✓ | `tabstop` | ts | number | buf | `8` | number of columns between two tab stops |  |
-| ◐ | `tagbsearch` | tbs | boolean | global | `true` | use binary searching in tags files |  |
+| — | `tagbsearch` | tbs | boolean | global | `true` | use binary searching in tags files | zett reads tags files whole; binary or linear search gives the same matches |
 | ✓ | `tagcase` | tc | string | buf | `followic` | how to handle case when searching in tags files |  |
 | ◐ | `tagfunc` | tfu | string | buf | `` | function to get list of tag matches |  |
 | ✓ | `taglength` | tl | number | global | `0` | number of significant characters for a tag |  |
@@ -364,7 +364,7 @@ Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `winbar` | wbr | string | win | `` |  |  |
 | — | `winblend` | winbl | number | win | `0` |  | see-through windows need a GUI: zett draws in the terminal's cells |
 | ✓ | `winborder` |  | string | global | `` |  |  |
-| ◐ | `window` | wi | number | global | `23` | nr of lines to scroll for CTRL-F and CTRL-B |  |
+| ✓ | `window` | wi | number | global | `23` | nr of lines to scroll for CTRL-F and CTRL-B |  |
 | ✓ | `winfixbuf` | wfb | boolean | win | `false` | keep window focused on a single buffer |  |
 | ✓ | `winfixheight` | wfh | boolean | win | `false` | keep window height when opening/closing windows |  |
 | ✓ | `winfixwidth` | wfw | boolean | win | `false` | keep window width when opening/closing windows |  |

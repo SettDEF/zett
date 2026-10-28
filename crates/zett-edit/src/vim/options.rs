@@ -13,7 +13,7 @@ pub const EDITOR_OPTIONS: &[&str] = &[
     "sections", "tabstop", "expandtab", "shiftwidth", "wrapscan", "ignorecase", "smartcase", "wrap", "scroll", "clipboard",
     "foldmethod", "foldenable", "foldlevel", "foldlevelstart", "foldmarker", "foldminlines", "foldnestmax", "foldignore",
     "foldopen", "foldclose", "spelllang", "spellfile", "spellsuggest", "spelloptions", "equalprg", "formatprg", "incsearch",
-    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr",
+    "paste", "langmap", "shortmess", "maxsearchcount", "undolevels", "digraph", "isfname", "jumpoptions", "magic", "terse", "formatexpr", "fileformats", "fileencodings", "indentexpr", "cinwords", "window",
 ];
 
 impl Editor {
@@ -117,6 +117,13 @@ impl Editor {
             let t = text.trim_end();
             if t.ends_with('{') || t.ends_with('(') || t.ends_with('[') || t.ends_with(':') && self.opt_on("cindent", false) {
                 width += self.shiftwidth();
+            } else if !t.ends_with(';') && !t.ends_with('}') {
+                // cinwords: a line opening with one of them (if, else, while …) indents the next
+                let words = self.opt("cinwords").unwrap_or("if,else,while,do,for,switch");
+                let first = t.trim_start().split(|c: char| !c.is_alphanumeric() && c != '_').next().unwrap_or("");
+                if !first.is_empty() && words.split(',').any(|w| w == first) {
+                    width += self.shiftwidth();
+                }
             }
         }
         if self.opt_on("copyindent", false) && width == self.indent_width(&base) {

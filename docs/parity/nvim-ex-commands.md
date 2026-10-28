@@ -1,6 +1,6 @@
 # Neovim's Ex commands in zett
 
-Generated 2026-10-23 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
+Generated 2026-10-28 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
 523 of 557 ✓ zett's `:` line has it (by its full or short name), 34 — decided against (why in the last column), 0 · not yet.
 
