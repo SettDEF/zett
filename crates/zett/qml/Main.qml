@@ -15,6 +15,9 @@ ApplicationWindow {
     color: t.bg
 
     Zett { id: app }
+    // for the parts in their own files (Today, FileView, Details): `win: win` there would bind to itself
+    readonly property var theme: t
+    readonly property var engine: app
 
     // ── colours from tinct (same file the shell and the other apps read) ──
     QtObject {
@@ -110,6 +113,7 @@ ApplicationWindow {
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
     property string view: app.shot.length > 0 && app.shotEngine !== "today" ? "page" : "today"
     function openPage(i) { win.view = "page"; app.open(i) }
+    function jumpToBlock(i) { list.positionViewAtIndex(i, ListView.Beginning); win.focusAfter = i }
     // the sidebar's Files and Tags, read again when pages change and every few seconds
     property var files: []
     property var tagList: []
@@ -708,188 +712,10 @@ ApplicationWindow {
             }
 
             // ───────── a file from the tree, read-only and highlighted ─────────
-            ColumnLayout {
-                visible: win.view === "file"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 8
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 24; Layout.rightMargin: 24
-                    spacing: 8
-                    Text { text: "draft"; color: t.accent; font.family: t.icons; font.pixelSize: 18 }
-                    Text { Layout.fillWidth: true; text: win.filePath.replace(app.dir + "/", "").split("/").join("  ›  "); elide: Text.ElideMiddle; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
-                    Text { text: `${win.fileText.split("\n").length} lines`; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
-                    Rectangle {
-                        implicitWidth: oRow.implicitWidth + 20; implicitHeight: 28; radius: 14
-                        color: oHov.hovered ? t.raised : t.card
-                        RowLayout { id: oRow; anchors.centerIn: parent; spacing: 5
-                            Text { text: "open_in_new"; color: t.dim; font.family: t.icons; font.pixelSize: 15 }
-                            Text { text: "Open with the system"; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
-                        HoverHandler { id: oHov; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: Qt.openUrlExternally("file://" + win.filePath) }
-                    }
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.leftMargin: 16; Layout.rightMargin: 16
-                    radius: 17
-                    color: t.card
-                    Flickable {
-                        id: fileFlick
-                        anchors { fill: parent; margins: 14 }
-                        clip: true
-                        contentWidth: Math.max(width, fileBody.implicitWidth + 50)
-                        contentHeight: fileBody.implicitHeight
-                        boundsBehavior: Flickable.StopAtBounds
-                        // line numbers beside the code, both in the cell font
-                        Text {
-                            id: gutter
-                            text: win.fileText.split("\n").map((_, i) => i + 1).join("\n")
-                            color: t.faint; font.family: t.mono; font.pixelSize: 13
-                            horizontalAlignment: Text.AlignRight
-                            width: 40
-                        }
-                        Text {
-                            id: fileBody
-                            x: 52
-                            text: win.view === "file" ? app.highlight(win.filePath.slice(win.filePath.lastIndexOf(".") + 1), win.fileText) : ""
-                            textFormat: Text.RichText
-                            color: t.text; font.family: t.mono; font.pixelSize: 13
-                        }
-                    }
-                }
-            }
+            FileView { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // ───────── Today: the start screen ─────────
-            Flickable {
-                id: today
-                visible: win.view === "today"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                contentHeight: todayCol.implicitHeight + 60
-                boundsBehavior: Flickable.StopAtBounds
-                readonly property string iso: Qt.formatDate(new Date(), "yyyy-MM-dd")
-                readonly property var recent: win.pages.map((p, i) => ({ p, i })).filter(o => o.p.modified > 0).sort((a, b) => b.p.modified - a.p.modified).slice(0, 6)
-                readonly property var todos: { win.pages; win.blocks; try { return JSON.parse(app.todos()) } catch (e) { return [] } }
-                readonly property int journal: win.pages.findIndex(p => p.title === iso)
-                function ago(s) {
-                    const d = Date.now() / 1000 - s
-                    return d < 60 ? "now" : d < 3600 ? `${Math.floor(d / 60)} min` : d < 86400 ? `${Math.floor(d / 3600)} h` : `${Math.floor(d / 86400)} d`
-                }
-                component Card: Rectangle {
-                    default property alias body: inner.data
-                    property string icon
-                    property string title
-                    property string extra
-                    Layout.fillWidth: true
-                    implicitHeight: inner.implicitHeight + 28
-                    radius: 17
-                    color: t.card
-                    ColumnLayout {
-                        id: inner
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
-                        spacing: 4
-                        RowLayout {
-                            spacing: 8
-                            Layout.bottomMargin: 4
-                            Text { text: icon; color: t.accent; font.family: t.icons; font.pixelSize: 18 }
-                            Text { text: title; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
-                            Item { Layout.fillWidth: true }
-                            Text { text: extra; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
-                        }
-                    }
-                }
-                component Row2: Rectangle {
-                    property string icon
-                    property string label
-                    property string side
-                    property bool dim: false
-                    signal clicked
-                    Layout.fillWidth: true
-                    implicitHeight: 34; radius: t.rRow
-                    color: rHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
-                    RowLayout {
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        spacing: 10
-                        Text { text: icon; color: t.faint; font.family: t.icons; font.pixelSize: 17 }
-                        Text { Layout.fillWidth: true; text: label; elide: Text.ElideRight; color: dim ? t.faint : t.text; font.family: t.sans; font.pixelSize: 13 }
-                        Text { text: side; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
-                    }
-                    HoverHandler { id: rHov; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: parent.clicked() }
-                }
-                ColumnLayout {
-                    id: todayCol
-                    x: Math.max(24, (today.width - width) / 2)
-                    y: 28
-                    width: Math.min(760, today.width - 48)
-                    spacing: 14
-                    Text { text: Qt.formatDate(new Date(), "dddd, d MMMM"); color: t.text; font.family: t.sans; font.pixelSize: 30; font.weight: Font.Bold }
-                    Text { Layout.topMargin: -8; text: `${win.pages.length} pages  ·  ${today.todos.length} open to-dos`; color: t.faint; font.family: t.mono; font.pixelSize: 12 }
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: today.width > 720 ? 2 : 1
-                        columnSpacing: 14; rowSpacing: 14
-                        Card {
-                            icon: "edit_note"; title: "Journal"; extra: today.iso
-                            Layout.alignment: Qt.AlignTop
-                            Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: today.journal >= 0 ? `${win.pages[today.journal].blocks} blocks written today` : "Nothing written today yet"; color: t.dim; font.family: t.sans; font.pixelSize: 13 }
-                            Rectangle {
-                                Layout.topMargin: 6
-                                implicitWidth: jRow.implicitWidth + 28; implicitHeight: 34; radius: 17
-                                color: jHov.hovered ? Qt.lighter(t.accent, 1.08) : t.accent
-                                RowLayout { id: jRow; anchors.centerIn: parent; spacing: 6
-                                    Text { text: today.journal >= 0 ? "arrow_forward" : "add"; color: t.onAccent; font.family: t.icons; font.pixelSize: 16 }
-                                    Text { text: today.journal >= 0 ? "Open today" : "Start today"; color: t.onAccent; font.family: t.sans; font.pixelSize: 13; font.weight: Font.DemiBold } }
-                                HoverHandler { id: jHov; cursorShape: Qt.PointingHandCursor }
-                                TapHandler { onTapped: { win.view = "page"; app.openTitle(today.iso) } }
-                            }
-                        }
-                        Card {
-                            icon: "history"; title: "Recent"; extra: ""
-                            Layout.alignment: Qt.AlignTop
-                            Text { visible: today.recent.length === 0; text: "No pages yet"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
-                            Repeater {
-                                model: today.recent
-                                delegate: Row2 { required property var modelData; icon: "description"; label: modelData.p.title || "Untitled"; side: today.ago(modelData.p.modified); onClicked: win.openPage(modelData.i) }
-                            }
-                        }
-                    }
-                    Card {
-                        icon: "check_box"; title: "Open to-dos"; extra: today.todos.length ? `${today.todos.length}` : ""
-                        Text { visible: today.todos.length === 0; text: "All done. Write  [ ]  in any page to add one."; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
-                        Repeater {
-                            model: today.todos.slice(0, 12)
-                            delegate: Row2 {
-                                required property var modelData
-                                icon: "check_box_outline_blank"; label: modelData.text || "(empty)"; side: modelData.title
-                                onClicked: { win.openPage(modelData.page); win.focusAfter = modelData.block }
-                            }
-                        }
-                    }
-                    Card {
-                        icon: "keyboard"; title: "Keys"; extra: ""
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Repeater {
-                                model: [["Ctrl P", "go to a page"], ["Ctrl \\", "details"], ["F2", "rename"], ["Ctrl W", "close tab"], ["Ctrl Tab", "next tab"], ["/", "block kinds"], ["Esc", "Vim keys"], ["right-click", "menus"]]
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    implicitWidth: kr.implicitWidth + 20; implicitHeight: 28; radius: 14
-                                    color: t.raised
-                                    RowLayout { id: kr; anchors.centerIn: parent; spacing: 6
-                                        Text { text: modelData[0]; color: t.accent; font.family: t.mono; font.pixelSize: 11 }
-                                        Text { text: modelData[1]; color: t.dim; font.family: t.sans; font.pixelSize: 12 } }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // empty workspace
             ColumnLayout {
@@ -1321,53 +1147,7 @@ ApplicationWindow {
         }
 
         // ───────── details: outline, links, info ─────────
-        Rectangle {
-            visible: win.detailsShown && win.pages.length > 0 && win.view === "page"
-            Layout.fillHeight: true
-            Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
-            implicitWidth: 248
-            radius: t.rCard
-            color: t.panel
-            border.width: 1; border.color: Qt.alpha(t.rule, 0.35)
-            readonly property var heads: win.blocks.map((b, i) => ({ i, b })).filter(o => /^(h[1-3]|heading)$/.test(o.b.kind) && (o.b.text ?? "").length)
-            readonly property var links: { try { return JSON.parse(app.backlinks) } catch (e) { return [] } }
-            readonly property int words: win.blocks.reduce((n, b) => n + ((b.text ?? "").match(/\S+/g)?.length ?? 0), 0)
-            component Head: Text { color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8; Layout.leftMargin: 8; Layout.topMargin: 10 }
-            component Line: Text { color: t.faint; font.family: t.sans; font.pixelSize: 12; Layout.leftMargin: 8; Layout.fillWidth: true; elide: Text.ElideRight }
-            ColumnLayout {
-                anchors { fill: parent; margins: 12 }
-                spacing: 2
-                Head { text: "OUTLINE"; Layout.topMargin: 4 }
-                Line { visible: parent.parent.heads.length === 0; text: "No headings yet" }
-                Repeater {
-                    model: parent.parent.heads
-                    delegate: Rectangle {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        implicitHeight: 30; radius: t.rRow
-                        color: olHov.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
-                        Text {
-                            anchors { fill: parent; leftMargin: 8 + (modelData.b.kind === "h3" ? 24 : modelData.b.kind === "h2" ? 12 : 0); rightMargin: 8 }
-                            verticalAlignment: Text.AlignVCenter
-                            text: modelData.b.text; elide: Text.ElideRight
-                            color: t.dim; font.family: t.sans; font.pixelSize: 13
-                        }
-                        HoverHandler { id: olHov; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: { list.positionViewAtIndex(modelData.i, ListView.Beginning); win.focusAfter = modelData.i } }
-                    }
-                }
-                Head { text: "LINKED FROM  " + parent.parent.links.length }
-                Line { visible: parent.parent.links.length === 0; text: "Nothing links here yet" }
-                Repeater {
-                    model: parent.parent.links
-                    delegate: Line { required property var modelData; text: "↳  " + (modelData.title ?? modelData.page ?? ""); color: t.dim }
-                }
-                Head { text: "INFO" }
-                Line { text: `${win.blocks.length} blocks  ·  ${parent.parent.words} words` }
-                Line { text: app.dir; elide: Text.ElideLeft }
-                Item { Layout.fillHeight: true }
-            }
-        }
+        Details { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
     }
     }
 
