@@ -367,7 +367,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const p = win.pages[app.current] ?? {}
         if (!p.path || !app.shareItems(p.path)) win.note("the share sheet is not installed (~/.scripts/apps/share/share)")
     }
-    function openPalette() {
+    // every command: the window's own, init.lua's hooks, the engine's; the palette and Settings > Keyboard Shortcuts show it
+    function paletteEntries() {
         const own = [
             { icon: "wb_sunny", name: "Today", desc: "the start screen", keys: "Ctrl ⇧ D", run: () => win.view = "today" },
             { icon: "search", name: "Go to page", desc: "quick open", keys: "Ctrl P", run: () => { quickField.text = ""; quick.open(); quickField.forceActiveFocus() } },
@@ -395,9 +396,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         for (const b of binds) if (b.desc && !keyOf[b.desc]) keyOf[b.desc] = b.keys
         let cmds = []
         try { cmds = JSON.parse(app.commandList()).commands || [] } catch (e) {}
-        palette.entries = own.concat(cmds.map(c => ({ icon: c.source === "zett" ? "bolt" : "extension", name: c.name, desc: c.desc + (c.source && c.source !== "zett" ? `  ·  ${c.source}` : ""), keys: keyOf[c.desc] ?? keyOf[c.name] ?? "", run: () => win.applyScript(JSON.parse(app.runCommand(c.name))) })))
-        palette.show()
+        return own.concat(cmds.map(c => ({ icon: c.source === "zett" ? "bolt" : "extension", name: c.name, desc: c.desc + (c.source && c.source !== "zett" ? `  ·  ${c.source}` : ""), keys: keyOf[c.desc] ?? keyOf[c.name] ?? "", run: () => win.applyScript(JSON.parse(app.runCommand(c.name))) })))
     }
+    function openPalette() { palette.entries = paletteEntries(); palette.show() }
     Shortcut { sequence: "Ctrl+Shift+D"; onActivated: win.view = "today" }
 
     // ── context menus: one component, each place passes its own items ──
@@ -697,6 +698,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "dnd") { const a = app.movePath(app.dir + "/src/main.rs", app.dir); const b = app.movePath(app.dir + "/src", app.dir + "/src"); const c = app.importFiles("file://" + app.dir + "/../ui-demo-v4.png", app.dir + "/src"); console.log(`zett-probe: move=${a} intoSelf=${b} imported=${c}`); grabLater.start(); return }
             if (app.shotEngine === "select") { win.selectFirst = win.blocks.findIndex(b => b.kind === "paragraph" && b.text.length > 3); claudeShot.start(); return }
             if (app.shotEngine === "run") { win.runFirst = win.blocks.findIndex(b => b.kind === "code" && /^(sh|bash|lua|python|py|js)$/.test(b.lang ?? "")); claudeShot.start(); return }
+            if (app.shotEngine === "shortcuts") { win.view = "settings"; Qt.callLater(() => settingsView.cat = "Keyboard Shortcuts"); claudeShot.start(); return }
             if (app.shotEngine === "claude") { win.claudeShown = true; claudeShot.start(); return }
             // tests: file:REL opens a workspace file in the editor; fileedit:REL also types a line in and saves
             if (app.shotEngine.startsWith("file:") || app.shotEngine.startsWith("fileedit:") || app.shotEngine.startsWith("filefind:") || app.shotEngine.startsWith("fileproblems:") || app.shotEngine.startsWith("fileside:")) {
@@ -822,7 +824,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             // ───────── Today: the start screen ─────────
             Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
             Search { id: searchView; visible: win.view === "search"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
-            Settings { visible: win.view === "settings"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+            Settings { id: settingsView; visible: win.view === "settings"; Layout.fillWidth: true; Layout.fillHeight: true; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // empty workspace
             ColumnLayout {

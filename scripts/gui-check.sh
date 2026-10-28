@@ -37,6 +37,7 @@ echo "zett --gui check ($BIN)"
 check page ""
 check home today
 check settings settings
+check shortcuts shortcuts
 check select select
 check run run "grep -q 'hi 3' '$W/check.md'"
 check run-again run "[ \$(grep -c '^\`\`\`output' '$W/check.md') -eq 1 ]"

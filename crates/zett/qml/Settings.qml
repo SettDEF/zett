@@ -118,7 +118,7 @@ Item {
         { cat: "Advanced", key: "", label: "Workspace", hint: app.dir, type: "action", actions: [["folder_open", "Show folder", () => Qt.openUrlExternally("file://" + app.dir)]] },
         { cat: "Advanced", key: "", label: "Commands", hint: "everything zett can do, with its key", type: "action", actions: [["terminal", "Palette  Ctrl ⇧ P", () => win.openPalette()]] }
     ]
-    readonly property var cats: [["Editor", "edit_note"], ["Appearance", "palette"], ["Window", "dashboard"], ["Advanced", "tune"]]
+    readonly property var cats: [["Editor", "edit_note"], ["Appearance", "palette"], ["Window", "dashboard"], ["Advanced", "tune"], ["Keyboard Shortcuts", "keyboard"]]
     property string cat: ""                     // "" = all
     property bool jsonView: false
     function valueOf(x) { return win.prefs[x.key] ?? x.def }
@@ -188,7 +188,7 @@ Item {
 
     // ── the settings ──
     Flickable {
-        visible: !s.jsonView
+        visible: !s.jsonView && s.cat !== "Keyboard Shortcuts"
         x: searchBox.x; y: searchBox.y + searchBox.height + 16
         width: searchBox.width; height: s.height - y - 16
         clip: true
@@ -245,6 +245,45 @@ Item {
     Component { id: choiceC; Choice { options: parent.setting.options; value: s.valueOf(parent.setting); onPicked: (v) => s.set(parent.setting, v) } }
     Component { id: stepC; Stepper { value: s.valueOf(parent.setting); step: parent.setting.step; from: parent.setting.from; to: parent.setting.to; suffix: parent.setting.suffix; onChanged: (v) => s.set(parent.setting, v) } }
     Component { id: actC; Row { spacing: 6; Repeater { model: parent.setting.actions; delegate: Button1 { required property var modelData; icon: modelData[0]; label: modelData[1]; onClicked: modelData[2]() } } } }
+
+    // ── Keyboard Shortcuts: every command with its keys (the palette's list), searchable; a click runs it ──
+    readonly property var shortcuts: { const q = search.text.trim().toLowerCase(); return s.cat === "Keyboard Shortcuts" ? win.paletteEntries().filter(c => !q || (c.name + " " + c.desc + " " + c.keys).toLowerCase().includes(q)) : [] }
+    Flickable {
+        visible: !s.jsonView && s.cat === "Keyboard Shortcuts"
+        x: searchBox.x; y: searchBox.y + searchBox.height + 16
+        width: searchBox.width; height: s.height - y - 16
+        clip: true; contentHeight: kCol.implicitHeight + 20
+        boundsBehavior: Flickable.StopAtBounds
+        Column {
+            id: kCol
+            width: parent.width
+            Repeater {
+                model: s.shortcuts
+                delegate: Rectangle {
+                    required property var modelData
+                    width: kCol.width; height: 46; radius: 10
+                    color: kH.hovered ? Qt.alpha(t.text, 0.05) : "transparent"
+                    Text { id: kI; x: 12; anchors.verticalCenter: parent.verticalCenter; text: modelData.icon ?? "bolt"; color: t.dim; font.family: t.icons; font.pixelSize: 18 }
+                    Column { anchors { left: kI.right; leftMargin: 12; right: keyRow.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                        Text { width: parent.width; text: modelData.name; elide: Text.ElideRight; color: t.text; font.family: t.sans; font.pixelSize: 14 }
+                        Text { width: parent.width; text: modelData.desc ?? ""; elide: Text.ElideRight; color: t.faint; font.family: t.sans; font.pixelSize: 11 } }
+                    Row {
+                        id: keyRow
+                        anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                        spacing: 4
+                        Repeater {
+                            model: (modelData.keys ?? "").split(" ").filter(k => k)
+                            delegate: Rectangle { required property string modelData; width: kt.implicitWidth + 12; height: 22; radius: 6; color: Qt.alpha(t.text, 0.06); border.width: 1; border.color: Qt.alpha(t.text, 0.12)
+                                Text { id: kt; anchors.centerIn: parent; text: modelData; color: t.text; font.family: t.mono; font.pixelSize: 11 } }
+                        }
+                        Text { visible: !modelData.keys; text: "no key"; color: t.faint; font.family: t.sans; font.pixelSize: 11 }
+                    }
+                    HoverHandler { id: kH; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: modelData.run() }
+                }
+            }
+        }
+    }
 
     // ── the JSON view: what is stored, as it is ──
     Rectangle {
