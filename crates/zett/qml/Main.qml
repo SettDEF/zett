@@ -99,6 +99,23 @@ ApplicationWindow {
     ]
     readonly property var slashMatches: slashItems.filter(i => i.label.toLowerCase().includes(slashQuery.toLowerCase()) || i.k.startsWith(slashQuery.toLowerCase()))
     onSlashQueryChanged: slashSel = 0
+    // [[ while typing: pages that match, the best first; a new page when none is called that
+    property int linkFor: -1
+    property int linkStart: 0
+    property string linkQuery: ""
+    property int linkSel: 0
+    property real linkX: 0
+    property real linkY: 0
+    onLinkQueryChanged: linkSel = 0
+    readonly property var linkMatches: {
+        if (linkFor < 0) return []
+        const q = linkQuery.toLowerCase()
+        const hits = pages.map(p => p.title || "Untitled").filter(ti => ti.toLowerCase().includes(q))
+            .sort((a, b) => (a.toLowerCase().startsWith(q) ? 0 : 1) - (b.toLowerCase().startsWith(q) ? 0 : 1) || a.length - b.length).slice(0, 8)
+            .map(ti => ({ title: ti, isNew: false }))
+        if (q && !hits.some(h => h.title.toLowerCase() === q)) hits.push({ title: linkQuery, isNew: true })
+        return hits
+    }
     function slashApply(i) {
         const m = slashMatches[i]
         const b = slashFor
@@ -567,6 +584,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "codeedit") { win.focusAfter = 1; grabLater.start(); return }
             if (app.shotEngine.startsWith("typing:")) { win.typeBlock = +app.shotEngine.split(":")[1]; win.typeNext(); return }
             if (app.shotEngine === "grip") { win.dropAt = 2; grabLater.start(); return }
+            if (app.shotEngine === "linkpick") { win.focusAfter = 0; Qt.callLater(() => { const dd = list.itemAtIndex(0); if (!dd) { Qt.quit(); return } dd.insertForTest("see [[fa"); const before = dd.textForTest(); dd.insertLink(win.linkMatches[0].title); console.log(`zett-probe: link "${before}" -> "${dd.textForTest()}" open=${win.linkFor >= 0}`); Qt.quit() }); return }
+            if (app.shotEngine === "linkpop") { const d = list.itemAtIndex(0); win.focusAfter = 0; Qt.callLater(() => { const dd = list.itemAtIndex(0); if (dd) dd.insertForTest(" see [[fa"); grabLater.start() }); return }
             if (app.shotEngine.startsWith("search:")) { win.view = "search"; searchView.query(app.shotEngine.slice(7)); console.log("zett-probe: search hits " + searchView.hits.length); grabLater.start(); return }
             if (app.shotEngine === "multisel") { win.selectBlock(1, "one"); win.selectBlock(2, "range"); grabLater.start(); return }
             if (app.shotEngine === "multi") {
@@ -732,6 +751,9 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: (ev) => win.blockMenu(blockItem.index, ev.scenePosition.x, ev.scenePosition.y, edit, shown.visible ? shown.hoveredLink : "") }
                     function vimKeyForTest(k) { edit.applyVim(app.vimKey(k)) }
                     function typeForTest(s) { edit.forceActiveFocus(); edit.text = s }
+                    // the [[ suggestion picked: the query replaced by the title and the closing ]]
+                    function insertLink(title) { const at = win.linkStart; edit.remove(at, edit.cursorPosition); edit.insert(at, title + "]]"); win.linkFor = -1 }
+                    function textForTest() { return edit.text }
                     function insertForTest(s) { edit.forceActiveFocus(); edit.insert(edit.cursorPosition, s) }
 
                     function vimHere() {
@@ -1054,6 +1076,18 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                         saveLater.restart()
                                         return
                                     }
+                                    // "[[" before the cursor: the pages that match what follows, Enter or Tab puts one in
+                                    {
+                                        const lm = blockItem.kind === "code" ? null : text.slice(0, cursorPosition).match(/\[\[([^\]\n]*)$/)
+                                        if (lm) {
+                                            const r = edit.positionToRectangle(cursorPosition)
+                                            const p = edit.mapToItem(rootRow, r.x, r.y + r.height)
+                                            win.linkX = p.x; win.linkY = p.y + 6
+                                            win.linkStart = cursorPosition - lm[1].length
+                                            win.linkQuery = lm[1]
+                                            win.linkFor = blockItem.index
+                                        } else if (win.linkFor === blockItem.index) win.linkFor = -1
+                                    }
                                     // "/word" in an empty text block: the slash menu, filtered by what follows
                                     if (blockItem.kind === "paragraph" && text.startsWith("/") && !/\s/.test(text)) {
                                         const p = edit.mapToItem(rootRow, 0, edit.height)
@@ -1102,6 +1136,12 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                                     // Ctrl+V: a paste is coming; don't treat its text as typed shortcuts
                                     if (e.key === Qt.Key_V && (e.modifiers & Qt.ControlModifier)) {
                                         edit.pastePending = true
+                                    }
+                                    if (win.linkFor === blockItem.index && win.linkMatches.length) {
+                                        if (e.key === Qt.Key_Down) { win.linkSel = Math.min(win.linkSel + 1, win.linkMatches.length - 1); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Up) { win.linkSel = Math.max(win.linkSel - 1, 0); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Tab) { blockItem.insertLink(win.linkMatches[win.linkSel].title); e.accepted = true; return }
+                                        if (e.key === Qt.Key_Escape) { win.linkFor = -1; e.accepted = true; return }
                                     }
                                     if (win.slashFor === blockItem.index) {
                                         if (e.key === Qt.Key_Down) { win.slashSel = Math.min(win.slashSel + 1, win.slashMatches.length - 1); e.accepted = true; return }
@@ -1313,6 +1353,46 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                     }
                     HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) quick.sel = index }
                     TapHandler { onTapped: quick.choose(index) }
+                }
+            }
+        }
+    }
+
+    // the [[ suggestions under the cursor; the block keeps the keyboard (Up/Down, Enter/Tab, Esc)
+    Rectangle {
+        parent: rootRow
+        z: 100
+        visible: win.linkFor >= 0 && win.linkMatches.length > 0
+        x: Math.min(win.linkX, rootRow.width - width - 12)
+        y: win.linkY
+        width: 280
+        height: linkCol.implicitHeight + 12
+        radius: 12
+        color: t.raised
+        border.width: 1; border.color: t.rule
+        ColumnLayout {
+            id: linkCol
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
+            spacing: 1
+            Text { Layout.leftMargin: 8; Layout.topMargin: 2; text: "LINK TO A PAGE"; color: t.faint; font.family: t.sans; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+            Repeater {
+                model: win.linkMatches
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    readonly property bool on: index === win.linkSel
+                    Layout.fillWidth: true
+                    implicitHeight: 32; radius: 8
+                    color: on ? Qt.alpha(t.accent, 0.16) : lh.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        spacing: 8
+                        Text { text: modelData.isNew ? "add" : "description"; color: modelData.isNew ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 16 }
+                        Text { Layout.fillWidth: true; text: modelData.isNew ? `New page “${modelData.title}”` : modelData.title; elide: Text.ElideRight; color: t.text; font.family: t.sans; font.pixelSize: 13 }
+                        Text { visible: parent.parent.on; text: "↵"; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                    }
+                    HoverHandler { id: lh; cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) win.linkSel = index }
+                    TapHandler { onTapped: { const d = list.itemAtIndex(win.linkFor); if (d) d.insertLink(modelData.title) } }
                 }
             }
         }
