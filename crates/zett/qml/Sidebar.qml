@@ -92,7 +92,7 @@ Rectangle {
             Layout.fillWidth: true
             // as tall as its pages, up to half the sidebar; the file tree takes the rest
             Layout.preferredHeight: Math.min(contentHeight, Math.max(120, (parent.height - 200) * 0.5))
-            Layout.fillHeight: !win.filesOpen
+            Layout.fillHeight: !win.filesOpen || win.sideMode === "pages"
             clip: true
             spacing: 2
             model: win.pages

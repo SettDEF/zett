@@ -809,6 +809,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             id: pageCol
             Layout.topMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8
             Layout.fillWidth: true
+            Layout.preferredWidth: 400     // small: what is left goes to it, so the side columns fit the window
             Layout.fillHeight: true
             spacing: 0
 
