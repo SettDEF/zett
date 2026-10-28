@@ -473,7 +473,9 @@ end
 
 -- open, or close when open (neo-tree's toggle); on another source, switch to it
 local function toggle(o)
-  if z.panel.is_open("explorer") and (not o.source or o.source == M.source) then M.close()
+  -- open but the keyboard elsewhere: the key focuses it; only a focused explorer closes
+  if z.panel.is_open("explorer") and z.panel.focused() ~= "explorer" then if o.source and o.source ~= M.source then set_source(o.source) end z.panel.focus("explorer")
+  elseif z.panel.is_open("explorer") and (not o.source or o.source == M.source) then M.close()
   elseif z.panel.is_open("explorer") then set_source(o.source) z.panel.focus("explorer")
   else M.open(o) end
 end
