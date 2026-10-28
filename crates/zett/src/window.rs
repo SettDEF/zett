@@ -844,9 +844,9 @@ impl qobject::Zett {
 }
 
 // ── code blocks: syntect (the terminal's languages) with colours from the theme ──
-fn highlight_html(lang: &str, code: &str) -> String {
+/// the code colours: the terminal's languages (syntect) and a theme made from the window's colours; built once
+pub(crate) fn code_syntax() -> (&'static syntect::parsing::SyntaxSet, &'static syntect::highlighting::Theme) {
     use std::sync::OnceLock;
-    use syntect::easy::HighlightLines;
     use syntect::highlighting::{Color, FontStyle, ScopeSelectors, StyleModifier, Theme, ThemeItem, ThemeSettings};
     use syntect::parsing::SyntaxSet;
     static SS: OnceLock<SyntaxSet> = OnceLock::new();
@@ -877,6 +877,13 @@ fn highlight_html(lang: &str, code: &str) -> String {
             ..Default::default()
         }
     });
+    (ss, th)
+}
+
+fn highlight_html(lang: &str, code: &str) -> String {
+    use syntect::easy::HighlightLines;
+    use syntect::highlighting::FontStyle;
+    let (ss, th) = code_syntax();
     let syn = (!lang.is_empty()).then(|| ss.find_syntax_by_token(lang)).flatten().unwrap_or_else(|| ss.find_syntax_plain_text());
     let mut h = HighlightLines::new(syn, th);
     // a div with <br>, not <pre>: <pre> spaces lines a pixel tighter than the editor laid over it, so the cursor drifted

@@ -282,10 +282,20 @@ ColumnLayout {
             Text { visible: !fv.diffRows.length; anchors.centerIn: parent; text: "No changes since the last commit"; color: t.faint; font.family: t.sans; font.pixelSize: 13 }
         }
     }
+    // the new editor core (Settings > Editor > New editor core): CodeView over CodeDoc, in place of the TextEdit
+    readonly property alias codeDoc: codeView.doc
+    readonly property bool newCore: (win.prefs.newCore ?? false) || app.shotEngine.startsWith("core:")
+    CodeView {
+        id: codeView
+        visible: fv.newCore && !fv.showDiff
+        Layout.fillWidth: true; Layout.fillHeight: true
+        Layout.leftMargin: 8; Layout.rightMargin: 8
+        win: fv.win; t: fv.t; app: fv.app
+    }
     // find / replace / go to line (FindBar.qml)
     FindBar { id: findBar; t: fv.t; editor: ed; Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8 }
     Rectangle {
-        visible: !fv.showDiff
+        visible: !fv.showDiff && !fv.newCore
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.leftMargin: 8; Layout.rightMargin: 8

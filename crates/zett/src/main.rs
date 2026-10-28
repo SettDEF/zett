@@ -5,6 +5,7 @@
 
 mod grep;
 mod lsp;
+mod doc;
 mod window;
 
 use clap::{CommandFactory, Parser, Subcommand};
