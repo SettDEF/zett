@@ -120,7 +120,8 @@ function vim.is_callable(f)
   return m ~= nil and type(m.__call) == "function"
 end
 function vim.validate() end
-vim.F = { if_nil = function(...) for _, v in ipairs({ ... }) do if v ~= nil then return v end end end }
+vim.F = { if_nil = function(...) for i = 1, select("#", ...) do local v = select(i, ...) if v ~= nil then return v end end end }
+vim.nonnil = vim.F.if_nil
 
 function vim.inspect(v, _, depth)
   depth = depth or 0
@@ -4262,5 +4263,154 @@ do
     local c = vim.fn.getchar(expr)
     if type(c) == "number" then return c == 0 and "" or utf8.char(c) end
     return c
+  end)
+end
+
+-- ── more of libuv (vim.uv): processes with pipes, files, the system ──
+do
+  local uv = vim.uv or vim.loop
+  local function set(name, f) if rawget(uv, name) == nil then uv[name] = f end end
+  local function sh(cmd) local p = io.popen(cmd) if not p then return "" end local s = p:read("*a") or "" p:close() return (s:gsub("%s+$", "")) end
+  -- an async call: the callback (last argument) gets (err, result) on the next tick; else the result
+  local function either(f)
+    return function(...)
+      local args = { ... }
+      local cb = type(args[#args]) == "function" and table.remove(args) or nil
+      local ok, r, e2 = pcall(f, unpack(args))
+      local err = not ok and tostring(r) or e2
+      if cb then vim.schedule(function() cb(err, ok and r or nil) end) return true end
+      if err then return nil, err end
+      return r
+    end
+  end
+
+  -- the system
+  set("os_uname", function() return { sysname = sh("uname -s"), release = sh("uname -r"), version = sh("uname -v"), machine = sh("uname -m") } end)
+  set("os_gethostname", function() local f = io.open("/etc/hostname") local h = f and f:read("*l") if f then f:close() end return h or sh("uname -n") end)
+  set("os_getpid", function() return vim.fn.getpid() end)
+  set("getpid", function() return vim.fn.getpid() end)
+  set("os_tmpdir", function() return os.getenv("TMPDIR") or "/tmp" end)
+  set("os_setenv", function(k, v) vim.env[k] = v return true end)
+  set("os_unsetenv", function(k) vim.env[k] = nil return true end)
+  set("os_get_passwd", function() return { username = os.getenv("USER") or sh("id -un"), uid = tonumber(sh("id -u")), gid = tonumber(sh("id -g")), homedir = os.getenv("HOME"), shell = os.getenv("SHELL") } end)
+  set("chdir", function(d) vim.fn.chdir(d) return 0 end)
+  set("available_parallelism", function() return tonumber(sh("nproc")) or 1 end)
+  set("cpu_info", function() local n = tonumber(sh("nproc")) or 1 local t = {} for i = 1, n do t[i] = { model = "cpu", speed = 0, times = {} } end return t end)
+  set("get_total_memory", function() local kb = tonumber(sh("awk '/MemTotal/{print $2}' /proc/meminfo")) return (kb or 0) * 1024 end)
+  set("get_free_memory", function() local kb = tonumber(sh("awk '/MemAvailable/{print $2}' /proc/meminfo")) return (kb or 0) * 1024 end)
+  set("uptime", function() local f = io.open("/proc/uptime") local s = f and f:read("*n") if f then f:close() end return s or 0 end)
+  set("exepath", function() return vim.v.progpath or "zett" end)
+  set("random", function(n) local t = {} for i = 1, n do t[i] = string.char(math.random(0, 255)) end return table.concat(t) end)
+  set("version", function() return 0x013000 end)
+  set("version_string", function() return "1.48.0" end)
+  set("guess_handle", function(fd) return fd <= 2 and "tty" or "file" end)
+  set("update_time", function() end)
+  set("loop_alive", function() return false end)
+  set("run", function() return false end)
+  set("walk", function() end)
+  set("metrics_idle_time", function() return 0 end)
+  set("kill", function(pid, sig)
+    local n = ({ sigterm = 15, sigkill = 9, sigint = 2, sighup = 1 })[tostring(sig or "sigterm"):lower()] or tonumber(sig) or 15
+    os.execute(("kill -%d %d 2>/dev/null"):format(n, pid))
+    return 0
+  end)
+
+  -- files: fds are zett's own numbers over Lua files
+  local files, next_fd = {}, 100
+  local modes = { r = "rb", ["r+"] = "r+b", w = "wb", ["w+"] = "w+b", a = "ab", ["a+"] = "a+b" }
+  set("fs_open", either(function(path, flags)
+    local m = type(flags) == "number" and (flags == 0 and "rb" or "wb") or modes[flags] or flags
+    local f, e = io.open(path, m)
+    if not f then error(("ENOENT: %s: %s"):format(e or "cannot open", path)) end
+    next_fd = next_fd + 1 files[next_fd] = f
+    return next_fd
+  end))
+  set("fs_read", either(function(fd, size, offset)
+    local f = files[fd] if not f then error("EBADF: bad file descriptor") end
+    if offset and offset >= 0 then f:seek("set", offset) end
+    return f:read(size and size > 0 and size or "*a") or ""
+  end))
+  set("fs_write", either(function(fd, data, offset)
+    local f = files[fd] if not f then error("EBADF: bad file descriptor") end
+    if offset and offset >= 0 then f:seek("set", offset) end
+    data = type(data) == "table" and table.concat(data) or data
+    f:write(data) return #data
+  end))
+  set("fs_close", either(function(fd) local f = files[fd] if f then f:close() files[fd] = nil end return true end))
+  set("fs_fstat", either(function(fd) local f = files[fd] if not f then error("EBADF") end local cur = f:seek() local size = f:seek("end") f:seek("set", cur) return { size = size, type = "file", mtime = { sec = 0, nsec = 0 } } end))
+  set("fs_mkdir", either(function(p) if vim.fn.mkdir(p) == 0 and vim.fn.isdirectory(p) == 0 then error("EACCES: cannot make " .. p) end return true end))
+  set("fs_rmdir", either(function(p) local ok, e = os.remove(p) if not ok then error(e) end return true end))
+  set("fs_unlink", either(function(p) local ok, e = os.remove(p) if not ok then error("ENOENT: " .. tostring(e)) end return true end))
+  set("fs_rename", either(function(a, b) local ok, e = os.rename(a, b) if not ok then error(e) end return true end))
+  set("fs_access", either(function(p, mode) return vim.fn.filereadable(p) == 1 or vim.fn.isdirectory(p) == 1 end))
+  set("fs_copyfile", either(function(a, b) local i = io.open(a, "rb") if not i then error("ENOENT: " .. a) end local s = i:read("*a") i:close() local o = io.open(b, "wb") if not o then error("EACCES: " .. b) end o:write(s) o:close() return true end))
+  local function entries(dir)
+    local out = {}
+    for _, n in ipairs(vim.fn.readdir(dir)) do
+      local p = dir .. "/" .. n
+      out[#out + 1] = { name = n, type = vim.fn.isdirectory(p) == 1 and "directory" or (vim.fn.getftype(p) == "link" and "link" or "file") }
+    end
+    return out
+  end
+  set("fs_scandir", either(function(dir)
+    if vim.fn.isdirectory(dir) == 0 then error("ENOENT: no such directory: " .. dir) end
+    return { list = entries(dir), i = 0 }
+  end))
+  set("fs_scandir_next", function(h) if not h then return nil end h.i = h.i + 1 local e = h.list[h.i] if e then return e.name, e.type end return nil end)
+  set("fs_opendir", either(function(dir, _, n) return { list = entries(dir), i = 0, n = n or 1 } end))
+  set("fs_readdir", either(function(h) local out = {} for _ = 1, h.n do h.i = h.i + 1 if not h.list[h.i] then break end out[#out + 1] = h.list[h.i] end return #out > 0 and out or nil end))
+  set("fs_closedir", either(function() return true end))
+
+  -- handles that only wait: idle (a callback every tick), async (one when sent)
+  set("new_idle", function()
+    local h = { on = false }
+    function h:start(cb) self.on = true local function tick() if self.on then pcall(cb) vim.defer_fn(tick, 10) end end vim.defer_fn(tick, 0) return 0 end
+    function h:stop() self.on = false return 0 end
+    function h:close() self.on = false end
+    function h:is_closing() return not self.on end
+    return h
+  end)
+  set("new_async", function(cb) local h = {} function h:send(...) local a = { ... } vim.schedule(function() cb(unpack(a)) end) return 0 end function h:close() end function h:is_closing() return false end return h end)
+  set("new_work", function(work, done) return { work = work, done = done } end)
+  set("queue_work", function(w, ...) local r = { pcall(w.work, ...) } vim.schedule(function() if r[1] and w.done then w.done(select(2, unpack(r))) end end) return true end)
+
+  -- uv.spawn with pipes, on zett's streaming jobs: read_start gets each piece, write goes to stdin
+  set("new_pipe", function()
+    local p = { readers = {}, closed = false }
+    function p:read_start(cb) self.reader = cb if self.buffer then for _, d in ipairs(self.buffer) do cb(nil, d) end self.buffer = nil end return 0 end
+    function p:read_stop() self.reader = nil return 0 end
+    function p:write(data, cb) if self.job then z.job.send(self.job, type(data) == "table" and table.concat(data) or data) end if cb then vim.schedule(cb) end return 0 end
+    function p:shutdown(cb) if self.job then z.job.close_stdin(self.job) end if cb then vim.schedule(cb) end return 0 end
+    function p:close(cb) self.closed = true self.reader = nil if cb then vim.schedule(cb) end end
+    function p:is_closing() return self.closed end
+    function p:is_active() return not self.closed end
+    function p:_deliver(data) if self.reader then self.reader(nil, data) else self.buffer = self.buffer or {} table.insert(self.buffer, data) end end
+    return p
+  end)
+  set("spawn", function(cmd, o, on_exit)
+    o = o or {}
+    local argv = { cmd } for _, a in ipairs(o.args or {}) do argv[#argv + 1] = tostring(a) end
+    local stdio = o.stdio or {}
+    local env
+    if o.env then env = {} for _, kv in ipairs(o.env) do local k, v = tostring(kv):match("^([^=]+)=(.*)$") if k then env[k] = v end end end
+    local h = { closed = false }
+    local ok, id, pid = pcall(z.job.stream, argv, { cwd = o.cwd, env = env, clear_env = env ~= nil }, function(kind, data)
+      if kind == "stdout" and stdio[2] then stdio[2]:_deliver(data)
+      elseif kind == "stderr" and stdio[3] then stdio[3]:_deliver(data)
+      elseif kind == "exit" then
+        for i = 2, 3 do if stdio[i] and stdio[i].reader then stdio[i].reader(nil, nil) end end
+        h.exited = true
+        if on_exit then on_exit(data, 0) end
+      end
+    end)
+    if not ok then return nil, "ENOENT: " .. tostring(id) end
+    h.pid, h.job = pid, id
+    if stdio[1] then stdio[1].job = id end
+    function h:kill(sig) z.job.kill(id, ({ sigterm = 15, sigkill = 9, sigint = 2 })[tostring(sig or "sigterm"):lower()] or tonumber(sig) or 15) return 0 end
+    function h:close() self.closed = true end
+    function h:is_closing() return self.closed end
+    function h:is_active() return not self.exited end
+    function h:get_pid() return pid end
+    return h, pid
   end)
 end
