@@ -351,7 +351,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         if (x.dir) { closedDirs = closedDirs.includes(x.rel) ? closedDirs.filter(d => d !== x.rel) : closedDirs.concat([x.rel]); return }
         const pi = win.pages.findIndex(p => p.path === x.path)
         if (pi >= 0) { win.openPage(pi); return }
-        filePath = x.path; fileText = app.readFile(x.path); view = "file"
+        filePath = x.path
+        if (x.path.endsWith(".canvas")) { canvasView.load(x.path); view = "canvas" } else { fileText = app.readFile(x.path); view = "file" }
         if (!fileTabs.includes(x.path)) fileTabs = fileTabs.concat([x.path])
         if (!app.shot.length) setPref("lastFile", x.path)
         if (!app.shot.length) setPref("recentFiles", [x.path].concat((prefs.recentFiles ?? []).filter(p => p !== x.path)).slice(0, 12))
@@ -542,6 +543,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "wb_sunny", name: "Today", desc: "the start screen", keys: "Ctrl ⇧ D", run: () => win.view = "today" },
             { icon: "search", name: "Go to page", desc: "quick open", keys: "Ctrl P", run: () => { quickField.text = ""; quick.open(); quickField.forceActiveFocus() } },
             { icon: "add", name: "New page", desc: "an empty page", keys: "", run: () => { app.newPage("Untitled"); win.focusAfter = 0 } },
+            { icon: "dashboard", name: "New canvas", desc: "cards on an endless board (a .canvas file)", keys: "", run: () => { let i = 1, p = app.dir + "/Canvas.canvas"; while (app.readFile(p).length) p = app.dir + "/Canvas " + (++i) + ".canvas"; app.writeFile(p, "{\"nodes\":[],\"edges\":[]}\n"); win.refreshSide(); win.openFile({ path: p, rel: p.slice(app.dir.length + 1) }) } },
             { icon: "edit", name: "Rename page", desc: "the open page", keys: "F2", run: () => win.renameReq++ },
             { icon: "right_panel_open", name: "Toggle details", desc: "outline, links, info", keys: "Ctrl \\", run: () => win.detailsShown = !win.detailsShown },
             { icon: "left_panel_close", name: "Toggle sidebar", desc: "", keys: "", run: () => win.sidebarHidden = !win.sidebarHidden },
@@ -949,6 +951,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             // coremarks:FILE: a plugin's sign, line tint and text after line 1 drawn by the window's editor
             // coreevents:FILE: a plugin's autocmds fire in the window (file type set, BufEnter on open, BufWritePost on save)
             if (app.shotEngine.startsWith("coreevents:")) { const f = app.shotEngine.slice(11); app.evalLua("vim.g.ev = '' vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWritePost', 'FileType' }, { callback = function(a) vim.g.ev = vim.g.ev .. a.event .. ':' .. vim.bo.filetype .. ' ' end })"); win.openFile({ path: app.dir + "/" + f, rel: f }); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 400 }", win); t2.triggered.connect(() => { fileView.write(); console.log("zett-probe: coreevents " + JSON.parse(app.evalLua("vim.g.ev")).result); grabLater.start() }); t2.start(); return }
+            // canvas:FILE: a .canvas opened: its cards, links and a live file card
+            if (app.shotEngine.startsWith("canvas:")) { const f = app.shotEngine.slice(7); win.openFile({ path: app.dir + "/" + f, rel: f }); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 500 }", win); t2.triggered.connect(() => { console.log("zett-probe: canvas view " + win.view + " cards " + canvasView.nodes.length + " live " + (canvasView.live["core.rs"] ?? "").split("\n")[0]); grabLater.start() }); t2.start(); return }
             if (app.shotEngine.startsWith("coremarks:")) { const f = app.shotEngine.slice(10); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.lendNow(); app.evalLua("local ns = vim.api.nvim_create_namespace('t') vim.api.nvim_buf_set_extmark(0, ns, 0, 0, { sign_text = '+', sign_hl_group = 'DiffAdd', line_hl_group = 'DiffAdd', virt_text = { { 'from a plugin', 'Comment' } } })"); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 700 }", win); t2.triggered.connect(() => { console.log("zett-probe: coremarks " + JSON.stringify(fileView.codeView.pmarks[0] ?? null)); grabLater.start() }); t2.start() }); return }
             if (app.shotEngine.startsWith("corelend:")) { const f = app.shotEngine.slice(9); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.lendNow(); app.evalLua("vim.api.nvim_buf_set_lines(0, 0, 1, false, { 'from lua ' .. vim.api.nvim_buf_line_count(0) })"); Qt.callLater(() => { console.log("zett-probe: corelend [" + fileView.codeDoc.lineText(0) + "] dirty " + fileView.codeDoc.dirty); grabLater.start() }) }); return }
             if (app.shotEngine.startsWith("corekept:")) { const f = app.shotEngine.slice(9), p = app.dir + "/" + f; app.keepUnsaved(p, "kept after a crash\n"); win.openFile({ path: p, rel: f }); Qt.callLater(() => { const offered = fileView.kept !== null; fileView.restoreKept(); console.log("zett-probe: corekept offered " + offered + " text [" + fileView.codeDoc.lineText(0) + "] dirty " + fileView.codeDoc.dirty); app.dropUnsaved(p); grabLater.start() }); return }
@@ -1128,6 +1132,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
 
             // ───────── a file from the tree, read-only and highlighted ─────────
             FileView { id: fileView; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+
+            CanvasView { id: canvasView; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // ───────── Today: the start screen ─────────
             Today { win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }

@@ -97,7 +97,7 @@ See PLAN.md for the vision and milestones.
   the commits that changed the section at the cursor (git log -L), Enter shows one
   - [ ] hunks (stage part of a file), push / pull / branches, a blame column
 - [x] 9 sync without a server (zett sync: pair with a code, peers found by UDP broadcast, HMAC proof, changed files both ways, both-changed kept as NAME.conflict-HOST; not encrypted yet, LAN only)
-- [ ] 10 canvas
+- [x] 10 canvas (CanvasView.qml: JSON Canvas 1.0 .canvas files; text cards in Markdown, file cards live, groups, curved links with labels; drag, resize, link by the dot, keys N Del arrows 0 +/-, Tab walks cards; "New canvas" in the palette)
 
 ### Emacs parity (2026-10-21): what Emacs has and zett does not yet, in the order they are felt
 A. editing (zett-edit textops.rs, pure, tested)

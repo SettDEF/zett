@@ -24,6 +24,7 @@ cp "$W/core.rs" "$W/core2.rs"; cp "$W/core.rs" "$W/core3.rs"; cp "$W/core.rs" "$
 for i in $(seq 1 1000); do echo "impl T$i {"; for j in $(seq 1 98); do echo "    fn f$j(&self) -> u32 { $j }"; done; echo "}"; done > "$W/big.rs"
 cp "$W/fix.c" "$W/fix2.c"; cp "$W/bad.c" "$W/bad2.c"   # untouched copies for the new core's server checks
 mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
+printf '{"nodes":[{"id":"a","type":"text","text":"# Ideas","x":0,"y":0,"width":260,"height":160},{"id":"b","type":"file","file":"core.rs","x":360,"y":0,"width":260,"height":160}],"edges":[{"id":"e","fromNode":"a","toNode":"b"}]}' > "$W/t.canvas"
 git -C "$W" init -q && git -C "$W" add -A && git -C "$W" -c user.email=c@c -c user.name=c commit -qm init
 echo '// changed' >> "$W/main.rs"
 
@@ -100,6 +101,7 @@ check corekept corekept:lines.rs "grep -q 'corekept offered true text \\[kept af
 check corelend corelend:lines.rs "grep -q 'corelend \\[from lua 3\\] dirty true' \"\$OUT/corelend.log\""
 check coremarks coremarks:core.rs "grep -q 'coremarks .*\"virt\":\[{\"text\":\"from a plugin\".*\"sign\":\"+\"' \"\$OUT/coremarks.log\""
 check coreevents coreevents:core.rs "grep -q 'coreevents FileType:rust BufEnter:rust BufWritePost:rust' \"\$OUT/coreevents.log\""
+check canvas canvas:t.canvas "grep -q 'canvas view canvas cards 2 live fn main() {' \"\$OUT/canvas.log\""
 # YouCompleteMe's engine, when ycmd is built in the data folder: gfi finds getFileInfo (fuzzy)
 if ls ~/.local/share/zett/ycmd/ycm_core* >/dev/null 2>&1; then
     printf 'function getFileInfo(path) {}\nconst gitFolderInfo = 1\n' > "$W/y.js"
