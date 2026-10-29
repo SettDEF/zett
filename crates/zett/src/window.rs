@@ -91,6 +91,10 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "lspEvent"]
         fn lsp_event(self: Pin<&mut Zett>, json: QString);
+        /// the colours file read again; the theme set (and every colour bound to it redrawn) only when it changed
+        #[qinvokable]
+        #[cxx_name = "reloadTheme"]
+        fn reload_theme(self: Pin<&mut Zett>);
         #[qinvokable]
         #[cxx_name = "readFile"]
         fn read_file(self: &Zett, path: &QString) -> QString;
@@ -1187,6 +1191,13 @@ impl qobject::Zett {
 
     fn office_to_pdf(&self, path: &QString) -> QString {
         QString::from(&office_pdf(std::path::Path::new(&path.to_string())).map(|p| p.display().to_string()).unwrap_or_default())
+    }
+
+    fn reload_theme(self: Pin<&mut Self>) {
+        let now = QString::from(&theme_json());
+        if &now != self.theme() {
+            self.set_theme(now);
+        }
     }
 
     fn read_file(&self, path: &QString) -> QString {
