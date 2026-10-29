@@ -127,7 +127,7 @@ plugin, not the core.
 
 ## apropos
 
-- · `apropos` Show all meaningful Lisp symbols whose names match PATTERN.
+- ✓ `apropos` Show all meaningful Lisp symbols whose names match PATTERN.
 - ✓ `apropos-command` Show commands (interactively callable functions) that match PATTERN.
 - ✓ `apropos-documentation` Show symbols whose documentation contains matches for PATTERN.
 - · `apropos-function` Show functions that match PATTERN.
@@ -135,8 +135,8 @@ plugin, not the core.
 - · `apropos-local-value` Show buffer-local variables whose values match PATTERN.
 - · `apropos-local-variable` Show buffer-local variables that match PATTERN.
 - ✓ `apropos-user-option` Show user options that match PATTERN.
-- · `apropos-value` Show all symbols whose value's printed representation matches PATTERN.
-- · `apropos-variable` Show variables that match PATTERN.
+- ✓ `apropos-value` Show all symbols whose value's printed representation matches PATTERN.
+- ✓ `apropos-variable` Show variables that match PATTERN.
 
 ## arp
 
@@ -196,7 +196,7 @@ plugin, not the core.
 - ✓ `backward-char` Move point N characters backward (forward if N is negative).
 - · `backward-delete-char` Delete the previous N characters (following if N is negative).
 - ✓ `backward-delete-char-untabify` Delete characters backward, changing tabs into spaces.
-- · `backward-kill-paragraph` Kill back to start of paragraph.
+- ✓ `backward-kill-paragraph` Kill back to start of paragraph.
 - ✓ `backward-kill-sentence` Kill back from point to start of sentence.
 - ✓ `backward-kill-sexp` Kill the sexp (balanced expression) preceding point.
 - ✓ `backward-kill-word` Kill characters backward until encountering the beginning of a word.
@@ -248,8 +248,8 @@ plugin, not the core.
 - · `beginning-of-defun-comments` Move to the beginning of ARGth defun, including comments.
 - · `beginning-of-defun-raw` Move point to the character that starts a defun.
 - ✓ `beginning-of-line` Move point to beginning of current line (in the logical order).
-- · `beginning-of-line-text` Move to the beginning of the text on this line.
-- · `beginning-of-visual-line` Move point to beginning of current visual line.
+- ✓ `beginning-of-line-text` Move to the beginning of the text on this line.
+- ✓ `beginning-of-visual-line` Move point to beginning of current visual line.
 
 ## benchmark
 
@@ -307,9 +307,9 @@ plugin, not the core.
 
 ## browse
 
-- · `browse-url` Open URL using a configurable method.
+- ✓ `browse-url` Open URL using a configurable method.
 - · `browse-url-at-mouse` Use a web browser to load a URL clicked with the mouse.
-- · `browse-url-at-point` Open URL at point using a configurable method.
+- ✓ `browse-url-at-point` Open URL at point using a configurable method.
 - · `browse-url-button-open` Follow the link under point using `browse-url'.
 - · `browse-url-chromium` Ask the Chromium WWW browser to load URL.
 - · `browse-url-default-android-browser` Browse URL with the system default browser.
@@ -438,7 +438,7 @@ plugin, not the core.
 
 ## calc
 
-- · `calc` The Emacs Calculator.  Full documentation is listed under `calc-mode'.
+- ✓ `calc` The Emacs Calculator.  Full documentation is listed under `calc-mode'.
 - · `calc-dispatch` Invoke the GNU Emacs Calculator.  See \[calc-dispatch-help] for details.
 - · `calc-embedded` Start Calc Embedded mode on the formula surrounding point.
 - · `calc-embedded-activate` Scan the current editing buffer for all embedded := and => formulas.
@@ -451,11 +451,11 @@ plugin, not the core.
 
 ## calculator
 
-- · `calculator` Run the Emacs calculator.
+- ✓ `calculator` Run the Emacs calculator.
 
 ## calendar
 
-- · `calendar` Display a three-month Gregorian calendar.
+- ✓ `calendar` Display a three-month Gregorian calendar.
 - · `calendar-hebrew-list-yahrzeits` List Yahrzeit dates for *Gregorian* DEATH-DATE from START-YEAR to END-YEAR.
 
 ## call
@@ -493,7 +493,7 @@ plugin, not the core.
 
 ## center
 
-- · `center-line` Center the line point is on, within the width specified by `fill-column'.
+- ✓ `center-line` Center the line point is on, within the width specified by `fill-column'.
 - · `center-line-mode` Minor mode for keeping modified lines centered horizontally.
 - · `center-paragraph` Center each nonblank line in the paragraph at or after point.
 - · `center-region` Center each nonblank line starting in the region.
@@ -619,8 +619,8 @@ plugin, not the core.
 - · `comment-indent-new-line` Break line at point and indent, continuing comment if within one.
 - · `comment-kill` Kill the first comment on this line, if any.
 - ✓ `comment-line` Comment or uncomment current line and leave point after it.
-- · `comment-or-uncomment-region` Call `comment-region', unless the region only consists of comments,
-- · `comment-region` Comment or uncomment each line in the region.
+- ✓ `comment-or-uncomment-region` Call `comment-region', unless the region only consists of comments,
+- ✓ `comment-region` Comment or uncomment each line in the region.
 - ✓ `comment-set-column` Set the comment column based on point.
 
 ## common
@@ -714,7 +714,7 @@ plugin, not the core.
 ## count
 
 - ✓ `count-lines-page` Report number of lines on current page, and how many are before or after point.
-- · `count-matches` Print and return number of matches for REGEXP following point.
+- ✓ `count-matches` Print and return number of matches for REGEXP following point.
 - ✓ `count-words` Count words between START and END.
 - ✓ `count-words-region` Count the number of words in the region.
 
@@ -873,7 +873,7 @@ plugin, not the core.
 ## delete
 
 - · `delete-active-region` Delete the active region.
-- · `delete-all-space` Delete all spaces, tabs, and newlines around point.
+- ✓ `delete-all-space` Delete all spaces, tabs, and newlines around point.
 - ✓ `delete-backward-char` Delete the previous N characters (following if N is negative).
 - ✓ `delete-blank-lines` On blank line, delete all surrounding blank lines, leaving just one.
 - ✓ `delete-char` Delete the following N characters (previous if N is negative).
@@ -881,16 +881,16 @@ plugin, not the core.
 - · `delete-directory` Delete the directory named DIRECTORY.  Does not follow symlinks.
 - · `delete-dir-local-variable` Delete all MODE settings of dir-local VARIABLE from .dir-locals.el.
 - ✓ `delete-duplicate-lines` Delete all but one copy of any identical lines in the region.
-- · `delete-file` Delete file named FILENAME.  If it is a symlink, remove the symlink.
+- ✓ `delete-file` Delete file named FILENAME.  If it is a symlink, remove the symlink.
 - · `delete-file-local-variable` Delete all settings of file-local VARIABLE from the Local Variables list.
 - · `delete-file-local-variable-prop-line` Delete all settings of file-local VARIABLE from the -*- line.
 - ✓ `delete-forward-char` Delete the following N characters (previous if N is negative).
 - ✓ `delete-frame` Delete FRAME, eliminating it from use.
 - ✓ `delete-horizontal-space` Delete all spaces and tabs around point.
 - ✓ `delete-indentation` Join this line to previous and fix up whitespace at join.
-- · `delete-matching-lines` Delete lines containing matches for REGEXP.
+- ✓ `delete-matching-lines` Delete lines containing matches for REGEXP.
 - · `delete-minibuffer-contents` Delete all user input in a minibuffer.
-- · `delete-non-matching-lines` Delete all lines except those containing matches for REGEXP.
+- ✓ `delete-non-matching-lines` Delete all lines except those containing matches for REGEXP.
 - ✓ `delete-other-frames` Delete all frames on FRAME's terminal, except FRAME.
 - ✓ `delete-other-windows` Make WINDOW fill its frame.
 - · `delete-other-windows-internal` Make WINDOW fill its frame.
@@ -1001,7 +1001,7 @@ plugin, not the core.
 - · `diff` Find and display the differences between OLD and NEW files.
 - · `diff-backup` Diff this file with its backup file or vice versa.
 - · `diff-buffers` Find and display the differences between OLD and NEW buffers.
-- · `diff-buffer-with-file` View the differences between BUFFER and its associated file.
+- ✓ `diff-buffer-with-file` View the differences between BUFFER and its associated file.
 - · `diff-minor-mode` Toggle Diff minor mode.
 - · `diff-mode` Major mode for viewing/editing context diffs.
 
@@ -1094,7 +1094,7 @@ plugin, not the core.
 
 ## downcase
 
-- · `downcase-dwim` Downcase words in the region, if active; if not, downcase word at point.
+- ✓ `downcase-dwim` Downcase words in the region, if active; if not, downcase word at point.
 - ✓ `downcase-region` Convert the region to lower case.  In programs, wants two arguments.
 - ✓ `downcase-word` Convert to lower case from point to end of word, moving over.
 
@@ -1108,8 +1108,8 @@ plugin, not the core.
 
 ## duplicate
 
-- · `duplicate-dwim` Duplicate the current line or region N times.
-- · `duplicate-line` Duplicate the current line N times.
+- ✓ `duplicate-dwim` Duplicate the current line or region N times.
+- ✓ `duplicate-line` Duplicate the current line N times.
 
 ## dynamic
 
@@ -1399,7 +1399,7 @@ plugin, not the core.
 - ✓ `end-of-buffer-other-window` Move point to the end of the buffer in the other window.
 - ✓ `end-of-defun` Move forward to next end of defun.
 - ✓ `end-of-line` Move point to end of current line (in the logical order).
-- · `end-of-visual-line` Move point to end of current visual line.
+- ✓ `end-of-visual-line` Move point to end of current visual line.
 
 ## enlarge
 
@@ -1606,7 +1606,7 @@ plugin, not the core.
 
 ## ffap
 
-- · `ffap` Find FILENAME, guessing a default from text around point.
+- ✓ `ffap` Find FILENAME, guessing a default from text around point.
 - · `ffap-at-mouse` Find file or URL guessed from text around mouse click.
 - · `ffap-bindings` Evaluate the forms in variable `ffap-bindings'.
 - · `ffap-menu` Put up a menu of files and URLs mentioned in this buffer.
@@ -1714,7 +1714,7 @@ plugin, not the core.
 
 ## flush
 
-- · `flush-lines` Delete lines containing matches for REGEXP.
+- ✓ `flush-lines` Delete lines containing matches for REGEXP.
 
 ## flymake
 
@@ -2108,7 +2108,7 @@ plugin, not the core.
 
 ## how
 
-- · `how-many` Print and return number of matches for REGEXP following point.
+- ✓ `how-many` Print and return number of matches for REGEXP following point.
 
 ## hs
 
@@ -2521,7 +2521,7 @@ plugin, not the core.
 
 ## keep
 
-- · `keep-lines` Delete all lines except those containing matches for REGEXP.
+- ✓ `keep-lines` Delete all lines except those containing matches for REGEXP.
 
 ## key
 
@@ -4790,7 +4790,7 @@ plugin, not the core.
 
 ## uncomment
 
-- · `uncomment-region` Uncomment each line in the BEG .. END region.
+- ✓ `uncomment-region` Uncomment each line in the BEG .. END region.
 
 ## undefined
 
@@ -4876,7 +4876,7 @@ plugin, not the core.
 ## upcase
 
 - · `upcase-char` Uppercasify ARG chars starting from point.  Point doesn't move.
-- · `upcase-dwim` Upcase words in the region, if active; if not, upcase word at point.
+- ✓ `upcase-dwim` Upcase words in the region, if active; if not, upcase word at point.
 - · `upcase-initials-region` Upcase the initial of each word in the region.
 - ✓ `upcase-region` Convert the region to upper case.  In programs, wants two arguments.
 - ✓ `upcase-word` Convert to upper case from point to end of word, moving over.

@@ -424,7 +424,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 
 ### State on 2026-10-29 (scripts/parity.sh)
 Neovim: options 293/293, Ex commands 524/524, normal keys 477/477, vim.api + vim.fn 827/840.
-Emacs: default keys 466/466, commands 520/3164 (the rest by name in docs/parity/emacs-commands.md).
+Emacs: default keys 466/466, commands 550/3164 (the rest by name in docs/parity/emacs-commands.md).
 Lines above ticked today were checked against parity.sh and the code; what stays open is really open:
 the WASM plugins and a plugin manifest, Fennel, major/minor modes, an editable dired, TRAMP, ediff,
 the agenda, the window's pages through Loro history, ycmd's semantic completers, Glass floats, Lottie.

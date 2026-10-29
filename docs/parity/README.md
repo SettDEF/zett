@@ -7,4 +7,4 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 - [Neovim's Normal-mode keys in zett](nvim-normal-keys.md): 477 ✓ of 477
 - [Neovim's API (vim.api) and functions (vim.fn)](nvim-api.md): 827 ✓ of 840
 - [Emacs's default keys in zett](emacs-keys.md): 466 ✓ of 466
-- [Emacs's commands](emacs-commands.md): 520 ✓ of 3164
+- [Emacs's commands](emacs-commands.md): 550 ✓ of 3164
