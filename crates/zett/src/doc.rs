@@ -959,10 +959,13 @@ impl qobject::CodeDoc {
         if p.is_empty() { return QString::from("[]") }
         let lower = p.to_lowercase();
         // the other open files, as on disk (a few, not huge ones)
-        let paths: Vec<String> = serde_json::from_str(&others.to_string()).unwrap_or_default();
-        let texts: Vec<(String, String)> = paths.iter().take(12).filter(|f| std::fs::metadata(f).is_ok_and(|m| m.len() < 2_000_000)).filter_map(|f| {
-            let name = std::path::Path::new(f).file_name()?.to_string_lossy().into_owned();
-            Some((name, std::fs::read_to_string(f).ok()?))
+        // each: a path (read from disk) or { path, text } (an unsaved tab, as it is now)
+        let list: Vec<serde_json::Value> = serde_json::from_str(&others.to_string()).unwrap_or_default();
+        let texts: Vec<(String, String)> = list.iter().take(12).filter_map(|v| {
+            let (f, text) = match v { serde_json::Value::String(p) => (p.clone(), None), o => (o["path"].as_str()?.to_string(), o["text"].as_str().map(String::from)) };
+            let name = std::path::Path::new(&f).file_name()?.to_string_lossy().into_owned();
+            let text = match text { Some(t) => t, None => { if std::fs::metadata(&f).map_or(true, |m| m.len() >= 2_000_000) { return None } std::fs::read_to_string(&f).ok()? } };
+            Some((name, text))
         }).collect();
         let mut out: Vec<serde_json::Value> = Vec::new();
         let mut seen = std::collections::HashSet::new();

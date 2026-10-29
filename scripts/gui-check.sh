@@ -96,6 +96,7 @@ check core3 core3:core3.rs "grep -q 'core3 word \\[a\\] indented \\[        let 
 check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \"\$(tail -c1 '$W/core4.rs' | od -An -c | tr -d ' ')\" = '\\n' ] && tail -1 '$W/core4.rs' | grep -q tail"
 check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"\\]' \"\$OUT/corewords.log\""
 check corecomp corecomp:core5.rs "grep -q 'corecomp focus true completing true items \\[\"let\"' \"\$OUT/corecomp.log\""
+check corekept corekept:lines.rs "grep -q 'corekept offered true text \\[kept after a crash\\] dirty true' \"\$OUT/corekept.log\""
 # YouCompleteMe's engine, when ycmd is built in the data folder: gfi finds getFileInfo (fuzzy)
 if ls ~/.local/share/zett/ycmd/ycm_core* >/dev/null 2>&1; then
     printf 'function getFileInfo(path) {}\nconst gitFolderInfo = 1\n' > "$W/y.js"

@@ -107,7 +107,12 @@ ColumnLayout {
     function wordStart(pos) { let s = pos; while (s > 0 && /[\w$]/.test(ed.text[s - 1])) s--; return s }
     function ask(kind, pos) { if (!lsp) return; const [l, c] = lineCol(pos); app.lspAsk(kind, win.filePath, l, c) }
     onVisibleChanged: if (visible) { openLsp(); loadGit() }
-    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit() } }
+    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit(); fv.checkKept() } }
+    // unsaved changes a zett that did not end well kept for this file: offered back (Restore / Drop)
+    property var kept: null
+    function checkKept() { const k = fv.win.filePath ? fv.app.keptUnsaved(fv.win.filePath) : ""; fv.kept = k ? JSON.parse(k) : null }
+    function restoreKept() { if (!fv.kept) return; if (fv.newCore) codeView.doc.restore(fv.kept.text); else ed.text = fv.kept.text; fv.kept = null }
+    function dropKept() { fv.app.dropUnsaved(fv.win.filePath); fv.kept = null }
     // git: the lines changed since the last commit, as bars in the gutter (green added, blue changed, red removed)
     property var gitMarks: []
     function loadGit() { try { gitMarks = visible && win.filePath ? JSON.parse(app.gitLines(win.filePath)) : [] } catch (e) { gitMarks = [] } }
@@ -294,7 +299,7 @@ ColumnLayout {
             TapHandler { onTapped: fv.showProblems = !fv.showProblems }
         }
         Repeater {
-            model: fv.dirty ? [["undo", "Revert", () => fv.revert()], ["save", "Save  Ctrl S", () => fv.save()]] : (fv.gitMarks.length || fv.showDiff ? [[fv.showDiff ? "edit" : "difference", fv.showDiff ? "Edit" : "Changes", () => fv.showDiff = !fv.showDiff]] : []).concat([["open_in_new", "Open with the system", () => Qt.openUrlExternally("file://" + fv.win.filePath)]])
+            model: fv.kept ? [["restore_page", "Restore unsaved changes", () => fv.restoreKept()], ["delete", "Drop", () => fv.dropKept()]] : fv.dirty ? [["undo", "Revert", () => fv.revert()], ["save", "Save  Ctrl S", () => fv.save()]] : (fv.gitMarks.length || fv.showDiff ? [[fv.showDiff ? "edit" : "difference", fv.showDiff ? "Edit" : "Changes", () => fv.showDiff = !fv.showDiff]] : []).concat([["open_in_new", "Open with the system", () => Qt.openUrlExternally("file://" + fv.win.filePath)]])
             delegate: Rectangle {
                 required property var modelData
                 implicitWidth: bRow.implicitWidth + 20; implicitHeight: 28; radius: 14

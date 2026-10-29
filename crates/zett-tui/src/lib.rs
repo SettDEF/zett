@@ -20,7 +20,7 @@ mod cmdline;
 mod ex;
 mod minibuf;
 mod travel;
-mod recover;
+pub mod recover;
 mod agent;
 mod query;
 mod refs;

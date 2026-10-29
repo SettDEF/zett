@@ -363,6 +363,18 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     function openMarketplace() { marketplace.show() }
     // files changed and not saved, left for another tab: path → text (the open one is in the editor itself)
     property var unsaved: ({})
+    // crash safety: unsaved text copied every 2 s (the terminal's recovery copies: either zett brings them back)
+    property var keptPaths: ({})
+    Timer {
+        interval: 2000; repeat: true; running: !app.shot.length
+        onTriggered: {
+            const now = {}
+            for (const p of Object.keys(win.unsaved)) { app.keepUnsaved(p, win.unsaved[p]); now[p] = true }
+            if (fileView.dirty && win.filePath && fileView.newCore) { app.keepUnsaved(win.filePath, fileView.codeDoc.text()); now[win.filePath] = true }
+            for (const p of Object.keys(win.keptPaths)) if (!now[p]) app.dropUnsaved(p)
+            win.keptPaths = now
+        }
+    }
     // everything unsaved: the open file, the kept ones, the side file
     function unsavedList() {
         const out = Object.keys(unsaved)
@@ -932,6 +944,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             // corecomp:FILE: a word started on a new line (no language server): the completion list and whether it shows
             // coreycm:FILE:TEXT: ycmd started first (it needs a moment), then TEXT typed at the end of the file: its items
             if (app.shotEngine.startsWith("coreycm:")) { const [f, typed] = app.shotEngine.slice(8).split(":"); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { const cv = fileView.codeView, d = cv.doc; d.candidates("xx", app.dir + "/" + f, "[]"); const tm = Qt.createQmlObject("import QtQuick; Timer { interval: 2500 }", win); tm.triggered.connect(() => { cv.focusInput(); d.click(d.lines - 1, 0, false, false); for (const ch of typed) d.key(0, ch, 0); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 500 }", win); t2.triggered.connect(() => { console.log("zett-probe: coreycm items " + JSON.stringify(cv.comps.map(c => c.label + "|" + c.detail))); grabLater.start() }); t2.start() }); tm.start() }); return }
+            // corekept:FILE: a copy kept by a zett that ended badly, then the file opened: offered, restored
+            if (app.shotEngine.startsWith("corekept:")) { const f = app.shotEngine.slice(9), p = app.dir + "/" + f; app.keepUnsaved(p, "kept after a crash\n"); win.openFile({ path: p, rel: f }); Qt.callLater(() => { const offered = fileView.kept !== null; fileView.restoreKept(); console.log("zett-probe: corekept offered " + offered + " text [" + fileView.codeDoc.lineText(0) + "] dirty " + fileView.codeDoc.dirty); app.dropUnsaved(p); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corecomp:")) { const [f, typed, other] = app.shotEngine.slice(9).split(":"); if (other) win.openFile({ path: app.dir + "/" + other, rel: other }); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { const cv = fileView.codeView, d = cv.doc; cv.focusInput(); d.click(1, 14, false, false); for (const ch of (typed ?? "\n    le")) d.key(0, ch, 0); Qt.callLater(() => { console.log("zett-probe: corecomp focus " + cv.inputFocused + " completing " + cv.completing + " items " + JSON.stringify(cv.comps.map(c => c.label)) + " from " + JSON.stringify(cv.comps.map(c => c.detail))); grabLater.start() }) }); return }
             if (app.shotEngine.startsWith("corekeep:")) { const p = app.shotEngine.slice(9).split(","); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(0, 0, false, false); for (const ch of "kept ") d.key(0, ch, 0); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); Qt.callLater(() => { const list = win.unsavedList(); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { console.log("zett-probe: corekeep away " + list.length + " back [" + d.lineText(0) + "] dirty " + d.dirty); grabLater.start() }) }) }); return }
             if (app.shotEngine.startsWith("corenote:")) { const f = app.shotEngine.slice(9); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.codeDoc.click(2, 4, false, false); Qt.callLater(() => { win.noteAboutCode(); noteT2.start() }) }); return }

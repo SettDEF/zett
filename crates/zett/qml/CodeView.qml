@@ -97,7 +97,8 @@ Rectangle {
         const have = new Set(server.map(i => i.label))
         // without a server too: this file's words, the other open files', the language's keywords, your snippets
         const ext = (cv.file.match(/\.([^./]+)$/) ?? ["", ""])[1].toLowerCase()
-        const others = (win.fileTabs ?? []).filter(p => p !== cv.file)
+        // the other open files; an unsaved one as it is now (its text), not as on disk
+        const others = (win.fileTabs ?? []).filter(p => p !== cv.file).map(p => (win.unsaved ?? {})[p] !== undefined ? { path: p, text: win.unsaved[p] } : p)
         let local = []; try { local = JSON.parse(doc.candidates(w, cv.file || ext, JSON.stringify(others))) } catch (e) {}
         const snips = Object.keys(win.snippets ?? {}).filter(k => wl && k.toLowerCase().startsWith(wl)).map(k => ({ label: k, insert: k, detail: "snippet", snippet: true }))
         return server.concat(snips, local.filter(x => !have.has(x.label))).slice(0, 50)

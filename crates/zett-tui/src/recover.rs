@@ -218,3 +218,18 @@ mod crash {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// For the window (zett --gui): the same copies as the terminal's, so either recovers the other's.
+pub fn keep_unsaved(path: &str, text: &str) {
+    write_copy(&dir(), path, text)
+}
+/// A kept copy newer than the file and different from it: (unix seconds, the text).
+pub fn kept_unsaved(path: &str) -> Option<(u64, String)> {
+    let (t, text) = read_copy(&dir(), path)?;
+    let disk = std::fs::read_to_string(path).unwrap_or_default();
+    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    (text != disk && t >= mtime).then_some((t, text))
+}
+pub fn drop_unsaved(path: &str) {
+    let _ = std::fs::remove_file(copy_in(&dir(), path));
+}

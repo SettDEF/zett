@@ -94,6 +94,17 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "readFile"]
         fn read_file(self: &Zett, path: &QString) -> QString;
+        /// crash safety, the terminal's copies: keep a file's unsaved text, the kept text newer than the file
+        /// ("" none: JSON {time, text}), drop it
+        #[qinvokable]
+        #[cxx_name = "keepUnsaved"]
+        fn keep_unsaved(self: &Zett, path: &QString, text: &QString);
+        #[qinvokable]
+        #[cxx_name = "keptUnsaved"]
+        fn kept_unsaved(self: &Zett, path: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "dropUnsaved"]
+        fn drop_unsaved(self: &Zett, path: &QString);
         /// a file of the workspace written (the file view saving); false outside the workspace or on an error
         #[qinvokable]
         #[cxx_name = "writeFile"]
@@ -1094,6 +1105,19 @@ impl qobject::Zett {
         let root = std::fs::canonicalize(workspace_dir()).unwrap_or_else(|_| workspace_dir());
         let inside = p.parent().and_then(|d| std::fs::canonicalize(d).ok()).is_some_and(|d| d.starts_with(&root));
         inside && std::fs::write(&p, text.to_string()).is_ok()
+    }
+
+    fn keep_unsaved(&self, path: &QString, text: &QString) {
+        zett_tui::recover::keep_unsaved(&path.to_string(), &text.to_string())
+    }
+    fn kept_unsaved(&self, path: &QString) -> QString {
+        match zett_tui::recover::kept_unsaved(&path.to_string()) {
+            Some((t, text)) => QString::from(&serde_json::json!({ "time": t, "text": text }).to_string()),
+            None => QString::from(""),
+        }
+    }
+    fn drop_unsaved(&self, path: &QString) {
+        zett_tui::recover::drop_unsaved(&path.to_string())
     }
 
     fn read_file(&self, path: &QString) -> QString {
