@@ -94,6 +94,13 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "readFile"]
         fn read_file(self: &Zett, path: &QString) -> QString;
+        #[qinvokable]
+        #[cxx_name = "fileExists"]
+        fn file_exists(self: &Zett, path: &QString) -> bool;
+        /// an office document as a PDF (LibreOffice, cached until the file changes): its path, or "" when it fails
+        #[qinvokable]
+        #[cxx_name = "officeToPdf"]
+        fn office_to_pdf(self: &Zett, path: &QString) -> QString;
         /// crash safety, the terminal's copies: keep a file's unsaved text, the kept text newer than the file
         /// ("" none: JSON {time, text}), drop it
         /// the code file open in the window: Lua sees it as its current buffer (plugins' commands and maps act on
@@ -1174,6 +1181,14 @@ impl qobject::Zett {
         zett_tui::recover::drop_unsaved(&path.to_string())
     }
 
+    fn file_exists(&self, path: &QString) -> bool {
+        std::path::Path::new(&path.to_string()).exists()
+    }
+
+    fn office_to_pdf(&self, path: &QString) -> QString {
+        QString::from(&office_pdf(std::path::Path::new(&path.to_string())).map(|p| p.display().to_string()).unwrap_or_default())
+    }
+
     fn read_file(&self, path: &QString) -> QString {
         let p = std::path::PathBuf::from(path.to_string());
         match std::fs::metadata(&p) {
@@ -1515,4 +1530,24 @@ impl qobject::Zett {
         }
         self.publish();
     }
+}
+
+/// The PDF LibreOffice makes of an office file, kept in the cache by the file's path and time (made once per change).
+fn office_pdf(src: &std::path::Path) -> Option<std::path::PathBuf> {
+    use sha2::Digest;
+    let m = std::fs::metadata(src).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    let tag: String = sha2::Sha256::digest(format!("{}\0{m}", src.display())).iter().take(8).map(|b| format!("{b:02x}")).collect();
+    let cache = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache")).join("zett/docs").join(&tag);
+    let out = cache.join(format!("{}.pdf", src.file_stem()?.to_string_lossy()));
+    if out.exists() { return Some(out) }
+    std::fs::create_dir_all(&cache).ok()?;
+    // its own profile: a LibreOffice the user has open would otherwise take the job and return at once
+    let profile = format!("file://{}", cache.join("profile").display());
+    let ok = std::process::Command::new("soffice")
+        .args([&format!("-env:UserInstallation={profile}"), "--headless", "--convert-to", "pdf", "--outdir"])
+        .arg(&cache).arg(src)
+        .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+        .status().is_ok_and(|s| s.success());
+    let _ = std::fs::remove_dir_all(cache.join("profile"));
+    (ok && out.exists()).then_some(out)
 }
