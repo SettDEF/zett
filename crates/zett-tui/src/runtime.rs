@@ -1115,3 +1115,26 @@ mod float_tests {
         assert!(frame.zindex < content.zindex, "frame {} content {}", frame.zindex, content.zindex);
     }
 }
+
+#[cfg(test)]
+mod split_style_tests {
+    fn screen(style: &str) -> Vec<String> {
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("set split_style={style}"));
+        app.command("vsplit");
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(60, 12)).unwrap();
+        term.draw(|f| app.draw(f)).unwrap();
+        let b = term.backend().buffer();
+        (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>()).collect()
+    }
+
+    #[test]
+    fn splits_look_as_split_style_says() {
+        let cards = screen("cards");
+        assert_eq!(cards[0].matches('╭').count(), 2, "a box round each window: {cards:#?}");
+        let gap = screen("gap");
+        assert!(!gap.iter().any(|l| l.contains('│')), "no line between them: {gap:#?}");
+        let line = screen("line");
+        assert!(line.iter().filter(|l| l.contains('│')).count() > 5, "Vim's line: {line:#?}");
+    }
+}

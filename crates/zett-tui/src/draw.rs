@@ -137,9 +137,19 @@ impl App {
                 }
             }
         }
+        // split_style: cards draw a rounded box round each window (it keeps what is inside); gap leaves the separator blank
+        let style = self.setting(cur, "split_style");
+        if style == "cards" && placed.len() > 1 {
+            for (id, r) in placed.iter_mut() {
+                if r.width < 6 || r.height < 4 { continue }
+                let lit = if *id == self.focus { hl("FloatBorder").patch(hl("Title")) } else { hl("WinSeparator") };
+                f.render_widget(ratatui::widgets::Block::bordered().border_set(ratatui::symbols::border::ROUNDED).border_style(lit), *r);
+                *r = r.inner(ratatui::layout::Margin { horizontal: 1, vertical: 1 });
+            }
+        }
         self.win_rects = placed.clone();
         // fillchars vert: the character between windows
-        let vert = crate::display::fillchars(&self.setting(self.cur.min(self.docs.len() - 1), "fillchars")).vert.to_string();
+        let vert = if style == "line" { crate::display::fillchars(&self.setting(self.cur.min(self.docs.len() - 1), "fillchars")).vert.to_string() } else { " ".to_string() };
         for s in seps {
             let bar: Vec<Line> = (0..s.height).map(|_| Line::from(Span::styled(vert.clone(), hl("WinSeparator")))).collect();
             f.render_widget(Paragraph::new(bar), s);

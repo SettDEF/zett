@@ -55,6 +55,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("cmdline", &[], Kind::Text, "bottom", "where : asks: bottom (Vim), top, center (a box, like noice.nvim), cursor (a box at the cursor)"),
     s("cmdwidth", &[], Kind::Int, "64", "the width of the : box (center, cursor)"),
     s("fill_column", &["textwidth", "tw"], Kind::Int, "80", "where M-q (fill-paragraph) wraps"),
+    s("split_style", &[], Kind::Text, "line", "how windows side by side look: line (Vim's, fillchars vert), gap (blank space), cards (each in a rounded box, the focused one lit)"),
 ];
 
 /// A setting by its name or short name: zett's own first, then the rest of Neovim's (nvim_options.rs).
