@@ -180,6 +180,21 @@ ColumnLayout {
     readonly property var symbolPath: { const p = []; for (const it of outline) { if (it.line > curLine) break; while (p.length && p[p.length - 1].depth >= it.depth) p.pop(); p.push(it) } return p }
     property bool showDiff: false
     property var diffRows: []
+    // side by side: old on the left, new on the right; removed and added lines paired up row by row
+    property bool diffSplit: win.prefs?.diffSplit ?? false
+    readonly property var splitRows: {
+        const out = []; let dels = [], adds = []
+        const flush = () => { for (let i = 0; i < Math.max(dels.length, adds.length); i++) out.push({ k: "pair", l: dels[i] ?? null, r: adds[i] ?? null }); dels = []; adds = [] }
+        for (const r of diffRows) {
+            if (r.k === "del") { dels.push({ n: r.a, t: r.text, k: "del" }); continue }
+            if (r.k === "add") { adds.push({ n: r.b, t: r.text, k: "add" }); continue }
+            flush()
+            if (r.k === "hunk") out.push(r)
+            else out.push({ k: "pair", l: { n: r.a, t: r.text, k: "same" }, r: { n: r.b, t: r.text, k: "same" } })
+        }
+        flush()
+        return out
+    }
     function loadDiff() {
         let r; try { r = JSON.parse(app.git(JSON.stringify(["diff", "--no-color", "-U3", "HEAD", "--", win.filePath]))) } catch (e) { r = { out: "" } }
         const rows = []; let a = 0, b = 0
@@ -297,8 +312,59 @@ ColumnLayout {
         Layout.fillWidth: true; Layout.fillHeight: true
         Layout.leftMargin: 8; Layout.rightMargin: 8
         radius: 17; color: t.card
+        // Unified / Side by side, kept as a preference
+        Rectangle {
+            z: 5; anchors { top: parent.top; right: parent.right; margins: 10 }
+            width: swRow.implicitWidth + 6; height: 26; radius: 13; color: t.raised
+            Row {
+                id: swRow; anchors.centerIn: parent; spacing: 2
+                Repeater {
+                    model: [[false, "view_agenda", "Unified"], [true, "view_column", "Side by side"]]
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool on: fv.diffSplit === modelData[0]
+                        width: swT.implicitWidth + 30; height: 22; radius: 11
+                        color: on ? Qt.alpha(t.accent, 0.22) : swH.hovered ? Qt.alpha(t.text, 0.06) : "transparent"
+                        Row { anchors.centerIn: parent; spacing: 4
+                            Text { text: modelData[1]; color: parent.parent.on ? t.accent : t.faint; font.family: t.icons; font.pixelSize: 14 }
+                            Text { id: swT; text: modelData[2]; color: parent.parent.on ? t.text : t.dim; font.family: t.sans; font.pixelSize: 11 } }
+                        HoverHandler { id: swH; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: fv.win.setPref("diffSplit", modelData[0]) }
+                    }
+                }
+            }
+        }
         ListView {
-            anchors { fill: parent; margins: 12 }
+            visible: fv.diffSplit
+            anchors { fill: parent; margins: 12; topMargin: 42 }
+            clip: true; boundsBehavior: Flickable.StopAtBounds
+            model: fv.splitRows
+            delegate: Item {
+                id: sr
+                required property var modelData
+                width: ListView.view.width; height: modelData.k === "hunk" ? 30 : 20
+                Text { visible: sr.modelData.k === "hunk"; x: 8; anchors.verticalCenter: parent.verticalCenter; text: sr.modelData.text ?? ""; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
+                Repeater {
+                    model: sr.modelData.k === "pair" ? [sr.modelData.l, sr.modelData.r] : []
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        x: index * (sr.width / 2 + 2); width: sr.width / 2 - 2; height: 20; radius: 6
+                        color: !modelData ? Qt.alpha(t.text, 0.03) : modelData.k === "add" ? Qt.alpha(t.added, 0.14) : modelData.k === "del" ? Qt.alpha(t.removed, 0.14) : "transparent"
+                        clip: true
+                        Row {
+                            visible: !!modelData
+                            anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                            Text { width: 36; horizontalAlignment: Text.AlignRight; text: modelData ? modelData.n : ""; color: t.faint; font.family: t.mono; font.pixelSize: 11 }
+                            Text { text: modelData ? modelData.t.replace(/\t/g, "    ") : ""; color: t.text; font.family: t.mono; font.pixelSize: 12 }
+                        }
+                    }
+                }
+            }
+        }
+        ListView {
+            visible: !fv.diffSplit
+            anchors { fill: parent; margins: 12; topMargin: 42 }
             clip: true; boundsBehavior: Flickable.StopAtBounds
             model: fv.diffRows
             delegate: Rectangle {
