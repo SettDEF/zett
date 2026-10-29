@@ -4951,3 +4951,38 @@ vim.api.nvim_create_autocmd("BufEnter", {
     for k, v in pairs(held) do pcall(function() vim.bo[k] = v end) end
   end,
 })
+
+-- YouCompleteMe's engine (ycmd) for completion: whether it is built, and building it (git clone + its build.py,
+-- in the background; zett uses it as soon as it is there)
+zett.ycm = zett.ycm or {}
+do
+  local dir = vim.fn.stdpath("data") .. "/ycmd"
+  zett.ycm.dir = dir
+  zett.ycm.state = zett.ycm.state or ""
+  function zett.ycm.status()
+    if zett.ycm.state ~= "" then return zett.ycm.state end
+    local built = #vim.fn.glob(dir .. "/ycm_core*", false, true) > 0
+    return built and "built" or (vim.fn.isdirectory(dir) == 1 and "not built" or "not installed")
+  end
+  -- fresh: clone (or pull) then build; needs git, python3, cmake and a C++ compiler
+  function zett.ycm.install()
+    if zett.ycm.state == "building" then return false, "already building" end
+    for _, p in ipairs({ "git", "python3", "cmake", "g++" }) do
+      if vim.fn.executable(p) == 0 then return false, p .. " is missing" end
+    end
+    zett.ycm.state = "building"
+    local q = vim.fn.shellescape(dir)
+    local sh = vim.fn.isdirectory(dir) == 1
+      and ("cd " .. q .. " && git pull -q && git submodule update -q --init --recursive && python3 build.py")
+      or ("git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/ycm-core/ycmd " .. q .. " && cd " .. q .. " && python3 build.py")
+    vim.system({ "sh", "-c", sh }, { text = true }, function(r)
+      zett.ycm.state = r.code == 0 and "" or ("failed: " .. ((r.stderr or ""):gsub("%s+$", ""):match("[^\n]*$") or ""))
+      vim.schedule(function() vim.notify(r.code == 0 and "ycmd built: completion uses it now (restart zett)" or ("ycmd build " .. zett.ycm.state), r.code == 0 and vim.log.levels.INFO or vim.log.levels.ERROR) end)
+    end)
+    return true
+  end
+  vim.api.nvim_create_user_command("YcmInstall", function()
+    local ok, err = zett.ycm.install()
+    vim.notify(ok and "building ycmd in the background…" or ("YcmInstall: " .. err))
+  end, { desc = "Build YouCompleteMe's engine (ycmd) for completion" })
+end

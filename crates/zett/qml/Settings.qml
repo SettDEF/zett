@@ -362,6 +362,27 @@ Item {
             }
         }
         Text { visible: s.cat === "Extensions" && s.storeNote.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; text: s.storeNote; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
+        // YouCompleteMe's engine (ycmd): built or not, Install / Update (builds in the background)
+        Rectangle {
+            id: ycmCard
+            visible: s.cat === "Extensions"
+            property string st: ""
+            function refresh() { try { ycmCard.st = JSON.parse(app.evalLua("vim.json.encode(zett.ycm.status())")).result.replace(/^"|"$/g, "") } catch (e) { ycmCard.st = "" } }
+            Component.onCompleted: refresh()
+            Timer { interval: 1500; repeat: true; running: ycmCard.visible && ycmCard.st === "building"; onTriggered: ycmCard.refresh() }
+            Layout.fillWidth: true; Layout.topMargin: 6; implicitHeight: 52; radius: 14
+            color: t.card
+            RowLayout {
+                anchors { fill: parent; leftMargin: 14; rightMargin: 10 }
+                spacing: 10
+                Text { text: "auto_awesome"; color: t.accent; font.family: t.icons; font.pixelSize: 20 }
+                ColumnLayout { Layout.fillWidth: true; spacing: 1
+                    Text { text: "YouCompleteMe engine (ycmd)"; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    Text { Layout.fillWidth: true; elide: Text.ElideRight; color: t.faint; font.family: t.sans; font.pixelSize: 12
+                        text: ycmCard.st === "built" ? "Built: fuzzy, ranked completion in the window and the terminal" : ycmCard.st === "building" ? "Building… (a minute or two)" : ycmCard.st.startsWith("failed") ? "Build " + ycmCard.st : "Fuzzy completion like YouCompleteMe (needs git, python3, cmake, g++)" } }
+                Button1 { visible: ycmCard.st !== "building"; icon: ycmCard.st === "built" ? "refresh" : "download"; label: ycmCard.st === "built" ? "Update" : "Install"; onClicked: { app.evalLua("zett.ycm.install()"); ycmCard.refresh() } }
+            }
+        }
         // the marketplace is a popup (Ctrl+Shift+X); this opens it
         Rectangle {
             visible: s.cat === "Extensions"
