@@ -8,6 +8,7 @@ Runs in zett and in Neovim.
 - `SPC g h` or `:Trail` opens or closes the panel (right side by default; `vim.g.trail_no_mappings = true` leaves the key out)
 - in the panel: `Enter` / `p` show the change since that point, `m` boxes or plain, `x` clear the marks, `r` reload, `q` close
 - boxes (the default): each change in the file and each entry in the panel in a box with rounded corners; `style = "plain"` for lines only
+- removed code keeps its language colours (in zett; in Neovim it is plain red for now)
 - `:TrailClear` takes the marks off the file
 
 ```lua

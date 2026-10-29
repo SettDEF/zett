@@ -613,13 +613,22 @@ impl App {
                     }
                 }
                 for (_, rows) in vlines.iter().filter(|(at, _)| *at == next) {
+                    // groups as a list ("DiffDelete+@syntax"): laid over each other; @syntax colours that piece as
+                    // this buffer's language (a plugin's removed code), all its rows parsed in one go
+                    let groups = |g: &str| g.split('+').filter(|p| *p != "@syntax").fold(Style::default(), |s, p| s.patch(hl::hl(p)));
+                    let code: Vec<String> = rows.iter().flat_map(|r| r.iter().filter(|(_, g)| g.split('+').any(|p| p == "@syntax")).map(|(t, _)| t.clone())).collect();
+                    let mut coloured = if code.is_empty() { Vec::new() } else { crate::code_spans(ss, &hl, &d.syntax, &code) }.into_iter();
                     for r in rows {
                         let mut spans = vec![Span::raw(" ".repeat(gutter as usize))];
                         let mut room = width;
                         for (t, g) in r {
-                            let t: String = t.chars().take(room).collect();
-                            room = room.saturating_sub(t.chars().count());
-                            spans.push(Span::styled(t, hl::hl(g)));
+                            let base = groups(g);
+                            let pieces: Vec<(Style, String)> = if g.split('+').any(|p| p == "@syntax") { coloured.next().unwrap_or_default().into_iter().map(|(st, s)| (base.patch(st), s)).collect() } else { vec![(base, t.clone())] };
+                            for (st, t) in pieces {
+                                let t: String = t.chars().take(room).collect();
+                                room = room.saturating_sub(t.chars().count());
+                                spans.push(Span::styled(t, st));
+                            }
                         }
                         virt.push_back(Line::from(spans));
                     }

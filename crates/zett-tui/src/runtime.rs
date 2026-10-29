@@ -996,6 +996,18 @@ mod plugin_trial {
         let b = term.backend().buffer();
         let rows: Vec<String> = (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>().trim_end().to_string()).collect();
         eprintln!("SCREEN\n{}", rows.join("\n"));
+        // ZETT_TRY_ROW=n: that row's cells with their colours, a run of one style per line
+        if let Ok(y) = env("ZETT_TRY_ROW").parse::<u16>() {
+            let mut run = (String::new(), None);
+            for x in 0..b.area.width {
+                let c = &b[(x, y)];
+                let st = Some((c.fg, c.bg));
+                if st != run.1 && !run.0.is_empty() { eprintln!("CELLS {:?} fg={:?} bg={:?}", run.0, run.1.unwrap().0, run.1.unwrap().1); run.0.clear(); }
+                run.1 = st;
+                run.0.push_str(c.symbol());
+            }
+            if let Some((fg, bg)) = run.1 { eprintln!("CELLS {:?} fg={fg:?} bg={bg:?}", run.0) }
+        }
     }
 }
 

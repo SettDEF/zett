@@ -184,8 +184,10 @@ function M.show(i)
       rows[1] = { { "╭─", border }, { label, "Title" }, { ("─"):rep(math.max(0, W + 1 - vim.fn.strdisplaywidth(label))) .. "╮", border } }
     end
     for l = sa, sa + ca - 1 do
-      local t = "- " .. (old_lines[l] or "")
-      rows[#rows + 1] = boxes and { { "│ ", border }, { fit(t, W), "DiffDelete" }, { " │", border } } or { { t, "DiffDelete" } }
+      -- the code in the file's colours over the removed background ("@syntax": zett colours it as the buffer's language)
+      local code = (old_lines[l] or ""):gsub("\t", "  ")
+      local hl = { "DiffDelete", "@syntax" }
+      rows[#rows + 1] = boxes and { { "│ ", border }, { "- ", "DiffDelete" }, { fit(code, W - 2), hl }, { " │", border } } or { { "- ", "DiffDelete" }, { code, hl } }
     end
     local bottom = { { "╰" .. ("─"):rep(W + 2) .. "╯", border } }
     if cb > 0 then

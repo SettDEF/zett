@@ -304,6 +304,24 @@ impl Doc {
     }
 }
 
+/// Lines of code that are not in a buffer (a plugin's removed lines: virt_lines with "@syntax") coloured as
+/// `syntax`, one state carried from line to line: (colour and style, text) pieces per line.
+pub(crate) fn code_spans(ss: &SyntaxSet, hl: &Highlighter, syntax: &str, lines: &[String]) -> Vec<Vec<(Style, String)>> {
+    let syn = ss.find_syntax_by_name(syntax).unwrap_or_else(|| ss.find_syntax_plain_text());
+    let (mut ps, mut hs) = (ParseState::new(syn), HighlightState::new(hl, ScopeStack::new()));
+    use syntect::highlighting::FontStyle as F;
+    lines.iter().map(|l| {
+        let text = format!("{l}\n");
+        let Ok(ops) = ps.parse_line(&text, ss) else { return vec![(Style::default(), l.clone())] };
+        HighlightIterator::new(&mut hs, &ops, &text, hl).map(|(st, s)| {
+            let mut style = Style::default().fg(to_color(st.foreground));
+            if st.font_style.contains(F::BOLD) { style = style.add_modifier(Modifier::BOLD) }
+            if st.font_style.contains(F::ITALIC) { style = style.add_modifier(Modifier::ITALIC) }
+            (style, s.trim_end_matches('\n').to_string())
+        }).filter(|(_, s)| !s.is_empty()).collect()
+    }).collect()
+}
+
 fn expand(s: &str) -> String {
     expand_from(s, &mut 0)
 }

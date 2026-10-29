@@ -1428,7 +1428,7 @@ local function mark_vlines(v)
   for _, line in ipairs(v) do
     local cs = {}
     for _, c in ipairs(line) do
-      local hl = type(c[2]) == "table" and c[2][#c[2]] or c[2]
+      local hl = type(c[2]) == "table" and table.concat(c[2], "+") or c[2]
       cs[#cs + 1] = tostring(c[1] or "") .. "\31" .. tostring(hl or "")
     end
     ls[#ls + 1] = #cs > 0 and table.concat(cs, "\31") or " \31"
