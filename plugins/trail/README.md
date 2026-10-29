@@ -11,6 +11,7 @@ Runs in zett and in Neovim.
 - boxes (the default): each change in the file and each entry in the panel in a box with rounded corners; `style = "plain"` for lines only
 - removed code keeps its language colours (in zett; in Neovim it is plain red for now)
 - under the entries, `Removed`: code an older version had that a later one (or the buffer) lost, newest first; `Enter` on a row opens it in a float where `y` copies it, `/` filters the list by a word
+- `[` / `]` in the panel scrub the shown entry older / newer; `t` opens the whole file as it was at that entry in a float (`[` / `]` step there too, `q` / `Esc` close)
 - `:TrailClear` takes the marks off the file
 
 ```lua
@@ -18,5 +19,3 @@ require("trail").setup({ side = "right", width = 36, commits = 50, saves = 100, 
 ```
 
 Saves are kept in `stdpath("state")/trail/`, one folder per file, the newest 100 per file.
-
-Next: scrubbing through time.

@@ -6,6 +6,7 @@ M.config = { side = "right", width = 36, commits = 50, saves = 100, style = "box
 
 local ns = vim.api.nvim_create_namespace("trail")
 local state = { panel_buf = nil, panel_win = nil, file_buf = nil, path = nil, entries = {}, shown = nil, rows = {}, hunks = {}, hunk_rows = {}, removed = {}, removed_rows = {}, removed_filter = nil }
+local fill_preview -- the scrub preview's float (below)
 
 -- ── where saves are kept: one folder per file, a snapshot per save ──
 local function hash(s)
@@ -364,6 +365,7 @@ function M.render()
   lines[help] = "⏎ show · r restore"
   lines[help + 1] = "m look · x clear · q close"
   lines[help + 2] = "/ search removed"
+  lines[help + 3] = "[ ] scrub · t preview"
   vim.bo[pb].modifiable = true
   vim.api.nvim_buf_set_lines(pb, 0, -1, false, lines)
   vim.bo[pb].modifiable = false
@@ -418,6 +420,7 @@ function M.refresh()
   state.removed = (b and vim.api.nvim_buf_is_valid(b)) and removed_blocks(state.entries, buf_text(b)) or {}
   local shown = state.shown
   if shown and state.entries[shown] then M.show(shown) else M.clear() M.render() end
+  fill_preview(state.shown)
 end
 
 -- Enter on a hunk row: the file's window goes to the hunk's first line
@@ -426,6 +429,72 @@ local function jump(h)
   if not (w and vim.api.nvim_win_is_valid(w) and b and vim.api.nvim_buf_is_valid(b)) then return end
   vim.api.nvim_win_set_cursor(w, { math.min(math.max(1, h.new_start), vim.api.nvim_buf_line_count(b)), 0 })
 end
+
+-- ── scrubbing: [ and ] step the shown entry older and newer; t shows the whole file as it was at it ──
+local preview = nil -- { win, buf } while the float is open
+
+-- an entry's whole text (the unsaved one is the buffer as it is now)
+local function whole(e)
+  local b = state.file_buf
+  local text = e.kind == "unsaved" and b and vim.api.nvim_buf_is_valid(b) and buf_text(b) or e.cached or ""
+  return (text:gsub("\n$", ""))
+end
+
+fill_preview = function(i)
+  local e = state.entries[i]
+  if not preview or not e or not vim.api.nvim_win_is_valid(preview.win) then return end
+  vim.bo[preview.buf].modifiable = true
+  vim.api.nvim_buf_set_lines(preview.buf, 0, -1, false, vim.split(whole(e), "\n", { plain = true }))
+  vim.bo[preview.buf].modifiable = false
+  local when = e.kind == "unsaved" and "unsaved" or ago(e.time)
+  vim.api.nvim_win_set_config(preview.win, { title = (" %s at %s "):format(vim.fn.fnamemodify(state.path or "", ":t"), when), title_pos = "center" })
+end
+
+local function close_preview()
+  if preview and vim.api.nvim_win_is_valid(preview.win) then vim.api.nvim_win_close(preview.win, true) end
+  preview = nil
+end
+
+-- show entry i: the file, the panel's cursor on its first row, the preview if it is open
+local function go(i)
+  if not state.entries[i] then return end
+  M.show(i)
+  local row
+  for r, j in pairs(state.rows) do if j == i and (not row or r < row) then row = r end end
+  if row and state.panel_win and vim.api.nvim_win_is_valid(state.panel_win) then vim.api.nvim_win_set_cursor(state.panel_win, { row, 0 }) end
+  fill_preview(i)
+end
+
+-- [ (older) and ] (newer): one entry on, stopping at the ends; with nothing shown, the newest
+function M.step(older)
+  local i = state.shown
+  local target = i and (older and i + 1 or i - 1) or 1
+  if target < 1 or target > #state.entries then return end
+  go(target)
+end
+
+-- t: a float with the whole file as it was at entry i (unsaved: the buffer now)
+function M.preview_at(i)
+  if not state.entries[i] then return vim.notify("Trail: no entry to preview", vim.log.levels.WARN) end
+  close_preview()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  if state.file_buf and vim.api.nvim_buf_is_valid(state.file_buf) then vim.bo[buf].filetype = vim.bo[state.file_buf].filetype end
+  local width, height = math.floor(vim.o.columns * 0.8), math.floor(vim.o.lines * 0.8)
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor", width = width, height = height,
+    row = math.floor((vim.o.lines - height) / 2), col = math.floor((vim.o.columns - width) / 2),
+    style = "minimal", border = "rounded", title = " ", title_pos = "center",
+  })
+  preview = { win = win, buf = buf }
+  vim.keymap.set("n", "[", function() M.step(true) end, { buffer = buf, nowait = true, desc = "Trail: the older entry" })
+  vim.keymap.set("n", "]", function() M.step(false) end, { buffer = buf, nowait = true, desc = "Trail: the newer entry" })
+  vim.keymap.set("n", "q", close_preview, { buffer = buf, nowait = true, desc = "Trail: close the preview" })
+  vim.keymap.set("n", "<Esc>", close_preview, { buffer = buf, nowait = true, desc = "Trail: close the preview" })
+  go(i)
+end
+
+function M.shown_index() return state.shown end
 
 local function setup_panel(pb)
   vim.bo[pb].buftype = "nofile"
@@ -452,10 +521,14 @@ local function setup_panel(pb)
     if hk then M.restore(hk.entry, hk.hunk) else M.refresh() end
   end, "Trail: restore a hunk, or reload")
   map("m", function() M.config.style = M.config.style == "boxes" and "plain" or "boxes" if state.shown then M.show(state.shown) else M.render() end end, "Trail: boxes or plain")
+  map("[", function() M.step(true) end, "Trail: scrub to the older entry")
+  map("]", function() M.step(false) end, "Trail: scrub to the newer entry")
+  map("t", function() M.preview_at(state.rows[at_cursor()] or state.shown) end, "Trail: preview the file at the entry")
   map("q", M.close, "Trail: close")
 end
 
 function M.close()
+  close_preview()
   M.clear()
   if state.panel_win and vim.api.nvim_win_is_valid(state.panel_win) then
     pcall(vim.api.nvim_win_close, state.panel_win, true)
