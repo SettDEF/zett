@@ -667,7 +667,7 @@ impl App {
             "ascii" => self.docs[self.cur].ed.feed("ga"),
             "exusage" => self.open_help("commands"),
             "viusage" => self.open_help("vim-keys"),
-            "options" => self.open_help("settings"),
+            "options" => self.settings_open(),
             "filetype" => {
                 if arg.trim() == "detect" {
                     let i = self.cur;

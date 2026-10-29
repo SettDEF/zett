@@ -1061,3 +1061,8 @@ z.command("dired", function() z.ui("dired") end, { desc = "This file's folder as
 alias("wdired-change-to-wdired-mode", "dired")
 alias("dired-jump", "dired")
 map("<C-x><C-j>", "dired")
+
+-- the settings as a popup (settings_ui.rs)
+z.command("customize", function() z.ui("settings") end, { desc = "The settings in a popup: search, switch, edit values" })
+alias("customize-variable", "customize")
+alias("customize-group", "customize")

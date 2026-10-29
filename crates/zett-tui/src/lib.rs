@@ -52,6 +52,7 @@ mod vimscript;
 mod viewer;
 mod mdview;
 mod dired;
+mod settings_ui;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -484,6 +485,8 @@ struct App {
     md_sent: mdview::Sent,
     /// folders shown as editable listings (dired.rs), by buffer name
     pub(crate) dired: std::collections::HashMap<String, dired::Dired>,
+    /// the settings popup when open (settings_ui.rs)
+    pub(crate) settings_ui: Option<settings_ui::SettingsUi>,
     /// the dashboard shows (no file yet) and its chosen button
     dash: bool,
     dash_sel: usize,
@@ -871,6 +874,7 @@ impl App {
             md_pics: Vec::new(),
             md_sent: Default::default(),
             dired: Default::default(),
+            settings_ui: None,
             dash: false,
             dash_sel: 0,
             last_doc: None,

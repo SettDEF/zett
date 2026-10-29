@@ -349,6 +349,7 @@ impl App {
         if let Some(Popup::Help(title, rows)) = &self.popup {
             draw_help(f, title, rows);
         }
+        self.settings_draw(f);
     }
 
     /// The editor settings a config can set (zett.opt.tabs = true, number, relativenumber), as :set does.

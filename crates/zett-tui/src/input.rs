@@ -24,6 +24,10 @@ impl App {
         }
         self.typed_at = Instant::now();
         self.held = false;
+        // the settings popup takes every key while it is open
+        if self.settings_key(&k) {
+            return;
+        }
         if let Some(p) = self.popup.take() {
             // any key closes help (Esc and q too)
             let _ = p;
