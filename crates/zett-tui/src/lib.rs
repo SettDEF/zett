@@ -1334,6 +1334,9 @@ impl App {
                 self.flash = None;
             }
             let wait = if self.flash.is_some() { wait.min(Duration::from_millis(60)) } else { wait };
+            // the completion pause, and a ycmd answer on its way
+            let wait = match self.comp_due { Some(t) => wait.min(t.saturating_duration_since(Instant::now()).max(Duration::from_millis(5))), None => wait };
+            let wait = if zett_ycm::waiting() { wait.min(Duration::from_millis(15)) } else { wait };
             // a scroll or held key resting: woken when it has, the circles drawn at once
             let wait = if self.fx_rested() { Duration::ZERO } else { self.fx_quiet_until.map_or(wait, |t| wait.min(t.saturating_duration_since(Instant::now()).max(Duration::from_millis(5)))) };
             let wait = match self.engine.next_timer() {

@@ -85,9 +85,13 @@ Rectangle {
         }
     }
     // the server's items for the word, then the file's own words it does not have (all there is without a server)
+    // a ycmd answer came (it is asked without waiting): the list made again
+    property real ycmSeen: 0
+    Timer { interval: 40; repeat: true; running: cv.completing && input.activeFocus; onTriggered: { const s = doc.ycmSeq(); if (s !== cv.ycmSeen) cv.ycmSeen = s } }
     readonly property var comps: {
         if (!cv.completing || !cv.fv) return []
         doc.version
+        cv.ycmSeen
         const w = word(), wl = w.toLowerCase()
         const server = cv.fv.comps.filter(i => !wl || (i.filter || i.label).toLowerCase().includes(wl))
         const have = new Set(server.map(i => i.label))

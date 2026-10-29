@@ -79,6 +79,10 @@ pub mod qobject {
         /// completion without a server: this file's words, the language's keywords, the other open files' words (paths as JSON)
         #[qinvokable]
         fn candidates(self: &CodeDoc, prefix: &QString, ext: &QString, others: &QString) -> QString;
+        /// the newest ycmd answer's number (the window asks for the list again when it grows)
+        #[qinvokable]
+        #[cxx_name = "ycmSeq"]
+        fn ycm_seq(self: &CodeDoc) -> i32;
         /// the text replaced, the file on disk kept as it is (so it shows as unsaved): edits kept while away
         #[qinvokable]
         fn restore(self: Pin<&mut CodeDoc>, text: &QString);
@@ -945,6 +949,10 @@ impl qobject::CodeDoc {
         QString::from(&serde_json::Value::Array(found.into_iter().take(30).map(|(w, _)| serde_json::Value::String(w)).collect()).to_string())
     }
 
+    pub fn ycm_seq(&self) -> i32 {
+        zett_ycm::answered() as i32
+    }
+
     pub fn candidates(&self, prefix: &QString, ext: &QString, others: &QString) -> QString {
         let r = self.rust();
         let p = prefix.to_string();
@@ -966,8 +974,13 @@ impl qobject::CodeDoc {
             let col = r.rope.line(line).slice(..head - r.rope.line_to_char(line)).len_bytes();
             let state = std::path::PathBuf::from(std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| format!("{}/.local/state", std::env::var("HOME").unwrap_or_default()))).join("zett/ycmd");
             let text = r.rope.to_string();
-            if let Some(Ok((_, items))) = zett_ycm::with(&state, |y| y.complete(&path, &text, line, col)) {
-                for i in items.into_iter().filter(|i| i.text != p).take(40) {
+            // asked without waiting; the newest answer for this file and line is used (the window looks again when one comes)
+            zett_ycm::ask(&state, &path, &text, line, col);
+            let a = zett_ycm::answer();
+            if a.seq > 0 && a.path == path && a.line == line {
+                // an answer for fewer letters: still only what fits the word now, fuzzily (its letters in order)
+                let fits = |w: &str| { let mut it = w.chars().flat_map(char::to_lowercase); lower.chars().all(|q| it.any(|c| c == q)) };
+                for i in a.items.into_iter().filter(|i| i.text != p && fits(&i.text)).take(40) {
                     if !seen.insert(i.text.clone()) { continue }
                     let detail = if i.kind == "[ID]" || i.kind.is_empty() { "ycm".to_string() } else if i.menu.is_empty() { i.kind.to_lowercase() } else { i.menu.clone() };
                     out.push(serde_json::json!({ "label": i.text, "insert": i.text, "detail": detail }));

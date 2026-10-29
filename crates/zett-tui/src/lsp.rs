@@ -238,6 +238,8 @@ pub(crate) struct Comp {
 
 // the list being made comes from ycmd (its fuzzy matches kept by the filter)
 thread_local! { static YCM_NEXT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+// the ycmd ask waited for: (buffer, its number)
+thread_local! { static YCM_WAIT: std::cell::Cell<Option<(usize, u64)>> = const { std::cell::Cell::new(None) }; }
 
 fn ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
@@ -315,6 +317,7 @@ impl App {
 
     /// Asks the server when the pause after typing is over.
     pub(crate) fn comp_tick(&mut self) {
+        self.comp_ycm_arrived();
         if self.comp_due.is_none_or(|t| Instant::now() < t) {
             return;
         }
@@ -338,27 +341,37 @@ impl App {
         }
     }
 
-    /// ycmd's completions at the cursor, as a server's would come (filtered fuzzily, asked again as you type).
+    /// Asks ycmd for the completions at the cursor; the answer comes later (comp_ycm_arrived), typing never waits.
     fn comp_from_ycmd(&mut self) {
         let d = &self.docs[self.cur];
         let Some(path) = d.abs_path().map(|p| p.display().to_string()) else { return };
         let c = d.ed.cursor();
-        let line_text = d.ed.buf.line(c.line);
-        let col: usize = line_text.chars().take(c.col).map(char::len_utf8).sum();
+        let col: usize = d.ed.buf.line(c.line).chars().take(c.col).map(char::len_utf8).sum();
         let text = d.ed.text();
-        let state = doom::state_dir().join("ycmd");
-        let got = zett_ycm::with(&state, |y| y.complete(&path, &text, c.line, col));
-        let Some(Ok((_, found))) = got else { return };
-        let typed: String = line_text.chars().take(c.col).collect::<String>().chars().rev().take_while(|ch| ident(*ch)).collect::<String>().chars().rev().collect();
-        let items: Vec<zett_lsp::Item> = found.into_iter().filter(|i| i.text != typed).take(60).enumerate().map(|(n, i)| zett_lsp::Item {
+        if let Some(seq) = zett_ycm::ask(&doom::state_dir().join("ycmd"), &path, &text, c.line, col) {
+            YCM_WAIT.with(|w| w.set(Some((self.cur, seq))));
+        }
+    }
+
+    /// ycmd's answer, once it is there: the menu (as a server's, filtered fuzzily), when still on that line.
+    fn comp_ycm_arrived(&mut self) {
+        let Some((doc, seq)) = YCM_WAIT.with(|w| w.get()) else { return };
+        if zett_ycm::answered() < seq { return }
+        YCM_WAIT.with(|w| w.set(None));
+        let a = zett_ycm::answer();
+        if doc != self.cur || self.docs[doc].ed.mode() != Mode::Insert { return }
+        let d = &self.docs[doc];
+        let c = d.ed.cursor();
+        if c.line != a.line || d.abs_path().map(|p| p.display().to_string()).as_deref() != Some(a.path.as_str()) { return }
+        let typed: String = d.ed.buf.line(c.line).chars().take(c.col).collect::<String>().chars().rev().take_while(|ch| ident(*ch)).collect::<String>().chars().rev().collect();
+        let items: Vec<zett_lsp::Item> = a.items.into_iter().filter(|i| i.text != typed).take(60).enumerate().map(|(n, i)| zett_lsp::Item {
             label: i.text.clone(), insert: i.text.clone(), filter: i.text, sort: format!("{n:04}"),
             detail: if i.kind == "[ID]" || i.kind.is_empty() { "ycm".into() } else if i.menu.is_empty() { i.kind.to_lowercase() } else { i.menu },
             kind: 1, ..Default::default()
         }).collect();
         self.comp_doc = self.cur;
-        let line = c.line;
         YCM_NEXT.with(|n| n.set(true));
-        self.comp_arrived(line, items, true);
+        self.comp_arrived(c.line, items, true);
         YCM_NEXT.with(|n| n.set(false));
     }
 

@@ -248,3 +248,75 @@ pub fn available() -> bool {
     static AT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *AT.get_or_init(|| find_dir().is_some())
 }
+
+/// What ycmd answered last: for which file and place, where the word starts, the items; `seq` counts the asks.
+#[derive(Clone, Debug, Default)]
+pub struct Answer {
+    pub seq: u64,
+    pub path: String,
+    pub line: usize,
+    pub col: usize,
+    pub start: usize,
+    pub items: Vec<Item>,
+}
+
+struct Ask {
+    seq: u64,
+    path: String,
+    text: String,
+    line: usize,
+    col: usize,
+}
+
+struct Worker {
+    tx: std::sync::mpsc::Sender<Ask>,
+    answer: std::sync::Arc<Mutex<Answer>>,
+    asked: std::sync::atomic::AtomicU64,
+}
+
+static WORKER: std::sync::OnceLock<Option<Worker>> = std::sync::OnceLock::new();
+
+/// Asks ycmd for completions without waiting (a thread of its own starts it, waits until it is ready, answers the
+/// newest ask only); the answer turns up in `answer()`. Returns the ask's number, None when ycmd is not built.
+pub fn ask(log_dir: &Path, path: &str, text: &str, line: usize, col: usize) -> Option<u64> {
+    let w = WORKER.get_or_init(|| {
+        let dir = find_dir()?;
+        let (tx, rx) = std::sync::mpsc::channel::<Ask>();
+        let answer = std::sync::Arc::new(Mutex::new(Answer::default()));
+        let out = answer.clone();
+        let logs = log_dir.to_path_buf();
+        std::thread::Builder::new().name("ycmd".into()).spawn(move || {
+            let Ok(mut y) = Ycmd::start(&dir, &logs) else { return };
+            let t = Instant::now();
+            while !y.ready() {
+                if t.elapsed() > Duration::from_secs(30) { return }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            while let Ok(mut a) = rx.recv() {
+                // typed on meanwhile: only the newest ask is worth answering
+                while let Ok(newer) = rx.try_recv() { a = newer }
+                let (start, items) = y.complete(&a.path, &a.text, a.line, a.col).unwrap_or((a.col, Vec::new()));
+                *out.lock().unwrap_or_else(|e| e.into_inner()) = Answer { seq: a.seq, path: a.path, line: a.line, col: a.col, start, items };
+            }
+        }).ok()?;
+        Some(Worker { tx, answer, asked: Default::default() })
+    }).as_ref()?;
+    let seq = w.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    w.tx.send(Ask { seq, path: path.to_string(), text: text.to_string(), line, col }).ok()?;
+    Some(seq)
+}
+
+/// The newest answer (seq 0: none yet).
+pub fn answer() -> Answer {
+    WORKER.get().and_then(|w| w.as_ref()).map(|w| w.answer.lock().unwrap_or_else(|e| e.into_inner()).clone()).unwrap_or_default()
+}
+
+/// The newest answer's number, cheaply (to see that one came).
+pub fn answered() -> u64 {
+    WORKER.get().and_then(|w| w.as_ref()).map(|w| w.answer.lock().unwrap_or_else(|e| e.into_inner()).seq).unwrap_or(0)
+}
+
+/// Asks not answered yet (the editor looks more often then).
+pub fn waiting() -> bool {
+    WORKER.get().and_then(|w| w.as_ref()).is_some_and(|w| w.asked.load(std::sync::atomic::Ordering::SeqCst) > answered())
+}

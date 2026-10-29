@@ -1040,16 +1040,17 @@ mod ycmd_tests {
         let f = dir.join("y.lua");
         std::fs::write(&f, "local function getFileInfo(path) end\nlocal gitFolderInfo = 1\nlocal unrelated = 2\n").unwrap();
         let mut app = crate::App::new(vec![f.clone()]);
-        // ycmd started and ready before typing (the first use only starts it)
-        let state = crate::doom::state_dir().join("ycmd");
-        let t = std::time::Instant::now();
-        while zett_ycm::with(&state, |_| ()).is_none() { assert!(t.elapsed().as_secs() < 30); std::thread::sleep(std::time::Duration::from_millis(100)) }
         app.command("normal! G");
         app.command("startinsert!");
         app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         for c in "gfi".chars() { app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)); }
+        // typing never waits: the ask goes out, the menu comes when ycmd answers (it starts on this first ask)
         std::thread::sleep(std::time::Duration::from_millis(300));
+        let t = std::time::Instant::now();
         app.comp_tick();
+        assert!(t.elapsed().as_millis() < 20, "the tick waited {:?}", t.elapsed());
+        while app.comp.is_none() { assert!(t.elapsed().as_secs() < 30, "no answer"); std::thread::sleep(std::time::Duration::from_millis(20)); app.comp_tick() }
+        eprintln!("menu after {:?}", t.elapsed());
         let comp = app.comp.as_ref().expect("a menu");
         let shown: Vec<String> = comp.shown.iter().map(|&i| comp.items[i].label.clone()).collect();
         eprintln!("menu {shown:?} (mode {:?})", app.docs[app.cur].ed.mode());
