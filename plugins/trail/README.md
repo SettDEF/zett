@@ -5,7 +5,7 @@ Pick one and the file shows what changed since then: added lines are marked `+`,
 
 Runs in zett and in Neovim.
 
-- `:Trail` opens or closes the panel (right side by default)
+- `SPC g h` or `:Trail` opens or closes the panel (right side by default; `vim.g.trail_no_mappings = true` leaves the key out)
 - in the panel: `Enter` / `p` show the change since that point, `m` boxes or plain, `x` clear the marks, `r` reload, `q` close
 - boxes (the default): each change in the file and each entry in the panel in a box with rounded corners; `style = "plain"` for lines only
 - `:TrailClear` takes the marks off the file

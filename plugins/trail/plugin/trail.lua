@@ -16,3 +16,8 @@ vim.api.nvim_create_autocmd("BufWritePost", {
     if package.loaded.trail then pcall(t.refresh) end
   end,
 })
+
+-- SPC g h (beside git status SPC g g and blame SPC g b); vim.g.trail_no_mappings = true leaves it out
+if not vim.g.trail_no_mappings and vim.fn.maparg("<leader>gh", "n") == "" then
+  vim.keymap.set("n", "<leader>gh", function() require("trail").toggle() end, { desc = "Trail: the file's history" })
+end
