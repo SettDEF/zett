@@ -1377,6 +1377,8 @@ impl App {
                 self.flash = None;
             }
             let wait = if self.flash.is_some() { wait.min(Duration::from_millis(60)) } else { wait };
+            // the settings popup's description running across
+            let wait = if self.settings_animating() { wait.min(Duration::from_millis(120)) } else { wait };
             // the completion pause, and a ycmd answer on its way
             let wait = match self.comp_due { Some(t) => wait.min(t.saturating_duration_since(Instant::now()).max(Duration::from_millis(5))), None => wait };
             let wait = if zett_ycm::waiting() { wait.min(Duration::from_millis(15)) } else { wait };

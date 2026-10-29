@@ -833,6 +833,10 @@ impl App {
     }
 
     pub(crate) fn mouse(&mut self, m: ratatui::crossterm::event::MouseEvent) {
+        // the settings popup takes the mouse while it is open
+        if self.settings_mouse(m) {
+            return;
+        }
         // a button held (scrolling, selecting) or the wheel turning: the help circles wait
         match m.kind {
             MouseEventKind::Down(_) | MouseEventKind::Drag(_) => {
