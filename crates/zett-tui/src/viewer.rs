@@ -56,7 +56,7 @@ fn page_text(v: &View) -> String {
 }
 
 /// The picture of a page (or the image) `w` pixels wide, as PNG.
-fn render(v: &View, w: u32) -> Option<Vec<u8>> {
+pub(crate) fn render(v: &View, w: u32) -> Option<Vec<u8>> {
     if v.pdf {
         // pdftoppm writes files (its "-" is a file name with -singlefile): into a temp folder, read back
         let dir = std::env::temp_dir().join(format!("zett-view-{}", std::process::id()));
@@ -77,7 +77,7 @@ fn render(v: &View, w: u32) -> Option<Vec<u8>> {
     }
 }
 
-fn b64(data: &[u8]) -> String {
+pub(crate) fn b64(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut s = String::with_capacity(data.len().div_ceil(3) * 4);
     for c in data.chunks(3) {
@@ -230,12 +230,12 @@ pub(crate) fn picture_area(r: Rect) -> Option<Rect> {
 }
 
 /// A PNG's size (its IHDR).
-fn png_size(d: &[u8]) -> Option<(u32, u32)> {
+pub(crate) fn png_size(d: &[u8]) -> Option<(u32, u32)> {
     (d.len() > 24 && &d[1..4] == b"PNG").then(|| (u32::from_be_bytes([d[16], d[17], d[18], d[19]]), u32::from_be_bytes([d[20], d[21], d[22], d[23]])))
 }
 
 /// Cells for a `w`x`h` px picture in `area` (cells of cw x ch px), its shape kept: as wide as `zoom` allows, no taller.
-fn fit(w: u32, h: u32, area: Rect, cw: f32, ch: f32, zoom: f32) -> (u16, u16) {
+pub(crate) fn fit(w: u32, h: u32, area: Rect, cw: f32, ch: f32, zoom: f32) -> (u16, u16) {
     let max_c = (area.width as f32 * zoom).min(area.width as f32).max(1.0);
     let rows_for = |c: f32| c * cw * h as f32 / (w.max(1) as f32 * ch);
     let mut c = max_c;
@@ -317,4 +317,29 @@ pub(crate) fn picture_escape(path: &Path, area: Rect, id: u32) -> Option<String>
     }
     out.push_str("\x1b8");
     Some(out)
+}
+
+/// Pixels per cell from the terminal (else a usual 9x18).
+pub(crate) fn cell_px() -> (f32, f32) {
+    ratatui::crossterm::terminal::window_size().ok().filter(|s| s.width > 0 && s.columns > 0).map(|s| (s.width as f32 / s.columns as f32, s.height as f32 / s.rows as f32)).unwrap_or((9.0, 18.0))
+}
+
+/// A picture file sent to the terminal once as image `id` (not shown yet: placed with a=p): the escapes and its size.
+pub(crate) fn picture_transmit(path: &Path, width_cells: u16, id: u32) -> Option<(String, u32, u32)> {
+    let (cw, _) = cell_px();
+    let v = View { path: path.to_path_buf(), pdf: false, page: 1, pages: 1, zoom: 1.0 };
+    let png = render(&v, (width_cells as f32 * cw) as u32)?;
+    let (pw, ph) = png_size(&png)?;
+    let data = b64(&png);
+    let chunks: Vec<&str> = data.as_bytes().chunks(4096).map(|c| std::str::from_utf8(c).unwrap_or("")).collect();
+    let mut out = String::new();
+    for (i, c) in chunks.iter().enumerate() {
+        let more = u8::from(i + 1 < chunks.len());
+        if i == 0 {
+            out.push_str(&format!("\x1b_Ga=t,f=100,t=d,i={id},q=2,m={more};{c}\x1b\\"));
+        } else {
+            out.push_str(&format!("\x1b_Gm={more};{c}\x1b\\"));
+        }
+    }
+    Some((out, pw, ph))
 }

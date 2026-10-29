@@ -479,7 +479,7 @@ struct App {
     pub(crate) md: std::collections::HashMap<String, mdview::State>,
     md_goto_src: Option<usize>,
     md_hints: Vec<String>,
-    md_pics: Vec<(PathBuf, Rect)>,
+    md_pics: Vec<mdview::Pic>,
     md_sent: mdview::Sent,
     /// the dashboard shows (no file yet) and its chosen button
     dash: bool,

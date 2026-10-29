@@ -42,6 +42,8 @@ pub(crate) struct Sent {
     ui: String,
     imgs: Vec<u32>,
     imgs_key: String,
+    /// pictures sent to the terminal: id, their pixel size
+    sent: HashMap<u32, (u32, u32)>,
 }
 
 fn level(l: HeadingLevel) -> u8 {
@@ -414,9 +416,18 @@ impl App {
                     regions.push(format!("table,{x},{y},{w},{},cols={}", (*n).min(room), cols.iter().map(|c| c.to_string()).collect::<Vec<_>>().join("|")));
                     let _ = head;
                 }
-                Some(Hint::Image { path, rows: n }) => pics.push((path.clone(), Rect { x: x as u16 + 2, y: y as u16, width: a.width.saturating_sub(6), height: (*n).min(room) as u16 })),
-                None => {}
+                Some(Hint::Image { .. }) | None => {}
             }
+        }
+        // pictures whose rows reach into the window, the top ones too: the part in view (cut by zash, x,y,w,h)
+        let end = top + a.height as usize;
+        for (i, r) in rows.iter().enumerate().take(end).skip(top.saturating_sub(64)) {
+            let Some(Hint::Image { path, rows: n }) = &r.hint else { continue };
+            let (from, to) = (i.max(top), (i + n).min(end));
+            if from >= to {
+                continue;
+            }
+            pics.push(Pic { path: path.clone(), x: a.x + 3, y: a.y + (from - top) as u16, w: a.width.saturating_sub(6), n: *n, skip: from - i, vis: to - from });
         }
         self.md_hints.extend(regions);
         self.md_pics.extend(pics);
@@ -478,15 +489,30 @@ impl App {
         }
         let key = format!("{:?}", self.md_pics);
         if key != self.md_sent.imgs_key {
+            // the placements go (the pictures stay sent), then each is placed again: its slice in view
             for id in self.md_sent.imgs.drain(..) {
-                out.push_str(&format!("\x1b_Ga=d,d=I,i={id},q=2\x1b\\"));
+                out.push_str(&format!("\x1b_Ga=d,d=i,i={id},q=2\x1b\\"));
             }
-            for (n, (p, r)) in self.md_pics.iter().enumerate() {
-                let id = 7720 + n as u32;
-                if let Some(seq) = crate::viewer::picture_escape(p, *r, id) {
+            let (cw, ch) = crate::viewer::cell_px();
+            for p in &self.md_pics {
+                // one id per file and width, sent once
+                let id = 7720 + (p.path.to_string_lossy().bytes().fold(p.w as u32, |h, b| h.wrapping_mul(31).wrapping_add(b as u32)) % 4000);
+                if !self.md_sent.sent.contains_key(&id) {
+                    let Some((seq, pw, ph)) = crate::viewer::picture_transmit(&p.path, p.w, id) else { continue };
                     out.push_str(&seq);
-                    self.md_sent.imgs.push(id);
+                    self.md_sent.sent.insert(id, (pw, ph));
                 }
+                let (pw, ph) = self.md_sent.sent[&id];
+                // its size at full: the shape kept, as wide as the window allows, at most its rows tall
+                let (cols, full) = crate::viewer::fit(pw, ph, Rect { x: 0, y: 0, width: p.w, height: p.n as u16 }, cw, ch, 1.0);
+                let full = full as usize;
+                if p.skip >= full {
+                    continue;
+                }
+                let vis = p.vis.min(full - p.skip);
+                let (y_px, h_px) = ((p.skip * ph as usize / full) as u32, (vis * ph as usize / full).max(1) as u32);
+                out.push_str(&format!("\x1b7\x1b[{};{}H\x1b_Ga=p,i={id},x=0,y={y_px},w={pw},h={h_px},c={cols},r={vis},C=1,q=2;\x1b\\\x1b8", p.y + 1, p.x + 1 + (p.w - cols) / 2));
+                self.md_sent.imgs.push(id);
             }
             self.md_sent.imgs_key = key;
         }
@@ -555,4 +581,17 @@ mod key_tests {
         assert_eq!(app.docs[app.cur].ed.cursor().line, 3);
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// A picture's part in view: where (cells), how wide, its rows in full, how many of them are above the window
+/// (scrolled off) and how many show.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Pic {
+    pub path: PathBuf,
+    pub x: u16,
+    pub y: u16,
+    pub w: u16,
+    pub n: usize,
+    pub skip: usize,
+    pub vis: usize,
 }
