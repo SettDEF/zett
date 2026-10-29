@@ -66,6 +66,10 @@ pub fn start(cwd: &str, cols: u16, rows: u16, palette: &str) -> i32 {
     env.insert("TERM".into(), "xterm-256color".into());
     env.insert("COLORTERM".into(), "truecolor".into());
     env.insert("ZETT_TERMINAL".into(), "1".into());
+    // the shell is in zett, not zash or zeit (it inherits their variables when zett was started there): plugins
+    // that draw with zash's own escapes (zash-popup) would draw nothing here and keys like Enter go to that
+    env.insert("TERM_PROGRAM".into(), "zett".into());
+    for k in ["ZASH", "ZASH_PANE", "ZEIT", "ZEIT_PANE", "ZEIT_FX", "ZEIT_SOCKET", "ZEIT_CMD", "TERM_PROGRAM_VERSION"] { env.insert(k.into(), String::new()); }
     let opts = tty::Options { shell: user_shell().map(|s| tty::Shell::new(s, Vec::new())), working_directory: Some(cwd.into()).filter(|p: &std::path::PathBuf| p.is_dir()), drain_on_exit: true, env };
     let Ok(pty) = tty::new(&opts, ws(cols, rows), 0) else { return -1 };
     let Ok(ev) = EventLoop::new(term.clone(), l.clone(), pty, true, false) else { return -1 };
