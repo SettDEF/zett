@@ -1092,6 +1092,18 @@ mod float_tests {
     }
 
     #[test]
+    fn a_buffer_made_by_vim_cmd_is_current_at_once() {
+        let mut app = app_with("mine\n");
+        // vnew, then writing to the current buffer, in one Lua call (zett makes the window after the Lua returns)
+        app.command("lua vim.cmd('botright vnew') vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'PANEL' }) vim.g.r = vim.api.nvim_get_current_buf() .. ':' .. vim.api.nvim_buf_get_lines(0, 0, -1, false)[1]");
+        let r = app.with_lua(|e| e.eval("return vim.g.r")).map(|r| r.0).unwrap_or_default();
+        assert_eq!(r, "2:PANEL", "Lua saw the new buffer as current");
+        assert_eq!(app.docs[0].ed.text(), "mine\n", "the file is untouched");
+        assert_eq!(app.docs.len(), 2);
+        assert_eq!(app.docs[1].ed.text(), "PANEL", "the lines reached the new buffer");
+    }
+
+    #[test]
     fn a_frame_float_is_drawn_under_the_float_it_frames() {
         let mut app = app_with("mine\n");
         // content first, then its frame (as plenary does): the frame must still be under it

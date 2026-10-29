@@ -404,7 +404,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 ## Plugins from Neovim (tried 2026-10-29)
 - [x] Comment.nvim, nvim-surround, nvim-autopairs work; lualine, flash load (looks unchecked); telescope loads
 - [x] floating windows from plugins as Neovim draws them (border styles, zindex + frames under contents, the cursor scrolls, focus + typing + modes, fed keys); telescope works (find, type to filter, Enter, Esc, C-p)
-- [ ] vim.cmd takes effect at once inside Lua (now after the Lua returns: `vnew` then set_lines hits the old buffer; plugins need vim.schedule)
+- [x] vim.cmd("vnew"/"new"/"enew"/"tabnew") in Lua: the new buffer is current at once (its lines kept, written to it once zett made it), never the old file
 - [x] vim.api on a buffer that is not current (reads from copies, writes queued and applied there)
 
 ## Trail: a file's history in a side panel (plugins/trail, 2026-10-29)

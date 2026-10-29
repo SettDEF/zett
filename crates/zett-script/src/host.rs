@@ -1497,3 +1497,19 @@ impl crate::Engine {
         std::mem::take(&mut self.st.borrow_mut().host.other_writes)
     }
 }
+
+impl crate::Engine {
+    /// Writes for buffers that do not exist yet (a vnew in the same Lua): kept for after the commands ran.
+    pub fn requeue_other_writes(&mut self, nrs: Vec<usize>) {
+        let w = &mut self.st.borrow_mut().host.other_writes;
+        for n in nrs { if !w.contains(&n) { w.push(n) } }
+    }
+    /// Writes still waiting for their buffer.
+    pub fn has_other_writes(&self) -> bool {
+        !self.st.borrow().host.other_writes.is_empty()
+    }
+    /// The buffers (numbers) writes are waiting for.
+    pub fn other_writes_waiting(&self) -> Vec<usize> {
+        self.st.borrow().host.other_writes.clone()
+    }
+}

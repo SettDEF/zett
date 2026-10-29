@@ -364,7 +364,22 @@ vim.env = setmetatable({}, {
 vim._env = {}
 
 -- ── Ex commands: vim.cmd("set ts=4"), vim.cmd.set("ts=4"), vim.cmd({ cmd = "edit", args = { "x" } }) ──
-local function ex(line) z.ui("ex", line) end
+local function ex(line)
+  -- a command that makes a new empty buffer the current one: that buffer is current from now on in this Lua
+  -- (cur_buf), its lines kept until zett makes it
+  local words = {}
+  for w in tostring(line):gmatch("%S+") do words[#words + 1] = w end
+  local mods = { botright = 1, bo = 1, topleft = 1, to = 1, vertical = 1, vert = 1, rightbelow = 1, belowright = 1, bel = 1, leftabove = 1, aboveleft = 1, abo = 1, silent = 1, ["silent!"] = 1, keepalt = 1, noautocmd = 1, noa = 1, tab = 1, keepjumps = 1 }
+  local i = 1
+  while words[i] and mods[words[i]] do i = i + 1 end
+  local c = words[i] and words[i]:gsub("^%d+", "") or ""
+  local makes = { enew = 1, ene = 1, new = 1, vnew = 1, vne = 1, tabnew = 1, tabe = 1, tabedit = 1 }
+  if makes[c] and not words[i + 1] then
+    local base = vim._pending_buf and vim._pending_buf.nr or #z.buffers()
+    vim._pending_buf = { nr = base + 1, lines = { "" } }
+  end
+  z.ui("ex", line)
+end
 local function cmd_string(c)
   if type(c) == "string" then return c end
   local s = c.cmd .. (c.bang and "!" or "")
@@ -419,7 +434,7 @@ local function opt_set(name, v, scope)
   local key = i and i.name or name
   v = as_text(v)
   if scope == "local" then
-    pcall(z.buf.set_opt, key, tostring(v))
+    if not vim._pending_buf then pcall(z.buf.set_opt, key, tostring(v)) end
     if type(v) == "boolean" then ex("setlocal " .. (v and "" or "no") .. key) else ex("setlocal " .. key .. "=" .. tostring(v):gsub(" ", "\\ ")) end
   else
     z.opt[key] = typed(i, v)
@@ -559,6 +574,11 @@ end
 
 -- ── buffers and windows: the one being edited (handle 0, or its number) ──
 local function cur_buf()
+  -- a buffer vim.cmd("vnew") makes is current at once (zett makes it after this Lua returns): its number
+  -- until it exists
+  if vim._pending_buf then
+    if #z.buffers() >= vim._pending_buf.nr then vim._pending_buf = nil else return vim._pending_buf.nr end
+  end
   -- the host says which one (its place in zett.buffers); else found by path
   local n = z.cur_buffer and z.cur_buffer() or 0
   if n > 0 then return n end
@@ -577,9 +597,39 @@ function vim._zett_apply_writes(nr)
   for _, w in ipairs(other_writes[nr] or {}) do pcall(z.buf.set_lines, w[1], w[2], w[3]) end
   other_writes[nr] = nil
 end
-api.nvim_buf_line_count = function(b) if other(b) then return z.buf_line_count_of(b) end return z.buf.line_count() end
-api.nvim_buf_get_lines = function(b, a, e, _) if other(b) then return z.buf_lines_of(b, a, e) end return lines(a, e) end
+-- the buffer vim.cmd("vnew") is making: its lines kept here (read back at once), its writes queued for it
+local function pending(b)
+  local p = vim._pending_buf
+  if not p then return nil end
+  if b == nil or b == 0 or b == p.nr then return p end
+end
+local function set_range(L, a, e, l)
+  local n = #L
+  a = a < 0 and n + a + 1 or a
+  e = e < 0 and n + e + 1 or e
+  local out = {}
+  for i = 1, a do out[#out + 1] = L[i] end
+  for _, x in ipairs(l or {}) do out[#out + 1] = x end
+  for i = e + 1, n do out[#out + 1] = L[i] end
+  if #out == 0 then out = { "" } end
+  return out
+end
+api.nvim_buf_line_count = function(b) local p = pending(b) if p then return #p.lines end if other(b) then return z.buf_line_count_of(b) end return z.buf.line_count() end
+api.nvim_buf_get_lines = function(b, a, e, _)
+  local p = pending(b)
+  if p then local n = #p.lines a = a < 0 and n + a + 1 or a e = e < 0 and n + e + 1 or e local out = {} for i = a + 1, e do out[#out + 1] = p.lines[i] end return out end
+  if other(b) then return z.buf_lines_of(b, a, e) end
+  return lines(a, e)
+end
 api.nvim_buf_set_lines = function(b, a, e, _, l)
+  local p = pending(b)
+  if p then
+    p.lines = set_range(p.lines, a, e, l)
+    other_writes[p.nr] = other_writes[p.nr] or {}
+    table.insert(other_writes[p.nr], { a, e, l })
+    z.note_other_write(p.nr)
+    return
+  end
   if other(b) then
     other_writes[b] = other_writes[b] or {}
     table.insert(other_writes[b], { a, e, l })

@@ -660,6 +660,15 @@ impl App {
     }
 
     pub(crate) fn effects(&mut self, fx: Vec<Effect>) {
+        self.effects_run(fx);
+        // lines Lua wrote to a buffer it made in the same call (vim.cmd("vnew")): that buffer is there now
+        let waiting = self.engine.other_writes_waiting();
+        if waiting.iter().any(|&n| n >= 1 && n <= self.docs.len()) {
+            let _ = self.with_lua(|_| ());
+        }
+    }
+
+    fn effects_run(&mut self, fx: Vec<Effect>) {
         for e in fx {
             match e {
                 // a Vim mapping's keys, typed in again (through the mappings unless :noremap)

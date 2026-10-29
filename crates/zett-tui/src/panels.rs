@@ -42,14 +42,18 @@ impl App {
         let rev = self.docs[cur].ed.buf.rev();
         let r = self.engine.lend_buffer(&mut self.docs[cur].ed, &path, &root, f);
         // lines Lua wrote to other buffers: each one lent in turn and the writes made there
+        let mut later = Vec::new();
         for nr in self.engine.take_other_writes() {
             let i = nr - 1;
-            if i == cur || i >= self.docs.len() { continue }
+            // a buffer this Lua made (vnew) is there only once its commands ran: then
+            if i >= self.docs.len() { later.push(nr); continue }
+            // (the current one too: a buffer made in that Lua is current by now, and nothing is lent any more)
             let p = self.docs[i].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
             let rev = self.docs[i].ed.buf.rev();
             self.engine.lend_buffer(&mut self.docs[i].ed, &p, &root, |e| { let _ = e.eval(&format!("vim._zett_apply_writes({nr})")); });
             if self.docs[i].ed.buf.rev() != rev { self.docs[i].states.clear(); self.docs[i].touched(0); }
         }
+        self.engine.requeue_other_writes(later);
         self.engine.set_others(Vec::new());
         if self.docs[cur].ed.buf.rev() != rev {
             let d = &mut self.docs[cur];
