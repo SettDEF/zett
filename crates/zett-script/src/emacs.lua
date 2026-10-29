@@ -1055,3 +1055,9 @@ ex("calendar", "Three months of the calendar", "!cal -3")
 z.command("markdown-view-mode", function() z.ui("mdView") end, { desc = "Show this Markdown buffer rendered (headings, lists, code, tables, pictures), or its source again" })
 alias("markdown-preview", "markdown-view-mode")
 map("<C-c><C-v>", "markdown-view-mode")
+
+-- dired and wdired (dired.rs): the folder as names to edit, :w (C-x C-s) renames
+z.command("dired", function() z.ui("dired") end, { desc = "This file's folder as a listing: edit the names and save to rename (a line taken out: to the trash, with C-u C-x C-s / :w!)" })
+alias("wdired-change-to-wdired-mode", "dired")
+alias("dired-jump", "dired")
+map("<C-x><C-j>", "dired")

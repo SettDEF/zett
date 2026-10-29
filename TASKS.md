@@ -109,7 +109,9 @@ F. special views (2026-10-29, viewer.rs)
 - [x] Markdown rendered (mdview.rs, :MarkdownView, markdown-view-mode, C-c C-v): headings, emphasis without its markers,
   bullets, numbers, checkboxes (x ticks one in the source), quotes, code coloured by its language, tables, rules,
   pictures; zash draws headings large, code in panels, tables as cards, pictures inline; e / Enter / q back at that line
-- [ ] proced (processes, k kills), hexl (hex view/edit), wdired (rename by editing names), eww (a text web browser)
+- [x] dired / wdired (dired.rs, C-x d, C-x C-j, :Dired): a folder as names to edit, :w renames (through temporary names:
+  swaps work), a line taken out goes to the trash only with :w!, Enter opens, - the folder above
+- [ ] proced (processes, k kills), hexl (hex view/edit), eww (a text web browser)
 A. editing (zett-edit textops.rs, pure, tested)
 - [x] fill-paragraph M-q (zett.opt.fill_column; list and comment prefixes kept), sort-lines, delete-duplicate-lines,
   join-line M-^, transpose-words M-t / transpose-lines C-x C-t, delete-blank-lines C-x C-o,

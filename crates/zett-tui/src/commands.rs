@@ -349,6 +349,11 @@ impl App {
     }
 
     pub(crate) fn save(&mut self, to: Option<PathBuf>) {
+        // a folder listing: its edits become renames (dired.rs)
+        if to.is_none() && self.dired.contains_key(&self.docs[self.cur].name) {
+            let bang = self.bang;
+            return self.dired_save(bang);
+        }
         let root = self.root.clone();
         // another file that is there already: only with ! (or writeany)
         if let Some(p) = &to {

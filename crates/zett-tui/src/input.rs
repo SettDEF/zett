@@ -47,6 +47,10 @@ impl App {
         if self.cmdline.is_none() && self.char_for.is_none() && self.keyseq.is_empty() && !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && self.md.contains_key(&self.docs[self.cur].name) && self.md_key(&k) {
             return;
         }
+        // a folder listing (dired.rs): Enter opens, - goes up (in normal mode, or the Emacs profile's)
+        if self.cmdline.is_none() && self.char_for.is_none() && self.keyseq.is_empty() && !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && self.dired.contains_key(&self.docs[self.cur].name) && matches!(k.code, KeyCode::Enter | KeyCode::Char('-')) && (self.docs[self.cur].ed.mode() == Mode::Normal || k.code == KeyCode::Enter) && self.dired_key(&k) {
+            return;
+        }
         // a PDF or picture view: its own keys (pages, zoom, q) before either profile's
         if self.cmdline.is_none() && self.char_for.is_none() && self.keyseq.is_empty() && !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && self.views.contains_key(&self.docs[self.cur].name) && !matches!(self.docs[self.cur].ed.mode(), Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && self.view_key(&k) {
             return;
