@@ -360,6 +360,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     property var fileTabs: []
     // where the open file's buttons go (in the tab row, Toolbar)
     property Item fileActionSlot: null
+    function openMarketplace() { marketplace.show() }
     // files changed and not saved, left for another tab: path → text (the open one is in the editor itself)
     property var unsaved: ({})
     // everything unsaved: the open file, the kept ones, the side file
@@ -496,6 +497,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequences: ["Ctrl+Z"]; onActivated: if (!app.undo()) win.note("nothing to undo") }
     Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; onActivated: if (!app.redo()) win.note("nothing to redo") }
     Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
+    Shortcut { sequence: "Ctrl+Shift+X"; onActivated: marketplace.opened ? marketplace.close() : marketplace.show() }
     Shortcut { sequence: "Ctrl+Shift+F"; onActivated: win.openSearch() }
     function openSearch() { win.view = "search"; Qt.callLater(searchView.focusField) }
     Shortcut { sequence: "Ctrl+`"; onActivated: win.toggleDrawer() }
@@ -544,6 +546,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             { icon: "redo", name: "Redo", desc: "", keys: "Ctrl ⇧ Z", run: () => { if (!app.redo()) win.note("nothing to redo") } },
             { icon: "manage_search", name: "Search everything", desc: "every block of every page", keys: "Ctrl ⇧ F", run: () => win.openSearch() },
             { icon: "settings", name: "Settings", desc: "keys, text, window, config", keys: "Ctrl ,", run: () => win.view = "settings" },
+            { icon: "storefront", name: "Marketplace", desc: "find and install Neovim plugins (7000+)", keys: "Ctrl ⇧ X", run: () => marketplace.show() },
             { icon: "folder_open", name: "Open Folder…", desc: "opens here", keys: "Ctrl K O", run: () => win.openFolderPick() },
             { icon: "edit_note", name: "Note about this code", desc: "a page linking back, beside the code", keys: "Ctrl Alt N", run: () => win.noteAboutCode() },
             { icon: "commit", name: "Source Control", desc: "changes, stage, commit", keys: "Ctrl ⇧ G", run: () => { win.sideMode = "git"; win.sidebarHidden = false } },
@@ -932,6 +935,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine.startsWith("corenote:")) { const f = app.shotEngine.slice(9); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.codeDoc.click(2, 4, false, false); Qt.callLater(() => { win.noteAboutCode(); noteT2.start() }) }); return }
             if (app.shotEngine.startsWith("corebig:")) { const t0 = Date.now(); win.openFile({ path: app.dir + "/" + app.shotEngine.slice(8), rel: app.shotEngine.slice(8) }); Qt.callLater(() => { const t1 = Date.now(); const d = fileView.codeDoc; d.click(99990, 0, false, false); for (const ch of "// end") d.key(0, ch, 0); const t2 = Date.now(); for (const ch of " more") d.key(0, ch, 0); console.log("zett-probe: corebig open " + (t1 - t0) + " ms, lines " + d.lines + ", first typing at the end " + (t2 - t1) + " ms, five more keys " + (Date.now() - t2) + " ms"); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corelsp:")) { const p = app.shotEngine.split(":"); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); claudeShot.interval = 20000; coreLspT.spec = p; coreLspT.start(); return }
+            // market:QUERY: the marketplace popup searched for QUERY
+            if (app.shotEngine.startsWith("market:")) { marketplace.show(); Qt.callLater(() => { marketplace.searchFor(app.shotEngine.slice(7)); console.log("zett-probe: market " + marketplace.info[0] + " " + JSON.stringify(marketplace.rows.slice(0, 3).map(r => r.repo))); grabLater.start() }); return }
             if (app.shotEngine === "explorer") { win.sideMode = "files"; grabLater.start(); return }
             if (app.shotEngine === "newfile") { sidebar.newKind = "file"; sidebar.create("made/new.rs"); sidebar.newKind = "folder"; sidebar.create("emptydir"); claudeShot.start(); return }
             if (app.shotEngine === "problems-panel") { win.drawerShown = true; drawer.tab = "problems"; drawer.run("printf 'error[E0308]: mismatched types\\n  --> src/main.rs:2:5\\n'"); probT.start(); return }
@@ -1069,6 +1074,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     Shortcut { sequence: "Shift+F11"; onActivated: drawer.debugKey("stepOut") }
     Shortcut { sequence: "F9"; onActivated: if (win.view === "file" && fileView.newCore) { const c = fileView.coreView.carets[0]; win.toggleBreakpoint(win.filePath, c[0]) } }
     Palette { id: palette; theme: t }
+    Marketplace { id: marketplace; theme: t; app: engine }
 
     RowLayout {
         anchors.fill: parent

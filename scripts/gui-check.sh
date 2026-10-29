@@ -72,6 +72,7 @@ check core3 core3:core3.rs "grep -q 'core3 word \\[a\\] indented \\[        let 
 check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \"\$(tail -c1 '$W/core4.rs' | od -An -c | tr -d ' ')\" = '\\n' ] && tail -1 '$W/core4.rs' | grep -q tail"
 check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"\\]' \"\$OUT/corewords.log\""
 check corecomp corecomp:core5.rs "grep -q 'corecomp focus true completing true items \\[\"let\"' \"\$OUT/corecomp.log\""
+check market market:git "grep -q 'zett-probe: market' \"\$OUT/market.log\""
 check corekw corecomp:new.js:functi "grep -q 'items \\[\"function\"\\] from \\[\"keyword\"' \"\$OUT/corekw.log\""
 check coreother corecomp:new.js:functi:other.js "grep -q '\"functionality\".*in other.js' \"\$OUT/coreother.log\""
 check corekeep corekeep:core5.rs,lines.rs "grep -q 'corekeep away 1 back \\[kept fn main' \"\$OUT/corekeep.log\" && grep -q 'dirty true' \"\$OUT/corekeep.log\""

@@ -4071,7 +4071,7 @@ function zett.store.market_info()
   return #m.items, m.fetched
 end
 -- the plugins matching every word of `query` (name, repo, description, tags), most stars first
-function zett.store.search(query, limit)
+function zett.store.search(query, limit, installed_only)
   local m = load_market()
   if not m then return {}, "no plugin list yet: zett.store.update() (Settings > Extensions: Update list)" end
   local words = {}
@@ -4085,9 +4085,11 @@ function zett.store.search(query, limit)
     if fits then
       local managed = false
       for _, l in ipairs(lines) do if l:find(e.repo, 1, true) then managed = true break end end
-      out[#out + 1] = { name = e.repo, repo = e.repo, kind = "lua", desc = e.desc, stars = e.stars, tags = e.tags, updated = e.updated, managed = managed,
-        installed = managed or vim.fn.isdirectory(vim.fn.stdpath("data") .. "/site/pack/plug/start/" .. e.name) == 1 }
-      if #out >= (limit or 50) then break end
+      local installed = managed or vim.fn.isdirectory(vim.fn.stdpath("data") .. "/site/pack/plug/start/" .. e.name) == 1
+      if installed or not installed_only then
+        out[#out + 1] = { name = e.repo, repo = e.repo, kind = "lua", desc = e.desc, stars = e.stars, tags = e.tags, updated = e.updated, managed = managed, installed = installed }
+        if #out >= (limit or 50) then break end
+      end
     end
   end
   return out
