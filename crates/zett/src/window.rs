@@ -96,6 +96,15 @@ pub mod qobject {
         fn read_file(self: &Zett, path: &QString) -> QString;
         /// crash safety, the terminal's copies: keep a file's unsaved text, the kept text newer than the file
         /// ("" none: JSON {time, text}), drop it
+        /// the code file open in the window: Lua sees it as its current buffer (plugins' commands and maps act on
+        /// it); "" path: none
+        #[qinvokable]
+        #[cxx_name = "lendFile"]
+        fn lend_file(self: Pin<&mut Zett>, path: &QString, text: &QString, line: i32, col: i32);
+        /// Lua changed the lent file: its whole new text and the cursor
+        #[qsignal]
+        #[cxx_name = "lentChanged"]
+        fn lent_changed(self: Pin<&mut Zett>, text: QString, line: i32, col: i32);
         #[qinvokable]
         #[cxx_name = "keepUnsaved"]
         fn keep_unsaved(self: &Zett, path: &QString, text: &QString);
@@ -286,6 +295,8 @@ use zett_core::{markdown, BlockId, Kind};
 
 pub struct ZettRust {
     folder: Option<Folder>,
+    /// the code file open in the window, lent to Lua as its current buffer around each script run: (path, text, line, col)
+    lent: Option<(String, String, usize, usize)>,
     /// undo / redo across blocks and pages (Loro's, edits within 0.8 s are one step)
     undo: Option<loro::UndoManager>,
     order: Vec<BlockId>,
@@ -327,6 +338,7 @@ impl Default for ZettRust {
         let folder = Folder::open(&dir).ok();
         let mut z = ZettRust {
             folder,
+            lent: None,
             undo: None,
             order: Vec::new(),
             pages: QString::default(),
@@ -752,7 +764,7 @@ impl qobject::Zett {
     /// Runs something on the engine with the workspace lent to it, then applies what it did:
     /// pages opened or changed here, UI requests and notices go back to QML as JSON.
     fn script(mut self: Pin<&mut Self>, call: impl FnOnce(&mut Engine) -> (serde_json::Value, Vec<Effect>)) -> QString {
-        let (mut out, effects, errors) = {
+        let (mut out, effects, errors, changed_file) = {
             let r = self.as_mut().rust_mut();
             let r = r.get_mut();
             let fresh = r.engine.is_none();
@@ -765,18 +777,40 @@ impl qobject::Zett {
                 }
                 call(e)
             };
+            // the open code file as Lua's current buffer (a plugin's command acts on it); its changes go back below
+            let mut lent = r.lent.as_ref().map(|(p, t, l, c)| {
+                let mut ed = zett_edit::Editor::from_str(t);
+                let l = (*l).min(ed.buf.len_lines().saturating_sub(1));
+                let c = (*c).min(ed.buf.line(l).chars().count());
+                ed.set_cursor(zett_core::Pos { line: l, col: c });
+                (p.clone(), ed)
+            });
+            if let Some((p, _)) = &lent { eng.set_buffers(vec![p.clone()]); }
+            let rev0 = lent.as_ref().map(|(_, ed)| ed.buf.rev());
+            let root = std::path::PathBuf::from(r.dir.to_string());
+            let run_lent = |e: &mut Engine, lent: &mut Option<(String, zett_edit::Editor)>| match lent {
+                Some((p, ed)) => e.lend_buffer(ed, p, &root, run),
+                None => run(e),
+            };
             let (folder, res) = match folder {
                 Some(f) => {
-                    let (f, res) = eng.lend(f, run);
+                    let (f, res) = eng.lend(f, |e| run_lent(e, &mut lent));
                     (Some(f), res)
                 }
-                None => (None, run(&mut eng)),
+                None => (None, run_lent(&mut eng, &mut lent)),
             };
             r.folder = folder;
+            // Lua changed the file: the new text for the editor, kept as what is lent now
+            let changed_file = match (&lent, rev0) {
+                (Some((_, ed)), Some(r0)) if ed.buf.rev() != r0 => { let c = ed.cursor(); Some((ed.text(), c.line, c.col)) }
+                _ => None,
+            };
+            if let (Some((t, l, c)), Some(slot)) = (&changed_file, r.lent.as_mut()) { slot.1 = t.clone(); slot.2 = *l; slot.3 = *c; }
             let errors = std::mem::take(&mut eng.errors);
             r.engine = Some(eng);
-            (res.0, res.1, errors)
+            (res.0, res.1, errors, changed_file)
         };
+        if let Some((t, l, c)) = changed_file { self.as_mut().lent_changed(QString::from(&t), l as i32, c as i32); }
         let mut ui = Vec::new();
         let mut notes: Vec<String> = errors;
         let mut changed = false;
@@ -1105,6 +1139,11 @@ impl qobject::Zett {
         let root = std::fs::canonicalize(workspace_dir()).unwrap_or_else(|_| workspace_dir());
         let inside = p.parent().and_then(|d| std::fs::canonicalize(d).ok()).is_some_and(|d| d.starts_with(&root));
         inside && std::fs::write(&p, text.to_string()).is_ok()
+    }
+
+    fn lend_file(self: Pin<&mut Self>, path: &QString, text: &QString, line: i32, col: i32) {
+        let p = path.to_string();
+        self.rust_mut().get_mut().lent = (!p.is_empty()).then(|| (p, text.to_string(), line.max(0) as usize, col.max(0) as usize));
     }
 
     fn keep_unsaved(&self, path: &QString, text: &QString) {

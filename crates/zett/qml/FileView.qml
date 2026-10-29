@@ -107,7 +107,13 @@ ColumnLayout {
     function wordStart(pos) { let s = pos; while (s > 0 && /[\w$]/.test(ed.text[s - 1])) s--; return s }
     function ask(kind, pos) { if (!lsp) return; const [l, c] = lineCol(pos); app.lspAsk(kind, win.filePath, l, c) }
     onVisibleChanged: if (visible) { openLsp(); loadGit() }
-    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit(); fv.checkKept() } }
+    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit(); fv.checkKept(); lendT.restart() } }
+    // the open file lent to Lua as its current buffer (plugins' commands and maps act on it): kept current a
+    // moment after each change; what Lua changes comes back here
+    function lendNow() { const c = codeView.carets[0] ?? [0, 0]; fv.app.lendFile(fv.newCore && fv.win.filePath ? fv.win.filePath : "", fv.newCore ? codeView.doc.text() : "", c[0], c[1]) }
+    Timer { id: lendT; interval: 150; onTriggered: fv.lendNow() }
+    Connections { target: codeView.doc; function onVersionChanged() { lendT.restart() } }
+    Connections { target: fv.app; function onLentChanged(text, line, col) { if (!fv.newCore || !fv.win.filePath) return; codeView.doc.restore(text); codeView.doc.click(line, col, false, false) } }
     // unsaved changes a zett that did not end well kept for this file: offered back (Restore / Drop)
     property var kept: null
     function checkKept() { const k = fv.win.filePath ? fv.app.keptUnsaved(fv.win.filePath) : ""; fv.kept = k ? JSON.parse(k) : null }
