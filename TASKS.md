@@ -96,7 +96,7 @@ See PLAN.md for the vision and milestones.
   diff inline, Enter opens, c commits (echo area), g, q; Enter on a commit shows it; C-c g b / SPC g b:
   the commits that changed the section at the cursor (git log -L), Enter shows one
   - [ ] hunks (stage part of a file), push / pull / branches, a blame column
-- [ ] 9 sync without a server
+- [x] 9 sync without a server (zett sync: pair with a code, peers found by UDP broadcast, HMAC proof, changed files both ways, both-changed kept as NAME.conflict-HOST; not encrypted yet, LAN only)
 - [ ] 10 canvas
 
 ### Emacs parity (2026-10-21): what Emacs has and zett does not yet, in the order they are felt

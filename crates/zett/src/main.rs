@@ -9,6 +9,7 @@ mod doc;
 mod dap;
 mod term;
 mod window;
+mod sync;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use clap::builder::styling::{AnsiColor, Effects, Styles};
@@ -108,6 +109,18 @@ enum Cmd {
         code: String,
         #[arg(long)]
         page: Option<String>,
+    },
+    /// Sync the workspace with your other devices on this network (no server, no account)
+    #[command(after_help = "First device:  zett sync --pair          prints a code\nOther device:  zett sync --pair CODE     the same code\nThen:          zett sync --serve on one, zett sync on the other (or zett sync HOST)")]
+    Sync {
+        /// a device to sync with (host or host:port); default: every paired device found on the network
+        peer: Option<String>,
+        /// wait for the other devices (keep it running on one of them)
+        #[arg(long)]
+        serve: bool,
+        /// pair this device: no CODE makes a new one, CODE joins the devices that use it
+        #[arg(long, num_args = 0..=1, default_missing_value = "")]
+        pair: Option<String>,
     },
     /// List every command (built-in, plugins, init.lua)
     Commands,
@@ -247,6 +260,9 @@ fn main() {
         }
         return doc(topic.as_deref().unwrap_or(""));
     }
+    if let Cmd::Sync { peer, serve, pair } = &cmd {
+        return sync_cmd(&dir, peer.as_deref(), *serve, pair.as_deref());
+    }
     let mut f = Folder::open(&dir).unwrap_or_else(|e| fail(&format!("{}: {e}", dir.display()), 1));
     if matches!(cmd, Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. }) {
         return script(cmd, f, cli.json);
@@ -298,7 +314,7 @@ fn main() {
             f.save_page(p).unwrap_or_else(|e| fail(&e.to_string(), 1));
             print!("{}", markdown::to_markdown(&f.ws, p));
         }
-        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::ProbeKeys | Cmd::Options { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } => unreachable!(),
+        Cmd::Completions { .. } | Cmd::Doc { .. } | Cmd::ProbeKeys | Cmd::Options { .. } | Cmd::Run { .. } | Cmd::Lua { .. } | Cmd::Commands | Cmd::Keys { .. } | Cmd::Sync { .. } => unreachable!(),
     }
 }
 
@@ -370,4 +386,34 @@ fn script(cmd: Cmd, f: Folder, json: bool) {
         }
         _ => unreachable!(),
     }
+}
+
+/// `zett sync`: pair, wait for peers, or sync with them now.
+fn sync_cmd(dir: &std::path::Path, peer: Option<&str>, serve: bool, pair: Option<&str>) {
+    if let Some(code) = pair {
+        let code = sync::pair((!code.is_empty()).then_some(code)).unwrap_or_else(|e| fail(&e.to_string(), 1));
+        println!("paired: {code}\non your other devices: zett sync --pair {code}");
+        return;
+    }
+    let Some(s) = sync::Setup::load(dir) else { fail("this device is not paired yet: zett sync --pair", 2) };
+    if serve {
+        if let Err(e) = sync::serve(&s, sync::PORT, false, |m| eprintln!("zett sync: {m}")) { fail(&e.to_string(), 1) }
+        return;
+    }
+    let peers: Vec<(String, String)> = match peer {
+        Some(p) => vec![(p.to_string(), p.to_string())],
+        None => sync::discover(&s, std::time::Duration::from_millis(800)),
+    };
+    if peers.is_empty() { fail("no paired device found on this network (is zett sync --serve running there?)", 3) }
+    let mut bad = false;
+    for (addr, name) in peers {
+        match sync::sync_with(&s, &addr) {
+            Ok(r) => {
+                println!("{}: {} in, {} out, {} deleted here, {} deleted there, {} conflicts", r.peer, r.got.len(), r.sent.len(), r.deleted_here.len(), r.deleted_there.len(), r.conflicts.len());
+                for c in &r.conflicts { println!("  both changed {c}: theirs is beside it as a .conflict- copy") }
+            }
+            Err(e) => { eprintln!("zett sync: {name}: {e}"); bad = true }
+        }
+    }
+    if bad { std::process::exit(1) }
 }
