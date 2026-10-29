@@ -20,6 +20,7 @@ mod cmdline;
 mod ex;
 mod minibuf;
 mod travel;
+mod recover;
 mod agent;
 mod query;
 mod refs;
@@ -684,6 +685,8 @@ struct App {
     /// the config files' times, looked at every two seconds (a change reloads the config)
     config_stamp: Vec<Option<std::time::SystemTime>>,
     config_at: Instant,
+    /// crash safety: copies of unsaved changes, where each file was (recover.rs)
+    recover: recover::Keeper,
     lsp: zett_lsp::Servers,
     lsp_status: String,
     comp: Option<lsp::Comp>,
@@ -972,6 +975,7 @@ impl App {
             history: Vec::new(),
             config_stamp: Vec::new(),
             config_at: Instant::now(),
+            recover: Default::default(),
             lsp: zett_lsp::Servers::new(),
             lsp_status: String::new(),
             comp: None,
@@ -1084,6 +1088,7 @@ impl App {
             self.lsp_tick();
             self.watch_buffer();
             self.watch_config();
+            self.recover_tick();
             if self.engine.next_timer().is_some_and(|t| t <= Instant::now()) {
                 let fx = self.with_lua(|e| e.run_timers());
                 self.after_lua(fx);
@@ -1397,6 +1402,8 @@ impl App {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle(old));
             }
         }
+        // quit as asked: places kept, copies of changes left unsaved on purpose dropped (a crash never gets here)
+        self.recover_quit();
         Ok(())
     }
 

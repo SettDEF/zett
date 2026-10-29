@@ -509,6 +509,7 @@ impl App {
                 }
             }
             "checkt" | "checktime" => self.checktime(),
+            "rec" | "recover" => self.recover_cmd(bang),
             "ene" | "enew" => {
                     self.doom_ui("newBuffer", "");
                 }
