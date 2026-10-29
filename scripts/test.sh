@@ -3,6 +3,8 @@
 # window's checks in parallel (gui-check.sh). Exit 1 on any failure.
 #   scripts/test.sh            build (release) and run both
 #   scripts/test.sh --unit     the unit tests only
+# the clipboard: in memory, never the user's (a run once left "one" on it)
+export ZETT_CLIPBOARD=memory
 set -uo pipefail
 cd "$(dirname "$0")/.."
 start=$(date +%s%N)

@@ -7,8 +7,19 @@ use std::time::{Duration, Instant};
 /// How long a paste may wait for the program that owns the clipboard.
 const PASTE_WAIT: Duration = Duration::from_millis(300);
 
+/// Tests (and ZETT_CLIPBOARD=memory, for headless runs) copy here: the user's real clipboard is never touched
+/// (the test suite once left "one" there after every run).
+fn memory() -> Option<&'static std::sync::Mutex<String>> {
+    static CLIP: std::sync::OnceLock<std::sync::Mutex<String>> = std::sync::OnceLock::new();
+    (cfg!(test) || std::env::var("ZETT_CLIPBOARD").is_ok_and(|v| v == "memory")).then(|| CLIP.get_or_init(Default::default))
+}
+
 /// Puts `text` on the clipboard. False when nothing took it.
 pub(crate) fn copy(text: &str) -> bool {
+    if let Some(m) = memory() {
+        *m.lock().unwrap() = text.to_string();
+        return true;
+    }
     if wayland() {
         if let Ok(mut c) = Command::new("wl-copy").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
             // through stdin: no length limit, and text starting with "-" stays text
@@ -21,6 +32,9 @@ pub(crate) fn copy(text: &str) -> bool {
 
 /// The clipboard's text, when it can be read (Wayland only; a terminal cannot be asked safely).
 pub(crate) fn paste() -> Option<String> {
+    if let Some(m) = memory() {
+        return Some(m.lock().unwrap().clone());
+    }
     if !wayland() {
         return None;
     }

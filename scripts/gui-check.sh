@@ -3,6 +3,8 @@
 # without a QML error, and the ones that change files must leave the right result. Exit 1 on any failure.
 #   scripts/gui-check.sh [ZETT_BINARY]      (default: $CARGO_TARGET_DIR/release/zett)
 # Uses clangd for the language server checks when it is installed (skipped otherwise).
+# the clipboard: in memory, never the user's (a run once left "one" on it)
+export ZETT_CLIPBOARD=memory
 set -uo pipefail
 BIN=${1:-${CARGO_TARGET_DIR:-$(dirname "$0")/../target}/release/zett}
 W=$(mktemp -d /tmp/zett-gui-check.XXXXXX)
