@@ -769,6 +769,7 @@ impl Engine {
             lua.create_function(move |_, ()| Ok(st.borrow().host.jobs.len()))?
         })?;
         z.set("job", job)?;
+        crate::wasm::register(lua, &z)?;
         // zett.hrtime(): nanoseconds on a monotonic clock (vim.uv.hrtime; os.clock is CPU time)
         let t0 = std::time::Instant::now();
         z.set("hrtime", lua.create_function(move |_, ()| Ok(t0.elapsed().as_nanos() as i64))?)?;

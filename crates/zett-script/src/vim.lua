@@ -3908,3 +3908,107 @@ do
     return r
   end)
 end
+
+-- ── WASM plugins: a folder with zett-plugin.json and its .wasm ──
+-- { "name": "text-tools", "wasm": "text_tools.wasm", "description": "…",
+--   "commands": [ { "name": "SortLines", "call": "sort_lines", "desc": "…" } ] }
+-- each command runs on the lines of its range (:'<,'>SortLines), else the whole buffer: they go in as text,
+-- what comes back replaces them. zett.wasm_plugins lists what is loaded (the store and :checkhealth show it).
+zett.wasm_plugins = zett.wasm_plugins or {}
+function zett.wasm_plugin(dir)
+  local ok, manifest = pcall(function() return vim.json.decode(table.concat(vim.fn.readfile(dir .. "/zett-plugin.json"), "\n")) end)
+  if not ok or type(manifest) ~= "table" then return nil, "no zett-plugin.json in " .. dir end
+  local okp, p = pcall(zett.wasm.load, dir .. "/" .. (manifest.wasm or (manifest.name .. ".wasm")))
+  if not okp then return nil, p end
+  for _, c in ipairs(manifest.commands or {}) do
+    vim.api.nvim_create_user_command(c.name, function(a)
+      local whole = (a.range or 0) == 0
+      local l1, l2 = whole and 1 or a.line1, whole and vim.api.nvim_buf_line_count(0) or a.line2
+      local text = table.concat(vim.api.nvim_buf_get_lines(0, l1 - 1, l2, false), "\n")
+      local done, out = pcall(p.call, p, c.call, text)
+      for _, l in ipairs(p:logs()) do vim.notify(manifest.name .. ": " .. l) end
+      if not done then vim.notify(c.name .. ": " .. tostring(out), vim.log.levels.ERROR) return end
+      vim.api.nvim_buf_set_lines(0, l1 - 1, l2, false, vim.split(out, "\n", { plain = true }))
+    end, { range = true, desc = c.desc or (manifest.name .. ": " .. c.name) })
+  end
+  zett.wasm_plugins[manifest.name] = { dir = dir, manifest = manifest, plugin = p }
+  return p
+end
+-- at start: every plugin folder under the config's wasm/ and zett's own share/zett/wasm/
+for _, root in ipairs({ vim.fn.stdpath("config") .. "/wasm", vim.fn.stdpath("data") .. "/wasm" }) do
+  for _, d in ipairs(vim.fn.glob(root .. "/*", false, true)) do
+    if vim.fn.filereadable(d .. "/zett-plugin.json") == 1 then
+      local _, err = zett.wasm_plugin(d)
+      if err then vim.schedule(function() vim.notify("wasm plugin " .. d .. ": " .. err, vim.log.levels.WARN) end) end
+    end
+  end
+end
+
+-- ── the store: extensions known to work in zett (each one tried), installed and removed from :ZettStore ──
+-- Neovim plugins go in as zett.plug lines in <config>/plugins/store/init.lua (a file to read and edit by hand);
+-- WASM plugins come with zett (<data>/store/<name>) and are copied to <config>/wasm/<name>
+zett.store = zett.store or {}
+zett.store.catalog = {
+  { name = "gitsigns.nvim", kind = "lua", repo = "lewis6991/gitsigns.nvim", desc = "Git changes by the line numbers, hunks to stage, preview and reset, blame" },
+  { name = "fidget.nvim", kind = "lua", repo = "j-hui/fidget.nvim", desc = "Language server progress and notifications in a corner" },
+  { name = "tinct.nvim", kind = "lua", repo = "SettDEF/tinct.nvim", desc = "Colours from the wallpaper (tinct), as the desktop has them" },
+  { name = "text-tools", kind = "wasm", desc = "Sort, dedupe and reverse lines, title case, pretty-print JSON (WASM)" },
+}
+local function store_file() return vim.fn.stdpath("config") .. "/plugins/store/init.lua" end
+local function store_lines() return vim.fn.filereadable(store_file()) == 1 and vim.fn.readfile(store_file()) or {} end
+function zett.store.installed(e)
+  if e.kind == "wasm" then return zett.wasm_plugins[e.name] ~= nil or vim.fn.isdirectory(vim.fn.stdpath("config") .. "/wasm/" .. e.name) == 1 end
+  for _, l in ipairs(store_lines()) do if l:find(e.repo, 1, true) then return true end end
+  -- set up by hand (the user's own config) counts too
+  return vim.fn.isdirectory(vim.fn.stdpath("data") .. "/site/pack/plug/start/" .. e.name) == 1
+end
+function zett.store.list()
+  local out = {}
+  for _, e in ipairs(zett.store.catalog) do out[#out + 1] = vim.tbl_extend("force", e, { installed = zett.store.installed(e) }) end
+  return out
+end
+local function find(name) for _, e in ipairs(zett.store.catalog) do if e.name == name then return e end end end
+function zett.store.install(name)
+  local e = find(name)
+  if not e then return false, "no " .. name .. " in the store" end
+  if e.kind == "wasm" then
+    local from, to = vim.fn.stdpath("data") .. "/store/" .. name, vim.fn.stdpath("config") .. "/wasm/" .. name
+    if vim.fn.isdirectory(from) == 0 then return false, "zett came without " .. name .. " (" .. from .. ")" end
+    vim.fn.mkdir(to, "p")
+    for _, f in ipairs(vim.fn.readdir(from)) do vim.fn.writefile(vim.fn.readblob(from .. "/" .. f), to .. "/" .. f, "b") end
+    local _, err = zett.wasm_plugin(to)
+    if err then return false, err end
+    return true
+  end
+  local lines = store_lines()
+  if #lines == 0 then lines = { "-- Installed from :ZettStore (one zett.plug per plugin; delete a line to remove it)" } end
+  local line = ("zett.plug(%q)"):format(e.repo)
+  if not vim.tbl_contains(lines, line) then lines[#lines + 1] = line end
+  vim.fn.mkdir(vim.fn.fnamemodify(store_file(), ":h"), "p")
+  vim.fn.writefile(lines, store_file())
+  local ok, err = pcall(zett.plug, e.repo)
+  return ok, not ok and tostring(err) or nil
+end
+function zett.store.remove(name)
+  local e = find(name)
+  if not e then return false end
+  if e.kind == "wasm" then
+    vim.fn.delete(vim.fn.stdpath("config") .. "/wasm/" .. name, "rf")
+    zett.wasm_plugins[name] = nil
+    return true, "gone after a restart (its commands stay until then)"
+  end
+  vim.fn.writefile(vim.tbl_filter(function(l) return not l:find(e.repo, 1, true) end, store_lines()), store_file())
+  return true, "gone after a restart"
+end
+vim.api.nvim_create_user_command("ZettStore", function()
+  local items = zett.store.list()
+  vim.ui.select(items, {
+    prompt = "Extensions (✓ installed: choosing one removes it)",
+    format_item = function(e) return ("%s %-14s %-4s %s"):format(e.installed and "✓" or "·", e.name, e.kind, e.desc) end,
+  }, function(e)
+    if not e then return end
+    local ok, msg
+    if e.installed then ok, msg = zett.store.remove(e.name) else ok, msg = zett.store.install(e.name) end
+    vim.notify(("%s %s%s"):format(e.name, ok and (e.installed and "removed" or "installed") or "failed", msg and (": " .. msg) or ""), ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+  end)
+end, { desc = "Extensions: install and remove (Lua and WASM plugins)" })

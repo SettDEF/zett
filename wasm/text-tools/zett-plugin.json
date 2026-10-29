@@ -1,0 +1,12 @@
+{
+  "name": "text-tools",
+  "wasm": "text_tools.wasm",
+  "description": "Sort, dedupe and reverse lines, title case, pretty-print JSON (a WASM plugin, written in Rust)",
+  "commands": [
+    { "name": "SortLines", "call": "sort_lines", "desc": "Sort the lines (case-insensitive)" },
+    { "name": "UniqueLines", "call": "unique_lines", "desc": "Take repeated lines out" },
+    { "name": "ReverseLines", "call": "reverse_lines", "desc": "Reverse the order of the lines" },
+    { "name": "TitleCase", "call": "title_case", "desc": "Every word with a capital" },
+    { "name": "JsonPretty", "call": "json_pretty", "desc": "Pretty-print JSON" }
+  ]
+}

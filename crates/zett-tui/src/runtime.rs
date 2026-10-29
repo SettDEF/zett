@@ -871,3 +871,23 @@ mod ssop_tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 }
+
+#[cfg(test)]
+mod wasm_plugin_tests {
+    // the example WASM plugin (wasm/text-tools) through its commands, on a range and on the whole buffer
+    #[test]
+    fn text_tools_commands_run_in_wasm() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../wasm/text-tools");
+        if !dir.join("text_tools.wasm").exists() { return }
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str("pear\napple\nfig\napple\n");
+        app.command(&format!("lua assert(zett.wasm_plugin({:?}))", dir.display().to_string()));
+        app.command("1,4SortLines");
+        assert_eq!(app.docs[app.cur].ed.text(), "apple\napple\nfig\npear\n");
+        app.command("UniqueLines");
+        assert_eq!(app.docs[app.cur].ed.text(), "apple\nfig\npear\n\n".trim_end_matches('\n').to_string() + "\n", "{:?}", app.docs[app.cur].ed.text());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str("{\"a\":1,\"b\":[2,3]}\n");
+        app.command("JsonPretty");
+        assert!(app.docs[app.cur].ed.text().starts_with("{\n  \"a\": 1,"), "{:?}", app.docs[app.cur].ed.text());
+    }
+}

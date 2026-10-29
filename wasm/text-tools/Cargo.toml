@@ -1,0 +1,19 @@
+[package]
+name = "text_tools"
+version = "0.1.0"
+edition = "2021"
+description = "zett WASM plugin: sort, dedupe, reverse lines, title case, pretty JSON"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+# its own build (wasm32), not one of zett's crates
+[workspace]

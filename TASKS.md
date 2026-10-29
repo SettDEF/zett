@@ -394,7 +394,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 5. [x] (2026-10-29: gdb -i=dap; breakpoints by the line numbers or F9, F5/F10/F11/⇧F11/⇧F5, call stack, variables opened by a click, output; other adapters (debugpy, lldb-dap) still to wire) Debugging (DAP): breakpoints in the gutter, variables, call stack, debug console
 6. [ ] (2026-10-29: blame of the cursor line, Keep current/incoming/both on conflicts, branch list + new branch, Stage/Discard per change; left: side-by-side diff, single lines inside a change) Git: blame per line, side-by-side diff, merge conflicts, branches, stage single lines
 7. [x] (2026-10-29: gui-check corebig fails over budget; measured 38-54 ms open of 100,000 lines, 1-3 ms a key) Speed budgets enforced: open < 100 ms, typing latency < 8 ms, checked by gui-check
-8. [ ] Extensions: Lua + WASM plugins, a small store
+8. [x] (2026-10-29: zett.wasm (wasmi, fuel-limited, text in/out, zett_log), plugin folders with zett-plugin.json → :Commands on a range, wasm/text-tools as the example; :ZettStore lists tried Lua (zett.plug) and WASM plugins, installs and removes; left: a store page in the window, a catalogue from the web) Extensions: Lua + WASM plugins, a small store
 
 ## Terminal zett: floats
 - [ ] Glass floats (fidget, hover, completion): a blurred, see-through background under a float. A terminal cannot blur

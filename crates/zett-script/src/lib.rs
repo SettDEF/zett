@@ -10,6 +10,7 @@
 
 pub mod docs;
 mod host;
+mod wasm;
 pub mod hl;
 
 pub use host::{diff_lines, file_icon, PanelView};
