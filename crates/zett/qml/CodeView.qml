@@ -71,6 +71,9 @@ Rectangle {
     function word() { return doc.lineText(carets[0][0]).slice(wordStart(), carets[0][1]) }
     // completion: asked after . :: or Ctrl+Space, then follows the word typed
     property bool completing: false
+    // text selected (any cursor): no completion list over it
+    readonly property bool hasSel: carets.some(c => c[0] !== c[2] || c[1] !== c[3])
+    onHasSelChanged: if (hasSel) completing = false
     Connections {
         target: doc
         function onVersionChanged() {
@@ -89,7 +92,7 @@ Rectangle {
     property real ycmSeen: 0
     Timer { interval: 40; repeat: true; running: cv.completing && input.activeFocus; onTriggered: { const s = doc.ycmSeq(); if (s !== cv.ycmSeen) cv.ycmSeen = s } }
     readonly property var comps: {
-        if (!cv.completing || !cv.fv) return []
+        if (!cv.completing || !cv.fv || cv.hasSel) return []
         doc.version
         cv.ycmSeen
         const w = word(), wl = w.toLowerCase()
@@ -141,6 +144,25 @@ Rectangle {
     TextEdit { id: clip; visible: false }
     function copy(cut) { const s = doc.selectedText(); if (!s) return; clip.text = s; clip.selectAll(); clip.copy(); if (cut) doc.key(0x01000007, "", 0) }
     function paste() { clip.text = ""; clip.paste(); if (clip.text) doc.insert(clip.text) }
+    // the right-click menu: copy / cut / paste on top, then what the keys do (each with its key)
+    function menu(x, y) {
+        const sel = doc.selectedText()
+        const lsp = !!(cv.fv && cv.fv.lsp)
+        const row = cv.win.clipRow(sel || doc.lineText(cv.carets[0][0]), sel ? () => cv.copy(true) : null, () => cv.paste(), null).slice(0, 3)
+        cv.win.showMenu(x, y, row, [
+            { icon: "arrow_forward", label: "Go to definition", key: "F12", enabled: lsp, run: () => cv.askHere("definition") },
+            { icon: "manage_search", label: "Find references", key: "⇧ F12", enabled: lsp, run: () => cv.askHere("references") },
+            { icon: "edit", label: "Rename", key: "F2", enabled: lsp, run: () => rename.open() },
+            { icon: "lightbulb", label: "Code actions", key: "Ctrl .", enabled: lsp, run: () => cv.fv.askActions(cv.carets[0][0], cv.carets[0][1]) },
+            { icon: "format_align_left", label: "Format file", key: "⇧ Alt F", enabled: lsp, run: () => cv.askHere("format") },
+            { sep: true },
+            { icon: "comment", label: "Comment line", key: "Ctrl /", run: () => doc.lineOp("comment:" + (cv.fv ? cv.fv.commentMark : "//")) },
+            { icon: "search", label: "Find", key: "Ctrl F", run: () => findBar.open(false) },
+            { icon: "find_replace", label: "Replace", key: "Ctrl H", run: () => findBar.open(true) },
+            { sep: true },
+            { icon: "auto_awesome", label: sel ? "Ask Claude about the selection" : "Ask Claude", key: "Ctrl I", run: () => aiBar.open() }
+        ])
+    }
 
     // plugins' marks on this file (extmarks: signs, a line's tint, highlighted ranges, text after the line), by line;
     // fetched only when they change
@@ -551,6 +573,16 @@ Rectangle {
                 if (tapCount >= 3) doc.selectUnit(l, c, true)
                 else if (tapCount === 2) doc.selectUnit(l, c, false)
                 else doc.click(l, c, (ev.modifiers & Qt.ShiftModifier) !== 0, (ev.modifiers & Qt.AltModifier) !== 0)
+            }
+        }
+        // right click: the editor's menu (the cursor moves there first unless it is in the selection)
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: (ev) => {
+                input.forceActiveFocus()
+                const [l, c] = cv.rowColAt(ev.position.x, ev.position.y)
+                if (!cv.hasSel) doc.click(l, c, false, false)
+                cv.menu(ev.scenePosition.x, ev.scenePosition.y)
             }
         }
         // Shift+Alt drag: a cursor on every line, at the column the pointer is in

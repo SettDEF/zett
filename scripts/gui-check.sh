@@ -104,6 +104,8 @@ check corekept corekept:lines.rs "grep -q 'corekept offered true text \\[kept af
 check corelend corelend:lines.rs "grep -q 'corelend \\[from lua 3\\] dirty true' \"\$OUT/corelend.log\""
 check coremarks coremarks:core.rs "grep -q 'coremarks .*\"virt\":\[{\"text\":\"from a plugin\".*\"sign\":\"+\"' \"\$OUT/coremarks.log\""
 check coreevents coreevents:core.rs "grep -q 'coreevents FileType:rust BufEnter:rust BufWritePost:rust' \"\$OUT/coreevents.log\""
+printf 'function getName(a) {}\nconst getter = 1\n' > "$W/m.js"
+check coremenu coremenu:m.js "grep -q 'coremenu comps [1-9][0-9]* then 0' \"\$OUT/coremenu.log\" && grep -q 'coremenu menu true Go to definition|.*Ask Claude' \"\$OUT/coremenu.log\""
 check canvas canvas:t.canvas "grep -q 'canvas view canvas cards 2 live fn main() {' \"\$OUT/canvas.log\""
 check doc doc:doc.pdf:sync "grep -q 'doc view doc pages 1 matches 2 note \[\]' \"\$OUT/doc.log\""
 # YouCompleteMe's engine, when ycmd is built in the data folder: gfi finds getFileInfo (fuzzy)

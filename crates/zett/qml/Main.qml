@@ -602,6 +602,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     function pageMd() { return `# ${app.title}\n\n` + win.blocks.map(blockMd).join("\n\n") }
     // the icon row; copy/cut act on the selection when there is one, else on the whole thing
+    // the one context menu, for views that build their own items (the code editor)
+    function showMenu(x, y, row, items) { ctx.show(x, y, row, items) }
     function clipRow(copyS, cut, paste, share) {
         return [
             { icon: "content_copy", label: "Copy", run: () => win.copyText(copyS) },
@@ -942,6 +944,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine.startsWith("coresave:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(9), rel: app.shotEngine.slice(9) }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(1, 99, false, false); for (const ch of "   ") d.key(0, ch, 0); d.click(4, 0, false, false); for (const ch of "tail") d.key(0, ch, 0); fileView.save(); grabLater.start() }); return }
             // coregit:FILE: blame on line 1, then the conflict at line 3 resolved to the incoming side
             if (app.shotEngine.startsWith("coregit:")) { const f = app.shotEngine.slice(8); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(0, 0, false, false); gitT.start() }); return }
+            // the suggestions close once text is selected; the right-click menu opens on it
+            if (app.shotEngine.startsWith("coremenu:")) { const f = app.shotEngine.slice(9); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { const cv = fileView.codeView, d = cv.doc; cv.focusInput(); d.click(d.lines - 1, 0, false, false); for (const ch of "ge") d.key(0, ch, 0); cv.fv.comps = [{ label: "function", detail: "ycm" }]; const before = cv.comps.length; d.drag(0, 9); console.log("zett-probe: coremenu comps " + before + " then " + cv.comps.length); cv.menu(300, 200); console.log("zett-probe: coremenu menu " + ctx.opened + " " + ctx.shown.map(i => i.label ?? "-").join("|")); grabLater.start() }); return }
             if (app.shotEngine.startsWith("corewords:")) { win.openFile({ path: app.dir + "/" + app.shotEngine.slice(10), rel: app.shotEngine.slice(10) }); Qt.callLater(() => { console.log("zett-probe: corewords " + fileView.codeDoc.words("le") + " " + fileView.codeDoc.words("ma")); grabLater.start() }); return }
             // corecomp:FILE: a word started on a new line (no language server): the completion list and whether it shows
             // coreycm:FILE:TEXT: ycmd started first (it needs a moment), then TEXT typed at the end of the file: its items
