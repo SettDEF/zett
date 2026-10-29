@@ -1,7 +1,8 @@
 -- Trail: a file's changes in a side panel (saves and git commits), what changed since one of them shown in the file.
 local M = {}
 
-M.config = { side = "right", width = 36, commits = 50, saves = 100 }
+-- style: "boxes" (changes and entries in rounded boxes) or "plain"
+M.config = { side = "right", width = 36, commits = 50, saves = 100, style = "boxes" }
 
 local ns = vim.api.nvim_create_namespace("trail")
 local state = { panel_buf = nil, panel_win = nil, file_buf = nil, path = nil, entries = {}, shown = nil }
@@ -127,6 +128,17 @@ local function timeline(path, b)
   return list
 end
 
+-- text cut or padded to w cells (tabs as two spaces)
+local function fit(s, w)
+  s = s:gsub("\t", "  ")
+  if vim.fn.strdisplaywidth(s) > w then
+    local n = w - 1
+    while n > 0 and vim.fn.strdisplaywidth(vim.fn.strcharpart(s, 0, n)) > w - 1 do n = n - 1 end
+    s = vim.fn.strcharpart(s, 0, n) .. "…"
+  end
+  return s .. (" "):rep(math.max(0, w - vim.fn.strdisplaywidth(s)))
+end
+
 -- ── the file: what changed since an entry (added lines coloured, removed ones shown where they were) ──
 function M.clear()
   if state.file_buf and vim.api.nvim_buf_is_valid(state.file_buf) then
@@ -144,62 +156,104 @@ function M.show(i)
   local old = e.cached or ""
   local old_lines = vim.split(old, "\n", { plain = true })
   local count = vim.api.nvim_buf_line_count(b)
+  local boxes = M.config.style == "boxes"
+  local border = "FloatBorder"
+  local new_lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+  -- a box's inner width: its longest line, within the file's window
+  local win_w = state.file_win and vim.api.nvim_win_is_valid(state.file_win) and vim.api.nvim_win_get_width(state.file_win) or 80
+  local function inner(sa, ca, sb, cb)
+    local w = 20
+    for l = sa, sa + ca - 1 do w = math.max(w, vim.fn.strdisplaywidth(old_lines[l] or "") + 2) end
+    for l = sb, sb + cb - 1 do w = math.max(w, vim.fn.strdisplaywidth(new_lines[l] or "")) end
+    return math.min(w, math.max(20, win_w - 14))
+  end
+  local function put(row, rows, above)
+    vim.api.nvim_buf_set_extmark(b, ns, math.max(0, math.min(row, count) - 1), 0, { virt_lines = rows, virt_lines_above = above })
+  end
   for _, h in ipairs(vim.diff(old, buf_text(b), { result_type = "indices" }) or {}) do
     local sa, ca, sb, cb = h[1], h[2], h[3], h[4]
+    local W = inner(sa, ca, sb, cb)
     for l = sb, sb + cb - 1 do
       if l >= 1 and l <= count then
-        vim.api.nvim_buf_set_extmark(b, ns, l - 1, 0, { line_hl_group = "DiffAdd", sign_text = "+", sign_hl_group = "DiffAdd" })
+        vim.api.nvim_buf_set_extmark(b, ns, l - 1, 0, { line_hl_group = "DiffAdd", sign_text = boxes and "│" or "+", sign_hl_group = boxes and border or "DiffAdd" })
       end
     end
-    if ca > 0 then
-      local rows = {}
-      for l = sa, sa + ca - 1 do rows[#rows + 1] = { { "- " .. (old_lines[l] or ""), "DiffDelete" } } end
-      -- above the first new line of the change; after line sb when the change only removed
-      if cb > 0 then
-        vim.api.nvim_buf_set_extmark(b, ns, math.min(sb, count) - 1, 0, { virt_lines = rows, virt_lines_above = true })
-      elseif sb == 0 then
-        vim.api.nvim_buf_set_extmark(b, ns, 0, 0, { virt_lines = rows, virt_lines_above = true })
-      else
-        vim.api.nvim_buf_set_extmark(b, ns, math.min(sb, count) - 1, 0, { virt_lines = rows })
-      end
+    local rows = {}
+    if boxes then
+      local label = (" −%d +%d "):format(ca, cb)
+      rows[1] = { { "╭─", border }, { label, "Title" }, { ("─"):rep(math.max(0, W + 1 - vim.fn.strdisplaywidth(label))) .. "╮", border } }
+    end
+    for l = sa, sa + ca - 1 do
+      local t = "- " .. (old_lines[l] or "")
+      rows[#rows + 1] = boxes and { { "│ ", border }, { fit(t, W), "DiffDelete" }, { " │", border } } or { { t, "DiffDelete" } }
+    end
+    local bottom = { { "╰" .. ("─"):rep(W + 2) .. "╯", border } }
+    if cb > 0 then
+      -- the removed lines above the new ones; in boxes, the box closes under the last new line
+      if boxes and ca > 0 then rows[#rows + 1] = { { "├" .. ("┄"):rep(W + 2) .. "┤", border } } end
+      if #rows > 0 then put(sb, rows, true) end
+      if boxes then put(sb + cb - 1, { bottom }, false) end
+    elseif #rows > 0 then
+      if boxes then rows[#rows + 1] = bottom end
+      if sb == 0 then put(1, rows, true) else put(sb, rows, false) end
     end
   end
   M.render()
 end
 
--- ── the panel ──
-local function entry_line(e, i)
-  local mark = state.shown == i and "▶ " or "  "
+-- ── the panel: an entry a line or two (plain), or a rounded card (boxes) ──
+local function entry_text(e)
   local what = e.kind == "unsaved" and "unsaved" or e.kind == "save" and "saved" or e.hash
-  local head = ("%s%-9s %-7s +%d −%d"):format(mark, e.kind == "unsaved" and "now" or ago(e.time), what, e.add or 0, e.del or 0)
-  if e.subject then return { head, "    " .. e.subject } end
-  return { head }
+  return ("%-9s %-7s +%d −%d"):format(e.kind == "unsaved" and "now" or ago(e.time), what, e.add or 0, e.del or 0), e.subject
 end
+
+local function kind_hl(e) return e.kind == "unsaved" and "WarningMsg" or e.kind == "commit" and "Identifier" or "Normal" end
 
 function M.render()
   local pb = state.panel_buf
   if not pb or not vim.api.nvim_buf_is_valid(pb) then return end
+  local boxes = M.config.style == "boxes"
   local lines = { "Trail: " .. vim.fn.fnamemodify(state.path or "", ":t"), "" }
+  local hls = {} -- row → { group, from byte, to byte } pieces
+  local function add(text, row_hls, entry)
+    lines[#lines + 1] = text
+    hls[#lines] = row_hls
+    if entry then state.rows[#lines] = entry end
+  end
   state.rows = {}
+  local cw = M.config.width - 6
   for i, e in ipairs(state.entries) do
-    for _, l in ipairs(entry_line(e, i)) do
-      lines[#lines + 1] = l
-      state.rows[#lines] = i
+    local head, sub = entry_text(e)
+    if boxes then
+      local bh = state.shown == i and "Special" or "FloatBorder"
+      local function body(t, g)
+        local s = "│ " .. fit(t, cw) .. " │"
+        add(s, { { bh, 0, #s }, { g, 4, #s - 4 } }, i)
+      end
+      local top = "╭" .. ("─"):rep(cw + 2) .. "╮"
+      add(top, { { bh, 0, #top } }, i)
+      body(head, kind_hl(e))
+      if sub then body(sub, "Comment") end
+      local bot = "╰" .. ("─"):rep(cw + 2) .. "╯"
+      add(bot, { { bh, 0, #bot } }, i)
+    else
+      local s = (state.shown == i and "▶ " or "  ") .. head
+      add(s, { { kind_hl(e), 0, #s } }, i)
+      if sub then add("    " .. sub, { { "Comment", 0, #sub + 4 } }, i) end
     end
   end
   if #state.entries == 0 then lines[#lines + 1] = "  no saves or commits yet" end
   lines[#lines + 1] = ""
-  lines[#lines + 1] = "⏎ show · x clear · q close"
+  lines[#lines + 1] = "⏎ show · m look · x clear · q close"
   vim.bo[pb].modifiable = true
   vim.api.nvim_buf_set_lines(pb, 0, -1, false, lines)
   vim.bo[pb].modifiable = false
   vim.api.nvim_buf_clear_namespace(pb, ns, 0, -1)
   vim.api.nvim_buf_set_extmark(pb, ns, 0, 0, { end_row = 0, end_col = #lines[1], hl_group = "Title" })
-  for row, i in pairs(state.rows) do
-    local e = state.entries[i]
-    local text = lines[row]
-    local hl = text:sub(1, 4) == "    " and "Comment" or (e.kind == "unsaved" and "WarningMsg" or e.kind == "commit" and "Identifier" or "Normal")
-    vim.api.nvim_buf_set_extmark(pb, ns, row - 1, 0, { end_row = row - 1, end_col = #text, hl_group = hl })
+  for row, list in pairs(hls) do
+    for p, h in ipairs(list) do
+      vim.api.nvim_buf_set_extmark(pb, ns, row - 1, h[2], { end_row = row - 1, end_col = h[3], hl_group = h[1], priority = 100 + p })
+    end
   end
   vim.api.nvim_buf_set_extmark(pb, ns, #lines - 1, 0, { end_row = #lines - 1, end_col = #lines[#lines], hl_group = "Comment" })
 end
@@ -227,6 +281,7 @@ local function setup_panel(pb)
   map("p", function() local i = under_cursor() if i then M.show(i) end end, "Trail: show the change")
   map("x", function() M.clear() M.render() end, "Trail: clear the marks")
   map("r", M.refresh, "Trail: refresh")
+  map("m", function() M.config.style = M.config.style == "boxes" and "plain" or "boxes" if state.shown then M.show(state.shown) else M.render() end end, "Trail: boxes or plain")
   map("q", M.close, "Trail: close")
 end
 
@@ -243,12 +298,14 @@ function M.open()
   local path = vim.api.nvim_buf_get_name(b)
   if path == "" then return vim.notify("Trail: this buffer has no file", vim.log.levels.WARN) end
   state.file_buf, state.path = b, vim.fn.fnamemodify(path, ":p")
+  state.file_win = vim.api.nvim_get_current_win()
   vim.cmd((M.config.side == "left" and "topleft" or "botright") .. " vnew")
   -- the split takes effect after this returns in zett (at once in Neovim): the panel is set up after it
   vim.schedule(function()
     state.panel_win = vim.api.nvim_get_current_win()
     state.panel_buf = vim.api.nvim_get_current_buf()
     vim.api.nvim_win_set_width(0, M.config.width)
+    vim.wo.number, vim.wo.relativenumber, vim.wo.signcolumn = false, false, "no"
     setup_panel(state.panel_buf)
     M.refresh()
   end)

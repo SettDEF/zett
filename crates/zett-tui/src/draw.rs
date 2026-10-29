@@ -389,7 +389,9 @@ impl App {
         }
         let (ss, theme) = (&self.ss, &self.theme);
         let hl = Highlighter::new(theme);
-        let (numbers, relative) = (self.numbers, self.relative);
+        // :setlocal (nu, rnu) over the global switch: a side panel without numbers
+        let own = |k: &str, all: bool| match self.docs[di].local.get(k).map(String::as_str) { Some("false") => false, Some("true") => true, _ => all };
+        let (numbers, relative) = (own("number", self.numbers), own("relativenumber", self.relative));
         // this buffer's display settings (settings.rs)
         let (wrap, words, cul, scrolloff, list) = (self.flag(di, "wrap"), self.flag(di, "linebreak"), self.flag(di, "cursorline"), self.num(di, "scrolloff"), self.flag(di, "list"));
         let colorcols: Vec<usize> = self.setting(di, "colorcolumn").split(',').filter_map(|s| s.trim().parse::<usize>().ok()).filter(|&c| c > 0).collect();

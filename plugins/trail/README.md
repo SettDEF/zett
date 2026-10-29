@@ -6,11 +6,12 @@ Pick one and the file shows what changed since then: added lines are marked `+`,
 Runs in zett and in Neovim.
 
 - `:Trail` opens or closes the panel (right side by default)
-- in the panel: `Enter` / `p` show the change since that point, `x` clear the marks, `r` reload, `q` close
+- in the panel: `Enter` / `p` show the change since that point, `m` boxes or plain, `x` clear the marks, `r` reload, `q` close
+- boxes (the default): each change in the file and each entry in the panel in a box with rounded corners; `style = "plain"` for lines only
 - `:TrailClear` takes the marks off the file
 
 ```lua
-require("trail").setup({ side = "right", width = 36, commits = 50, saves = 100 })
+require("trail").setup({ side = "right", width = 36, commits = 50, saves = 100, style = "boxes" })
 ```
 
 Saves are kept in `stdpath("state")/trail/`, one folder per file, the newest 100 per file.
