@@ -770,6 +770,11 @@ impl Engine {
         })?;
         z.set("job", job)?;
         crate::wasm::register(lua, &z)?;
+        // vimregex(pattern, icase): a Vim pattern compiled (zett_edit's engine) → userdata with :find(text, from) → s, e (bytes, e
+        // past the end); vim.regex builds match_str / match_line on it
+        z.set("vimregex", lua.create_function(|_, (p, icase): (String, Option<bool>)| {
+            zett_edit::vimre::compile(&p, icase.unwrap_or(false), false).map(VimRe).map_err(mlua::Error::runtime)
+        })?)?;
         // zett.hrtime(): nanoseconds on a monotonic clock (vim.uv.hrtime; os.clock is CPU time)
         let t0 = std::time::Instant::now();
         z.set("hrtime", lua.create_function(move |_, ()| Ok(t0.elapsed().as_nanos() as i64))?)?;
@@ -1376,4 +1381,15 @@ pub(crate) fn poll_jobs(lua: &mlua::Lua, st: &Rc<RefCell<super::State>>, errors:
         }
     }
     any
+}
+
+/// A compiled Vim pattern for Lua (vim.regex).
+pub(crate) struct VimRe(zett_edit::vimre::VimRegex);
+impl mlua::UserData for VimRe {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(m: &mut M) {
+        m.add_method("find", |_, r, (s, from): (mlua::String, Option<usize>)| {
+            let s = String::from_utf8_lossy(&s.as_bytes()).into_owned();
+            Ok(match r.0.find_at(&s, from.unwrap_or(0).min(s.len())) { Some((a, b)) => (Some(a), Some(b)), None => (None, None) })
+        });
+    }
 }

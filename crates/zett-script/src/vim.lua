@@ -4052,3 +4052,124 @@ if not rawget(vim, "base64") then
     end,
   }
 end
+
+-- vim.glob: LSP's file-watch patterns (**/*.rs, src/{a,b}/*.[ch]). Neovim builds an LPeg pattern; zett a
+-- regex with the same :match(path) (the end position + 1, or nil)
+if not rawget(vim, "glob") then
+  local function to_re(g)
+    local out, i, depth = { "\\v^" }, 1, 0
+    while i <= #g do
+      local c, two = g:sub(i, i), g:sub(i, i + 2)
+      if two == "**/" then out[#out + 1] = "(.*/)?" i = i + 3
+      elseif g:sub(i, i + 1) == "**" then out[#out + 1] = ".*" i = i + 2
+      elseif c == "*" then out[#out + 1] = "[^/]*" i = i + 1
+      elseif c == "?" then out[#out + 1] = "[^/]" i = i + 1
+      elseif c == "{" then depth = depth + 1 out[#out + 1] = "(" i = i + 1
+      elseif c == "}" and depth > 0 then depth = depth - 1 out[#out + 1] = ")" i = i + 1
+      elseif c == "," and depth > 0 then out[#out + 1] = "|" i = i + 1
+      elseif c == "[" then
+        local e = g:find("]", i + 1, true)
+        if not e then out[#out + 1] = "\\[" i = i + 1
+        else
+          local inner = g:sub(i + 1, e - 1):gsub("^!", "^")
+          out[#out + 1] = "[" .. inner .. "]" i = e + 1
+        end
+      else
+        out[#out + 1] = c:match("[%w/_ ]") and c or ("\\" .. c)
+        i = i + 1
+      end
+    end
+    out[#out + 1] = "$"
+    return table.concat(out)
+  end
+  vim.glob = {
+    to_lpeg = function(pattern)
+      local re = vim.regex(to_re(pattern))
+      return setmetatable({ pattern = pattern }, { __index = {
+        match = function(_, s) local a, b = re:match_str(s) if a then return b + 1 end return nil end,
+      } })
+    end,
+    _to_regex = to_re,
+  }
+end
+
+-- vim.health: what a plugin's health.lua reports (:checkhealth gathers them)
+if not rawget(vim, "health") then
+  local report = {}
+  local function add(kind, msg, advice)
+    report[#report + 1] = { kind = kind, msg = msg }
+    for _, a in ipairs(type(advice) == "table" and advice or advice and { advice } or {}) do report[#report + 1] = { kind = "advice", msg = a } end
+  end
+  vim.health = {
+    start = function(name) report[#report + 1] = { kind = "start", msg = name } end,
+    ok = function(m) add("ok", m) end,
+    info = function(m) add("info", m) end,
+    warn = function(m, a) add("warn", m, a) end,
+    error = function(m, a) add("error", m, a) end,
+  }
+  -- every lua/<plugin>/health.lua (or health/init.lua) on the runtime path: its check(), as rows for :checkhealth
+  function vim._zett_health()
+    local rows, seen = {}, {}
+    local files = vim.list_extend(vim.api.nvim_get_runtime_file("lua/*/health.lua", true), vim.api.nvim_get_runtime_file("lua/*/health/init.lua", true))
+    for _, f in ipairs(files) do
+      local mod = f:match("lua/([^/]+)/health") .. ".health"
+      if not seen[mod] and mod ~= "vim.health" then
+        seen[mod] = true
+        report = {}
+        -- the file found, loaded as it is (require may not reach a folder only on 'runtimepath')
+        local ok, m = pcall(require, mod)
+        if not ok then ok, m = pcall(dofile, f) end
+        if ok and type(m) == "table" and type(m.check) == "function" then
+          local done, err = pcall(m.check)
+          if not done then add("error", "check() failed: " .. tostring(err)) end
+        elseif not ok then add("error", tostring(m)) end
+        rows[#rows + 1] = { "── " .. mod:gsub("%.health$", ""), "" }
+        for _, r in ipairs(report) do
+          rows[#rows + 1] = { ({ start = "  ##", ok = "  ✔ ok", info = "  · info", warn = "  ⚠ warn", error = "  ✖ error", advice = "      →" })[r.kind], r.msg }
+        end
+      end
+    end
+    return rows
+  end
+end
+
+-- vim.regex(pattern): a Vim pattern (magic, \c \v \zs …); match_str(s) → start, end (0-based bytes) or nil;
+-- match_line(buf, line, start, end) on a buffer's line (0-based, as Neovim)
+function vim.regex(pattern)
+  local re = z.vimregex(pattern, vim.o.ignorecase and not (vim.o.smartcase and pattern:find("%u")) or false)
+  local o = {}
+  function o:match_str(s)
+    local a, b = re:find(s, 0)
+    if a then return a, b end
+    return nil
+  end
+  function o:match_line(buf, line, s, e)
+    local l = vim.api.nvim_buf_get_lines(buf, line, line + 1, false)[1] or ""
+    local part = l:sub((s or 0) + 1, e)
+    local a, b = re:find(part, 0)
+    if a then return a, b end
+    return nil
+  end
+  return o
+end
+
+-- nvim_get_runtime_file(name, all): `name` (with * and **) under every 'runtimepath' folder, the config folder
+-- and each start package (config and data pack/*/start/*), as Neovim searches; the first only unless `all`
+api.nvim_get_runtime_file = function(name, all)
+  local dirs, seen, out = {}, {}, {}
+  local function add(d) if d and d ~= "" and not seen[d] then seen[d] = true dirs[#dirs + 1] = d end end
+  local cfg = type(z.config_dir) == "function" and z.config_dir() or tostring(z.config_dir or vim.fn.stdpath("config"))
+  for d in tostring(vim.o.runtimepath or ""):gmatch("[^,]+") do add(vim.fn.expand(d)) end
+  add(cfg)
+  for _, base in ipairs({ cfg, vim.fn.stdpath("data") .. "/site" }) do
+    for _, p in ipairs(vim.fn.glob(base .. "/pack/*/start/*", false, true)) do add(p) end
+  end
+  for _, d in ipairs(dirs) do
+    for _, f in ipairs(vim.fn.glob(d .. "/" .. name, false, true)) do
+      out[#out + 1] = f
+      if not all then return out end
+    end
+  end
+  return out
+end
+rawset(vim.fn, "nvim_get_runtime_file", api.nvim_get_runtime_file)

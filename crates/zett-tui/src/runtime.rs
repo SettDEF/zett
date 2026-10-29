@@ -891,3 +891,24 @@ mod wasm_plugin_tests {
         assert!(app.docs[app.cur].ed.text().starts_with("{\n  \"a\": 1,"), "{:?}", app.docs[app.cur].ed.text());
     }
 }
+
+#[cfg(test)]
+mod glob_health_tests {
+    #[test]
+    fn glob_matches_and_checkhealth_runs_plugin_checks() {
+        let base = std::env::temp_dir().join(format!("zett-health-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("lua/myplug")).unwrap();
+        std::fs::write(base.join("lua/myplug/health.lua"), "return { check = function() vim.health.start('setup') vim.health.ok('all good') vim.health.warn('old thing', { 'update it' }) end }").unwrap();
+        let mut app = crate::App::new(Vec::new());
+        app.command(&format!("set runtimepath+={}", base.display()));
+        let get = |app: &mut crate::App, e: &str| app.engine.eval(e).map(|r| r.0).unwrap_or_else(|x| x);
+        let g = get(&mut app, r#"(function() local g = vim.glob.to_lpeg("**/*.{rs,toml}") local n = vim.glob.to_lpeg("src/[!t]*.lua") return table.concat({ tostring(g:match("src/a/main.rs")), tostring(g:match("Cargo.toml")), tostring(g:match("src/main.c")), tostring(n:match("src/x.lua")), tostring(n:match("src/t.lua")) }, " ") end)()"#);
+        assert_eq!(g, "14 11 nil 10 nil");
+        app.command("checkhealth");
+        let rows = match &app.popup { Some(crate::Popup::Help(_, r)) => r.clone(), _ => Vec::new() };
+        let text: Vec<String> = rows.iter().map(|(a, b)| format!("{a} {b}")).collect();
+        let _ = std::fs::remove_dir_all(&base);
+        assert!(text.iter().any(|l| l.contains("── myplug")), "{text:?}");
+        assert!(text.iter().any(|l| l.contains("✔ ok all good")) && text.iter().any(|l| l.contains("→ update it")), "{text:?}");
+    }
+}

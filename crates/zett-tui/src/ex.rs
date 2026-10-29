@@ -835,6 +835,10 @@ impl App {
             rows.push((format!("{} {tool}", if have(tool) { "✔" } else { "–" }), why.to_string()));
         }
         rows.push(("terminal".into(), std::env::var("TERM_PROGRAM").unwrap_or_else(|_| std::env::var("TERM").unwrap_or_default())));
+        // the plugins' own checks (lua/*/health.lua, vim.health), as in Neovim
+        if let Ok((text, _)) = self.engine.eval("(function() local o = {} for _, r in ipairs(vim._zett_health()) do o[#o + 1] = r[1] .. '\\t' .. r[2] end return table.concat(o, '\\n') end)()") {
+            rows.extend(text.lines().filter_map(|l| l.split_once('\t')).map(|(a, b)| (a.to_string(), b.to_string())));
+        }
         self.popup = Some(Popup::Help("checkhealth".into(), rows));
     }
 }
