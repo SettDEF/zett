@@ -12,6 +12,7 @@ zett-edit.workspace = true
 zett-script.workspace = true
 zett-lsp = { path = "../zett-lsp" }
 ratatui = "0.29"
+pulldown-cmark = { version = "0.13", default-features = false }
 fancy-regex = "0.16"
 tree-sitter = "0.25"
 libloading = "0.8"

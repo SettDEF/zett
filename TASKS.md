@@ -106,6 +106,9 @@ F. special views (2026-10-29, viewer.rs)
   the window in zash, kitty, ghostty, wezterm (Kitty graphics, after the synchronized update), fitted and centred;
   n/p/Space/Backspace/G/Home pages, +/-/0 zoom, q closes; typing changes nothing
 - [x] image-mode: PNG, JPEG, GIF, WebP, BMP the same way
+- [x] Markdown rendered (mdview.rs, :MarkdownView, markdown-view-mode, C-c C-v): headings, emphasis without its markers,
+  bullets, numbers, checkboxes (x ticks one in the source), quotes, code coloured by its language, tables, rules,
+  pictures; zash draws headings large, code in panels, tables as cards, pictures inline; e / Enter / q back at that line
 - [ ] proced (processes, k kills), hexl (hex view/edit), wdired (rename by editing names), eww (a text web browser)
 A. editing (zett-edit textops.rs, pure, tested)
 - [x] fill-paragraph M-q (zett.opt.fill_column; list and comment prefixes kept), sort-lines, delete-duplicate-lines,

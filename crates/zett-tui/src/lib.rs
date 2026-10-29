@@ -50,6 +50,7 @@ mod inputmethod;
 mod changelog;
 mod vimscript;
 mod viewer;
+mod mdview;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -473,6 +474,13 @@ struct App {
     /// PDFs and pictures open as views (viewer.rs), by buffer name; what of them is on the screen
     pub(crate) views: std::collections::HashMap<String, viewer::View>,
     shown: viewer::Shown,
+    /// Markdown buffers shown rendered (mdview.rs), by name; the source line to bring into view; what this frame
+    /// asks zash to draw over them, and what was last sent
+    pub(crate) md: std::collections::HashMap<String, mdview::State>,
+    md_goto_src: Option<usize>,
+    md_hints: Vec<String>,
+    md_pics: Vec<(PathBuf, Rect)>,
+    md_sent: mdview::Sent,
     /// the dashboard shows (no file yet) and its chosen button
     dash: bool,
     dash_sel: usize,
@@ -854,6 +862,11 @@ impl App {
             win_rects: Vec::new(),
             views: Default::default(),
             shown: Default::default(),
+            md: Default::default(),
+            md_goto_src: None,
+            md_hints: Vec::new(),
+            md_pics: Vec::new(),
+            md_sent: Default::default(),
             dash: false,
             dash_sel: 0,
             last_doc: None,
@@ -1289,6 +1302,7 @@ impl App {
             // a PDF or picture view: its page over its window (Kitty graphics), after the update ends: zash places
             // a picture at once but holds the update's cursor moves back until then
             self.view_paint();
+            self.md_paint();
             // InsertEnter / InsertLeave, and VimEnter on the first frame (autocommands)
             let m = self.docs[self.cur].ed.mode();
             if self.last_mode != Some(m) {

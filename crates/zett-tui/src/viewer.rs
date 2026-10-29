@@ -291,3 +291,30 @@ mod view_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// Pictures can be drawn here (for mdview.rs too).
+pub(crate) fn graphics_on() -> bool {
+    graphics()
+}
+
+/// A picture file drawn into `area` (its shape kept, centred) as image `id`: the escapes, or None when it cannot be read.
+pub(crate) fn picture_escape(path: &Path, area: Rect, id: u32) -> Option<String> {
+    let (cw, ch) = ratatui::crossterm::terminal::window_size().ok().filter(|s| s.width > 0 && s.columns > 0).map(|s| (s.width as f32 / s.columns as f32, s.height as f32 / s.rows as f32)).unwrap_or((9.0, 18.0));
+    let v = View { path: path.to_path_buf(), pdf: false, page: 1, pages: 1, zoom: 1.0 };
+    let png = render(&v, (area.width as f32 * cw) as u32)?;
+    let (pw, ph) = png_size(&png)?;
+    let (cols, rows) = fit(pw, ph, area, cw, ch, 1.0);
+    let data = b64(&png);
+    let mut out = format!("\x1b7\x1b[{};{}H", area.y + 1, area.x + 1 + (area.width - cols) / 2);
+    let chunks: Vec<&str> = data.as_bytes().chunks(4096).map(|c| std::str::from_utf8(c).unwrap_or("")).collect();
+    for (i, c) in chunks.iter().enumerate() {
+        let more = u8::from(i + 1 < chunks.len());
+        if i == 0 {
+            out.push_str(&format!("\x1b_Ga=T,f=100,t=d,i={id},q=2,C=1,c={cols},r={rows},m={more};{c}\x1b\\"));
+        } else {
+            out.push_str(&format!("\x1b_Gm={more};{c}\x1b\\"));
+        }
+    }
+    out.push_str("\x1b8");
+    Some(out)
+}

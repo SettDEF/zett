@@ -967,6 +967,8 @@ impl App {
             // setcmdline(text): the : line (open) holds this; histadd(":", line): the history gets it
             "setCmdline" => self.cmdline = Some(arg.to_string()),
             "histAdd" => self.remember_cmd(arg.to_string()),
+            // markdown-view-mode, :MarkdownView: this buffer rendered, or its source again (mdview.rs)
+            "mdView" => self.md_toggle(),
             "toggleSides" => {
                 self.sides_hidden = !self.sides_hidden;
                 if self.sides_hidden {

@@ -1050,3 +1050,8 @@ alias("apropos-value", "apropos")
 ask("calculator", "Work out an expression (+ - * / %, functions like sqrt, pow)", "Calc: \tex:echo {1}")
 alias("calc", "calculator")
 ex("calendar", "Three months of the calendar", "!cal -3")
+
+-- Markdown rendered in the window (mdview.rs): C-c C-v as markdown-mode's preview key
+z.command("markdown-view-mode", function() z.ui("mdView") end, { desc = "Show this Markdown buffer rendered (headings, lists, code, tables, pictures), or its source again" })
+alias("markdown-preview", "markdown-view-mode")
+map("<C-c><C-v>", "markdown-view-mode")

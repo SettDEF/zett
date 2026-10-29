@@ -307,6 +307,15 @@ impl App {
                 }
             }
         }
+        // Markdown shown rendered (mdview.rs): drawn over the window's text, its status line kept
+        for (id, r) in self.win_rects.clone() {
+            let Some(Some(w)) = self.wins.get(id) else { continue };
+            let di = w.doc;
+            if self.docs.get(di).is_some_and(|d| self.md.contains_key(&d.name)) && r.height > 1 {
+                let a = Rect { height: r.height - 1, ..r };
+                self.md_draw(f, di, a, id == self.focus);
+            }
+        }
         let (line_at, boxed, below) = self.cmd_place(body, cmd);
         self.draw_cmd(f, cmd, line_at, boxed);
         // showcmd: the keys of a command under way, at the right of the last line (showcmdloc=last)

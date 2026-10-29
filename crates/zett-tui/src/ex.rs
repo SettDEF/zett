@@ -510,6 +510,7 @@ impl App {
             }
             "checkt" | "checktime" => self.checktime(),
             "rec" | "recover" => self.recover_cmd(bang),
+            "MarkdownView" | "Mdv" => self.md_toggle(),
             "ene" | "enew" => {
                     self.doom_ui("newBuffer", "");
                 }

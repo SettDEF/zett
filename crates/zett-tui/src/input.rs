@@ -43,6 +43,10 @@ impl App {
         if self.qr.is_some() && self.minibuf.is_none() {
             return self.qr_key(k);
         }
+        // Markdown shown rendered: its keys (move, tick, back to the source) before either profile's
+        if self.cmdline.is_none() && self.char_for.is_none() && self.keyseq.is_empty() && !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && self.md.contains_key(&self.docs[self.cur].name) && self.md_key(&k) {
+            return;
+        }
         // a PDF or picture view: its own keys (pages, zoom, q) before either profile's
         if self.cmdline.is_none() && self.char_for.is_none() && self.keyseq.is_empty() && !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && self.views.contains_key(&self.docs[self.cur].name) && !matches!(self.docs[self.cur].ed.mode(), Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && self.view_key(&k) {
             return;
