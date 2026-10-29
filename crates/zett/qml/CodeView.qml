@@ -351,12 +351,18 @@ Rectangle {
     Pop {
         visible: cv.comps.length > 0 && input.activeFocus
         x: Math.min(cv.cx, cv.width - width - 8); y: cv.cy + cv.lh + 2
-        width: 340; height: Math.min(260, compCol.implicitHeight + 10)
+        width: 340; height: Math.min(260, cv.comps.length * 26 + 10)
         clip: true
-        Column {
-            id: compCol; x: 5; y: 5; width: parent.width - 10
-            Repeater {
-                model: cv.comps.slice(0, 40)
+        // its own list: the wheel scrolls it (never the editor under it), the selection stays in view
+        ListView {
+            id: compCol; anchors { fill: parent; margins: 5 }
+            clip: true; boundsBehavior: Flickable.StopAtBounds
+            model: cv.comps
+            currentIndex: cv.fv ? cv.fv.compSel : -1
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+            // Settings > Editor > Wheel moves through the completion list (pumwheel); off: the editor scrolls
+            interactive: cv.win.prefs?.pumWheel ?? true
+            WheelHandler { onWheel: (ev) => { if (!(cv.win.prefs?.pumWheel ?? true)) { cv.scrollY = Math.max(0, Math.min(cv.maxTop(), cv.scrollY - ev.angleDelta.y / 120 * cv.lh * 3)); return } compCol.contentY = Math.max(0, Math.min(compCol.contentHeight - compCol.height, compCol.contentY - ev.angleDelta.y / 120 * 26 * 3)) } }
                 delegate: Rectangle {
                     required property var modelData
                     required property int index
@@ -367,7 +373,6 @@ Rectangle {
                         Text { text: modelData.detail ?? ""; color: cv.t.faint; font.family: cv.t.sans; font.pixelSize: 11; elide: Text.ElideRight; width: 140 } }
                     TapHandler { onTapped: cv.takeComp(index) }
                 }
-            }
         }
     }
     Pop {

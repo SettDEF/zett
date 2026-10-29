@@ -42,6 +42,7 @@ pub(crate) const SETTINGS: &[Setting] = &[
     s("statusline", &["stl"], Kind::Text, "", "the status line's format (%f %m %l %c %P %= %#Group# …; empty: zett's mode line)"),
     s("showmode", &["smd"], Kind::Bool, "false", "-- INSERT -- and the like on the last line (the status line shows the mode already)"),
     s("scrolloff", &["so"], Kind::Int, "3", "lines kept above and below the cursor"),
+    s("pumwheel", &[], Kind::Bool, "true", "the mouse wheel over the completion menu moves through it (off: it scrolls the text under it)"),
     s("tabstop", &["ts"], Kind::Int, "4", "columns a tab character takes"),
     s("shiftwidth", &["sw"], Kind::Int, "4", "columns one indent step takes"),
     s("expandtab", &["et"], Kind::Bool, "true", "Tab inserts spaces, to the next indent step"),

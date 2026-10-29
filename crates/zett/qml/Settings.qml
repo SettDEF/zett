@@ -108,6 +108,7 @@ Item {
         { cat: "Editor", key: "keys", label: "Key profile", hint: "Emacs keys type at once; Vim keys start in normal mode (Esc)", type: "choice", options: [["emacs", "Emacs"], ["vim", "Vim"]], def: "emacs" },
         { cat: "Editor", key: "codeLigatures", label: "Ligatures in code", hint: "=> drawn as ⇒ in code blocks and files", type: "choice", options: [[false, "Off"], [true, "On"]], def: false },
         { cat: "Editor", key: "formatOnSave", label: "Format on save", hint: "Ctrl+S in the file editor lets the language server format first", type: "choice", options: [[false, "Off"], [true, "On"]], def: false },
+        { cat: "Editor", key: "pumWheel", label: "Wheel moves through completions", hint: "The mouse wheel over the completion list scrolls the list; off: it scrolls the code under it", type: "choice", options: [[true, "On"], [false, "Off"]], def: true },
         { cat: "Editor", key: "trimOnSave", label: "Trim trailing whitespace", hint: "Ctrl+S takes the spaces at line ends away", type: "choice", options: [[true, "On"], [false, "Off"]], def: true },
         { cat: "Editor", key: "finalNewline", label: "Final newline", hint: "Ctrl+S ends the file with a newline", type: "choice", options: [[true, "On"], [false, "Off"]], def: true },
         { cat: "Editor", key: "autoSave", label: "Auto save", hint: "a file is written a second after the last change", type: "choice", options: [[false, "Off"], [true, "After a second"]], def: false },

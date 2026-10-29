@@ -213,6 +213,11 @@ pub(crate) fn severity_color(s: u8) -> Color {
 }
 
 /// The completion popup in insert mode.
+thread_local! {
+    /// where the completion menu was drawn last (the wheel over it moves through it)
+    pub(crate) static COMP_AT: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+}
+
 pub(crate) struct Comp {
     pub items: Vec<zett_lsp::Item>,
     /// indexes into `items`, filtered by what is typed
@@ -510,6 +515,7 @@ impl App {
         let below = cy + 1 + rows + if framed { 2 } else { 0 } <= area.bottom().saturating_sub(2);
         let y = if below { cy + 1 } else { cy.saturating_sub(rows) };
         let a = Rect { x, y, width: w, height: rows };
+        COMP_AT.with(|c| c.set(Some(a)));
         // pumborder: a frame round the menu (none by default, as Neovim), the items inside it
         let set = match self.setting(self.cur, "pumborder").as_str() {
             "single" => Some(ratatui::symbols::border::PLAIN),

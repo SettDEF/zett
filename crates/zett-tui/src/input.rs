@@ -788,6 +788,17 @@ impl App {
                 self.fx_hover = None;
             }
         }
+        // the wheel over the completion menu moves through the menu, not the text under it
+        if matches!(m.kind, MouseEventKind::ScrollDown | MouseEventKind::ScrollUp) && self.comp.is_some() && self.flag(self.cur, "pumwheel") {
+            let over = crate::lsp::COMP_AT.with(|c| c.get()).is_some_and(|r| m.column >= r.x && m.column < r.x + r.width && m.row >= r.y && m.row < r.y + r.height);
+            if over {
+                if let Some(c) = self.comp.as_mut() {
+                    let n = c.shown.len().max(1);
+                    c.sel = if m.kind == MouseEventKind::ScrollDown { (c.sel + 1).min(n - 1) } else { c.sel.saturating_sub(1) };
+                }
+                return;
+            }
+        }
         self.mouse_at = (m.column, m.row);
         if self.panel_mouse(&m) {
             return;
