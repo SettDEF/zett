@@ -5,7 +5,7 @@ local M = {}
 M.config = { side = "right", width = 36, commits = 50, saves = 100, style = "boxes" }
 
 local ns = vim.api.nvim_create_namespace("trail")
-local state = { panel_buf = nil, panel_win = nil, file_buf = nil, path = nil, entries = {}, shown = nil }
+local state = { panel_buf = nil, panel_win = nil, file_buf = nil, path = nil, entries = {}, shown = nil, rows = {}, hunks = {}, hunk_rows = {} }
 
 -- ── where saves are kept: one folder per file, a snapshot per save ──
 local function hash(s)
@@ -96,6 +96,18 @@ local function stat(old, new)
   return add, del
 end
 
+-- the function or heading a hunk sits under: the closest line at or above `line` that names one
+local name_pats = { "^%s*local%s+function%s+([%w_.:]+)", "^%s*function%s+([%w_.:]+)", "^%s*fn%s+([%w_]+)", "^%s*def%s+([%w_]+)", "^#+%s+(.+)" }
+local function near(lines, line)
+  for l = math.min(line, #lines), 1, -1 do
+    for _, p in ipairs(name_pats) do
+      local n = lines[l]:match(p)
+      if n then return n end
+    end
+  end
+  return "top"
+end
+
 local function ago(t)
   local d = os.time() - t
   if d < 60 then return "now" end
@@ -145,6 +157,7 @@ function M.clear()
     vim.api.nvim_buf_clear_namespace(state.file_buf, ns, 0, -1)
   end
   state.shown = nil
+  state.hunks = {}
 end
 
 function M.show(i)
@@ -172,6 +185,7 @@ function M.show(i)
   end
   for _, h in ipairs(vim.diff(old, buf_text(b), { result_type = "indices" }) or {}) do
     local sa, ca, sb, cb = h[1], h[2], h[3], h[4]
+    state.hunks[#state.hunks + 1] = { h = { old_start = sa, old_count = ca, new_start = sb, new_count = cb }, name = near(new_lines, math.max(sb, 1)) }
     local W = inner(sa, ca, sb, cb)
     for l = sb, sb + cb - 1 do
       if l >= 1 and l <= count then
@@ -203,6 +217,25 @@ function M.show(i)
   M.render()
 end
 
+-- restore one hunk: its current lines become the entry's old lines (only that hunk changes)
+function M.restore(i, h)
+  local e, b = state.entries[i], state.file_buf
+  if not e or not b or not vim.api.nvim_buf_is_valid(b) then return end
+  -- the hunk must still be there: the file may have changed since the entry was shown
+  local found = false
+  for _, x in ipairs(vim.diff(e.cached or "", buf_text(b), { result_type = "indices" }) or {}) do
+    if x[1] == h.old_start and x[2] == h.old_count and x[3] == h.new_start and x[4] == h.new_count then found = true end
+  end
+  if not found then return vim.notify("Trail: that change is gone, press Enter on the entry again", vim.log.levels.WARN) end
+  local old_lines = vim.split(e.cached or "", "\n", { plain = true })
+  local repl = {}
+  for l = h.old_start, h.old_start + h.old_count - 1 do repl[#repl + 1] = old_lines[l] end
+  -- a pure deletion (new_count 0) has its start as the line it goes after
+  local first = h.new_count == 0 and h.new_start or h.new_start - 1
+  vim.api.nvim_buf_set_lines(b, first, first + h.new_count, false, repl)
+  M.show(i)
+end
+
 -- ── the panel: an entry a line or two (plain), or a rounded card (boxes) ──
 local function entry_text(e)
   local what = e.kind == "unsaved" and "unsaved" or e.kind == "save" and "saved" or e.hash
@@ -217,12 +250,14 @@ function M.render()
   local boxes = M.config.style == "boxes"
   local lines = { "Trail: " .. vim.fn.fnamemodify(state.path or "", ":t"), "" }
   local hls = {} -- row → { group, from byte, to byte } pieces
-  local function add(text, row_hls, entry)
+  local function add(text, row_hls, entry, hunk)
     lines[#lines + 1] = text
     hls[#lines] = row_hls
     if entry then state.rows[#lines] = entry end
+    if hunk then state.hunk_rows[#lines] = hunk end
   end
   state.rows = {}
+  state.hunk_rows = {}
   local cw = M.config.width - 6
   for i, e in ipairs(state.entries) do
     local head, sub = entry_text(e)
@@ -243,10 +278,20 @@ function M.render()
       add(s, { { kind_hl(e), 0, #s } }, i)
       if sub then add("    " .. sub, { { "Comment", 0, #sub + 4 } }, i) end
     end
+    -- the shown entry's hunks, one row each: where it starts, what it sits under, its size
+    if state.shown == i then
+      for _, hk in ipairs(state.hunks) do
+        local h = hk.h
+        local s = ("    L%d %s −%d +%d"):format(math.max(1, h.new_start), hk.name, h.old_count, h.new_count)
+        add(s, { { "Normal", 0, #s } }, nil, { entry = i, hunk = h })
+      end
+    end
   end
   if #state.entries == 0 then lines[#lines + 1] = "  no saves or commits yet" end
   lines[#lines + 1] = ""
-  lines[#lines + 1] = "⏎ show · m look · x clear · q close"
+  local help = #lines + 1
+  lines[help] = "⏎ show · r restore"
+  lines[help + 1] = "m look · x clear · q close"
   vim.bo[pb].modifiable = true
   vim.api.nvim_buf_set_lines(pb, 0, -1, false, lines)
   vim.bo[pb].modifiable = false
@@ -257,7 +302,9 @@ function M.render()
       vim.api.nvim_buf_set_extmark(pb, ns, row - 1, h[2], { end_row = row - 1, end_col = h[3], hl_group = h[1], priority = 100 + p })
     end
   end
-  vim.api.nvim_buf_set_extmark(pb, ns, #lines - 1, 0, { end_row = #lines - 1, end_col = #lines[#lines], hl_group = "Comment" })
+  for r = help, #lines do
+    vim.api.nvim_buf_set_extmark(pb, ns, r - 1, 0, { end_row = r - 1, end_col = #lines[r], hl_group = "Comment" })
+  end
 end
 
 function M.refresh()
@@ -267,9 +314,11 @@ function M.refresh()
   if shown and state.entries[shown] then M.show(shown) else M.clear() M.render() end
 end
 
-local function under_cursor()
-  local row = vim.api.nvim_win_get_cursor(0)[1]
-  return state.rows and state.rows[row]
+-- Enter on a hunk row: the file's window goes to the hunk's first line
+local function jump(h)
+  local w, b = state.file_win, state.file_buf
+  if not (w and vim.api.nvim_win_is_valid(w) and b and vim.api.nvim_buf_is_valid(b)) then return end
+  vim.api.nvim_win_set_cursor(w, { math.min(math.max(1, h.new_start), vim.api.nvim_buf_line_count(b)), 0 })
 end
 
 local function setup_panel(pb)
@@ -279,10 +328,19 @@ local function setup_panel(pb)
   vim.bo[pb].filetype = "trail"
   pcall(vim.api.nvim_buf_set_name, pb, "trail://" .. (state.path or ""))
   local function map(k, f, desc) vim.keymap.set("n", k, f, { buffer = pb, nowait = true, desc = desc }) end
-  map("<CR>", function() local i = under_cursor() if i then M.show(i) end end, "Trail: show the change")
-  map("p", function() local i = under_cursor() if i then M.show(i) end end, "Trail: show the change")
+  local function at_cursor() return vim.api.nvim_win_get_cursor(0)[1] end
+  local function enter()
+    local row = at_cursor()
+    if state.hunk_rows[row] then return jump(state.hunk_rows[row].hunk) end
+    if state.rows[row] then M.show(state.rows[row]) end
+  end
+  map("<CR>", enter, "Trail: show the change, or jump to a hunk")
+  map("p", enter, "Trail: show the change, or jump to a hunk")
   map("x", function() M.clear() M.render() end, "Trail: clear the marks")
-  map("r", M.refresh, "Trail: refresh")
+  map("r", function()
+    local hk = state.hunk_rows[at_cursor()]
+    if hk then M.restore(hk.entry, hk.hunk) else M.refresh() end
+  end, "Trail: restore a hunk, or reload")
   map("m", function() M.config.style = M.config.style == "boxes" and "plain" or "boxes" if state.shown then M.show(state.shown) else M.render() end end, "Trail: boxes or plain")
   map("q", M.close, "Trail: close")
 end
