@@ -4,8 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 say() { printf '\033[1;34m::\033[0m %s\n' "$*"; }
-say "building (release, low priority)"
-nice -n 19 cargo build --release --quiet -p zett -j "${JOBS:-4}"
+say "building (release, all cores)"
+cargo build --release --quiet -p zett ${JOBS:+-j "$JOBS"}
 install -Dm755 "${CARGO_TARGET_DIR:-target}/release/zett" "$HOME/.local/bin/zett"
 icons="$HOME/.local/share/icons/hicolor"
 install -Dm644 packaging/zett.svg "$icons/scalable/apps/zett.svg"

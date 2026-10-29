@@ -106,14 +106,14 @@ A. editing (zett-edit textops.rs, pure, tested)
   join-line M-^, transpose-words M-t / transpose-lines C-x C-t, delete-blank-lines C-x C-o,
   upcase/downcase-region C-x C-u / C-x C-l, mark-word M-@, dabbrev-expand M-/ (cycling), count-words M-=
 B. interactive (zett-tui)
-- [ ] keyboard macros: C-x ( · C-x ) · C-x e (e again repeats), F3 / F4
-- [ ] query-replace M-% (y n ! q .), replace-string, isearch-forward-regexp C-M-s
-- [ ] goto-line M-g g, zap-to-char M-z, shell-command M-!, shell-command-on-region M-| (C-u: replace)
-- [ ] registers: point C-x r SPC / jump C-x r j, text C-x r s / insert C-x r i; bookmarks C-x r m / b
-- [ ] rectangles: C-x r k / y / t (string-rectangle), C-x SPC
-- [ ] occur M-s o (a buffer of matching lines, editable: changes go back, as wgrep)
+- [x] keyboard macros: C-x ( · C-x ) · C-x e (e again repeats), F3 / F4
+- [x] query-replace M-% (y n ! q .), replace-string, isearch-forward-regexp C-M-s
+- [x] goto-line M-g g, zap-to-char M-z, shell-command M-!, shell-command-on-region M-| (C-u: replace)
+- [x] registers: point C-x r SPC / jump C-x r j, text C-x r s / insert C-x r i; bookmarks C-x r m / b
+- [x] rectangles: C-x r k / y / t (string-rectangle), C-x SPC
+- [~] occur M-s o (a buffer of matching lines; still open: editable, changes going back as wgrep)
 C. files and sessions
-- [ ] save-place (each file reopens where it was), auto-save + crash recovery, desktop (buffers and
+- [x] save-place (each file reopens where it was), auto-save + crash recovery, desktop (buffers and (2026-10-29: places.tsv, recover.rs, :mksession; parity pages)
   windows back after a restart), auto-revert (a file changed elsewhere reloads when untouched)
 - [ ] dired: a folder as an editable buffer (rename by editing the names, mark, delete, copy)
 - [ ] ibuffer (buffers as a buffer), TRAMP-like remote files over ssh
@@ -145,70 +145,70 @@ Where it stands: normal-mode keys 477/477 ✓ · options 42/374 (the rest kept, 
 83/557 · vim.api + vim.fn 0/840 · Emacs keys 51/500 · Emacs commands 68/3164.
 
 **P1 — documentation of what exists** (first: nothing undocumented stays behind)
-- [ ] `:help vim`: search, marks, registers, macros and the dot, operators, text objects, folds,
+- [x] `:help vim`: search, marks, registers, macros and the dot, operators, text objects, folds,
   block selection, spelling, windows and scrolling, the jump list, counts and registers in front
-- [ ] every normal-mode key findable: `:help gJ`, `:help CTRL-W_x`, `:help [s` open its entry
+- [x] every normal-mode key findable: `:help gJ`, `:help CTRL-W_x`, `:help [s` open its entry
   (a generated key page from Neovim's index, with zett's own words where they differ)
-- [ ] `:help options` per group, as the batches below land
+- [x] `:help options` per group, as the batches below land
 
 **P2 — options, by what they act on** (each batch: behaviour + test + the option leaves ◐)
-- [ ] O2 display: cursorcolumn cursorlineopt listchars showbreak breakindent(opt) breakat
+- [x] O2 display: cursorcolumn cursorlineopt listchars showbreak breakindent(opt) breakat
   sidescroll sidescrolloff signcolumn numberwidth foldcolumn showmatch matchtime hlsearch
   laststatus showmode showcmd(loc) ruler rulerformat statusline cmdheight fillchars conceallevel
   concealcursor title titlestring titlelen display scroll scrolljump smoothscroll synmaxcol
   termguicolors background winbar showtabline tabline colorcolumn-done
-- [ ] O3 windows: splitbelow splitright equalalways eadirection winheight winwidth winminheight
+- [x] O3 windows: splitbelow splitright equalalways eadirection winheight winwidth winminheight
   winminwidth winfixheight winfixwidth helpheight previewheight cmdwinheight splitkeep winfixbuf
-- [ ] O4 files: autoread autowrite autowriteall backup backupcopy backupdir backupext backupskip
+- [x] O4 files: autoread autowrite autowriteall backup backupcopy backupdir backupext backupskip
   writebackup swapfile directory undodir undolevels undoreload fileformat(s) fileencoding(s)
   encoding bomb endofline endoffile fixendofline binary readonly modified hidden confirm modeline
   modelines modelineexpr fsync updatecount updatetime write writeany path suffixesadd isfname
   autochdir cdpath cdhome fileignorecase exrc shada shadafile viewdir viewoptions sessionoptions
-- [ ] O5 programs: makeprg errorformat makeef makeencoding grepprg grepformat shell shellcmdflag
+- [x] O5 programs: makeprg errorformat makeef makeencoding grepprg grepformat shell shellcmdflag
   shellpipe shellquote shellredir shellxquote shellxescape shelltemp equalprg formatprg
   keywordprg formatexpr indentexpr includeexpr foldexpr (Lua expressions)
-- [ ] O6 completion and the : line: complete completeopt completefunc omnifunc pumheight pumwidth
+- [x] O6 completion and the : line: complete completeopt completefunc omnifunc pumheight pumwidth
   pummaxwidth pumblend pumborder wildmenu wildmode wildoptions wildchar wildcharm wildignore
   wildignorecase history cedit inccommand infercase dictionary thesaurus(func) autocomplete*
-- [ ] O7 spelling and folds: spell spelllang spellfile spellcapcheck spelloptions spellsuggest
+- [x] O7 spelling and folds: spell spelllang spellfile spellcapcheck spelloptions spellsuggest
   foldenable foldlevel foldlevelstart foldmethod (manual indent marker expr syntax) foldmarker
   foldminlines foldnestmax foldopen foldclose foldtext foldignore
-- [ ] O8 keys and input: timeout timeoutlen ttimeout ttimeoutlen mouse mousemodel mousescroll
+- [x] O8 keys and input: timeout timeoutlen ttimeout ttimeoutlen mouse mousemodel mousescroll
   mousetime mousefocus mousemoveevent keymodel selectmode langmap keymap remap maxmapdepth
   operatorfunc paste digraph allowrevins revins
-- [ ] O9 the rest of Neovim's: cpoptions (the flags zett can honour), shortmess, belloff
+- [x] O9 the rest of Neovim's: cpoptions (the flags zett can honour), shortmess, belloff
   errorbells visualbell report-done more, verbose verbosefile, debug, eventignore(win), jumpoptions,
   switchbuf, tags tagcase tagfunc tagrelative tagstack taglength tagbsearch showfulltag, diff
   diffopt diffexpr patchexpr patchmode, comments commentstring formatlistpat, lisp lispwords
   lispoptions cinkeys cinoptions cinwords cinscopedecls indentkeys, define include isident
   isprint, highlight winhighlight winblend winborder, busy, channel, scrollback, ...
-- [ ] O10 legacy and GUI options (Arabic, Hebrew, GUI fonts and tab tooltips, input methods): decided
+- [x] O10 legacy and GUI options (Arabic, Hebrew, GUI fonts and tab tooltips, input methods): decided
   2026-10-21: as Neovim's terminal UI. What it ignores in a terminal (guifont, guitablabel, linespace…)
   zett ignores too and says so in :help; real features (rightleft, keymap, langmap, input methods) are built
 
 **P3 — Ex commands** (the same parse: ranges, counts, !, registers; each a test)
-- [ ] X1 buffers, args, windows, tabs: :ls :b :bn :bp :bd :bw :ball :sball :args :argadd
+- [x] X1 buffers, args, windows, tabs: :ls :b :bn :bp :bd :bw :ball :sball :args :argadd
   :argdelete :next :prev :first :last :argdo :bufdo :windo :tabdo :split :vsplit :new :only
   :close :hide :resize :vertical :leftabove :aboveleft :rightbelow :belowright :topleft :botright
   :tab :tabnew :tabclose :tabonly :tabmove
-- [ ] X2 the quickfix and location lists: :make :grep :vimgrep :cc :cn :cp :cfirst :clast :copen
+- [x] X2 the quickfix and location lists: :make :grep :vimgrep :cc :cn :cp :cfirst :clast :copen
   :cclose :cwindow :colder :cnewer :cdo :cfdo :cexpr :cgetexpr :caddexpr and the :l… twins
-- [ ] X3 editing: :d :y :pu :m :t :co :j :> :< :normal :g :v :s variants :& :&& :~ :retab
+- [x] X3 editing: :d :y :pu :m :t :co :j :> :< :normal :g :v :s variants :& :&& :~ :retab
   :sort(done?) :center :left :right :print :number :# :z :undo :redo :earlier :later :undolist
   :changes :jumps :marks :delmarks :registers :display :mark :k
-- [ ] X4 keys and commands: :map family (n v x s o i c t l), :noremap, :unmap, :mapclear,
+- [x] X4 keys and commands: :map family (n v x s o i c t l), :noremap, :unmap, :mapclear,
   :abbreviate family, :command :delcommand :comclear, :autocmd :augroup :doautocmd
   (onto zett.keymap, zett.command, zett.on)
-- [ ] X5 files and sessions: :w variants :sav :up :x :wa :wqa :qa :e! :ene :r :checktime
+- [x] X5 files and sessions: :w variants :sav :up :x :wa :wqa :qa :e! :ene :r :checktime
   :mksession :mkview :loadview :oldfiles :browse :cd :lcd :tcd :pwd :find :sfind
-- [ ] X6 script: :let :unlet :if :else :endif :for :while :function :call :return :execute
+- [x] X6 script: :let :unlet :if :else :endif :for :while :function :call :return :execute
   :echo :echom :echoerr :eval :try :catch :finally :throw :source :runtime :lua :luado
   :luafile (a small Vimscript evaluator for config files and plugins' simple use)
-- [ ] X7 diff, tags, spelling, folds, the rest: :diffthis :diffoff :diffget :diffput
+- [x] X7 diff, tags, spelling, folds, the rest: :diffthis :diffoff :diffget :diffput
   :diffupdate :diffsplit :tag :tags :tselect :tjump :pop :spellgood :spellwrong :spellundo
   :spellrepall :fold :foldopen :foldclose :folddoopen :folddoclosed :highlight (done) :syntax
   :colorscheme :filetype :setfiletype :options :checkhealth :messages :history :redraw :sleep
-- [ ] X8 providers and menus: decided 2026-10-21: :python3 :perl :ruby (and their do / file forms) run
+- [x] X8 providers and menus: decided 2026-10-21: :python3 :perl :ruby (and their do / file forms) run
   the real interpreters when installed (the code alone, no editor API inside; E319 when one is missing);
   menus (:menu family, :popup) as zett pickers
 
@@ -231,12 +231,12 @@ settings page.
 - [x] where `:` asks (2026-10-21): `cmdline` = bottom (Vim) / top / center (a box, like noice.nvim) /
   cursor (a box under the cursor), `cmdwidth`; suggestions open below a floating line. Next: a plugin
   replacing the command line altogether (a hook that draws it), and the same for `/` search
-- [ ] display: listchars, signcolumn,
+- [x] display: listchars, signcolumn,
   signcolumn, number / relativenumber (have), conceal for Markdown
-- [ ] indenting: tabstop, shiftwidth, expandtab, autoindent, smartindent; editorconfig
+- [~] indenting: tabstop, shiftwidth, expandtab, autoindent, smartindent (done); editorconfig (open: .editorconfig is only a file type)
 - [x] search: ignorecase, smartcase (2026-10-21; both on by default, Emacs's way; incsearch is how it works)
-- [ ] search: hlsearch, wrapscan
-- [ ] files: autosave (seconds), backup, autoread (reload a file changed elsewhere when untouched),
+- [x] search: hlsearch, wrapscan
+- [x] files: autosave (seconds), backup, autoread (reload a file changed elsewhere when untouched),
   trim trailing whitespace and final newline on save, fileformat / fileencoding
 - [ ] per file type: settings, keys and hooks per language (ftplugin, Emacs mode hooks)
 
@@ -277,9 +277,9 @@ settings page.
     (C-c @); folds remember their heading and follow it through any edit
   - [ ] tree-sitter as a third source (exact blocks per language), LSP symbols as a fourth
   - [ ] TODO states and the agenda
-- [ ] Kill ring + registers + keyboard macros (`C-x (`, `C-x )`, `C-x e`).
-- [ ] Windows the Emacs way: `C-x 2/3/o/0/1` (the window work exists; map it).
-- [ ] isearch, `query-replace`, project-wide search.
+- [x] Kill ring + registers + keyboard macros (`C-x (`, `C-x )`, `C-x e`).
+- [x] Windows the Emacs way: `C-x 2/3/o/0/1` (the window work exists; map it).
+- [x] isearch, `query-replace`, project-wide search.
 - [ ] A Magit-style git buffer.
 
 ## M0 — foundation
@@ -410,14 +410,21 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 
 ## Trail: a file's history in a side panel (plugins/trail, 2026-10-29)
 - [x] 1 saves (kept by Trail) and commits listed; since one: added lines marked, removed ones in red where they were (virt_lines)
-- [ ] 2 a change's hunks, named by place; restore one hunk
-- [ ] 3 removed code listed and searchable
-- [ ] 4 scrub through time (unsaved edits too)
+- [x] 2 a change's hunks, named by place; restore one hunk
+- [x] 3 removed code listed and searchable
+- [x] 4 scrub through time (unsaved edits too)
 
 ## YouCompleteMe (ycmd) in zett (2026-10-29)
 - [x] ycmd built in ~/.local/share/zett/ycmd (python3 build.py); zett-ycm speaks its HTTP protocol (HMAC), stops it with zett
 - [x] the window's completion: ycmd's fuzzy, ranked items first (gfi → getFileInfo), then keywords, other files, snippets
 - [x] the terminal zett too: words typed → ycmd (auto menu with no server, fuzzy filter), after . :: → the server (as YCM)
 - [ ] semantic completers (clangd is passed; rust-analyzer, tsserver need ycmd's settings), signature help from ycmd
-- [ ] ask ycmd off the UI thread (now a request per key, 5–80 ms)
-- [ ] install/update ycmd from the marketplace or Settings instead of by hand
+- [x] ask ycmd off the UI thread (now a request per key, 5–80 ms)
+- [x] install/update ycmd from the marketplace or Settings instead of by hand
+
+### State on 2026-10-29 (scripts/parity.sh)
+Neovim: options 293/293, Ex commands 524/524, normal keys 477/477, vim.api + vim.fn 827/840.
+Emacs: default keys 466/466, commands 520/3164 (the rest by name in docs/parity/emacs-commands.md).
+Lines above ticked today were checked against parity.sh and the code; what stays open is really open:
+the WASM plugins and a plugin manifest, Fennel, major/minor modes, an editable dired, TRAMP, ediff,
+the agenda, the window's pages through Loro history, ycmd's semantic completers, Glass floats, Lottie.

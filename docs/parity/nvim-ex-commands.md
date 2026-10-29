@@ -2,7 +2,7 @@
 
 Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and zett 0.1.0.
 
-523 of 557 ✓ zett's `:` line has it (by its full or short name), 34 — decided against (why in the last column), 0 · not yet.
+524 of 557 ✓ zett's `:` line has it (by its full or short name), 33 — decided against (why in the last column), 0 · not yet.
 
 | | command | written | what it does | |
 |---|---|---|---|---|
@@ -380,7 +380,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `:quitall` | `:quita[ll]` | quit Vim |  |
 | ✓ | `:qall` | `:qa[ll]` | quit Vim |  |
 | ✓ | `:read` | `:r[ead]` | read file into the text |  |
-| — | `:recover` | `:rec[over]` | recover a file from a swap file | swap files: zett keeps every change in its undo history on disk (time travel), not a swap file |
+| ✓ | `:recover` | `:rec[over]` | recover a file from a swap file |  |
 | ✓ | `:redo` | `:red[o]` | redo one undone change |  |
 | ✓ | `:redir` | `:redi[r]` | redirect messages to a file or register |  |
 | ✓ | `:redraw` | `:redr[aw]` | force a redraw of the display |  |
