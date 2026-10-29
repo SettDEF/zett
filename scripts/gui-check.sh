@@ -72,6 +72,11 @@ check core3 core3:core3.rs "grep -q 'core3 word \\[a\\] indented \\[        let 
 check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \"\$(tail -c1 '$W/core4.rs' | od -An -c | tr -d ' ')\" = '\\n' ] && tail -1 '$W/core4.rs' | grep -q tail"
 check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"\\]' \"\$OUT/corewords.log\""
 check corecomp corecomp:core5.rs "grep -q 'corecomp focus true completing true items \\[\"let\"' \"\$OUT/corecomp.log\""
+# YouCompleteMe's engine, when ycmd is built in the data folder: gfi finds getFileInfo (fuzzy)
+if ls ~/.local/share/zett/ycmd/ycm_core* >/dev/null 2>&1; then
+    printf 'function getFileInfo(path) {}\nconst gitFolderInfo = 1\n' > "$W/y.js"
+    check coreycm coreycm:y.js:gfi "grep -q 'getFileInfo|ycm' \"\$OUT/coreycm.log\""
+fi
 check market market:git "grep -q 'zett-probe: market' \"\$OUT/market.log\""
 # QML click tests: each runs next to a copy of the file it tests (qt6 qmltestrunner)
 QT=$(command -v /usr/lib/qt6/bin/qmltestrunner || true)

@@ -958,7 +958,25 @@ impl qobject::CodeDoc {
         }).collect();
         let mut out: Vec<serde_json::Value> = Vec::new();
         let mut seen = std::collections::HashSet::new();
+        // YouCompleteMe's engine first (ycmd, when built): fuzzy (gfi → getFileInfo), ranked; `ext` is the file's path
+        let path = ext.to_string();
+        if path.contains('/') {
+            let head = r.carets[0].head.min(r.rope.len_chars());
+            let line = r.rope.char_to_line(head);
+            let col = r.rope.line(line).slice(..head - r.rope.line_to_char(line)).len_bytes();
+            let state = std::path::PathBuf::from(std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| format!("{}/.local/state", std::env::var("HOME").unwrap_or_default()))).join("zett/ycmd");
+            let text = r.rope.to_string();
+            if let Some(Ok((_, items))) = zett_ycm::with(&state, |y| y.complete(&path, &text, line, col)) {
+                for i in items.into_iter().filter(|i| i.text != p).take(40) {
+                    if !seen.insert(i.text.clone()) { continue }
+                    let detail = if i.kind == "[ID]" || i.kind.is_empty() { "ycm".to_string() } else if i.menu.is_empty() { i.kind.to_lowercase() } else { i.menu.clone() };
+                    out.push(serde_json::json!({ "label": i.text, "insert": i.text, "detail": detail }));
+                }
+            }
+        }
+        let ext = QString::from(std::path::Path::new(&path).extension().and_then(|e| e.to_str()).unwrap_or(&path));
         for (w, from) in zett_tui::keyword_candidates(&p, &r.rope.to_string(), r.carets[0].head, false, &texts, true).into_iter().take(30) {
+            if seen.contains(&w) { continue }
             let detail = if from.is_empty() { "in this file".to_string() } else { format!("in {from}") };
             seen.insert(w.clone());
             out.push(serde_json::json!({ "label": w, "insert": w, "detail": detail }));

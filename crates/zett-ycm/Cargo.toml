@@ -1,0 +1,12 @@
+[package]
+name = "zett-ycm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = "1"
+base64 = "0.22"
+hmac = "0.12"
+sha2 = "0.10"
+libc = "0.2"
