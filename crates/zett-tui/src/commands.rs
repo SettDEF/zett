@@ -354,6 +354,9 @@ impl App {
             let bang = self.bang;
             return self.dired_save(bang);
         }
+        if to.is_none() && self.hexl.contains_key(&self.docs[self.cur].name) {
+            return self.hexl_save();
+        }
         let root = self.root.clone();
         // another file that is there already: only with ! (or writeany)
         if let Some(p) = &to {

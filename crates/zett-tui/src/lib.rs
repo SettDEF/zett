@@ -52,6 +52,7 @@ mod vimscript;
 mod viewer;
 mod mdview;
 mod dired;
+mod hexl;
 mod settings_ui;
 mod proced;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
@@ -486,6 +487,8 @@ struct App {
     md_sent: mdview::Sent,
     /// folders shown as editable listings (dired.rs), by buffer name
     pub(crate) dired: std::collections::HashMap<String, dired::Dired>,
+    /// files shown as hex (hexl.rs): buffer name to file
+    pub(crate) hexl: std::collections::HashMap<String, PathBuf>,
     /// the settings popup when open (settings_ui.rs)
     pub(crate) settings_ui: Option<settings_ui::SettingsUi>,
     /// the process list (proced.rs) while its buffer is open
@@ -877,6 +880,7 @@ impl App {
             md_pics: Vec::new(),
             md_sent: Default::default(),
             dired: Default::default(),
+            hexl: Default::default(),
             settings_ui: None,
             proced: None,
             dash: false,

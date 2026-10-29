@@ -513,6 +513,7 @@ impl App {
             "MarkdownView" | "Mdv" => self.md_toggle(),
             "Settings" => self.settings_open(),
             "Proced" => self.proced_open(),
+            "Hexl" => { let f = (!arg.trim().is_empty()).then(|| PathBuf::from(arg.trim())); self.hexl_open(f) }
             "Dired" => { let d = (!arg.trim().is_empty()).then(|| self.root.join(arg.trim())); self.open_dired(d) }
             "ene" | "enew" => {
                     self.doom_ui("newBuffer", "");

@@ -971,6 +971,7 @@ impl App {
             "mdView" => self.md_toggle(),
             "settings" => self.settings_open(),
             "proced" => self.proced_open(),
+            "hexl" => self.hexl_open((!arg.is_empty()).then(|| PathBuf::from(arg))),
             "dired" => self.open_dired((!arg.is_empty()).then(|| PathBuf::from(arg))),
             "toggleSides" => {
                 self.sides_hidden = !self.sides_hidden;

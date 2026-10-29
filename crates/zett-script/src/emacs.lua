@@ -1069,3 +1069,6 @@ alias("customize-group", "customize")
 
 -- the processes as a buffer (proced.rs; Vitals' view and controls when it is installed)
 z.command("proced", function() z.ui("proced") end, { desc = "The processes, busiest first (Vitals: CPU, GPU, memory, power, why): m marks, f freezes, l limits, x twice kills, s sorts" })
+-- a file as hex (hexl.rs): :w writes the edited bytes
+z.command("hexl-find-file", function() if z.arg then z.ui("hexl", z.arg) else z.ui("prompt", "Hexl file: \tex:Hexl {1}") end end, { desc = "A file as hex, offsets and characters: edit the hex, :w writes the bytes" })
+z.command("hexl-mode", function() z.ui("hexl", "") end, { desc = "This file as hex: edit the hex, :w writes the bytes" })
