@@ -994,6 +994,7 @@ mod plugin_trial {
         let b = term.backend().buffer();
         let rows: Vec<String> = (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>().trim_end().to_string()).collect();
         eprintln!("SCREEN\n{}", rows.join("\n"));
+        for p in app.engine.panels() { eprintln!("PANEL {} z={} side={} {}x{} at={:?} border={:?} lines={} cursor={} first={:?} withtext={:?}", p.id, p.zindex, p.side, p.width, p.height, p.at, p.border, p.lines.len(), p.cursor, p.lines.first().map(|l| l.iter().map(|x| x.0.as_str()).collect::<String>()), p.lines.iter().enumerate().filter(|(_, l)| l.iter().any(|x| x.0.contains(".lua") || x.0.contains(">"))).map(|(i, l)| (i, l.iter().map(|x| x.0.as_str()).collect::<String>())).take(3).collect::<Vec<_>>()); }
         // ZETT_TRY_ROW=n: that row's cells with their colours, a run of one style per line
         if let Ok(y) = env("ZETT_TRY_ROW").parse::<u16>() {
             let mut run = (String::new(), None);
@@ -1057,5 +1058,47 @@ mod ycmd_tests {
         assert_eq!(shown.first().map(String::as_str), Some("getFileInfo"), "{shown:?}");
         assert!(shown.contains(&"gitFolderInfo".to_string()) && !shown.contains(&"unrelated".to_string()), "{shown:?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod float_tests {
+    // floats and scratch buffers never reach the file being edited, and behave as Neovim's (telescope's needs)
+    fn app_with(text: &str) -> crate::App {
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str(text);
+        app
+    }
+
+    #[test]
+    fn scratch_options_and_text_stay_in_the_scratch_buffer() {
+        let mut app = app_with("mine\n");
+        app.command("lua vim.g.b = vim.api.nvim_create_buf(false, true) vim.bo[vim.g.b].buftype = 'prompt' vim.bo[vim.g.b].modifiable = false");
+        app.command("lua vim.api.nvim_buf_set_lines(vim.g.b, 0, -1, false, { '  one' }) vim.api.nvim_buf_set_text(vim.g.b, 0, 0, 0, 2, { '> ' })");
+        app.command("lua vim.g.r = vim.bo.buftype .. '|' .. tostring(vim.bo.modifiable) .. '|' .. vim.bo[vim.g.b].buftype .. '|' .. vim.api.nvim_buf_get_lines(vim.g.b, 0, -1, false)[1]");
+        assert_eq!(app.docs[app.cur].ed.text(), "mine\n", "the file is untouched");
+        let r = app.with_lua(|e| e.eval("return vim.g.r")).map(|r| r.0).unwrap_or_default();
+        assert_eq!(r, "|true|prompt|> one");
+    }
+
+    #[test]
+    fn keys_fed_to_a_focused_float_go_into_it() {
+        let mut app = app_with("mine\n");
+        app.command("lua vim.g.b = vim.api.nvim_create_buf(false, true) vim.g.w = vim.api.nvim_open_win(vim.g.b, true, { relative = 'editor', row = 1, col = 1, width = 20, height = 1 })");
+        app.command("lua vim.api.nvim_feedkeys('Ahi', 'n', true) vim.g.r = vim.fn.mode() .. '|' .. vim.api.nvim_buf_get_lines(vim.g.b, 0, -1, false)[1] .. '|' .. tostring(vim.api.nvim_get_current_win() == vim.g.w)");
+        assert_eq!(app.docs[app.cur].ed.text(), "mine\n", "the file is untouched");
+        let r = app.with_lua(|e| e.eval("return vim.g.r")).map(|r| r.0).unwrap_or_default();
+        assert_eq!(r, "i|hi|true");
+    }
+
+    #[test]
+    fn a_frame_float_is_drawn_under_the_float_it_frames() {
+        let mut app = app_with("mine\n");
+        // content first, then its frame (as plenary does): the frame must still be under it
+        app.command("lua local c = vim.api.nvim_create_buf(false, true) vim.api.nvim_open_win(c, false, { relative = 'editor', row = 3, col = 3, width = 10, height = 2 })");
+        app.command("lua local f = vim.api.nvim_create_buf(false, true) vim.api.nvim_open_win(f, false, { relative = 'editor', row = 2, col = 2, width = 12, height = 4, focusable = false })");
+        let p = app.engine.panels();
+        let (content, frame) = (p.iter().find(|x| x.width == 10).unwrap(), p.iter().find(|x| x.width == 12).unwrap());
+        assert!(frame.zindex < content.zindex, "frame {} content {}", frame.zindex, content.zindex);
     }
 }

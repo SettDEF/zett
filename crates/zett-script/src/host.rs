@@ -23,6 +23,10 @@ pub(crate) struct Panel {
     /// a float placed as Neovim places one: (relative to "editor" | "cursor" | "win", row, col);
     /// width and height are then in cells
     at: Option<(String, i32, i32)>,
+    /// a Neovim float's border: "" zett's own frame, "none", "single", "double", "rounded", "solid", "shadow", or 8 characters
+    border: String,
+    /// a Neovim float's zindex (stacking: higher drawn over lower; 50 as Neovim's default)
+    zindex: i64,
     on_key: Option<RegistryKey>,
     on_move: Option<RegistryKey>,
     on_close: Option<RegistryKey>,
@@ -46,6 +50,9 @@ pub struct PanelView {
     pub dy: i16,
     /// side "float" placed at (relative to, row, col), its size in cells (nvim_open_win)
     pub at: Option<(String, i32, i32)>,
+    /// a Neovim float's border ("" zett's own frame; "none" none; a style; or its 8 characters, nvim_open_win order)
+    pub border: String,
+    pub zindex: i64,
 }
 
 #[derive(Default)]
@@ -274,7 +281,7 @@ impl Engine {
         st.host
             .panels
             .iter()
-            .map(|p| PanelView { id: p.id.clone(), side: p.side.clone(), width: p.width, height: p.height, title: p.title.clone(), lines: p.lines.clone(), cursor: p.cursor, focused: st.host.focus.as_deref() == Some(&p.id), dx: p.dx, dy: p.dy, at: p.at.clone() })
+            .map(|p| PanelView { id: p.id.clone(), side: p.side.clone(), width: p.width, height: p.height, title: p.title.clone(), lines: p.lines.clone(), cursor: p.cursor, focused: st.host.focus.as_deref() == Some(&p.id), dx: p.dx, dy: p.dy, at: p.at.clone(), border: p.border.clone(), zindex: p.zindex })
             .collect()
     }
 
@@ -554,7 +561,7 @@ impl Engine {
             let i = match h.panels.iter().position(|p| p.id == id) {
                 Some(i) => i,
                 None => {
-                    h.panels.push(Panel { id: id.clone(), side: "left".into(), width: 30, height: 0, title: String::new(), lines: Vec::new(), cursor: 0, dx: 0, dy: 0, at: None, on_key: None, on_move: None, on_close: None });
+                    h.panels.push(Panel { id: id.clone(), side: "left".into(), width: 30, height: 0, title: String::new(), lines: Vec::new(), cursor: 0, dx: 0, dy: 0, at: None, border: String::new(), zindex: 50, on_key: None, on_move: None, on_close: None });
                     h.panels.len() - 1
                 }
             };
@@ -568,6 +575,8 @@ impl Engine {
             }
             p.height = o.get::<Option<u16>>("height")?.unwrap_or(p.height);
             p.title = o.get::<Option<String>>("title")?.unwrap_or(p.title.clone());
+            if let Some(b) = o.get::<Option<String>>("border")? { p.border = b; }
+            if let Some(zi) = o.get::<Option<i64>>("zindex")? { p.zindex = zi; }
             // relative = "editor" | "cursor" | "win", row =, col =: a float where Neovim's would be
             if let Some(rel) = o.get::<Option<String>>("relative")?.filter(|r| !r.is_empty()) {
                 p.at = Some((rel, o.get::<Option<i32>>("row")?.unwrap_or(0), o.get::<Option<i32>>("col")?.unwrap_or(0)));

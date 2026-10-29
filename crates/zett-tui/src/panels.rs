@@ -198,9 +198,11 @@ impl App {
         }
         let top = *top;
         for (i, l) in p.lines.iter().enumerate().skip(top).take(body_h) {
-            let sel = i == p.cursor && p.focused;
-            let mut spans = vec![Span::raw(" ")];
-            let mut used = 1;
+            let sel = i == p.cursor && p.focused && p.at.is_none();
+            // a Neovim float's lines exactly where it put them; zett's panels keep a margin
+            let pad = if p.at.is_some() { 0 } else { 1 };
+            let mut spans = vec![Span::raw(" ".repeat(pad))];
+            let mut used = pad;
             for (text, g) in l {
                 let room = (a.width as usize).saturating_sub(used);
                 if room == 0 {
@@ -300,7 +302,10 @@ impl App {
     /// Floating panels over the windows: centred (then moved), framed, the title on the frame.
     /// The layer with the keyboard stands out; one without it stays in view, dimmed.
     pub(crate) fn draw_float_panels(&mut self, f: &mut Frame, body: Rect) {
-        for p in self.engine.panels().into_iter().filter(|p| p.side == "float") {
+        // Neovim floats stacked by zindex (higher over lower; the same: the later over the earlier)
+        let mut floats: Vec<PanelView> = self.engine.panels().into_iter().filter(|p| p.side == "float").collect();
+        floats.sort_by_key(|p| if p.at.is_some() { p.zindex } else { i64::MAX });
+        for p in floats {
             let pct = |n: u16, of: u16| ((of as u32 * n.min(100) as u32) / 100) as u16;
             let w = pct(p.width.max(20), body.width).max(20).min(body.width);
             let h = pct(if p.height == 0 { 70 } else { p.height }, body.height).max(5).min(body.height);
@@ -310,7 +315,8 @@ impl App {
             // placed as Neovim places a float (nvim_open_win): its size in cells inside the frame, at
             // row / col from the editor, the cursor or the focused window, kept on the screen
             if let Some((rel, row, col)) = &p.at {
-                let (w, h) = ((p.width + 2).min(body.width), ((if p.height == 0 { p.lines.len().max(1) as u16 } else { p.height }) + 2).min(body.height));
+                let frame = if float_border(&p.border).is_some() { 2 } else { 0 };
+                let (w, h) = ((p.width + frame).min(body.width), ((if p.height == 0 { p.lines.len().max(1) as u16 } else { p.height }) + frame).min(body.height));
                 let (ox, oy) = match rel.as_str() {
                     "cursor" => (self.cursor_xy.0 as i32, self.cursor_xy.1 as i32),
                     "win" => self.win_rects.iter().find(|(id, _)| *id == self.focus).map_or((body.x as i32, body.y as i32), |(_, r)| (r.x as i32, r.y as i32)),
@@ -323,11 +329,14 @@ impl App {
             crate::layer(f, outer);
             // a Neovim float (nvim_open_win): its own title only, none when it has none
             let title = if p.at.is_some() { if p.title.is_empty() { String::new() } else { format!(" {} ", p.title) } } else if p.focused { format!(" {} ", p.title) } else { format!(" {} · SPC w Tab: up ", p.title) };
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_set(crate::display::float_set())
-                .border_style(hl(if p.focused { "FloatBorder" } else { "FloatBorderDim" }))
-                .title(Span::styled(title, hl(if p.focused { "Title" } else { "TitleNC" })));
+            // a Neovim float's own border (none, a style, its characters); zett's panels keep zett's frame
+            let set = if p.at.is_some() { float_border(&p.border) } else { Some(crate::display::float_set()) };
+            let mut block = Block::default()
+                .borders(if set.is_some() { Borders::ALL } else { Borders::NONE })
+                .border_set(set.unwrap_or(crate::display::float_set()))
+                .border_style(hl(if p.focused { "FloatBorder" } else { "FloatBorderDim" }));
+            // a title takes a row of its own without a frame: only one there is, and only on a frame
+            if !title.is_empty() && set.is_some() { block = block.title(Span::styled(title, hl(if p.focused { "Title" } else { "TitleNC" }))); }
             let inner = block.inner(outer);
             f.render_widget(block, outer);
             // the lines as a side panel draws them, without its own title row
@@ -387,6 +396,31 @@ impl App {
         if stamp != self.config_stamp {
             self.config_stamp = stamp;
             self.effects(vec![Effect::Ui("reload".into(), String::new())]);
+        }
+    }
+}
+
+/// A Neovim float's border as drawn: None for "none" / "shadow" (no frame); a named style; or the float's own
+/// eight characters (top-left, top, top-right, right, bottom-right, bottom, bottom-left, left; joined by \x1f).
+fn float_border(b: &str) -> Option<ratatui::symbols::border::Set> {
+    use ratatui::symbols::border;
+    match b {
+        "none" | "shadow" => None,
+        "" | "rounded" => Some(crate::display::float_set()),
+        "single" => Some(border::PLAIN),
+        "double" => Some(border::DOUBLE),
+        "solid" => Some(border::EMPTY),
+        "bold" => Some(border::THICK),
+        own => {
+            thread_local! { static SETS: std::cell::RefCell<std::collections::HashMap<String, ratatui::symbols::border::Set>> = Default::default(); }
+            SETS.with(|s| {
+                if let Some(set) = s.borrow().get(own) { return Some(*set) }
+                let c: Vec<&'static str> = own.split('\u{1f}').map(|x| &*Box::leak(if x.is_empty() { " ".to_string() } else { x.to_string() }.into_boxed_str())).collect();
+                if c.len() != 8 { return Some(crate::display::float_set()) }
+                let set = border::Set { top_left: c[0], horizontal_top: c[1], top_right: c[2], vertical_right: c[3], bottom_right: c[4], horizontal_bottom: c[5], bottom_left: c[6], vertical_left: c[7] };
+                s.borrow_mut().insert(own.to_string(), set);
+                Some(set)
+            })
         }
     }
 }

@@ -403,7 +403,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 
 ## Plugins from Neovim (tried 2026-10-29)
 - [x] Comment.nvim, nvim-surround, nvim-autopairs work; lualine, flash load (looks unchecked); telescope loads
-- [ ] floating windows from plugins drawn (telescope's picker, which-key, nvim-cmp)
+- [x] floating windows from plugins as Neovim draws them (border styles, zindex + frames under contents, the cursor scrolls, focus + typing + modes, fed keys); telescope works (find, type to filter, Enter, Esc, C-p)
 - [ ] vim.cmd takes effect at once inside Lua (now after the Lua returns: `vnew` then set_lines hits the old buffer; plugins need vim.schedule)
 - [x] vim.api on a buffer that is not current (reads from copies, writes queued and applied there)
 

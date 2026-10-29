@@ -437,6 +437,54 @@ vim.o = opt_table("global")
 vim.go = vim.o
 vim.bo = opt_table("local")
 vim.wo = opt_table("local")
+-- vim.bo[n] / vim.wo[n]: that buffer's or window's own options, never the current one's (telescope sets
+-- buftype=prompt and nomodifiable on its scratch buffers this way). A scratch buffer and a float keep theirs;
+-- another file's are kept for it and set when it becomes current
+do
+  local held = {}
+  vim._zett_held_opts = held
+  local function current_buf() return vim.api.nvim_get_current_buf() end
+  local function buf_view(b)
+    return setmetatable({}, {
+      __index = function(_, name) return vim.api.nvim_buf_get_option(b, name) end,
+      __newindex = function(_, name, v)
+        if vim._zett_is_vbuf and vim._zett_is_vbuf(b) then return vim.api.nvim_buf_set_option(b, name, v) end
+        held[b] = held[b] or {}
+        held[b][name] = v
+      end,
+    })
+  end
+  local bo_plain = vim.bo
+  vim.bo = setmetatable({}, {
+    __index = function(t, k)
+      if type(k) == "number" then
+        if (k == 0 or k == current_buf()) and not vim._cur_float then return t end
+        return buf_view(k == 0 and current_buf() or k)
+      end
+      if vim._cur_float then return vim.api.nvim_buf_get_option(0, k) end
+      return bo_plain[k]
+    end,
+    __newindex = function(_, k, v)
+      if vim._cur_float then return vim.api.nvim_buf_set_option(0, k, v) end
+      bo_plain[k] = v
+    end,
+  })
+  local wo_plain = vim.wo
+  vim.wo = setmetatable({}, {
+    __index = function(t, k)
+      if type(k) == "number" then
+        if vim._zett_is_float and vim._zett_is_float(k) then return vim._zett_float_wo(k) end
+        return t
+      end
+      if vim._cur_float and vim._zett_float_wo then return vim._zett_float_wo(vim._cur_float)[k] end
+      return wo_plain[k]
+    end,
+    __newindex = function(_, k, v)
+      if vim._cur_float and vim._zett_float_wo then vim._zett_float_wo(vim._cur_float)[k] = v return end
+      wo_plain[k] = v
+    end,
+  })
+end
 local function opt_object(scope)
   return setmetatable({}, {
     __index = function(_, name)
@@ -1839,7 +1887,7 @@ local function float_lines(h)
   return out
 end
 local function refresh(b)
-  for h, f in pairs(floats) do if f.buf == b then z.panel.set_lines(f.panel, float_lines(h)) end end
+  for h, f in pairs(floats) do if f.buf == b then z.panel.set_lines(f.panel, float_lines(h)) if f.cursor then z.panel.set_cursor(f.panel, f.cursor[1]) end end end
 end
 -- extmarks on a buffer a float shows: the float drawn again
 for _, name in ipairs({ "nvim_buf_set_extmark", "nvim_buf_del_extmark", "nvim_buf_clear_namespace" }) do
@@ -1903,6 +1951,7 @@ local function close_float(h)
   local f = floats[h]
   if not f then return end
   floats[h] = nil
+  if vim._float_focus == h then vim._float_focus = nil end
   pcall(z.panel.close, f.panel)
   if vim._cur_float == h then vim._cur_float = nil end
 end
@@ -1913,27 +1962,222 @@ api.nvim_buf_delete = function(b, o)
   vbufs[b] = nil
 end
 
--- a key in a focused float: its buffer's own mapping (a function, or <Cmd>…<CR> / :…<CR>)
-local function float_key(h, key)
+-- ── keys in a focused float: its own normal and insert mode, its buffer's mappings in each, typing into its
+-- buffer (prompt buffers start the line with their prompt), the change events plugins filter on ──
+vim._float_focus = nil
+local function fl_line(h)
+  local f = floats[h]
+  local L = vlines(f.buf)
+  local c = f.cursor or { #L, #(L[#L] or "") }
+  local row = math.max(1, math.min(c[1], #L))
+  return L, row, math.min(c[2], #(L[row] or ""))
+end
+local function fl_prompt(h)
+  local b = floats[h].buf
+  if (vbufs[b].opts.buftype or "") ~= "prompt" then return "" end
+  return (vim.fn.prompt_getprompt and vim.fn.prompt_getprompt(b)) or ""
+end
+local function fl_changed(h)
+  local f = floats[h]
+  vbufs[f.buf].tick = (vbufs[f.buf].tick or 0) + 1
+  refresh(f.buf)
+  if f.cursor then pcall(z.panel.set_cursor, f.panel, f.cursor[1]) end
+  vim._cur_float = h
+  pcall(api.nvim_exec_autocmds, f.mode == "i" and "TextChangedI" or "TextChanged", { buffer = f.buf, modeline = false })
+  vim._cur_float = vim._float_focus
+end
+local function fl_set(h, L, row, line, col)
+  L[row] = line
+  vbufs[floats[h].buf].lines = L
+  floats[h].cursor = { row, col }
+  fl_changed(h)
+end
+local function fl_insert_mode(h, where)
+  local f = floats[h]
+  local L, row, col = fl_line(h)
+  local p = fl_prompt(h)
+  if p ~= "" and (L[row] or ""):sub(1, #p) ~= p then L[row] = p .. (L[row] or "") vbufs[f.buf].lines = L end
+  local line = L[row] or ""
+  if where == "end" then col = #line elseif where == "start" then col = #p elseif where == "after" then col = math.min(#line, col + 1) end
+  f.cursor = { row, math.max(col, #p) }
+  f.mode = "i"
+  pcall(api.nvim_exec_autocmds, "InsertEnter", { buffer = f.buf, modeline = false })
+end
+
+local function run_rhs(h, rhs)
+  local ok, err = true, nil
+  if type(rhs) == "function" then
+    ok, err = pcall(rhs)
+  else
+    local cmd = rhs:match("^<[Cc][Mm][Dd]>(.-)<[Cc][Rr]>$") or rhs:match("^:(.-)<[Cc][Rr]>$")
+    if cmd and (cmd == "q" or cmd == "quit" or cmd == "close" or cmd == "bd" or cmd == "bdelete") then close_float(h)
+    elseif cmd then ok, err = pcall(vim.cmd, cmd)
+    else for _, k in ipairs(vim._zett_key_tokens(rhs)) do vim._zett_float_key(h, k, true) end end
+  end
+  if ok == false then vim.notify(tostring(err), vim.log.levels.ERROR) end
+end
+
+-- one key: true when the float took it (a focused float takes them all but its window keys)
+function vim._zett_float_key(h, key, noremap)
   local f = floats[h]
   if not f or not is_vbuf(f.buf) then return false end
-  for lhs, rhs in pairs(vbufs[f.buf].maps.n or {}) do
-    if z.key_name(lhs) == z.key_name(key) then
-      vim._cur_float = h
-      local ok, err
-      if type(rhs) == "function" then
-        ok, err = pcall(rhs)
-      else
-        local cmd = rhs:match("^<[Cc][Mm][Dd]>(.-)<[Cc][Rr]>$") or rhs:match("^:(.-)<[Cc][Rr]>$")
-        if cmd and (cmd == "q" or cmd == "quit" or cmd == "close" or cmd == "bd" or cmd == "bdelete") then close_float(h) ok = true
-        elseif cmd then ok, err = pcall(vim.cmd, cmd) end
-      end
-      vim._cur_float = nil
-      if ok == false then vim.notify(tostring(err)) end
-      return true
+  local mode = f.mode or "n"
+  vim._cur_float = h
+  if not noremap then
+    for lhs, rhs in pairs(vbufs[f.buf].maps[mode] or {}) do
+      if z.key_name(lhs) == z.key_name(key) then run_rhs(h, rhs) vim._cur_float = vim._float_focus return true end
     end
   end
-  return false
+  local L, row, col = fl_line(h)
+  local line = L[row] or ""
+  local took = true
+  if mode == "i" then
+    local p = fl_prompt(h)
+    if key == "<Esc>" or key == "<C-c>" or key == "<C-[>" then
+      f.mode = "n"
+      f.cursor = { row, math.max(#p, col - 1) }
+      pcall(api.nvim_exec_autocmds, "InsertLeave", { buffer = f.buf, modeline = false })
+    elseif key == "<BS>" or key == "<C-h>" then
+      if col > #p then
+        local start = vim.str_utf_start and (col + vim.str_utf_start(line, col)) or col
+        start = math.max(#p + 1, start)
+        fl_set(h, L, row, line:sub(1, start - 1) .. line:sub(col + 1), start - 1)
+      end
+    elseif key == "<C-u>" then fl_set(h, L, row, p .. line:sub(col + 1), #p)
+    elseif key == "<Left>" then f.cursor = { row, math.max(#p, col - 1) }
+    elseif key == "<Right>" then f.cursor = { row, math.min(#line, col + 1) }
+    elseif key == "<Home>" then f.cursor = { row, #p }
+    elseif key == "<End>" then f.cursor = { row, #line }
+    else
+      local ch = key == "<Space>" and " " or key == "<Tab>" and "\t" or ((not key:match("^<.+>$")) and key or nil)
+      if ch then fl_set(h, L, row, line:sub(1, col) .. ch .. line:sub(col + 1), col + #ch) else took = false end
+    end
+  else
+    if key == "i" then fl_insert_mode(h, "here")
+    elseif key == "a" then fl_insert_mode(h, "after")
+    elseif key == "A" then fl_insert_mode(h, "end")
+    elseif key == "I" then fl_insert_mode(h, "start")
+    elseif key == "<Esc>" then -- stays in normal mode
+    elseif key == "j" or key == "<Down>" then f.cursor = { math.min(#L, row + 1), 0 } pcall(z.panel.set_cursor, f.panel, f.cursor[1])
+    elseif key == "k" or key == "<Up>" then f.cursor = { math.max(1, row - 1), 0 } pcall(z.panel.set_cursor, f.panel, f.cursor[1])
+    elseif key == "0" then f.cursor = { row, 0 }
+    elseif key == "$" then f.cursor = { row, math.max(0, #line - 1) }
+    else took = false end
+  end
+  vim._cur_float = vim._float_focus
+  return took
+end
+
+-- "<Esc>A" → { "<Esc>", "A" }; Vim's internal key bytes (\27 …) as their names
+function vim._zett_key_tokens(keys)
+  local out, i = {}, 1
+  local names = { ["\27"] = "<Esc>", ["\r"] = "<CR>", ["\n"] = "<CR>", ["\t"] = "<Tab>", ["\8"] = "<BS>", ["\127"] = "<BS>" }
+  while i <= #keys do
+    local c = keys:sub(i, i)
+    local tok = c == "<" and keys:match("^<[^<>]+>", i) or nil
+    if tok then out[#out + 1] = tok i = i + #tok
+    elseif names[c] then out[#out + 1] = names[c] i = i + 1
+    else
+      local n = c:byte() >= 0xF0 and 4 or c:byte() >= 0xE0 and 3 or c:byte() >= 0xC0 and 2 or 1
+      out[#out + 1] = keys:sub(i, i + n - 1) i = i + n
+    end
+  end
+  return out
+end
+
+local function float_key(h, key) return vim._zett_float_key(h, key) end
+function vim._zett_is_float(w) return type(w) == "number" and floats[w] ~= nil end
+function vim._zett_is_vbuf(b) return is_vbuf(b) end
+function vim._zett_float_wo(h) floats[h].wo = floats[h].wo or {} return floats[h].wo end
+function vim._zett_float_panel(h) return floats[h] and floats[h].panel end
+function vim._zett_float_mode(h) return floats[h] and floats[h].mode or "n" end
+
+-- stacking among floats of one zindex: the one opened or reconfigured last on top (as Neovim)
+local stack_n = 0
+local function float_stack() stack_n = stack_n + 1 return stack_n end
+
+-- a float's border as zett draws it: "none", a style name, or 8 characters joined by \31 (Neovim's order:
+-- top-left, top, top-right, right, bottom-right, bottom, bottom-left, left); a list of 1, 2 or 4 repeats, as Neovim's
+local function float_border(b)
+  if b == nil or b == "" then b = (vim.o.winborder ~= nil and vim.o.winborder ~= "") and vim.o.winborder or "none" end
+  if type(b) == "string" then return b end
+  if type(b) ~= "table" or #b == 0 then return "none" end
+  local ch = {}
+  for i, x in ipairs(b) do ch[i] = type(x) == "table" and (x[1] or "") or tostring(x) end
+  local all = {}
+  for i = 1, 8 do all[i] = ch[((i - 1) % #ch) + 1] end
+  return table.concat(all, "\31")
+end
+
+-- a float's place and size as Neovim reports them (plenary's borders, telescope's layout ask): its top-left
+-- cell on the screen (anchor taken into account, a border outside it), its size inside the border
+local function float_geom(h)
+  local c = floats[h].config
+  local w, hgt = math.floor(tonumber(c.width) or 40), math.floor(tonumber(c.height) or 1)
+  local row, col = math.floor(tonumber(c.row) or 0), math.floor(tonumber(c.col) or 0)
+  local a = (c.anchor or "NW"):upper()
+  local b = float_border(c.border)
+  local bd = (b ~= "none" and b ~= "shadow") and 1 or 0
+  if a:find("S") then row = row - hgt - 2 * bd end
+  if a:find("E") then col = col - w - 2 * bd end
+  if c.relative == "win" or c.relative == "cursor" then
+    local base = c.relative == "cursor" and { vim.fn.screenrow() - 1, vim.fn.screencol() - 1 } or orig.nvim_win_get_position(c.win or 0)
+    row, col = row + (base[1] or 0), col + (base[2] or 0)
+  end
+  return math.max(0, row) + bd, math.max(0, col) + bd, w, hgt
+end
+for _, k in ipairs({ "nvim_win_get_position", "nvim_win_get_width", "nvim_win_get_height" }) do orig[k] = orig[k] or api[k] end
+api.nvim_win_get_position = function(w) w = (w == 0 or w == nil) and vim._cur_float or w if is_float(w) then local r, c = float_geom(w) return { r, c } end return orig.nvim_win_get_position(w) end
+api.nvim_win_get_width = function(w) w = (w == 0 or w == nil) and vim._cur_float or w if is_float(w) then local _, _, wd = float_geom(w) return wd end return orig.nvim_win_get_width(w) end
+api.nvim_win_get_height = function(w) w = (w == 0 or w == nil) and vim._cur_float or w if is_float(w) then local _, _, _, ht = float_geom(w) return ht end return orig.nvim_win_get_height(w) end
+for _, k in ipairs({ "nvim_win_get_position", "nvim_win_get_width", "nvim_win_get_height" }) do rawset(vim.fn, k, api[k]) end
+-- a float's cursor: kept with it, and its panel scrolled so that line is in view (telescope's results sit at the bottom)
+orig.nvim_win_get_cursor = orig.nvim_win_get_cursor or api.nvim_win_get_cursor
+orig.nvim_win_set_cursor = orig.nvim_win_set_cursor or api.nvim_win_set_cursor
+api.nvim_win_get_cursor = function(w)
+  w = (w == 0 or w == nil) and vim._cur_float or w
+  if is_float(w) then local c = floats[w].cursor or { 1, 0 } return { c[1], c[2] } end
+  return orig.nvim_win_get_cursor(w)
+end
+api.nvim_win_set_cursor = function(w, pos)
+  w = (w == 0 or w == nil) and vim._cur_float or w
+  if is_float(w) then
+    floats[w].cursor = { pos[1], pos[2] }
+    pcall(z.panel.set_cursor, floats[w].panel, pos[1])
+    return
+  end
+  return orig.nvim_win_set_cursor(w, pos)
+end
+
+-- a float's place in the stack: zindex first, then the one opened or reconfigured last on top; a float that
+-- frames another of its zindex (holds it with at most a cell around it: plenary's borders) sits just under it
+local function float_stack_value(h)
+  local z = (tonumber(floats[h].config.zindex) or 50) * 1000000
+  local v = z + float_stack()
+  local r, c, w, ht = float_geom(h)
+  for g, other in pairs(floats) do
+    if g ~= h and other.stackval and math.floor(other.stackval / 1000000) * 1000000 == z then
+      local r2, c2, w2, h2 = float_geom(g)
+      local frames = r <= r2 and c <= c2 and r + ht >= r2 + h2 and c + w >= c2 + w2 and r2 - r <= 1 and c2 - c <= 1
+        and (r + ht) - (r2 + h2) <= 1 and (c + w) - (c2 + w2) <= 1 and (w * ht > w2 * h2)
+      if frames then v = math.min(v, other.stackval - 1) end
+    end
+  end
+  floats[h].stackval = v
+  return v
+end
+
+-- for :checkhealth and tests: each float's config and its first lines
+function vim._zett_floats()
+  local out = {}
+  for h, f in pairs(floats) do
+    local L = float_lines(h)
+    local first = {}
+    for i = 1, math.min(2, #L) do first[i] = type(L[i]) == "table" and table.concat(vim.tbl_map(function(p) return p[1] end, L[i])) or L[i] end
+    out[#out + 1] = ("%d %s r%s c%s %sx%s border=%s z=%s focusable=%s | %s"):format(h, f.config.relative or "", f.config.row, f.config.col, f.config.width, f.config.height, (vim.inspect(f.config.border):gsub("%s+", "")), f.config.zindex, tostring(f.config.focusable), table.concat(first, " / "))
+  end
+  table.sort(out)
+  return table.concat(out, "\n")
 end
 
 local function place(h)
@@ -1945,7 +2189,8 @@ local function place(h)
   local w, hgt = math.floor(tonumber(c.width) or 40), math.floor(tonumber(c.height) or #L)
   local row, col = math.floor(tonumber(c.row) or 0), math.floor(tonumber(c.col) or 0)
   local a = (c.anchor or "NW"):upper()
-  local bd = (c.border and c.border ~= "none" and c.border ~= "") and 2 or 0
+  local border = float_border(c.border)
+  local bd = (border ~= "none" and border ~= "shadow") and 2 or 0
   if a:find("S") then row = row - hgt - bd end
   if a:find("E") then col = col - w - bd end
   row, col = math.max(0, row), math.max(0, col)
@@ -1955,11 +2200,12 @@ local function place(h)
     id = f.panel, side = "float",
     relative = (c.relative and c.relative ~= "") and c.relative or "editor",
     row = row, col = col, width = w, height = hgt,
-    title = title or "", focus = f.enter and true or false,
+    title = title or "", focus = f.enter and true or false, border = border, zindex = float_stack_value(h),
     on_key = function(key) return float_key(h, key) end,
     on_close = function() floats[h] = nil end,
   })
   z.panel.set_lines(f.panel, L)
+  if f.cursor then z.panel.set_cursor(f.panel, f.cursor[1]) end
 end
 api.nvim_open_win = function(b, enter, config)
   b = (b == 0) and cur_buf() or b
@@ -4488,14 +4734,23 @@ do
   -- uv.spawn with pipes, on zett's streaming jobs: read_start gets each piece, write goes to stdin
   set("new_pipe", function()
     local p = { readers = {}, closed = false }
-    function p:read_start(cb) self.reader = cb if self.buffer then for _, d in ipairs(self.buffer) do cb(nil, d) end self.buffer = nil end return 0 end
+    -- what came while nobody read waits in order (the end too, as false); reading hands it out one piece at a
+    -- time while a reader is there (telescope reads a piece, stops, starts again)
+    function p:_flush()
+      while self.reader and self.queue and #self.queue > 0 do
+        local d = table.remove(self.queue, 1)
+        local r = self.reader
+        if d == false then self.eof = true r(nil, nil) else r(nil, d) end
+      end
+    end
+    function p:read_start(cb) self.reader = cb self:_flush() return 0 end
     function p:read_stop() self.reader = nil return 0 end
     function p:write(data, cb) if self.job then z.job.send(self.job, type(data) == "table" and table.concat(data) or data) end if cb then vim.schedule(cb) end return 0 end
     function p:shutdown(cb) if self.job then z.job.close_stdin(self.job) end if cb then vim.schedule(cb) end return 0 end
     function p:close(cb) self.closed = true self.reader = nil if cb then vim.schedule(cb) end end
     function p:is_closing() return self.closed end
     function p:is_active() return not self.closed end
-    function p:_deliver(data) if self.reader then self.reader(nil, data) else self.buffer = self.buffer or {} table.insert(self.buffer, data) end end
+    function p:_deliver(data) self.queue = self.queue or {} if data == nil then table.insert(self.queue, false) else table.insert(self.queue, data) end self:_flush() end
     return p
   end)
   set("spawn", function(cmd, o, on_exit)
@@ -4509,7 +4764,7 @@ do
       if kind == "stdout" and stdio[2] then stdio[2]:_deliver(data)
       elseif kind == "stderr" and stdio[3] then stdio[3]:_deliver(data)
       elseif kind == "exit" then
-        for i = 2, 3 do if stdio[i] and stdio[i].reader then stdio[i].reader(nil, nil) end end
+        for i = 2, 3 do if stdio[i] and stdio[i]._deliver then stdio[i]:_deliver(nil) end end
         h.exited = true
         if on_exit then on_exit(data, 0) end
       end
@@ -4525,3 +4780,124 @@ do
     return h, pid
   end)
 end
+
+-- uv check / prepare handles (a callback each turn of the loop; plenary's Job waits for its pipes with one),
+-- and the function forms of their methods (uv.check_start(h, cb) as h:start(cb))
+do
+  local uv = vim.uv or vim.loop
+  local function looper()
+    local h = { on = false, closed = false }
+    function h:start(cb) self.on = true local function tick() if self.on and not self.closed then pcall(cb) vim.defer_fn(tick, 5) end end vim.defer_fn(tick, 0) return 0 end
+    function h:stop() self.on = false return 0 end
+    function h:close(cb) self.on = false self.closed = true if cb then vim.schedule(cb) end end
+    function h:is_closing() return self.closed end
+    function h:is_active() return self.on end
+    return h
+  end
+  uv.new_check = looper
+  uv.new_prepare = looper
+  for _, kind in ipairs({ "check", "prepare", "idle" }) do
+    uv[kind .. "_start"] = uv[kind .. "_start"] or function(h, cb) return h:start(cb) end
+    uv[kind .. "_stop"] = uv[kind .. "_stop"] or function(h) return h:stop() end
+  end
+  uv.is_active = uv.is_active or function(h) return h and h.is_active and h:is_active() or false end
+end
+
+-- the function forms of handle methods (uv.process_kill(h, sig) as h:kill(sig)): telescope and plenary call these
+do
+  local uv = vim.uv or vim.loop
+  local forms = { process_kill = "kill", read_start = "read_start", read_stop = "read_stop", write = "write", shutdown = "shutdown",
+    close = "close", process_get_pid = "get_pid", is_readable = "is_active", is_writable = "is_active" }
+  for fname, method in pairs(forms) do
+    if uv[fname] == nil then
+      uv[fname] = function(h, ...) if type(h) == "table" and type(h[method]) == "function" then return h[method](h, ...) end return 0 end
+    end
+  end
+end
+
+-- a float as the current window (nvim_set_current_win, nvim_open_win with enter): keys, fed keys, mode() and the
+-- current buffer are the float's until another window is made current or it closes
+do
+  local api = vim.api
+  local set_win, open_win, feed = api.nvim_set_current_win, api.nvim_open_win, api.nvim_feedkeys
+  local function focus_float(h)
+    vim._float_focus = h
+    vim._cur_float = h
+    local p = vim._zett_float_panel and vim._zett_float_panel(h)
+    if p then pcall(z.panel.focus, p) end
+  end
+  api.nvim_set_current_win = function(w)
+    if vim._zett_is_float and vim._zett_is_float(w) then return focus_float(w) end
+    if vim._float_focus then vim._float_focus = nil vim._cur_float = nil pcall(z.panel.focus, nil) end
+    return set_win(w)
+  end
+  api.nvim_open_win = function(b, enter, config)
+    local w = open_win(b, enter, config)
+    if enter and vim._zett_is_float and vim._zett_is_float(w) then focus_float(w) end
+    return w
+  end
+  -- fed keys while a float has the keyboard go to it, never to the file under it
+  api.nvim_feedkeys = function(keys, mode, esc)
+    local h = vim._float_focus
+    if h and vim._zett_is_float(h) then
+      for _, k in ipairs(vim._zett_key_tokens(keys)) do vim._zett_float_key(h, k, tostring(mode or ""):find("n") ~= nil) end
+      return
+    end
+    return feed(keys, mode, esc)
+  end
+  local mode_fn, get_mode = vim.fn.mode, api.nvim_get_mode
+  rawset(vim.fn, "mode", function(...)
+    local h = vim._float_focus
+    if h and vim._zett_float_mode then return vim._zett_float_mode(h) end
+    return mode_fn(...)
+  end)
+  api.nvim_get_mode = function()
+    local h = vim._float_focus
+    if h and vim._zett_float_mode then return { mode = vim._zett_float_mode(h), blocking = false } end
+    return get_mode()
+  end
+  for _, k in ipairs({ "nvim_set_current_win", "nvim_open_win", "nvim_feedkeys", "nvim_get_mode" }) do rawset(vim.fn, k, api[k]) end
+end
+
+-- text in a buffer that is not the current one (a plugin's scratch buffer, another file): through its lines,
+-- never into the current buffer (telescope draws its "> " into the results this way)
+do
+  local api = vim.api
+  local set_text, get_text = api.nvim_buf_set_text, api.nvim_buf_get_text
+  local function other(b)
+    if b == nil or b == 0 then return vim._cur_float ~= nil end
+    return b ~= vim.api.nvim_get_current_buf() or vim._cur_float ~= nil
+  end
+  api.nvim_buf_get_text = function(b, sr, sc, er, ec, o)
+    if not other(b) then return get_text(b, sr, sc, er, ec, o) end
+    local l = api.nvim_buf_get_lines(b, sr, er + 1, false)
+    if #l == 0 then return {} end
+    if #l == 1 then return { l[1]:sub(sc + 1, ec) } end
+    l[1] = l[1]:sub(sc + 1)
+    l[#l] = l[#l]:sub(1, ec)
+    return l
+  end
+  api.nvim_buf_set_text = function(b, sr, sc, er, ec, repl)
+    if not other(b) then return set_text(b, sr, sc, er, ec, repl) end
+    local l = api.nvim_buf_get_lines(b, sr, er + 1, false)
+    local head, tail = (l[1] or ""):sub(1, sc), (l[#l] or ""):sub(ec + 1)
+    local new = {}
+    for i, r in ipairs(repl or {}) do new[i] = r end
+    if #new == 0 then new = { "" } end
+    new[1] = head .. new[1]
+    new[#new] = new[#new] .. tail
+    api.nvim_buf_set_lines(b, sr, er + 1, false, new)
+  end
+  rawset(vim.fn, "nvim_buf_set_text", api.nvim_buf_set_text)
+  rawset(vim.fn, "nvim_buf_get_text", api.nvim_buf_get_text)
+end
+
+-- options set for another file while it was not current (vim.bo[n]) take effect when it is
+vim.api.nvim_create_autocmd("BufEnter", {
+  callback = function(a)
+    local held = vim._zett_held_opts and vim._zett_held_opts[a.buf]
+    if not held then return end
+    vim._zett_held_opts[a.buf] = nil
+    for k, v in pairs(held) do pcall(function() vim.bo[k] = v end) end
+  end,
+})
