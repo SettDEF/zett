@@ -160,7 +160,7 @@ Rectangle {
             { icon: "search", label: "Find", key: "Ctrl F", run: () => findBar.open(false) },
             { icon: "find_replace", label: "Replace", key: "Ctrl H", run: () => findBar.open(true) },
             { sep: true },
-            { icon: "auto_awesome", label: sel ? "Ask Claude about the selection" : "Ask Claude", key: "Ctrl I", run: () => aiBar.open() }
+            { icon: "auto_awesome", label: "Ask Claude", key: "Ctrl I", run: () => aiBar.open() }
         ])
     }
 
@@ -406,7 +406,7 @@ Rectangle {
             }
         }
     }
-    // selections: for each cursor, a rounded band per row it covers
+    // selections: for each cursor, a band per row it covers, the rows joined
     Repeater {
         model: cv.carets.filter(c => c[0] !== c[2] || c[1] !== c[3])
         delegate: Item {
@@ -422,9 +422,12 @@ Rectangle {
                     visible: doc.rowLine(row) === line && row >= cv.firstRow && row < cv.firstRow + cv.shown
                     readonly property int c0: index === 0 ? parent.a[1] : 0
                     readonly property int c1: line === parent.b[0] ? parent.b[1] : 400
-                    x: cv.gutter + 12 + c0 * cv.cw; y: row * cv.lh - cv.scrollY + 2
-                    width: Math.max(cv.cw * 0.5, (Math.min(c1, 400) - c0) * cv.cw); height: cv.lh - 4
-                    radius: 4; color: Qt.alpha(cv.t.accent, 0.28)
+                    x: cv.gutter + 12 + c0 * cv.cw; y: row * cv.lh - cv.scrollY
+                    // rows touch (no gap between lines); only the selection's own first and last edges are round
+                    width: Math.max(cv.cw * 0.5, (Math.min(c1, 400) - c0) * cv.cw); height: cv.lh
+                    topLeftRadius: index === 0 ? 4 : 0; topRightRadius: index === 0 ? 4 : 0
+                    bottomLeftRadius: line === parent.b[0] ? 4 : 0; bottomRightRadius: line === parent.b[0] ? 4 : 0
+                    color: Qt.alpha(cv.t.accent, 0.28)
                 }
             }
         }
