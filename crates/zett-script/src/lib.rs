@@ -129,6 +129,15 @@ pub struct Engine {
 const DEFAULTS: &str = include_str!("defaults.lua");
 /// Neovim's Lua API (vim.*) on zett's, so Neovim configs and plugins run (`:help vim-api`).
 const VIM: &str = include_str!("vim.lua");
+/// Neovim's own Lua modules, unchanged (nvim/NOTICE): what `require("vim.iter")` and friends load
+const NVIM_MODULES: &[(&str, &str)] = &[
+    ("iter", include_str!("nvim/iter.lua")),
+    ("func", include_str!("nvim/func.lua")),
+    ("uri", include_str!("nvim/uri.lua")),
+    ("version", include_str!("nvim/version.lua")),
+    ("secure", include_str!("nvim/secure.lua")),
+];
+const NVIM_SHARED: &str = include_str!("nvim/shared.lua");
 /// Vimscript, translated to Lua on vim.lua (:let, :if, :function, init.vim, .vim files).
 const VIMSCRIPT: &str = include_str!("vimscript.lua");
 /// The code editor's layer (Doom's SPC tree), on top of the defaults when `frontend` is "editor".
@@ -286,10 +295,48 @@ impl Engine {
         self.lua.globals().get::<Table>("zett").and_then(|z| z.get::<String>("frontend")).unwrap_or_default()
     }
 
+    /// Neovim's Lua modules: `require("vim.X")` loads one, and `vim.X` is set as Neovim's lazy vim table has it;
+    /// from its shared.lua only what zett lacks (ringbuf, spairs, defaulttable, list, helpers), run apart so the rest of
+    /// it never replaces zett's own vim.split and friends
+    fn nvim_modules(&mut self) {
+        let lua = &self.lua;
+        let r: mlua::Result<()> = (|| {
+            let preload: Table = lua.globals().get::<Table>("package")?.get("preload")?;
+            for (name, src) in NVIM_MODULES {
+                let f = lua.load(*src).set_name(format!("@vim/{name}.lua")).into_function()?;
+                preload.set(format!("vim.{name}"), f)?;
+            }
+            lua.load(
+                r#"
+                local src = ...
+                local real = vim
+                local fake = setmetatable({}, { __index = real })
+                local env = setmetatable({ vim = fake }, { __index = _G })
+                env._G = env
+                assert(load(src, "@vim/_core/shared.lua", "t", env))()
+                -- what shared.lua made that zett has not (ringbuf, spairs, defaulttable, list, its private helpers)
+                for k, v in pairs(fake) do
+                    if rawget(real, k) == nil then rawset(real, k, v) end
+                end
+                for _, k in ipairs({ "iter", "func", "uri", "version", "secure" }) do
+                    if k == "version" or rawget(real, k) == nil then rawset(real, k, require("vim." .. k)) end
+                end
+                "#,
+            )
+            .set_name("@zett/nvim_modules")
+            .call::<()>(NVIM_SHARED)?;
+            Ok(())
+        })();
+        if let Err(e) = r {
+            self.errors.push(format!("neovim modules: {e}"));
+        }
+    }
+
     /// Built-in defaults, then plugins, then the user's init.lua (the user has the last word).
     pub fn load_config(&mut self, dir: &Path) {
         self.exec_named(DEFAULTS, "zett", "defaults.lua");
         self.exec_named(VIM, "zett", "vim.lua");
+        self.nvim_modules();
         self.exec_named(VIMSCRIPT, "zett", "vimscript.lua");
         let plugins = dir.join("plugins");
         if self.frontend() == "editor" {

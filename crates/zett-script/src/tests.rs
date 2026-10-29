@@ -343,3 +343,22 @@ fn jobstart_streams_and_msgpack_round_trips() {
     let m = e.eval(r#"vim.inspect(vim.fn.msgpackparse(vim.fn.msgpackdump({ { 1, "two", { a = 3.5 } }, -7, 70000 }, "B")))"#).unwrap().0;
     assert_eq!(m, r#"{ { 1, "two", { a = 3.5 } }, -7, 70000 }"#);
 }
+
+#[test]
+fn neovims_lua_modules_are_there() {
+    let (_d, f) = ws("nvimmods");
+    let mut e = Engine::new(Some(f));
+    let cfg = std::env::temp_dir().join(format!("zett-nvimmods-cfg-{}", std::process::id()));
+    std::fs::create_dir_all(&cfg).unwrap();
+    e.load_config(&cfg);
+    let out = e.eval(r#"table.concat({
+        vim.iter({ 1, 2, 3, 4 }):filter(function(x) return x % 2 == 0 end):map(function(x) return x * 10 end):join(","),
+        tostring(vim.version.cmp("1.2.3", "1.10.0")),
+        tostring(vim.version.parse("v2.4.1")),
+        vim.uri.uri_from_fname("/a b"),
+        vim.base64.encode("zett rocks!"),
+        tostring(require("vim.iter") == vim.iter),
+        vim.split("a,b", ",")[2],
+    }, " ")"#).unwrap().0;
+    assert_eq!(out, "20,40 -1 2.4.1 file:///a%20b emV0dCByb2NrcyE= true b");
+}

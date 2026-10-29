@@ -4022,3 +4022,33 @@ vim.api.nvim_create_user_command("ZettStore", function()
     vim.notify(("%s %s%s"):format(e.name, ok and (e.installed and "removed" or "installed") or "failed", msg and (": " .. msg) or ""), ok and vim.log.levels.INFO or vim.log.levels.ERROR)
   end)
 end, { desc = "Extensions: install and remove (Lua and WASM plugins)" })
+
+-- vim.base64 (C in Neovim): RFC 4648 with padding
+if not rawget(vim, "base64") then
+  local abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  local idx = {} for i = 1, 64 do idx[abc:byte(i)] = i - 1 end
+  vim.base64 = {
+    encode = function(s)
+      vim.validate("str", s, "string")
+      return (s:gsub("..?.?", function(c)
+        local a, b, cc = c:byte(1, 3)
+        local n = a * 65536 + (b or 0) * 256 + (cc or 0)
+        local q = { (n >> 18) & 63, (n >> 12) & 63, (n >> 6) & 63, n & 63 }
+        local out = abc:sub(q[1] + 1, q[1] + 1) .. abc:sub(q[2] + 1, q[2] + 1)
+        return out .. (b and abc:sub(q[3] + 1, q[3] + 1) or "=") .. (cc and abc:sub(q[4] + 1, q[4] + 1) or "=")
+      end))
+    end,
+    decode = function(s)
+      vim.validate("str", s, "string")
+      if #s % 4 ~= 0 or s:find("[^%w%+/=]") then error("Invalid input") end
+      return (s:gsub("....", function(q)
+        local v = {} for i = 1, 4 do v[i] = idx[q:byte(i)] end
+        local n = (v[1] << 18) | (v[2] << 12) | ((v[3] or 0) << 6) | (v[4] or 0)
+        local o = string.char((n >> 16) & 255)
+        if v[3] then o = o .. string.char((n >> 8) & 255) end
+        if v[4] then o = o .. string.char(n & 255) end
+        return o
+      end))
+    end,
+  }
+end
