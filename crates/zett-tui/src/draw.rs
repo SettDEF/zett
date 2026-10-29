@@ -1098,7 +1098,8 @@ impl App {
         }
         f.render_widget(Paragraph::new(out), a);
         self.fx_marks.extend(fx_marks);
-        if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() {
+        // (no cursor in a window showing Markdown rendered or a PDF: the view has its own chosen row)
+        if focused && self.cmdline.is_none() && self.minibuf.is_none() && self.popup.is_none() && !self.md.contains_key(&d.name) && !self.views.contains_key(&d.name) {
             let x = a.x + gutter + (ccol.saturating_sub(d.left + starts[crow]) + if crow > 0 { cur_cont } else { 0 }) as u16;
             let y = a.y + cursor_row as u16;
             self.cursor_xy = (x, y);

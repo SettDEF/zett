@@ -394,7 +394,8 @@ impl App {
             let mut spans: Vec<Span> = vec![Span::raw(" ")];
             spans.extend(r.spans.iter().map(|(st, t)| Span::styled(t.clone(), *st)));
             let l = Line::from(spans);
-            if focused && top + i == sel { l.style(hl("CursorLine")) } else { l }
+            // the chosen row lit (not an empty one: under a picture only its edge would show)
+            if focused && top + i == sel && !r.spans.is_empty() { l.style(hl("CursorLine")) } else { l }
         }).collect();
         f.render_widget(Paragraph::new(lines), a);
         // what zash draws over it: headings larger, code panels, table cards, pictures (sent after the frame)
@@ -441,8 +442,9 @@ impl App {
         let s = self.md.get_mut(&name).unwrap();
         let last = rows.len().saturating_sub(1);
         match k.code {
-            KeyCode::Char('j') | KeyCode::Down => s.sel = (s.sel + 1).min(last),
-            KeyCode::Char('k') | KeyCode::Up => s.sel = s.sel.saturating_sub(1),
+            // to the next row with something on it (blank rows and a picture's rows are passed)
+            KeyCode::Char('j') | KeyCode::Down => s.sel = rows.iter().enumerate().skip(s.sel + 1).find(|(_, r)| !r.spans.is_empty()).map(|(i, _)| i).unwrap_or(s.sel),
+            KeyCode::Char('k') | KeyCode::Up => s.sel = rows.iter().enumerate().take(s.sel).rev().find(|(_, r)| !r.spans.is_empty()).map(|(i, _)| i).unwrap_or(s.sel),
             KeyCode::PageDown | KeyCode::Char(' ') => { s.sel = (s.sel + page).min(last); s.top = (s.top + page).min(last) }
             KeyCode::PageUp | KeyCode::Backspace => { s.sel = s.sel.saturating_sub(page); s.top = s.top.saturating_sub(page) }
             KeyCode::Char('g') | KeyCode::Home => { s.sel = 0; s.top = 0 }
