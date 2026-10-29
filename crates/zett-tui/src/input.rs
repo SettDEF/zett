@@ -43,6 +43,10 @@ impl App {
         if self.qr.is_some() && self.minibuf.is_none() {
             return self.qr_key(k);
         }
+        // a PDF or picture view: its own keys (pages, zoom, q) before either profile's
+        if self.cmdline.is_none() && self.char_for.is_none() && self.keyseq.is_empty() && !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) && self.views.contains_key(&self.docs[self.cur].name) && !matches!(self.docs[self.cur].ed.mode(), Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && self.view_key(&k) {
+            return;
+        }
         // a command waiting for its key (C-x r s, M-z, C-q), whichever the profile
         if self.char_for.is_some() && self.cmdline.is_none() {
             return self.emacs_key(&k);
@@ -104,6 +108,11 @@ impl App {
                 self.vis_g = true;
                 return;
             }
+        }
+        // a PDF or picture view: its own keys (pages, zoom, q) before Vim's
+        // …and nothing typed changes it (its text is the page's, read from the file): moves and commands still work
+        if !ctrl && self.views.contains_key(&self.docs[self.cur].name) && mode == Mode::Insert && matches!(k.code, KeyCode::Char(_) | KeyCode::Enter | KeyCode::Backspace | KeyCode::Delete | KeyCode::Tab) && !k.modifiers.contains(KeyModifiers::ALT) {
+            return self.say("a PDF or picture view: n/p pages, +/- zoom, q closes");
         }
         // : in visual mode: the selected lines as the range ('<,'>), as Vim does
         if matches!(mode, Mode::Visual | Mode::VisualLine | Mode::VisualBlock) && k.code == KeyCode::Char(':') {

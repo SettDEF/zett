@@ -101,6 +101,12 @@ See PLAN.md for the vision and milestones.
 - [x] 10 canvas (CanvasView.qml: JSON Canvas 1.0 .canvas files; text cards in Markdown, file cards live, groups, curved links with labels; drag, resize, link by the dot, keys N Del arrows 0 +/-, Tab walks cards; "New canvas" in the palette)
 
 ### Emacs parity (2026-10-21): what Emacs has and zett does not yet, in the order they are felt
+F. special views (2026-10-29, viewer.rs)
+- [x] doc-view / pdf: a PDF is a buffer of its page's text (pdftotext: / and y work, any terminal) with the page drawn over
+  the window in zash, kitty, ghostty, wezterm (Kitty graphics, after the synchronized update), fitted and centred;
+  n/p/Space/Backspace/G/Home pages, +/-/0 zoom, q closes; typing changes nothing
+- [x] image-mode: PNG, JPEG, GIF, WebP, BMP the same way
+- [ ] proced (processes, k kills), hexl (hex view/edit), wdired (rename by editing names), eww (a text web browser)
 A. editing (zett-edit textops.rs, pure, tested)
 - [x] fill-paragraph M-q (zett.opt.fill_column; list and comment prefixes kept), sort-lines, delete-duplicate-lines,
   join-line M-^, transpose-words M-t / transpose-lines C-x C-t, delete-blank-lines C-x C-o,

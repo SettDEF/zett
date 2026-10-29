@@ -49,6 +49,7 @@ mod chars;
 mod inputmethod;
 mod changelog;
 mod vimscript;
+mod viewer;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -469,6 +470,9 @@ struct App {
     tree: WTree,
     focus: usize,
     win_rects: Vec<(usize, Rect)>,
+    /// PDFs and pictures open as views (viewer.rs), by buffer name; what of them is on the screen
+    pub(crate) views: std::collections::HashMap<String, viewer::View>,
+    shown: viewer::Shown,
     /// the dashboard shows (no file yet) and its chosen button
     dash: bool,
     dash_sel: usize,
@@ -778,9 +782,13 @@ impl App {
         let mut root = std::env::current_dir().unwrap_or_default();
         let mut docs = Vec::new();
         let mut msg = None;
+        let mut views_later: Vec<PathBuf> = Vec::new();
         for p in &paths {
             if p.is_dir() {
                 root = p.clone();
+            } else if p.is_file() && viewer::is_view(p) {
+                // a PDF or picture: opened as a view once the editor is up (below)
+                views_later.push(p.clone());
             } else {
                 if let Some(parent) = p.parent().filter(|d| !d.as_os_str().is_empty() && paths.len() == 1) {
                     if !root.join(p).exists() || p.is_absolute() {
@@ -844,6 +852,8 @@ impl App {
             tree: WTree::Leaf(0),
             focus: 0,
             win_rects: Vec::new(),
+            views: Default::default(),
+            shown: Default::default(),
             dash: false,
             dash_sel: 0,
             last_doc: None,
@@ -1032,6 +1042,9 @@ impl App {
         app.started_ms = started.elapsed().as_millis();
         for i in 0..app.docs.len() {
             app.lsp_open(i);
+        }
+        for p in views_later {
+            app.open(&p);
         }
         app
     }
@@ -1273,6 +1286,9 @@ impl App {
             if sync {
                 let _ = execute!(std::io::stdout(), ratatui::crossterm::terminal::EndSynchronizedUpdate);
             }
+            // a PDF or picture view: its page over its window (Kitty graphics), after the update ends: zash places
+            // a picture at once but holds the update's cursor moves back until then
+            self.view_paint();
             // InsertEnter / InsertLeave, and VimEnter on the first frame (autocommands)
             let m = self.docs[self.cur].ed.mode();
             if self.last_mode != Some(m) {

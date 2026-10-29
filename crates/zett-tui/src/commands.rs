@@ -34,6 +34,11 @@ impl App {
             self.show_doc(i);
             return;
         }
+        // a PDF or a picture: a view of it (viewer.rs), not its bytes as text
+        if p.is_file() && crate::viewer::is_view(p) {
+            doom::remember(p);
+            return self.open_view(p);
+        }
         // BufReadPre before a file is read, BufNewFile for one that is not there yet
         let target = p.display().to_string();
         self.fire_autocmds(if p.exists() { "bufreadpre" } else { "bufnewfile" }, Some(&target));

@@ -298,6 +298,15 @@ impl App {
             f.render_widget(ratatui::widgets::Clear, cmd);
             f.render_widget(ratatui::widgets::Block::default().style(hl("MsgArea")), cmd);
         }
+        // a PDF or picture view: its page goes over these cells (viewer.rs), so they are drawn empty
+        for (id, r) in self.win_rects.clone() {
+            let Some(Some(w)) = self.wins.get(id) else { continue };
+            if self.docs.get(w.doc).is_some_and(|d| self.views.contains_key(&d.name)) {
+                if let Some(a) = crate::viewer::picture_area(r) {
+                    f.render_widget(ratatui::widgets::Clear, a);
+                }
+            }
+        }
         let (line_at, boxed, below) = self.cmd_place(body, cmd);
         self.draw_cmd(f, cmd, line_at, boxed);
         // showcmd: the keys of a command under way, at the right of the last line (showcmdloc=last)
