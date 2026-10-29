@@ -925,6 +925,8 @@ mod plugin_trial {
         let data = std::env::temp_dir().join(format!("zett-try-data-{}", std::process::id()));
         std::fs::create_dir_all(&data).unwrap();
         unsafe { std::env::set_var("XDG_DATA_HOME", &data) }
+        // and state (undo files, a plugin's own saves): a test that writes a file keeps it here
+        unsafe { std::env::set_var("XDG_STATE_HOME", data.join("state")) }
         let mut app = crate::App::new(Vec::new());
         let text = env("ZETT_TRY_TEXT");
         if !text.is_empty() { app.docs[app.cur].ed = zett_edit::Editor::from_str(&text.replace("\\n", "\n")); }

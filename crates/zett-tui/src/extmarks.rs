@@ -20,6 +20,9 @@ pub(crate) struct ExtMark {
     pub virt: Vec<(String, String)>,
     /// conceal: the text hidden (Some(''): nothing in its place, else that character)
     pub conceal: Option<String>,
+    /// whole lines after the line (before it: virt_above), each its (text, group) pieces
+    pub virt_lines: Vec<Vec<(String, String)>>,
+    pub virt_above: bool,
 }
 
 /// vim._marks_for's lines into marks.
@@ -30,7 +33,7 @@ pub(crate) fn parse(s: &str) -> Vec<ExtMark> {
         let t = |i: usize| f.get(i).copied().unwrap_or("").to_string();
         let vt: Vec<&str> = f.get(11).map(|v| v.split('\u{1f}').collect()).unwrap_or_default();
         let virt = vt.chunks(2).filter(|c| !c[0].is_empty()).map(|c| (c[0].to_string(), c.get(1).copied().unwrap_or("").to_string())).collect();
-        Some(ExtMark { row: n(0)? as usize, col: n(1)? as usize, end_row: n(2)? as usize, end_col: n(3)?, priority: n(4).unwrap_or(4096), hl: t(5), line_hl: t(6), sign: t(7), sign_hl: t(8), num_hl: t(9), virt_pos: t(10), virt, conceal: f.get(12).and_then(|c| c.strip_prefix('=')).map(str::to_string) })
+        Some(ExtMark { row: n(0)? as usize, col: n(1)? as usize, end_row: n(2)? as usize, end_col: n(3)?, priority: n(4).unwrap_or(4096), hl: t(5), line_hl: t(6), sign: t(7), sign_hl: t(8), num_hl: t(9), virt_pos: t(10), virt, conceal: f.get(12).and_then(|c| c.strip_prefix('=')).map(str::to_string), virt_lines: f.get(13).filter(|v| !v.is_empty()).map(|v| v.split('\u{1d}').map(|l| l.split('\u{1f}').collect::<Vec<_>>().chunks(2).map(|c| (c[0].to_string(), c.get(1).copied().unwrap_or("").to_string())).collect()).collect()).unwrap_or_default(), virt_above: f.get(14) == Some(&"1") })
     }).collect()
 }
 

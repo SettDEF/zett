@@ -74,6 +74,10 @@ pub(crate) struct Host {
     pub tops: Vec<usize>,
     /// the current buffer's own settings (filetype, commentstring …): vim.bo / vim.o read them first
     pub locals: std::collections::HashMap<String, String>,
+    /// the other open buffers (by place; None: the current one, lent as zett.buf), read by vim.api for a buffer not current
+    pub others: Vec<Option<zett_core::Buffer>>,
+    /// buffers (numbers) Lua wrote lines to while they were not current: the editor applies them after
+    pub other_writes: Vec<usize>,
     /// a plugin watches keys (vim.on_key): the editor tells Lua each one
     pub on_key: bool,
     /// keys waiting to be read by getchar (a test, or keys typed ahead), then the source that waits for one
@@ -797,6 +801,19 @@ impl Engine {
         // on_key_watch(on): someone uses vim.on_key, so the editor sends each key to vim._zett_on_key
         let st = self.st.clone();
         z.set("on_key_watch", lua.create_function(move |_, on: bool| { st.borrow_mut().host.on_key = on; Ok(()) })?)?;
+        // buf_lines_of(nr, a, b) / buf_line_count_of(nr): another open buffer's lines (nil: not one zett has)
+        let st = self.st.clone();
+        z.set("buf_lines_of", lua.create_function(move |_, (nr, a, b): (usize, i64, i64)| {
+            let st = st.borrow();
+            let Some(Some(buf)) = st.host.others.get(nr.wrapping_sub(1)) else { return Ok(None) };
+            let n = buf.len_lines();
+            let (a, b) = (line_index(a, n), line_index(b, n));
+            Ok(Some((a..b.max(a)).map(|i| buf.line(i)).collect::<Vec<_>>()))
+        })?)?;
+        let st = self.st.clone();
+        z.set("buf_line_count_of", lua.create_function(move |_, nr: usize| Ok(st.borrow().host.others.get(nr.wrapping_sub(1)).and_then(|b| b.as_ref()).map(|b| b.len_lines())))?)?;
+        let st = self.st.clone();
+        z.set("note_other_write", lua.create_function(move |_, nr: usize| { let w = &mut st.borrow_mut().host.other_writes; if !w.contains(&nr) { w.push(nr) } Ok(()) })?)?;
         // local_opt(name): the current buffer's own value of a setting, nil when it has none
         let st = self.st.clone();
         z.set("local_opt", lua.create_function(move |_, name: String| Ok(st.borrow().host.locals.get(&name).cloned()))?)?;
@@ -913,6 +930,14 @@ impl Engine {
         let get = with(self.st.clone());
         buf.set("redo", lua.create_function(move |_, ()| {
             get()?.borrow_mut().redo();
+            Ok(())
+        })?)?;
+        // set_opt(name, value): a buffer setting changed at once (vim.bo.modifiable = true, then writing in the same call)
+        let get = with(self.st.clone());
+        let st = self.st.clone();
+        buf.set("set_opt", lua.create_function(move |_, (name, value): (String, String)| {
+            get()?.borrow_mut().set_opt(&name, &value);
+            st.borrow_mut().host.locals.insert(name, value);
             Ok(())
         })?)?;
         let get = with(self.st.clone());
@@ -1450,5 +1475,16 @@ impl crate::Engine {
     /// How many queued keys are still unread.
     pub fn queued_keys(&self) -> usize {
         self.st.borrow().host.pending_keys.len()
+    }
+}
+
+impl crate::Engine {
+    /// The other open buffers, by place (None for the current one), for vim.api on a buffer not current.
+    pub fn set_others(&mut self, others: Vec<Option<zett_core::Buffer>>) {
+        self.st.borrow_mut().host.others = others;
+    }
+    /// The buffers Lua wrote to while they were not current (apply each: lend it, vim._zett_apply_writes(nr)).
+    pub fn take_other_writes(&mut self) -> Vec<usize> {
+        std::mem::take(&mut self.st.borrow_mut().host.other_writes)
     }
 }

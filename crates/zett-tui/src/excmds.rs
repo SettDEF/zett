@@ -16,7 +16,7 @@ const NAMES: &[(&str, &str)] = &[
     ("sbuffer", "sb"), ("sbnext", "sbn"), ("sbNext", "sbN"), ("sbprevious", "sbp"), ("sbfirst", "sbf"), ("sbrewind", "sbr"),
     ("sblast", "sbl"), ("sbmodified", "sbm"),
     ("close", "clo"), ("hide", "hid"), ("unhide", "unh"), ("sunhide", "sun"), ("resize", "res"), ("vertical", "vert"),
-    ("horizontal", "hor"), ("leftabove", "lefta"), ("aboveleft", "abo"), ("rightbelow", "rightb"), ("belowright", "bel"),
+    ("horizontal", "hor"), ("leftabove", "lefta"), ("aboveleft", "abo"), ("rightbelow", "rightb"), ("belowright", "bel"), ("botright", "bo"),
     ("topleft", "to"), ("windo", "wind"), ("winsize", "wi"), ("sview", "sv"), ("sfind", "sf"), ("drop", "dr"),
     ("pclose", "pc"), ("pedit", "ped"), ("pbuffer", "pb"),
     ("tabnew", "tabnew"), ("tabedit", "tabe"), ("tabfind", "tabf"), ("tabclose", "tabc"), ("tabonly", "tabo"), ("tabnext", "tabn"),
@@ -239,9 +239,9 @@ impl App {
                     _ => self.command(arg),
                 }
             }
-            "leftabove" | "aboveleft" | "rightbelow" | "belowright" | "topleft" => {
+            "leftabove" | "aboveleft" | "rightbelow" | "belowright" | "topleft" | "botright" => {
                 // the split in the command goes before (above, left) or after (below, right)
-                let after = matches!(cmd, "rightbelow" | "belowright");
+                let after = matches!(cmd, "rightbelow" | "belowright" | "botright");
                 let i = self.cur;
                 let keep: Vec<(String, Option<String>)> = ["splitbelow", "splitright"].iter().map(|k| (k.to_string(), self.docs[i].local.get(*k).cloned())).collect();
                 for (k, _) in &keep {

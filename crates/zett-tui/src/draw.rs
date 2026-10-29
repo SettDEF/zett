@@ -417,6 +417,8 @@ impl App {
         // for matchtime tenths of a second after the key
         let lasting = self.typed_at.elapsed() < Duration::from_millis(self.num(di, "matchtime") as u64 * 100);
         let paren = (lasting && self.docs[di].ed.mode() == zett_edit::Mode::Insert && self.flag(di, "showmatch")).then(|| self.docs[di].ed.match_before_cursor()).flatten();
+        // a plugin's whole lines between the text (extmark virt_lines): (the line they stand before, rows)
+        let vlines: Vec<(usize, Vec<Vec<(String, String)>>)> = self.extmarks.get(&di).map(|(_, v)| v.iter().filter(|m| !m.virt_lines.is_empty()).map(|m| (if m.virt_above { m.row } else { m.row + 1 }, m.virt_lines.clone())).collect()).unwrap_or_default();
         let (queries, embeds, nb, root) = (&mut self.queries, &mut self.embeds, &self.notebook, self.root.clone());
         let d = &mut self.docs[di];
         let lines = d.ed.buf.len_lines();
@@ -498,6 +500,7 @@ impl App {
             loop {
                 let extra: usize = d.ed.suggestions().iter().filter(|h| h.end() > d.top && h.end() <= c.line).map(|h| h.new.len()).sum::<usize>()
                     + qrows.iter().filter(|(after, _)| *after >= d.top && *after < c.line).map(|(_, r)| r.len()).sum::<usize>()
+                    + vlines.iter().filter(|(at, _)| *at >= d.top && *at <= c.line).map(|(_, r)| r.len()).sum::<usize>()
                     + dview.as_ref().map_or(0, |v| v.fill.iter().filter(|(l, _)| **l > d.top && **l <= c.line).map(|(_, n)| *n).sum::<usize>());
                 let rows: usize = (d.top..c.line).filter(|&l| !d.ed.is_hidden(l)).take(height * 2).map(|l| rows_of(d, l)).sum::<usize>() + extra + crow;
                 if rows + margin < height || d.top >= c.line {
@@ -603,6 +606,18 @@ impl App {
                         let mut spans = vec![Span::styled(gut("+ ", gutter as usize), hl::hl("AgentAdd")), Span::styled(shown, hl::hl("AgentAdd"))];
                         if i == 0 {
                             spans.push(Span::styled(format!(" {} ", h.author), hl::hl("AgentTag")));
+                        }
+                        virt.push_back(Line::from(spans));
+                    }
+                }
+                for (_, rows) in vlines.iter().filter(|(at, _)| *at == next) {
+                    for r in rows {
+                        let mut spans = vec![Span::raw(" ".repeat(gutter as usize))];
+                        let mut room = width;
+                        for (t, g) in r {
+                            let t: String = t.chars().take(room).collect();
+                            room = room.saturating_sub(t.chars().count());
+                            spans.push(Span::styled(t, hl::hl(g)));
                         }
                         virt.push_back(Line::from(spans));
                     }

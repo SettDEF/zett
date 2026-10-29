@@ -419,6 +419,7 @@ local function opt_set(name, v, scope)
   local key = i and i.name or name
   v = as_text(v)
   if scope == "local" then
+    pcall(z.buf.set_opt, key, tostring(v))
     if type(v) == "boolean" then ex("setlocal " .. (v and "" or "no") .. key) else ex("setlocal " .. key .. "=" .. tostring(v):gsub(" ", "\\ ")) end
   else
     z.opt[key] = typed(i, v)
@@ -521,6 +522,24 @@ local function lines(a, b) local ok, r = pcall(z.buf.lines, a, b) return ok and 
 
 -- ── vim.api ──
 local api = vim.api or {}
+-- a buffer that is not the current one: read from the copies the editor gives, written by a queue it applies after
+local function other(b) return type(b) == "number" and b > 0 and b ~= cur_buf() and z.buf_lines_of and z.buf_line_count_of(b) ~= nil end
+local other_writes = {}
+function vim._zett_apply_writes(nr)
+  for _, w in ipairs(other_writes[nr] or {}) do pcall(z.buf.set_lines, w[1], w[2], w[3]) end
+  other_writes[nr] = nil
+end
+api.nvim_buf_line_count = function(b) if other(b) then return z.buf_line_count_of(b) end return z.buf.line_count() end
+api.nvim_buf_get_lines = function(b, a, e, _) if other(b) then return z.buf_lines_of(b, a, e) end return lines(a, e) end
+api.nvim_buf_set_lines = function(b, a, e, _, l)
+  if other(b) then
+    other_writes[b] = other_writes[b] or {}
+    table.insert(other_writes[b], { a, e, l })
+    z.note_other_write(b)
+    return
+  end
+  z.buf.set_lines(a, e, l)
+end
 vim.api = api
 api.nvim_command = ex
 api.nvim_exec = function(src, output) vim.cmd(src) return output and "" or nil end
@@ -541,9 +560,6 @@ api.nvim_buf_get_name = function(b)
   return z.buffers()[b] or ""
 end
 api.nvim_buf_set_name = function(_, name) ex("file " .. name) end
-api.nvim_buf_line_count = function() return z.buf.line_count() end
-api.nvim_buf_get_lines = function(_, a, b, _) return lines(a, b) end
-api.nvim_buf_set_lines = function(_, a, b, _, l) z.buf.set_lines(a, b, l) end
 api.nvim_buf_get_text = function(_, sr, sc, er, ec, _)
   local l = lines(sr, er + 1)
   if #l == 0 then return {} end
@@ -1405,6 +1421,21 @@ end
 -- for the window: how often marks changed, and buffer b's marks on rows a..e as lines of
 -- row col end_row end_col priority hl line_hl sign_text sign_hl num_hl virt_pos virt (text\31hl\31…)
 function vim._marks_seq() return mark_seq end
+-- virt_lines as one field: lines by \29, each line's (text, group) pieces by \31
+local function mark_vlines(v)
+  if not v then return "" end
+  local ls = {}
+  for _, line in ipairs(v) do
+    local cs = {}
+    for _, c in ipairs(line) do
+      local hl = type(c[2]) == "table" and c[2][#c[2]] or c[2]
+      cs[#cs + 1] = tostring(c[1] or "") .. "\31" .. tostring(hl or "")
+    end
+    ls[#ls + 1] = #cs > 0 and table.concat(cs, "\31") or " \31"
+  end
+  return table.concat(ls, "\29")
+end
+
 function vim._marks_for(b, a, e)
   local out = {}
   for _, list in pairs(marks[b] or {}) do
@@ -1417,7 +1448,7 @@ function vim._marks_for(b, a, e)
           local hl = type(c[2]) == "table" and c[2][#c[2]] or c[2]
           vt[#vt + 1] = tostring(c[1] or "") .. "\31" .. tostring(hl or "")
         end
-        out[#out + 1] = table.concat({ m.row, m.col, er, o.end_col or (o.end_row and 0) or -1, o.priority or (o.sign_text and 10 or 4096), o.hl_group or "", o.line_hl_group or "", o.sign_text or "", o.sign_hl_group or "", o.number_hl_group or "", o.virt_text_pos or "eol", table.concat(vt, "\31"), o.conceal and ("=" .. o.conceal) or "" }, "\t")
+        out[#out + 1] = table.concat({ m.row, m.col, er, o.end_col or (o.end_row and 0) or -1, o.priority or (o.sign_text and 10 or 4096), o.hl_group or "", o.line_hl_group or "", o.sign_text or "", o.sign_hl_group or "", o.number_hl_group or "", o.virt_text_pos or "eol", table.concat(vt, "\31"), o.conceal and ("=" .. o.conceal) or "", mark_vlines(o.virt_lines), o.virt_lines_above and "1" or "" }, "\t")
       end
     end
   end
@@ -1642,7 +1673,7 @@ api.nvim_win_get_position = function(w) local x = win_of(w) return x and { x.row
 api.nvim_win_get_number = function(w) local _, i = win_of(w) return i or 0 end
 api.nvim_win_get_tabpage = function() return 1 end
 -- the focus to window w (a command after this Lua returns, as the others)
-local function focus(w) local _, i = win_of(w) if i then ex(i .. "wincmd w") end end
+local function focus(w) if w == nil or w == 0 or w == handle(cur_nr()) then return end local _, i = win_of(w) if i then ex(i .. "wincmd w") end end
 api.nvim_set_current_win = function(w) focus(w) end
 api.nvim_set_current_buf = function(b) ex("buffer " .. b) end
 api.nvim_win_set_buf = function(w, b) focus(w) ex("buffer " .. b) end

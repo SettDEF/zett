@@ -24,6 +24,9 @@ impl App {
         let tops = self.win_rects.iter().filter_map(|&(id, _)| self.wins.get(id).and_then(|w| w.as_ref()).map(|w| w.top)).collect();
         self.engine.set_tops(tops);
         self.engine.set_locals(self.docs[cur].local.clone());
+        // the other buffers' text (ropes: cheap copies), for vim.api on a buffer that is not current
+        let others = self.docs.iter().enumerate().map(|(i, d)| (i != cur).then(|| d.ed.buf.clone())).collect();
+        self.engine.set_others(others);
         // the : line and (when it grew) the command history, for getcmdline / histget
         let line = self.cmdline.clone().map(|l| { let n = l.chars().count(); (l, n) });
         let hist = (self.cmd_hist.len() != self.hist_sent).then(|| self.cmd_hist.clone());
@@ -38,6 +41,16 @@ impl App {
         }
         let rev = self.docs[cur].ed.buf.rev();
         let r = self.engine.lend_buffer(&mut self.docs[cur].ed, &path, &root, f);
+        // lines Lua wrote to other buffers: each one lent in turn and the writes made there
+        for nr in self.engine.take_other_writes() {
+            let i = nr - 1;
+            if i == cur || i >= self.docs.len() { continue }
+            let p = self.docs[i].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
+            let rev = self.docs[i].ed.buf.rev();
+            self.engine.lend_buffer(&mut self.docs[i].ed, &p, &root, |e| { let _ = e.eval(&format!("vim._zett_apply_writes({nr})")); });
+            if self.docs[i].ed.buf.rev() != rev { self.docs[i].states.clear(); self.docs[i].touched(0); }
+        }
+        self.engine.set_others(Vec::new());
         if self.docs[cur].ed.buf.rev() != rev {
             let d = &mut self.docs[cur];
             d.states.clear();

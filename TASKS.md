@@ -400,3 +400,15 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 - [ ] Glass floats (fidget, hover, completion): a blurred, see-through background under a float. A terminal cannot blur
       part of its cell grid, so zash draws it: zett tells zash the float's rectangle (an escape sequence zash knows),
       zash blurs what is under it; plain terminals keep the solid background
+
+## Plugins from Neovim (tried 2026-10-29)
+- [x] Comment.nvim, nvim-surround, nvim-autopairs work; lualine, flash load (looks unchecked); telescope loads
+- [ ] floating windows from plugins drawn (telescope's picker, which-key, nvim-cmp)
+- [ ] vim.cmd takes effect at once inside Lua (now after the Lua returns: `vnew` then set_lines hits the old buffer; plugins need vim.schedule)
+- [x] vim.api on a buffer that is not current (reads from copies, writes queued and applied there)
+
+## Trail: a file's history in a side panel (plugins/trail, 2026-10-29)
+- [x] 1 saves (kept by Trail) and commits listed; since one: added lines marked, removed ones in red where they were (virt_lines)
+- [ ] 2 a change's hunks, named by place; restore one hunk
+- [ ] 3 removed code listed and searchable
+- [ ] 4 scrub through time (unsaved edits too)
