@@ -297,7 +297,7 @@ settings page.
 - [x] performance budgets (docs/PERFORMANCE.md) + checker: `cargo run --release -p zett-edit --example perf` — all met
 - [x] operation-based undo (cost of the change, not of the file): x/dd/p/u 2–4 µs in 100k lines
 - [x] Neovim comparison harness (scripts-nvim-compare.sh)
-- [ ] M1: undo/redo cursor placement matches Neovim (diff: `abc` + `ofoo<Esc>Obar<Esc>uu<C-r>` → nvim 1:1, zett 1:3)
+- [x] M1: undo/redo cursor placement matches Neovim (14 typed sequences checked against nvim; test undo_and_redo_put_the_cursor_where_neovim_does)
 
 ## Done the night of 2026-10-16/17
 - [x] folder mirror: a workspace is a folder of .md files (~/zett or $ZETT_DIR)

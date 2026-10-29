@@ -9,6 +9,17 @@ mod tests {
         e
     }
 
+    // the cursor after undo and redo, as Neovim puts it (each checked against nvim, keys typed one by one)
+    #[test]
+    fn undo_and_redo_put_the_cursor_where_neovim_does() {
+        for (keys, line, col) in [("ofoo<Esc>Obar<Esc>uu<C-r>", 0, 0), ("ofoo<Esc>u<C-r>", 0, 0), ("Ax<Esc>0u", 0, 6), ("Ax<Esc>0u<C-r>", 0, 7), ("wdwu<C-r>", 0, 3), ("yyppu", 1, 0)] {
+            let mut e = ed("abc def\nsecond line\n");
+            e.feed(keys);
+            let c = e.cursor();
+            assert_eq!((c.line, c.col), (line, col), "{keys}");
+        }
+    }
+
     #[test]
     fn search_with_slash_n_and_star() {
         let mut e = ed("one two one three one");

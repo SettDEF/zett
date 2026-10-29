@@ -991,6 +991,7 @@ mod plugin_trial {
         let errors = app.with_lua(|e| std::mem::take(&mut e.errors));
         for e in &errors { eprintln!("ERROR {e}"); }
         eprintln!("TEXT {:?}", app.docs[app.cur].ed.text());
+        { let c = app.docs[app.cur].ed.cursor(); let l = app.docs[app.cur].ed.buf.line(c.line); eprintln!("CURSOR {}:{}", c.line + 1, l.chars().take(c.col).map(char::len_utf8).sum::<usize>() + 1); }
         let b = term.backend().buffer();
         let rows: Vec<String> = (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>().trim_end().to_string()).collect();
         eprintln!("SCREEN\n{}", rows.join("\n"));

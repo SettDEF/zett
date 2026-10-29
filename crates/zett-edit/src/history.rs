@@ -33,7 +33,10 @@ impl Editor {
         }
         self.buf.insert(at, s);
         self.vim.shift(at, s.chars().count() as isize);
+        let here = self.cursor;
         if let Some(c) = self.open.as_mut() {
+            // the cursor as the first edit is made (Vim's u_save: after A moved it, before o opens the line)
+            if c.edits.is_empty() { c.cursor = here; }
             c.edits.push(Edit { at, removed: String::new(), inserted: s.to_string() });
         }
     }
@@ -44,7 +47,9 @@ impl Editor {
         }
         let gone = self.buf.remove(a, b);
         self.vim.removed(a.min(b), gone.chars().count());
+        let here = self.cursor;
         if let Some(c) = self.open.as_mut() {
+            if c.edits.is_empty() { c.cursor = here; }
             c.edits.push(Edit { at: a.min(b), removed: gone.clone(), inserted: String::new() });
         }
         gone
@@ -79,9 +84,13 @@ impl Editor {
         self.close();
         if let Some(n) = self.undo.nodes[self.undo.cur].redo {
             self.forward(n);
-            // Vim puts the cursor where the change starts
+            // as Vim: back where the cursor was when the change began, when that is in the changed lines;
+            // else where the change starts
             let c = &self.undo.nodes[n].change;
-            self.cursor = c.edits.first().map_or(c.cursor, |e| e.at);
+            let start = c.edits.first().map_or(c.cursor, |e| e.at);
+            let line = |p: usize| self.buf.to_pos(p.min(self.buf.len_chars())).line;
+            let (s, saved) = (line(start), line(c.cursor));
+            self.cursor = if saved + 1 >= s && saved <= s + 1 { c.cursor } else { start };
             self.clamp();
         }
     }
