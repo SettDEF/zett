@@ -410,6 +410,7 @@ ColumnLayout {
     }
     // the new editor core (Settings > Editor > New editor core): CodeView over CodeDoc, in place of the TextEdit
     readonly property alias codeDoc: codeView.doc
+    readonly property alias codeView: codeView
     readonly property alias coreView: codeView
     // the default now; Settings can go back to the classic editor. Headless checks use the classic one unless they test the core
     readonly property bool newCore: app.shot.length ? app.shotEngine.startsWith("core") : (win.prefs.newCore ?? true)

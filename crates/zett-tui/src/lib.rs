@@ -10,6 +10,7 @@ mod extmarks;
 mod keyword;
 /// keyword completion, shared with the window's editor (the same words, the same order as i_CTRL-N)
 pub use keyword::candidates as keyword_candidates;
+pub use keyword::language_keywords;
 mod lsp;
 mod panels;
 mod hl;

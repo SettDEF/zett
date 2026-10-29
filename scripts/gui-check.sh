@@ -18,6 +18,7 @@ printf 'int main(void) {\n    int x = "text";\n    undefined_fn();\n    return x
 printf 'int add(int a, int b);\nint main(void) {\n    add(1, 2);\n    return 0;\n}\n' > "$W/sig.c"
 printf 'int main(void) {\n    int x = 1\n    return x;\n}\n' > "$W/fix.c"
 printf 'a\nb\nc\n' > "$W/lines.rs"
+: > "$W/new.js"; printf 'function functionality() {}\n' > "$W/other.js"
 printf 'fn main() {\n    let a = 1;\n    let b = 2;\n}\n' > "$W/core.rs"
 cp "$W/core.rs" "$W/core2.rs"; cp "$W/core.rs" "$W/core3.rs"; cp "$W/core.rs" "$W/core4.rs"; cp "$W/core.rs" "$W/core5.rs"
 for i in $(seq 1 1000); do echo "impl T$i {"; for j in $(seq 1 98); do echo "    fn f$j(&self) -> u32 { $j }"; done; echo "}"; done > "$W/big.rs"
@@ -70,6 +71,9 @@ check core2 core2:core2.rs "grep -q 'core2 found 2 replaced 2' \"\$OUT/core2.log
 check core3 core3:core3.rs "grep -q 'core3 word \\[a\\] indented \\[        let a = 1;\\] cursors 2' \"\$OUT/core3.log\" && grep -q '^    xlet a' '$W/core3.rs' && grep -q '^    xlet b' '$W/core3.rs'"
 check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \"\$(tail -c1 '$W/core4.rs' | od -An -c | tr -d ' ')\" = '\\n' ] && tail -1 '$W/core4.rs' | grep -q tail"
 check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"\\]' \"\$OUT/corewords.log\""
+check corecomp corecomp:core5.rs "grep -q 'corecomp focus true completing true items \\[\"let\"' \"\$OUT/corecomp.log\""
+check corekw corecomp:new.js:functi "grep -q 'items \\[\"function\"\\] from \\[\"keyword\"' \"\$OUT/corekw.log\""
+check coreother corecomp:new.js:functi:other.js "grep -q '\"functionality\".*in other.js' \"\$OUT/coreother.log\""
 check corekeep corekeep:core5.rs,lines.rs "grep -q 'corekeep away 1 back \\[kept fn main' \"\$OUT/corekeep.log\" && grep -q 'dirty true' \"\$OUT/corekeep.log\""
 check corenote corenote:core5.rs "grep -q 'corenote pages \\[\"core5.rs › main\"\\] notes \\[\"core5.rs › main\"\\] side [0-9]' \"\$OUT/corenote.log\""
 check welcome welcome

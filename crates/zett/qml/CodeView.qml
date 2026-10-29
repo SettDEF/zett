@@ -53,6 +53,9 @@ Rectangle {
         doc.select(l0, c0, old.length); doc.insert(out)
         ai = null; input.forceActiveFocus()
     }
+    // for the checks: the keys go to the text, and whether they do
+    function focusInput() { input.forceActiveFocus() }
+    readonly property bool inputFocused: input.activeFocus
     function aiReject() { if (ai && ai.busy) cv.app.stopShell(); ai = null; input.forceActiveFocus() }
     function expandSnippet() {
         const w = word(), body = (win.snippets ?? {})[w]
@@ -88,10 +91,14 @@ Rectangle {
         const w = word(), wl = w.toLowerCase()
         const server = cv.fv.comps.filter(i => !wl || (i.filter || i.label).toLowerCase().includes(wl))
         const have = new Set(server.map(i => i.label))
-        let local = []; try { local = JSON.parse(doc.words(w)) } catch (e) {}
-        return server.concat(local.filter(x => !have.has(x)).map(x => ({ label: x, insert: x, detail: "in this file" }))).slice(0, 50)
+        // without a server too: this file's words, the other open files', the language's keywords, your snippets
+        const ext = (cv.file.match(/\.([^./]+)$/) ?? ["", ""])[1].toLowerCase()
+        const others = (win.fileTabs ?? []).filter(p => p !== cv.file)
+        let local = []; try { local = JSON.parse(doc.candidates(w, ext, JSON.stringify(others))) } catch (e) {}
+        const snips = Object.keys(win.snippets ?? {}).filter(k => wl && k.toLowerCase().startsWith(wl)).map(k => ({ label: k, insert: k, detail: "snippet", snippet: true }))
+        return server.concat(snips, local.filter(x => !have.has(x.label))).slice(0, 50)
     }
-    function takeComp(i) { const it = comps[i]; if (!it) return; const w0 = wordStart(); doc.select(carets[0][0], w0, carets[0][1] - w0); doc.insert(it.insert || it.label); completing = false; cv.fv.comps = [] }
+    function takeComp(i) { const it = comps[i]; if (!it) return; const w0 = wordStart(); doc.select(carets[0][0], w0, carets[0][1] - w0); doc.insert(it.insert || it.label); completing = false; cv.fv.comps = []; if (it.snippet) expandSnippet() }
     function askHere(kind) { if (cv.fv) cv.fv.askAt(kind, cv.carets[0][0], cv.carets[0][1]) }
     readonly property string file: win.filePath
     // switching files: unsaved text is kept (win.unsaved) and comes back when the file is opened again

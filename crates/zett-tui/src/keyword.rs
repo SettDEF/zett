@@ -337,3 +337,20 @@ mod ctrl_x_tests {
         assert_eq!(app.docs[app.cur].ed.buf.line(3).trim_end(), "foo bar", "the first goes in at once");
     }
 }
+
+/// A language's keywords and common built-ins, by file extension (completion with no language server).
+pub fn language_keywords(ext: &str) -> &'static [&'static str] {
+    match ext {
+        "rs" => &["as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use", "where", "while", "Option", "Some", "None", "Result", "Ok", "Err", "String", "Vec", "Box", "println!", "format!", "vec!", "assert_eq!", "impl Default"],
+        "js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" | "qml" => &["async", "await", "break", "case", "catch", "class", "const", "continue", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return", "static", "super", "switch", "this", "throw", "true", "try", "typeof", "undefined", "var", "void", "while", "yield", "interface", "type", "enum", "readonly", "property", "signal", "console", "Promise", "Object", "Array", "JSON", "Math"],
+        "py" => &["False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with", "yield", "print", "range", "len", "self", "__init__"],
+        "lua" => &["and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while", "require", "pairs", "ipairs", "table", "string", "print", "vim"],
+        "c" | "h" | "cpp" | "cc" | "hpp" | "cxx" => &["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "bool", "true", "false", "nullptr", "class", "namespace", "template", "typename", "public", "private", "protected", "virtual", "include", "define", "printf", "malloc", "free"],
+        "go" => &["break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough", "for", "func", "go", "goto", "if", "import", "interface", "map", "package", "range", "return", "select", "struct", "switch", "type", "var", "nil", "true", "false", "string", "error", "make", "append"],
+        "sh" | "bash" | "zsh" => &["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "function", "return", "local", "export", "readonly", "echo", "printf", "exit", "source", "shift"],
+        "java" | "kt" | "cs" => &["abstract", "boolean", "break", "case", "catch", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float", "for", "if", "implements", "import", "instanceof", "int", "interface", "long", "new", "null", "package", "private", "protected", "public", "return", "static", "super", "switch", "this", "throw", "throws", "try", "void", "while", "fun", "val", "var", "namespace", "using", "string"],
+        "php" => &["function", "echo", "class", "public", "private", "protected", "return", "if", "else", "elseif", "foreach", "as", "while", "for", "new", "null", "true", "false", "array", "namespace", "use"],
+        "rb" => &["def", "end", "class", "module", "if", "elsif", "else", "unless", "while", "do", "return", "yield", "nil", "true", "false", "self", "require", "puts"],
+        _ => &[],
+    }
+}

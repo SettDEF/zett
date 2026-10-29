@@ -76,6 +76,9 @@ pub mod qobject {
         /// the file's own words starting with `prefix` (not the prefix itself), nearest the cursor first, 30 at most
         #[qinvokable]
         fn words(self: &CodeDoc, prefix: &QString) -> QString;
+        /// completion without a server: this file's words, the language's keywords, the other open files' words (paths as JSON)
+        #[qinvokable]
+        fn candidates(self: &CodeDoc, prefix: &QString, ext: &QString, others: &QString) -> QString;
         /// the text replaced, the file on disk kept as it is (so it shows as unsaved): edits kept while away
         #[qinvokable]
         fn restore(self: Pin<&mut CodeDoc>, text: &QString);
@@ -940,6 +943,33 @@ impl qobject::CodeDoc {
         if p.is_empty() { return QString::from("[]") }
         let found = zett_tui::keyword_candidates(&p, &r.rope.to_string(), r.carets[0].head, false, &[], true);
         QString::from(&serde_json::Value::Array(found.into_iter().take(30).map(|(w, _)| serde_json::Value::String(w)).collect()).to_string())
+    }
+
+    pub fn candidates(&self, prefix: &QString, ext: &QString, others: &QString) -> QString {
+        let r = self.rust();
+        let p = prefix.to_string();
+        if p.is_empty() { return QString::from("[]") }
+        let lower = p.to_lowercase();
+        // the other open files, as on disk (a few, not huge ones)
+        let paths: Vec<String> = serde_json::from_str(&others.to_string()).unwrap_or_default();
+        let texts: Vec<(String, String)> = paths.iter().take(12).filter(|f| std::fs::metadata(f).is_ok_and(|m| m.len() < 2_000_000)).filter_map(|f| {
+            let name = std::path::Path::new(f).file_name()?.to_string_lossy().into_owned();
+            Some((name, std::fs::read_to_string(f).ok()?))
+        }).collect();
+        let mut out: Vec<serde_json::Value> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (w, from) in zett_tui::keyword_candidates(&p, &r.rope.to_string(), r.carets[0].head, false, &texts, true).into_iter().take(30) {
+            let detail = if from.is_empty() { "in this file".to_string() } else { format!("in {from}") };
+            seen.insert(w.clone());
+            out.push(serde_json::json!({ "label": w, "insert": w, "detail": detail }));
+        }
+        // keywords after the words that are really there
+        for k in zett_tui::language_keywords(&ext.to_string()) {
+            if k.len() > p.len() && k.to_lowercase().starts_with(&lower) && seen.insert(k.to_string()) {
+                out.push(serde_json::json!({ "label": k, "insert": k, "detail": "keyword" }));
+            }
+        }
+        QString::from(&serde_json::Value::Array(out).to_string())
     }
 }
 
