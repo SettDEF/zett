@@ -318,3 +318,28 @@ let g:logs = join(g:log, ',')
     // an error is a Vim error, not a crash
     assert!(e.eval("vim._vimscript.run('echo NoSuchFunc()')").is_ok());
 }
+
+#[test]
+fn jobstart_streams_and_msgpack_round_trips() {
+    let (_d, f) = ws("jobstream");
+    let mut e = Engine::new(Some(f));
+    // the vim layer, with no user config (an empty folder)
+    let cfg = std::env::temp_dir().join(format!("zett-jobstream-cfg-{}", std::process::id()));
+    std::fs::create_dir_all(&cfg).unwrap();
+    e.load_config(&cfg);
+    // output arrives while the job runs, stdin can be written, on_exit comes last
+    let out = e.eval(r#"(function()
+        local got = {}
+        local id = vim.fn.jobstart({ "sh", "-c", "echo one; sleep 0.3; read x; echo got $x" }, {
+            on_stdout = function(_, d) got[#got + 1] = table.concat(d, "|") end,
+            on_exit = function(_, c) got[#got + 1] = "exit " .. c end })
+        vim.wait(200, function() return #got > 0 end)
+        local early = got[1]
+        vim.fn.chansend(id, "hi\n")
+        local code = vim.fn.jobwait({ id }, 3000)[1]
+        return early .. " / " .. code .. " / " .. table.concat(got, ";")
+    end)()"#).unwrap().0;
+    assert!(out.starts_with("one| / 0 / one|;got hi|;;exit 0"), "{out}");
+    let m = e.eval(r#"vim.inspect(vim.fn.msgpackparse(vim.fn.msgpackdump({ { 1, "two", { a = 3.5 } }, -7, 70000 }, "B")))"#).unwrap().0;
+    assert_eq!(m, r#"{ { 1, "two", { a = 3.5 } }, -7, 70000 }"#);
+}

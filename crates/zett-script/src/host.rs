@@ -81,6 +81,8 @@ pub(crate) struct Host {
     pub timers: Vec<(std::time::Instant, RegistryKey)>,
     /// processes started by zett.job.spawn (vim.system): each one's result arrives on its channel
     pub jobs: Vec<Job>,
+    /// processes started by zett.job.stream (jobstart): output arrives in pieces while they run
+    pub streams: Vec<Stream>,
     /// every option the editor has: name, short names, kind (bool, int, text), default (zett.option_info)
     pub options: Vec<(String, Vec<String>, String, String)>,
 }
@@ -270,7 +272,7 @@ impl Engine {
         let st = self.st.borrow();
         let t = st.host.timers.iter().map(|t| t.0).min();
         // a running job (vim.system) is checked every 5 ms for its end
-        if st.host.jobs.is_empty() { t } else { Some(t.unwrap_or_else(std::time::Instant::now).min(std::time::Instant::now() + std::time::Duration::from_millis(5))) }
+        if st.host.jobs.is_empty() && st.host.streams.is_empty() { t } else { Some(t.unwrap_or_else(std::time::Instant::now).min(std::time::Instant::now() + std::time::Duration::from_millis(5))) }
     }
 
     /// Runs the zett.defer functions that are due.
@@ -656,6 +658,7 @@ impl Engine {
         // spawn(argv, { cwd, env = {K = V}, clear_env, stdin = "text" }, on_exit(result)) → id, pid
         let st = self.st.clone();
         let next = Rc::new(std::cell::Cell::new(0u64));
+        let next2 = next.clone();
         job.set("spawn", lua.create_function(move |lua, (argv, o, cb): (Vec<String>, Option<mlua::Table>, Option<Function>)| {
             let get = |k: &str| o.as_ref().and_then(|t| t.get::<Option<String>>(k).ok().flatten());
             let env: Option<Vec<(String, String)>> = o.as_ref().and_then(|t| t.get::<Option<mlua::Table>>("env").ok().flatten()).map(|t| t.pairs::<String, String>().flatten().collect());
@@ -696,12 +699,42 @@ impl Engine {
                 }
             }
         })?)?;
+        // stream(argv, { cwd, env, clear_env }, cb(kind, data)): a job whose output comes in pieces (jobstart);
+        // cb("stdout"|"stderr", text) while it runs, cb("exit", code) at the end → id, pid
+        let st = self.st.clone();
+        job.set("stream", lua.create_function(move |lua, (argv, o, cb): (Vec<String>, Option<mlua::Table>, Function)| {
+            let get = |k: &str| o.as_ref().and_then(|t| t.get::<Option<String>>(k).ok().flatten());
+            let env: Option<Vec<(String, String)>> = o.as_ref().and_then(|t| t.get::<Option<mlua::Table>>("env").ok().flatten()).map(|t| t.pairs::<String, String>().flatten().collect());
+            let clear = o.as_ref().and_then(|t| t.get::<Option<bool>>("clear_env").ok().flatten()).unwrap_or(false);
+            let (pid, stdin, rx) = start_stream(&argv, get("cwd"), env, clear).map_err(|e| mlua::Error::runtime(format!("{}: {e}", argv.first().cloned().unwrap_or_default())))?;
+            let id = next2.get() + 1;
+            next2.set(id);
+            let cb = lua.create_registry_value(cb)?;
+            st.borrow_mut().host.streams.push(Stream { id, pid, stdin: Some(stdin), rx, cb });
+            Ok((id, pid))
+        })?)?;
+        // send(id, text): to a streamed job's stdin; false when it is closed or gone
+        let st = self.st.clone();
+        job.set("send", lua.create_function(move |_, (id, data): (u64, mlua::String)| {
+            use std::io::Write;
+            let mut s = st.borrow_mut();
+            let Some(j) = s.host.streams.iter_mut().find(|j| j.id == id) else { return Ok(false) };
+            Ok(j.stdin.as_mut().is_some_and(|w| w.write_all(&data.as_bytes()).and_then(|_| w.flush()).is_ok()))
+        })?)?;
+        // close_stdin(id): the program sees the end of its input
+        let st = self.st.clone();
+        job.set("close_stdin", lua.create_function(move |_, id: u64| {
+            if let Some(j) = st.borrow_mut().host.streams.iter_mut().find(|j| j.id == id) { j.stdin = None }
+            Ok(())
+        })?)?;
         // kill(id, signal = 15)
         let st = self.st.clone();
         job.set("kill", lua.create_function(move |_, (id, sig): (u64, Option<i32>)| {
-            if let Some(j) = st.borrow().host.jobs.iter().find(|j| j.id == id) {
+            let s = st.borrow();
+            let pid = s.host.jobs.iter().find(|j| j.id == id).map(|j| j.pid).or_else(|| s.host.streams.iter().find(|j| j.id == id).map(|j| j.pid));
+            if let Some(pid) = pid {
                 // the signal by kill(1): no libc in this crate
-                let _ = std::process::Command::new("kill").arg(format!("-{}", sig.unwrap_or(15))).arg(j.pid.to_string()).status();
+                let _ = std::process::Command::new("kill").arg(format!("-{}", sig.unwrap_or(15))).arg(pid.to_string()).status();
             }
             Ok(())
         })?)?;
@@ -1245,8 +1278,77 @@ fn start_job(argv: &[String], cwd: Option<String>, env: Option<Vec<(String, Stri
     Ok((pid, rx))
 }
 
+/// A streamed job (jobstart): stdin kept for writing, its output and its end arrive on the channel.
+pub(crate) struct Stream {
+    pub id: u64,
+    pub pid: u32,
+    pub stdin: Option<std::process::ChildStdin>,
+    pub rx: std::sync::mpsc::Receiver<StreamMsg>,
+    pub cb: RegistryKey,
+}
+
+pub(crate) enum StreamMsg {
+    /// "stdout" or "stderr", and what came
+    Data(&'static str, String),
+    Exit(i32),
+}
+
+/// Starts `argv` with stdin, stdout and stderr piped; a thread per output sends what it reads.
+pub(crate) fn start_stream(argv: &[String], cwd: Option<String>, env: Option<Vec<(String, String)>>, clear_env: bool) -> std::io::Result<(u32, std::process::ChildStdin, std::sync::mpsc::Receiver<StreamMsg>)> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    let (prog, args) = argv.split_first().ok_or_else(|| std::io::Error::other("no command"))?;
+    let mut c = Command::new(prog);
+    c.args(args).stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::piped());
+    if let Some(d) = cwd { c.current_dir(d); }
+    if clear_env { c.env_clear(); }
+    for (k, v) in env.unwrap_or_default() { c.env(k, v); }
+    let mut child = c.spawn()?;
+    let pid = child.id();
+    let stdin = child.stdin.take().ok_or_else(|| std::io::Error::other("no stdin"))?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut readers = Vec::new();
+    for (name, pipe) in [("stdout", child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>)), ("stderr", child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>))] {
+        let (Some(mut pipe), tx) = (pipe, tx.clone()) else { continue };
+        readers.push(std::thread::spawn(move || {
+            let mut buf = [0u8; 8192];
+            while let Ok(n) = pipe.read(&mut buf) {
+                if n == 0 || tx.send(StreamMsg::Data(name, String::from_utf8_lossy(&buf[..n]).into_owned())).is_err() { break }
+            }
+        }));
+    }
+    std::thread::spawn(move || {
+        // the end after all output, so on_exit comes last as in Neovim
+        for r in readers { let _ = r.join(); }
+        use std::os::unix::process::ExitStatusExt;
+        let code = child.wait().map(|s| s.code().unwrap_or(128 + s.signal().unwrap_or(0))).unwrap_or(-1);
+        let _ = tx.send(StreamMsg::Exit(code));
+    });
+    Ok((pid, stdin, rx))
+}
+
 /// Runs the callbacks of the jobs that have ended (each once); true when one ran.
 pub(crate) fn poll_jobs(lua: &mlua::Lua, st: &Rc<RefCell<super::State>>, errors: &mut Vec<String>) -> bool {
+    // streamed jobs first: each piece of output to its callback as (kind, text), the end as ("exit", code)
+    let msgs: Vec<(mlua::Function, Vec<StreamMsg>)> = {
+        let mut s = st.borrow_mut();
+        let mut out = Vec::new();
+        let mut ended = Vec::new();
+        for j in &s.host.streams {
+            let got: Vec<StreamMsg> = j.rx.try_iter().collect();
+            if got.iter().any(|m| matches!(m, StreamMsg::Exit(_))) { ended.push(j.id) }
+            if !got.is_empty() { if let Ok(f) = lua.registry_value::<mlua::Function>(&j.cb) { out.push((f, got)) } }
+        }
+        s.host.streams.retain(|j| !ended.contains(&j.id));
+        out
+    };
+    let streamed = !msgs.is_empty();
+    for (f, list) in msgs {
+        for m in list {
+            let r = match m { StreamMsg::Data(k, d) => f.call::<()>((k, d)), StreamMsg::Exit(c) => f.call::<()>(("exit", c)) };
+            if let Err(e) = r { errors.push(format!("jobstart: {e}")) }
+        }
+    }
     let done: Vec<(Option<RegistryKey>, JobOut)> = {
         let mut s = st.borrow_mut();
         let mut done = Vec::new();
@@ -1260,7 +1362,7 @@ pub(crate) fn poll_jobs(lua: &mlua::Lua, st: &Rc<RefCell<super::State>>, errors:
         });
         done
     };
-    let any = !done.is_empty();
+    let any = !done.is_empty() || streamed;
     for (cb, out) in done {
         if let Some(k) = cb {
             let r = match out.table(lua) {

@@ -3464,39 +3464,72 @@ do
   -- jobs: z.job hands the whole output at exit, so on_stdout/on_stderr get it then, in lines
   local jobs, chans = {}, {}
   local function split_out(s) return vim.split(s or "", "\n", { plain = true }) end
+  -- jobs on z.job.stream: output comes while the program runs, in Neovim's shape: on_stdout(id, data, "stdout")
+  -- with data the text split at line breaks (its first item ends the last call's unfinished line, "" at the end
+  -- when it ended with one), {""} once at the end (EOF); stdout_buffered: all of it in one call at the end
   set("jobstart", function(cmd, o)
     o = o or {}
     if type(cmd) == "string" then cmd = { vim.o.shell or "sh", "-c", cmd } end
-    local j = { o = o, input = {} }
-    local ok, id, pid = pcall(z.job.spawn, cmd, { cwd = o.cwd, env = o.env, clear_env = o.clear_env, stdin = o.stdin ~= "null" and "" or nil }, function(r)
-      j.done = r
-      if o.on_stdout then o.on_stdout(j.id, split_out(r.stdout), "stdout") end
-      if o.on_stderr then o.on_stderr(j.id, split_out(r.stderr), "stderr") end
-      if o.on_exit then o.on_exit(j.id, r.code or 0, "exit") end
+    local j = { o = o, buf = { stdout = {}, stderr = {} }, done = nil }
+    local function deliver(kind, text)
+      local cb = o["on_" .. kind]
+      local data = vim.split(text, "\n", { plain = true })
+      if o[kind .. "_buffered"] then
+        local b = j.buf[kind]
+        if #b > 0 then b[#b] = b[#b] .. table.remove(data, 1) end
+        for _, l in ipairs(data) do b[#b + 1] = l end
+      elseif cb then cb(j.id, data, kind) end
+    end
+    local env
+    if o.env then env = {} for k, v in pairs(o.env) do env[tostring(k)] = tostring(v) end end
+    local ok, zid, pid = pcall(z.job.stream, cmd, { cwd = o.cwd, env = env, clear_env = o.clear_env }, function(kind, data)
+      if kind == "exit" then
+        for _, k in ipairs({ "stdout", "stderr" }) do
+          local cb = o["on_" .. k]
+          if cb then cb(j.id, o[k .. "_buffered"] and j.buf[k] or { "" }, k) end
+        end
+        j.done = data
+        if o.on_exit then o.on_exit(j.id, data, "exit") end
+      else deliver(kind, data) end
     end)
     if not ok then return -1 end
-    j.id, j.zid, j.pid = id + 2, id, pid
+    j.id, j.zid, j.pid = zid + 2, zid, pid
     jobs[j.id] = j chans[j.id] = j
     return j.id
   end)
   set("termopen", function(cmd, o) return fn.jobstart(cmd, o) end)
   set("jobpid", function(id) local j = jobs[id] if not j then error("E900: Invalid channel id") end return j.pid end)
   set("jobstop", function(id) local j = jobs[id] if not j or j.done then return 0 end z.job.kill(j.zid, 15) return 1 end)
+  -- jobwait: the loop runs (output and ends arrive) until each has ended or the time is up: its code, -1 time out, -3 no such job
   set("jobwait", function(ids, ms)
-    local out = {}
-    for i, id in ipairs(ids) do
-      local j = jobs[id]
-      if not j then out[i] = -3
-      elseif j.done then out[i] = j.done.code or 0
-      else local r = z.job.wait(j.zid, (ms and ms >= 0) and ms or nil) out[i] = r and (r.code or 0) or -1 end
+    local stop = (ms and ms >= 0) and (z.hrtime() + ms * 1e6) or nil
+    while true do
+      local left = false
+      for _, id in ipairs(ids) do local j = jobs[id] if j and j.done == nil then left = true end end
+      if not left or (stop and z.hrtime() >= stop) then break end
+      z.job.pump(10)
     end
+    local out = {}
+    for i, id in ipairs(ids) do local j = jobs[id] out[i] = not j and -3 or j.done or -1 end
     return out
   end)
   set("jobresize", function(id) return jobs[id] and 1 or 0 end)
-  set("jobsend", function() return 0 end)
-  set("jobclose", function(id) return jobs[id] and 1 or 0 end)
-  set("chansend", function(id, data) local c = chans[id] if not c then return 0 end c.input[#c.input + 1] = data return type(data) == "string" and #data or #table.concat(data, "\n") end)
-  set("chanclose", function(id) return chans[id] and 1 or 0 end)
+  -- chansend: text (or a list of lines, joined by line breaks) to the job's stdin
+  set("chansend", function(id, data)
+    local j = chans[id]
+    if not j or not j.zid then return 0 end
+    local s = type(data) == "table" and table.concat(data, "\n") or tostring(data)
+    return z.job.send(j.zid, s) and #s or 0
+  end)
+  set("jobsend", function(id, data) return fn.chansend(id, data) end)
+  -- chanclose(id, "stdin"): the end of its input; no stream: the job stops
+  set("chanclose", function(id, stream)
+    local j = chans[id]
+    if not j or not j.zid then return 0 end
+    if stream == "stdin" then z.job.close_stdin(j.zid) else z.job.kill(j.zid, 15) end
+    return 1
+  end)
+  set("jobclose", function(id, stream) return fn.chanclose(id, stream) end)
   api.nvim_chan_send = function(id, data) fn.chansend(id, data) end
   api.nvim_list_chans = function()
     local r = { { id = 1, stream = "stdio", mode = "rpc" } }
@@ -3513,8 +3546,6 @@ do
   set("serverstart", function(a) return a or (fn.tempname() .. ".sock") end)
   set("serverstop", function() return 0 end)
   set("stdioopen", function() return 0 end)
-  set("msgpackdump", function() error("zett: msgpack is not there") end)
-  set("msgpackparse", function() return {} end)
   set("api_info", function() local f = {} for k in pairs(api) do f[#f + 1] = { name = k, method = false, since = 0, parameters = {}, return_type = "Object" } end return { version = { major = 0, minor = 11, patch = 0, api_level = 13 }, functions = f, ui_events = {}, types = {}, error_types = {} } end)
   -- other languages: none
   for _, n in ipairs({ "perleval", "py3eval", "pyeval", "pyxeval", "rubyeval", "libcall", "libcallnr" }) do set(n, function() error("zett: " .. n .. " is not supported") end) end
@@ -3757,7 +3788,7 @@ do
   api.nvim__get_runtime = function(pats, all) local r = {} for _, p in ipairs(pats) do for _, f in ipairs(api.nvim_get_runtime_file(p, all)) do r[#r + 1] = f end end return r end
   api.nvim__runtime_inspect = function() return {} end
   api.nvim__stats = function() return { fsync = 0, log_skip = 0, lua_refcount = collectgarbage("count"), redraw = 0, arena_alloc_count = 0 } end
-  api.nvim__unpack = function() error("zett: msgpack is not there") end
+  api.nvim__unpack = function(s) return vim.fn.msgpackparse(s)[1] end
 
   -- vim.fn.nvim_*: every api function is also a Vim function
   for k, v in pairs(api) do if rawget(vim.fn, k) == nil then fn[k] = v rawset(vim.fn, k, v) end end
@@ -3813,4 +3844,67 @@ function vim._zett_qftf(spec, quickfix, n)
   local out = {}
   for i = 1, n do out[i] = tostring(r[i] or ""):gsub("\n", " ") end
   return table.concat(out, "\n")
+end
+
+-- msgpack (msgpackdump, msgpackparse): nil, booleans, integers, floats, strings, lists and dicts; the bytes as a
+-- readfile()-style list of lines (a NL in the data is a "\0" in the line), as Neovim gives and takes them
+do
+  local pack, unpack_one
+  function pack(v, out)
+    local t = type(v)
+    if v == nil or v == vim.NIL then out[#out + 1] = "\xc0"
+    elseif t == "boolean" then out[#out + 1] = v and "\xc3" or "\xc2"
+    elseif t == "number" and math.type(v) == "integer" then
+      if v >= 0 and v < 128 then out[#out + 1] = string.char(v)
+      elseif v < 0 and v >= -32 then out[#out + 1] = string.char(0x100 + v)
+      else out[#out + 1] = "\xd3" .. string.pack(">i8", v) end
+    elseif t == "number" then out[#out + 1] = "\xcb" .. string.pack(">d", v)
+    elseif t == "string" then
+      local n = #v
+      out[#out + 1] = (n < 32 and string.char(0xa0 + n) or n < 0x10000 and ("\xda" .. string.pack(">I2", n)) or ("\xdb" .. string.pack(">I4", n))) .. v
+    elseif t == "table" then
+      if vim.islist(v) then
+        out[#out + 1] = #v < 16 and string.char(0x90 + #v) or ("\xdd" .. string.pack(">I4", #v))
+        for _, x in ipairs(v) do pack(x, out) end
+      else
+        local keys = {} for k in pairs(v) do keys[#keys + 1] = k end table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        out[#out + 1] = #keys < 16 and string.char(0x80 + #keys) or ("\xdf" .. string.pack(">I4", #keys))
+        for _, k in ipairs(keys) do pack(k, out) pack(v[k], out) end
+      end
+    else error("msgpackdump: cannot pack a " .. t) end
+  end
+  function unpack_one(s, i)
+    local b = s:byte(i)
+    if not b then error("msgpackparse: incomplete data") end
+    if b < 0x80 then return b, i + 1 end
+    if b >= 0xe0 then return b - 0x100, i + 1 end
+    if b >= 0xa0 and b < 0xc0 then local n = b - 0xa0 return s:sub(i + 1, i + n), i + 1 + n end
+    if b >= 0x90 and b < 0xa0 then local r, j = {}, i + 1 for k = 1, b - 0x90 do r[k], j = unpack_one(s, j) end return r, j end
+    if b >= 0x80 and b < 0x90 then local r, j = {}, i + 1 for _ = 1, b - 0x80 do local k k, j = unpack_one(s, j) r[k], j = unpack_one(s, j) end return r, j end
+    local fixed = { [0xc0] = function() return vim.NIL, i + 1 end, [0xc2] = function() return false, i + 1 end, [0xc3] = function() return true, i + 1 end }
+    if fixed[b] then return fixed[b]() end
+    local nums = { [0xcc] = ">I1", [0xcd] = ">I2", [0xce] = ">I4", [0xcf] = ">I8", [0xd0] = ">i1", [0xd1] = ">i2", [0xd2] = ">i4", [0xd3] = ">i8", [0xca] = ">f", [0xcb] = ">d" }
+    if nums[b] then local v, j = string.unpack(nums[b], s, i + 1) return v, j end
+    local strs = { [0xd9] = ">I1", [0xda] = ">I2", [0xdb] = ">I4", [0xc4] = ">I1", [0xc5] = ">I2", [0xc6] = ">I4" }
+    if strs[b] then local n, j = string.unpack(strs[b], s, i + 1) return s:sub(j, j + n - 1), j + n end
+    local arrs = { [0xdc] = ">I2", [0xdd] = ">I4" }
+    if arrs[b] then local n, j = string.unpack(arrs[b], s, i + 1) local r = {} for k = 1, n do r[k], j = unpack_one(s, j) end return r, j end
+    local maps = { [0xde] = ">I2", [0xdf] = ">I4" }
+    if maps[b] then local n, j = string.unpack(maps[b], s, i + 1) local r = {} for _ = 1, n do local k k, j = unpack_one(s, j) r[k], j = unpack_one(s, j) end return r, j end
+    error(string.format("msgpackparse: type 0x%02x is not read", b))
+  end
+  local function set(name, f) rawset(vim.fn, name, f) end
+  set("msgpackdump", function(list, flags)
+    local out = {}
+    for _, v in ipairs(list) do pack(v, out) end
+    local s = table.concat(out)
+    if flags and flags:find("B") then return s end
+    return vim.split((s:gsub("\n", "\0")), "\0\n", { plain = true }) -- lines as readfile gives them
+  end)
+  set("msgpackparse", function(data)
+    local s = type(data) == "table" and table.concat(data, "\n"):gsub("%z", "\n") or data
+    local r, i = {}, 1
+    while i <= #s do r[#r + 1], i = unpack_one(s, i) end
+    return r
+  end)
 end
