@@ -358,6 +358,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     }
     // the open files as tabs beside the pages'; closing the shown one shows its neighbour (or the page)
     property var fileTabs: []
+    // where the open file's buttons go (in the tab row, Toolbar)
+    property Item fileActionSlot: null
     // files changed and not saved, left for another tab: path → text (the open one is in the editor itself)
     property var unsaved: ({})
     // everything unsaved: the open file, the kept ones, the side file

@@ -11,7 +11,7 @@ Item {
     // the open pages as pill tabs
     ListView {
         id: tabList
-        anchors { left: parent.left; right: toolRow.left; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 8 }
+        anchors { left: parent.left; right: win.view === "file" ? fileSlot.left : toolRow.left; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 8 }
         height: 34
         orientation: ListView.Horizontal
         spacing: 6
@@ -86,6 +86,14 @@ Item {
                 TapHandler { acceptedButtons: Qt.MiddleButton; onTapped: win.closeFileTab(modelData) }
             }
         }
+    }
+    // a file's buttons (Changes, Open with the system, Revert, Save): FileView puts them here, beside the tabs
+    Item {
+        id: fileSlot
+        visible: win.view === "file"
+        anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 11 }
+        width: childrenRect.width; height: 30
+        Component.onCompleted: win.fileActionSlot = fileSlot
     }
     RowLayout {
         id: toolRow

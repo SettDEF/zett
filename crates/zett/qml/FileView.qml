@@ -281,14 +281,15 @@ ColumnLayout {
         comps = []
     }
 
+    // the file's buttons: in the tab row (win.fileActionSlot), so the code starts right under the tabs
     RowLayout {
-        Layout.fillWidth: true
-        Layout.leftMargin: 12; Layout.rightMargin: 12
+        parent: fv.win.fileActionSlot
+        visible: parent !== null
+        width: implicitWidth; height: 30
         spacing: 8
-        Item { Layout.fillWidth: true }   // the path and the unsaved dot are in the window's header
         Text { visible: fv.note.length > 0; text: fv.note; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
         // the server: its errors and warnings for this file
-        Text { visible: fv.lsp; text: fv.errors + fv.warnings ? `${fv.errors} errors  ${fv.warnings} warnings` : "no problems"; color: fv.errors ? t.removed : fv.warnings ? "#d8a54a" : t.faint; font.family: t.mono; font.pixelSize: 11 
+        Text { visible: fv.lsp && fv.errors + fv.warnings > 0; text: `${fv.errors} errors  ${fv.warnings} warnings`; color: fv.errors ? t.removed : fv.warnings ? "#d8a54a" : t.faint; font.family: t.mono; font.pixelSize: 11 
             HoverHandler { cursorShape: fv.diags.length ? Qt.PointingHandCursor : Qt.ArrowCursor }
             TapHandler { onTapped: fv.showProblems = !fv.showProblems }
         }
