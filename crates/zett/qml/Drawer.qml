@@ -16,6 +16,10 @@ Rectangle {
     property int back: -1
     property string tab: "term"           // term (a real shell) | shell (one command, its output) | problems
     // text typed into the real terminal (tests, "run in terminal")
+    // F5 and the step keys from anywhere: the Debug tab opens
+    property string debugProgram: ""
+    function debugView() { return dbgLoader.item }
+    function debugKey(k) { tab = "debug"; d.win.drawerShown = true; Qt.callLater(() => { const g = dbgLoader.item; if (!g) return; if (d.debugProgram) { g.progText = d.debugProgram; d.debugProgram = "" } if (k === "start") { g.status === "stopped" ? g.step("continue") : g.start() } else if (k === "stop") g.stop(); else g.step(k) }) }
     function termType(s) { if (termLoader.item && termLoader.item.sid >= 0) app.termWrite(termLoader.item.sid, s) }
     // keys as typed: each character, then Return (tests)
     function termKeys(s) { const tm = termLoader.item; if (!tm || tm.sid < 0) return; for (const ch of s) app.termKey(tm.sid, ch.toUpperCase().charCodeAt(0), ch, 0); app.termKey(tm.sid, 0x01000004, "\r", 0) }
@@ -83,7 +87,7 @@ Rectangle {
                 Row {
                     id: segRow; anchors.centerIn: parent; spacing: 2
                     Repeater {
-                        model: [["term", "terminal", "Terminal"], ["shell", "play_arrow", "Run"], ["problems", "error", d.win.problems.length ? `Problems  ${d.win.problems.length}` : "Problems"]]
+                        model: [["term", "terminal", "Terminal"], ["shell", "play_arrow", "Run"], ["debug", "bug_report", "Debug"], ["problems", "error", d.win.problems.length ? `Problems  ${d.win.problems.length}` : "Problems"]]
                         delegate: Rectangle {
                             required property var modelData
                             readonly property bool on: d.tab === modelData[0]
@@ -137,6 +141,14 @@ Rectangle {
                     }
                 }
             }
+        }
+        // the debugger: kept while the drawer lives (a session keeps running on the other tabs)
+        Loader {
+            id: dbgLoader
+            Layout.fillWidth: true; Layout.fillHeight: true
+            visible: d.tab === "debug"
+            active: d.tab === "debug" || item !== null
+            sourceComponent: Debugger { win: d.win; app: d.app; t: d.t }
         }
         // the real terminal: made when first shown, kept while the drawer lives
         Loader {

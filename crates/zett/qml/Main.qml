@@ -335,6 +335,16 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     readonly property var fileEditor: fileView   // the status bar reads the editor's cursor and problems
     readonly property string homeDir: app.env("HOME")
     property string fileText: ""
+    // debugging: breakpoints per file (0-based lines), the line the program stopped at
+    property var breakpoints: ({})
+    property string lastBreakpointFile: ""
+    property var debugAt: ({})
+    function toggleBreakpoint(path, line) {
+        const b = Object.assign({}, breakpoints), l = (b[path] ?? []).slice(), i = l.indexOf(line)
+        if (i >= 0) l.splice(i, 1); else l.push(line)
+        if (l.length) b[path] = l.sort((x, y) => x - y); else delete b[path]
+        lastBreakpointFile = path; breakpoints = b
+    }
     // a file opened in the editor at a 0-based line and column
     function openFileAt(x, line, col) { openFile(x); Qt.callLater(() => fileView.goTo(line, col)) }
     function openFile(x) {
@@ -943,6 +953,10 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine === "side") { win.sidePage = win.pages.findIndex(p => p.title === "fan-curve"); grabLater.start(); return }
             if (app.shotEngine === "term") { win.drawerShown = true; termT.start(); return }
             // termtype:TEXT: TEXT typed into the terminal without Enter, then the picture (and the row as text)
+            // termwait: the terminal open, nothing typed (keys come from outside, e.g. loom --keys), rows after 9 s
+            // coredebug:PROG:FILE:LINE: a breakpoint there, the program started; after 6 s what the debugger shows
+            if (app.shotEngine.startsWith("coredebug:")) { const p = app.shotEngine.split(":"); win.openFile({ path: app.dir + "/" + p[2], rel: p[2] }); win.toggleBreakpoint(app.dir + "/" + p[2], +p[3] - 1); drawer.debugProgram = p[1]; drawer.debugKey("start"); debugT.start(); return }
+            if (app.shotEngine === "termwait") { win.drawerShown = true; termWaitT.start(); return }
             if (app.shotEngine.startsWith("termtype:")) { win.drawerShown = true; termTypeT.start(); return }
             if (app.shotEngine === "drawer") { win.drawerShown = true; drawer.run("ls; echo; git status --short | head -5; printf 'done in %s\\n' \"$(pwd)\""); grabLater.start(); return }
             if (app.shotEngine === "hooks") { console.log("zett-probe: hooks " + JSON.stringify(win.hooks)); grabLater.start(); return }
@@ -1029,6 +1043,8 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     // corelsp:FILE:act:L:C or corelsp:FILE:rename:L:C:NEW, once the server has reported (diagnostics in)
     Timer { id: coreLspT; property var spec: []; property int tries: 0; interval: 1500; onTriggered: { if (!fileView.diags.length && ++tries < 10) { restart(); return } const s = spec, l = +s[3], c = +s[4]; fileView.codeDoc.click(l, c, false, false); if (s[2] === "act") fileView.askActions(l, c); else { fileView.renameAsked = true; app.lspChange(fileView.win.filePath, fileView.codeDoc.text()); fileView.askAt("rename:" + s[5], l, c) } claudeShot.start() } }
     // the real terminal: a colourful command typed in, then the picture
+    Timer { id: debugT; interval: 6000; onTriggered: { const g = drawer.debugView(); console.log("zett-probe: debug status " + g.status + " note [" + g.note + "] frames " + JSON.stringify(g.frames.map(f => f.name + ":" + f.line)) + " vars " + JSON.stringify(g.vars.map(v => v.name + "=" + v.value)) + " at " + JSON.stringify(win.debugAt)); grabLater.start() } }
+    Timer { id: termWaitT; interval: 9000; onTriggered: { console.log("zett-probe: termrows " + drawer.termScreen()); grabLater.start() } }
     Timer { id: termTypeT; interval: 2500; onTriggered: { if (app.shotEngine.startsWith("termtype:keys:")) drawer.termKeys(app.shotEngine.slice(14)); else drawer.termType(app.shotEngine.slice(9)); Qt.callLater(() => { termShowT.start() }) } }
     Timer { id: termShowT; interval: 800; onTriggered: { console.log("zett-probe: termrows " + drawer.termScreen()); grabLater.start() } }
     Timer { id: termT; interval: 1500; onTriggered: { drawer.termType("printf \x27\\033[1;32mgreen\\033[0m \\033[44mblue bg\\033[0m\\n\x27; ls --color=always /; echo cols=$COLUMNS\r"); claudeShot.interval = 1500; claudeShot.start() } }
@@ -1041,6 +1057,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         border.width: pageDrop.containsDrag ? 2 : 1
     }
     ContextMenu { id: ctx; theme: t; z: 1000 }
+    // debugging keys, as VS Code's
+    Shortcut { sequence: "F5"; onActivated: drawer.debugKey("start") }
+    Shortcut { sequence: "Shift+F5"; onActivated: drawer.debugKey("stop") }
+    Shortcut { sequence: "F10"; onActivated: drawer.debugKey("next") }
+    Shortcut { sequence: "F11"; onActivated: drawer.debugKey("stepIn") }
+    Shortcut { sequence: "Shift+F11"; onActivated: drawer.debugKey("stepOut") }
+    Shortcut { sequence: "F9"; onActivated: if (win.view === "file" && fileView.newCore) { const c = fileView.coreView.carets[0]; win.toggleBreakpoint(win.filePath, c[0]) } }
     Palette { id: palette; theme: t }
 
     RowLayout {

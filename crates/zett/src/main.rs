@@ -6,6 +6,7 @@
 mod grep;
 mod lsp;
 mod doc;
+mod dap;
 mod term;
 mod window;
 

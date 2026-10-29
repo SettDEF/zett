@@ -194,6 +194,16 @@ Rectangle {
             width: cv.width; height: cv.lh
             // the current line: inset with its own corners, so it stays inside the rounded card
             Rectangle { visible: parent.cur; anchors { fill: parent; leftMargin: 6; rightMargin: 6 } radius: 8; color: Qt.alpha(cv.t.text, 0.05) }
+            // the line the debugger stopped at; a breakpoint: a red dot left of the number (a click there or F9)
+            readonly property bool bp: (cv.win.breakpoints, (cv.win.breakpoints[cv.win.filePath] ?? []).includes(line))
+            readonly property bool here: cv.win.debugAt.path === cv.win.filePath && cv.win.debugAt.line === line
+            Rectangle { visible: parent.here; anchors { fill: parent; leftMargin: 6; rightMargin: 6 } radius: 8; color: Qt.alpha("#e5c46f", 0.22); border.width: 1; border.color: Qt.alpha("#e5c46f", 0.5) }
+            Rectangle { visible: parent.bp || bpH.hovered; x: 10; anchors.verticalCenter: parent.verticalCenter; width: 10; height: 10; radius: 5; color: parent.bp ? cv.t.removed : Qt.alpha(cv.t.removed, 0.35) }
+            Item {
+                x: 4; width: 20; height: parent.height
+                HoverHandler { id: bpH; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: cv.win.toggleBreakpoint(cv.win.filePath, parent.parent.line) }
+            }
             Text {
                 x: 0; width: 40; height: parent.height
                 horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter

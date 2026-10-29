@@ -58,6 +58,12 @@ check side fileside:main.rs:check.md
 check git git
 check core core:core.rs "grep -q 'core rows 3 lines 5 fold 2' \"\$OUT/core.log\" && grep -q '    ylet a' '$W/core.rs' && grep -q '    ylet b' '$W/core.rs' && ! grep -q xlet '$W/core.rs'"
 # speed: a 100,000 line file opens in under 300 ms, five keys at its end in under 200 ms
+# debugging (gdb -i=dap): a breakpoint in a C program stops it there, with its call stack and arguments
+if command -v gdb >/dev/null && command -v gcc >/dev/null; then
+    printf 'int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\nint main(void) {\n    return add(40, 2) - 42;\n}\n' > "$W/dbg.c"
+    gcc -g -O0 -o "$W/dbg" "$W/dbg.c"
+    check coredebug coredebug:dbg:dbg.c:2 "grep -q 'frames \\[\"add:2\",\"main:6\"\\].*a=40' \"\$OUT/coredebug.log\""
+fi
 # speed budgets (TASKS: the best editor, step 7): a 100,000-line file opens in under 100 ms, a key is drawn in under 8 ms
 check corebig corebig:big.rs "awk '/corebig open/ { o = \$5; f = \$(NF-6); k = \$(NF-1) } END { if (!(o < 100 && f < 8 && k / 5 < 8)) print \"over budget: open \" o \" ms, first key \" f \" ms, five keys \" k \" ms\" > \"/dev/stderr\"; exit !(o < 100 && f < 8 && k / 5 < 8) }' \"\$OUT/corebig.log\""
 check core2 core2:core2.rs "grep -q 'core2 found 2 replaced 2' \"\$OUT/core2.log\" && [ \"\$(sed -n 3p '$W/core2.rs')\" = '    // var a = 1;' ]"

@@ -215,6 +215,21 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "stopShell"]
         fn stop_shell(self: Pin<&mut Zett>);
+        /// a debug adapter (argv JSON, gdb -i=dap by default) in folder: its id, -1 on failure
+        #[qinvokable]
+        #[cxx_name = "dapStart"]
+        fn dap_start(self: &Zett, argv: &QString, cwd: &QString) -> i32;
+        /// a DAP request (arguments as JSON): its seq
+        #[qinvokable]
+        #[cxx_name = "dapRequest"]
+        fn dap_request(self: &Zett, id: i32, command: &QString, args: &QString) -> i32;
+        /// what the adapter said since the last call (a JSON array of messages)
+        #[qinvokable]
+        #[cxx_name = "dapPoll"]
+        fn dap_poll(self: &Zett, id: i32) -> QString;
+        #[qinvokable]
+        #[cxx_name = "dapStop"]
+        fn dap_stop(self: &Zett, id: i32);
         /// a real terminal (a shell in a pty) in folder; its id, -1 on failure. palette: 18 hex colours (16, fg, bg)
         #[qinvokable]
         #[cxx_name = "termStart"]
@@ -998,6 +1013,10 @@ impl qobject::Zett {
         crate::grep::replace(&workspace_dir(), &query.to_string(), &with.to_string(), &o, &only) as i32
     }
 
+    fn dap_start(&self, argv: &QString, cwd: &QString) -> i32 { crate::dap::start(&argv.to_string(), &cwd.to_string()) }
+    fn dap_request(&self, id: i32, command: &QString, args: &QString) -> i32 { crate::dap::request(id, &command.to_string(), &args.to_string()) }
+    fn dap_poll(&self, id: i32) -> QString { QString::from(&crate::dap::poll(id)) }
+    fn dap_stop(&self, id: i32) { crate::dap::stop(id) }
     fn term_start(&self, cwd: &QString, cols: i32, rows: i32, palette: &QString) -> i32 { crate::term::start(&cwd.to_string(), cols.clamp(2, 1000) as u16, rows.clamp(1, 500) as u16, &palette.to_string()) }
     fn term_key(&self, id: i32, key: i32, text: &QString, mods: i32) { crate::term::key(id, key, &text.to_string(), mods) }
     fn term_write(&self, id: i32, text: &QString) { crate::term::write(id, text.to_string().as_bytes()) }
