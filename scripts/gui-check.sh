@@ -73,6 +73,9 @@ check coresave coresave:core4.rs "! grep -qE '[[:blank:]]$' '$W/core4.rs' && [ \
 check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"\\]' \"\$OUT/corewords.log\""
 check corecomp corecomp:core5.rs "grep -q 'corecomp focus true completing true items \\[\"let\"' \"\$OUT/corecomp.log\""
 check market market:git "grep -q 'zett-probe: market' \"\$OUT/market.log\""
+# QML click tests: each runs next to a copy of the file it tests (qt6 qmltestrunner)
+QT=$(command -v /usr/lib/qt6/bin/qmltestrunner || true)
+if [ -n "$QT" ]; then mkdir -p "$W/qmlt"; cp "$(dirname "$0")/qml-tests/tst_market.qml" "$(dirname "$0")/../crates/zett/qml/Marketplace.qml" "$W/qmlt/"; if (cd "$W/qmlt" && QT_QPA_PLATFORM=offscreen timeout 60 "$QT" -input tst_market.qml > "$OUT/qmlt.log" 2>&1); then pass=$((pass + 1)); printf '  ok    %s\n' marketclicks; else fail=$((fail + 1)); printf '  FAIL  %s: see %s\n' marketclicks "$OUT/qmlt.log"; fi; fi
 check corekw corecomp:new.js:functi "grep -q 'items \\[\"function\"\\] from \\[\"keyword\"' \"\$OUT/corekw.log\""
 check coreother corecomp:new.js:functi:other.js "grep -q '\"functionality\".*in other.js' \"\$OUT/coreother.log\""
 check corekeep corekeep:core5.rs,lines.rs "grep -q 'corekeep away 1 back \\[kept fn main' \"\$OUT/corekeep.log\" && grep -q 'dirty true' \"\$OUT/corekeep.log\""

@@ -155,6 +155,7 @@ Item {
                             required property var modelData
                             required property int index
                             readonly property bool on: index === m.cat
+                            objectName: "chip" + index
                             implicitWidth: cr.implicitWidth + 20; implicitHeight: 32; radius: 16
                             color: on ? m.theme.accent : (ch.hovered ? m.theme.card : "transparent")
                             border.width: on ? 0 : 1; border.color: Qt.alpha(m.theme.rule, 0.5)
@@ -231,8 +232,11 @@ Item {
                             Layout.fillWidth: true; spacing: 5
                             Repeater {
                                 model: m.cur ? m.cur.tags.slice(0, 8) : []
-                                delegate: Rectangle { required property var modelData; implicitWidth: tg.implicitWidth + 12; implicitHeight: 20; radius: 10; color: Qt.alpha(m.theme.text, 0.07)
-                                    Text { id: tg; anchors.centerIn: parent; text: modelData; color: m.theme.dim; font.family: m.theme.sans; font.pixelSize: 11 } }
+                                                // a tag searches for it (all categories)
+                                delegate: Rectangle { required property var modelData; objectName: "tag_" + modelData; implicitWidth: tg.implicitWidth + 14; implicitHeight: 22; radius: 11; color: tgH.hovered ? Qt.alpha(m.theme.accent, 0.22) : Qt.alpha(m.theme.text, 0.07)
+                                    Text { id: tg; anchors.centerIn: parent; text: "#" + modelData; color: tgH.hovered ? m.theme.text : m.theme.dim; font.family: m.theme.sans; font.pixelSize: 11 }
+                                    HoverHandler { id: tgH; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: { m.cat = 0; m.sel = 0; field.text = modelData; m.search(); field.forceActiveFocus() } } }
                             }
                         }
                         Item { Layout.fillHeight: true }
