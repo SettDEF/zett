@@ -3964,7 +3964,12 @@ function zett.store.installed(e)
 end
 function zett.store.list()
   local out = {}
-  for _, e in ipairs(zett.store.catalog) do out[#out + 1] = vim.tbl_extend("force", e, { installed = zett.store.installed(e) }) end
+  for _, e in ipairs(zett.store.catalog) do
+    -- managed: installed by the store (its file or its wasm folder), so the store can take it out again
+    local managed = e.kind == "wasm" and vim.fn.isdirectory(vim.fn.stdpath("config") .. "/wasm/" .. e.name) == 1
+    if e.kind == "lua" then for _, l in ipairs(store_lines()) do if l:find(e.repo, 1, true) then managed = true end end end
+    out[#out + 1] = vim.tbl_extend("force", e, { installed = zett.store.installed(e), managed = managed })
+  end
   return out
 end
 local function find(name) for _, e in ipairs(zett.store.catalog) do if e.name == name then return e end end end
@@ -3992,6 +3997,11 @@ end
 function zett.store.remove(name)
   local e = find(name)
   if not e then return false end
+  local mine = false
+  for _, l in ipairs(store_lines()) do if l:find(e.repo, 1, true) then mine = true end end
+  if e.kind == "lua" and not mine then
+    return false, "set up in your own config, not by the store: take its zett.plug line out there"
+  end
   if e.kind == "wasm" then
     vim.fn.delete(vim.fn.stdpath("config") .. "/wasm/" .. name, "rf")
     zett.wasm_plugins[name] = nil
@@ -4004,7 +4014,7 @@ vim.api.nvim_create_user_command("ZettStore", function()
   local items = zett.store.list()
   vim.ui.select(items, {
     prompt = "Extensions (✓ installed: choosing one removes it)",
-    format_item = function(e) return ("%s %-14s %-4s %s"):format(e.installed and "✓" or "·", e.name, e.kind, e.desc) end,
+    format_item = function(e) return ("%s %-14s %-4s %s%s"):format(e.installed and "✓" or "·", e.name, e.kind, e.desc, e.installed and not e.managed and "  (in your config)" or "") end,
   }, function(e)
     if not e then return end
     local ok, msg
