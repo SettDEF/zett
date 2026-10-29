@@ -403,7 +403,9 @@ end
 local function opt_get(name)
   local i = info(name)
   local key = i and i.name or name
-  local v = z.opt[key]
+  -- the current buffer's own value first (filetype, commentstring, :setlocal), as Neovim's vim.o / vim.bo give it
+  local v = z.local_opt and z.local_opt(key)
+  if v == nil then v = z.opt[key] end
   if v == nil then v = i and i.default end
   return typed(i, v)
 end
@@ -475,7 +477,8 @@ function vim.keymap.set(modes, lhs, rhs, opts)
     local f = rhs
     rhs = function()
       local keys = f()
-      if type(keys) == "string" and keys ~= "" then z.feed_keys(keys, opts.remap == true) end
+      -- <Plug> keys are only mappings: always remapped, as Neovim does
+      if type(keys) == "string" and keys ~= "" then z.feed_keys(keys, opts.remap == true or keys:lower():find("<plug>", 1, true) ~= nil) end
     end
   end
   for _, m in ipairs(modes) do
@@ -484,7 +487,7 @@ function vim.keymap.set(modes, lhs, rhs, opts)
       if zm then z.map(zm, lhs, rhs, { desc = opts.desc }) end
     else
       local flags = (opts.silent and "<silent>" or "") .. (opts.buffer and "<buffer>" or "") .. (opts.expr and "<expr>" or "") .. (opts.nowait and "<nowait>" or "")
-      ex(m .. (opts.remap and "map " or "noremap ") .. (flags ~= "" and flags .. " " or "") .. lhs .. " " .. rhs)
+      ex(m .. ((opts.remap or tostring(rhs):lower():find("<plug>", 1, true)) and "map " or "noremap ") .. (flags ~= "" and flags .. " " or "") .. lhs .. " " .. rhs)
     end
   end
 end
@@ -3021,6 +3024,13 @@ function zett.plug(repo, o)
   local mine = lua_dir .. "/?.lua;" .. lua_dir .. "/?/init.lua;"
   if not package.path:find(mine, 1, true) then package.path = mine .. package.path end
   plugged[#plugged + 1] = { repo = repo, name = name, dir = dir, local_dir = o.dir ~= nil }
+  -- after startup (:ZettStore, :lua zett.plug): its plugin/ files now, as at startup they run with the rest
+  if vim._zett_entered then
+    for _, f in ipairs(vim.fn.glob(dir .. "/plugin/**/*.{vim,lua}", false, true)) do
+      local ok, err = pcall(vim.cmd, "source " .. vim.fn.fnameescape(f))
+      if not ok then vim.notify("plug: " .. f .. ": " .. tostring(err), vim.log.levels.ERROR) end
+    end
+  end
   if o.opts ~= nil or o.setup then
     local main = o.main or name:gsub("%.nvim$", ""):gsub("%.lua$", ""):gsub("^nvim%-", "")
     -- a built-in stand-in of the same name (zett's own fidget) steps aside for the real plugin
@@ -4183,3 +4193,74 @@ api.nvim_get_runtime_file = function(name, all)
   return out
 end
 rawset(vim.fn, "nvim_get_runtime_file", api.nvim_get_runtime_file)
+
+-- libuv's function forms (uv.timer_stop(t) as t:stop()): lualine and others call them so
+do
+  local uv = vim.uv or vim.loop
+  local forms = {
+    timer_start = "start", timer_stop = "stop", timer_again = "again", timer_set_repeat = "set_repeat",
+    timer_get_repeat = "get_repeat", timer_get_due_in = "get_due_in", close = "close", is_active = "is_active",
+    is_closing = "is_closing", ref = "ref", unref = "unref", has_ref = "has_ref",
+  }
+  for fname, method in pairs(forms) do
+    if uv and rawget(uv, fname) == nil then
+      uv[fname] = function(h, ...) if h and h[method] then return h[method](h, ...) end end
+    end
+  end
+end
+-- startup is over: a plugin added from now on runs its plugin/ files at once (zett.plug)
+pcall(vim.api.nvim_create_autocmd, "VimEnter", { callback = function() vim._zett_entered = true end })
+
+-- vim.fs.abspath (Neovim 0.11): a path made absolute against the current folder, ~ expanded
+if vim.fs and not vim.fs.abspath then
+  function vim.fs.abspath(p)
+    vim.validate("path", p, "string")
+    if p:sub(1, 1) == "~" then p = (os.getenv("HOME") or "") .. p:sub(2) end
+    if p:sub(1, 1) == "/" then return vim.fs.normalize(p) end
+    return vim.fs.normalize(vim.fn.getcwd() .. "/" .. p)
+  end
+end
+
+-- vim.on_key(fn, ns): fn(key, typed) for every key typed (nil fn: that one taken off); the editor calls
+-- vim._zett_on_key only while one is set
+do
+  local watchers, next_ns = {}, 1000
+  function vim.on_key(f, ns)
+    ns = ns or (function() next_ns = next_ns + 1 return next_ns end)()
+    watchers[ns] = f
+    z.on_key_watch(next(watchers) ~= nil)
+    return ns
+  end
+  function vim._zett_on_key(key)
+    local k = vim.keycode and vim.keycode(key) or key
+    for ns, f in pairs(watchers) do
+      local ok, r = pcall(f, k, k)
+      if not ok then watchers[ns] = nil vim.notify("on_key: " .. tostring(r), vim.log.levels.ERROR) end
+    end
+    z.on_key_watch(next(watchers) ~= nil)
+  end
+end
+
+-- getchar / getcharstr: the next key, waited for (the editor reads the terminal); a plain character as its
+-- number (getchar) or itself (getcharstr), a special key in Vim's internal form (nvim_replace_termcodes)
+do
+  local special = { ["<Esc>"] = 27, ["<Enter>"] = 13, ["<Tab>"] = 9, ["<Space>"] = 32 }
+  local function next_key(expr)
+    if expr == 0 then return nil end -- getchar(0): only when one is waiting; zett has none queued then
+    return z.getkey and z.getkey() or nil
+  end
+  rawset(vim.fn, "getchar", function(expr)
+    local k = next_key(expr)
+    if not k then return 0 end
+    if special[k] then return special[k] end
+    local ctrl = k:match("^<C%-(%a)>$")
+    if ctrl then return ctrl:lower():byte() - 96 end
+    if utf8.len(k) == 1 then return utf8.codepoint(k) end
+    return vim.api.nvim_replace_termcodes(k, true, false, true)
+  end)
+  rawset(vim.fn, "getcharstr", function(expr)
+    local c = vim.fn.getchar(expr)
+    if type(c) == "number" then return c == 0 and "" or utf8.char(c) end
+    return c
+  end)
+end

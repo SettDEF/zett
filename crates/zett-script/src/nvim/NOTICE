@@ -1,4 +1,5 @@
-These files are Neovim's own Lua (runtime/lua/vim/{iter,func,uri,version,secure}.lua and _core/shared.lua),
+These files are Neovim's own Lua (runtime/lua/vim/{iter,func,uri,version,secure,filetype}.lua, filetype/{detect,options}.lua
+and _core/shared.lua),
 copied unchanged from NVIM v0.12.6 so plugins that require them work in zett.
 
 Copyright Neovim contributors. Licensed under the Apache License, Version 2.0:

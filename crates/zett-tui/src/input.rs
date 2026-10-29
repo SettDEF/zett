@@ -14,6 +14,14 @@ impl App {
             (KeyCode::Char('['), KeyModifiers::CONTROL) => KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
             _ => k,
         };
+        // vim.on_key: a plugin watching keys sees this one first
+        if self.engine.wants_keys() {
+            let tok = token(&k);
+            if !tok.is_empty() {
+                let fx = self.with_lua(|e| e.eval(&format!("vim._zett_on_key({tok:?})")).map(|r| r.1).unwrap_or_default());
+                self.after_lua(fx);
+            }
+        }
         self.typed_at = Instant::now();
         self.held = false;
         if let Some(p) = self.popup.take() {
@@ -288,6 +296,22 @@ impl App {
             }
             Feed::None => {
                 self.menu.clear();
+                // a mapping waited for more (ys, with yss there too) and the next key matched nothing longer:
+                // the longest one that matched runs, the keys after it go through the maps again (as Vim)
+                if seq.len() > 1 && self.noremap == 0 {
+                    let ed = &self.docs[self.cur].ed;
+                    let km = match ed.mode() { Mode::Insert => "i", Mode::Visual | Mode::VisualLine | Mode::VisualBlock => "x", _ if ed.op_pending() => "o", _ => "n" };
+                    for n in (1..seq.len()).rev() {
+                        if let Some(fx) = self.with_lua(|e| e.feed_exact(km, &seq[..n])) {
+                            self.ran_keys = n;
+                            self.after_lua(fx);
+                            for t in &seq[n..] {
+                                for k in zett_edit::keys::parse(t) { self.key(key_event(&k)); }
+                            }
+                            return;
+                        }
+                    }
+                }
                 for t in seq {
                     let typed = t.chars().count() == 1;
                     for k in zett_edit::keys::parse(&t) {
@@ -367,9 +391,17 @@ impl App {
                 if self.docs[i].ed.buf.path().is_some() {
                     self.take_disk(i);
                 }
-                // the file type it was opened as, for :set ft? and to switch from
-                let ft = crate::settings::ft_key(&self.docs[i].syntax);
+                // the file type: Neovim's detection (vim.filetype.match: its names, which plugins key on), else
+                // the syntax zett opened it with
+                let path = self.docs[i].abs_path().map(|p| p.display().to_string()).unwrap_or_default();
+                let detected = if path.is_empty() { None } else {
+                    self.engine.eval(&format!("(function() local ok, ft = pcall(vim.filetype.match, {{ filename = {path:?} }}) return ok and type(ft) == 'string' and ft or '' end)()")).ok().map(|r| r.0).filter(|s| !s.is_empty())
+                };
+                let ft = detected.unwrap_or_else(|| crate::settings::ft_key(&self.docs[i].syntax));
                 self.docs[i].local.entry("filetype".into()).or_insert(ft);
+                // commentstring as Neovim's ftplugins set it (Comment.nvim, gc, and :set cms? read it)
+                let cms = crate::settings::commentstring_for(&self.docs[i].local["filetype"]);
+                if !cms.is_empty() { self.docs[i].local.entry("commentstring".into()).or_insert(cms.into()); }
                 self.apply_modeline(i);
                 let keep = self.cur;
                 self.cur = i;
@@ -1027,8 +1059,27 @@ impl App {
         if !remap {
             self.noremap += 1;
         }
+        // <Plug>name (a plugin's internal mapping): run from the maps, not the keyboard; the rest typed as keys
+        let lower = keys.to_ascii_lowercase();
+        if remap && lower.contains("<plug>") {
+            let mut rest = keys;
+            while !rest.is_empty() {
+                let at = rest.to_ascii_lowercase().find("<plug>").unwrap_or(rest.len());
+                for k in zett_edit::keys::parse(&rest[..at]) { self.key(key_event(&k)); }
+                rest = &rest[at..];
+                if rest.is_empty() { break }
+                let end = rest[6..].find(['<', ' ']).map_or(rest.len(), |e| e + 6);
+                let seq = zett_script::keys(&rest[..end]);
+                let ed = &self.docs[self.cur].ed;
+                let km = match ed.mode() { Mode::Insert => "i", Mode::Visual | Mode::VisualLine | Mode::VisualBlock => "x", _ if ed.op_pending() => "o", _ => "n" };
+                let feed = self.with_lua(|e| e.feed(km, &seq));
+                self.after_feed(feed, seq);
+                rest = &rest[end..];
+            }
+        } else {
         for k in zett_edit::keys::parse(keys) {
             self.key(key_event(&k));
+        }
         }
         if !remap {
             self.noremap -= 1;

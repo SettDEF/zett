@@ -23,6 +23,7 @@ impl App {
         self.engine.set_layout(cur + 1, wins, self.focus + 1);
         let tops = self.win_rects.iter().filter_map(|&(id, _)| self.wins.get(id).and_then(|w| w.as_ref()).map(|w| w.top)).collect();
         self.engine.set_tops(tops);
+        self.engine.set_locals(self.docs[cur].local.clone());
         // the : line and (when it grew) the command history, for getcmdline / histget
         let line = self.cmdline.clone().map(|l| { let n = l.chars().count(); (l, n) });
         let hist = (self.cmd_hist.len() != self.hist_sent).then(|| self.cmd_hist.clone());

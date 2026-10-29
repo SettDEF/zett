@@ -528,3 +528,20 @@ mod modeline_tests {
         assert!(!modeline_unsafe("ts") && !modeline_unsafe("list"));
     }
 }
+
+/// 'commentstring' for a file type, as Neovim's ftplugins set it ("" when zett does not know one).
+pub(crate) fn commentstring_for(ft: &str) -> &'static str {
+    match ft {
+        "c" | "cpp" | "cs" | "java" | "javascript" | "javascriptreact" | "typescript" | "typescriptreact" | "rust" | "go" | "swift"
+        | "kotlin" | "scala" | "dart" | "zig" | "qml" | "glsl" | "wgsl" | "php" | "json5" | "jsonc" | "proto" | "groovy" | "d" => "// %s",
+        "lua" | "sql" | "haskell" | "elm" | "ada" | "vhdl" => "-- %s",
+        "python" | "sh" | "bash" | "zsh" | "fish" | "ruby" | "perl" | "r" | "make" | "cmake" | "yaml" | "toml" | "conf"
+        | "dockerfile" | "nix" | "julia" | "elixir" | "tcl" | "gitignore" | "gitconfig" | "awk" | "sshconfig" | "hyprlang" => "# %s",
+        "vim" => "\" %s",
+        "html" | "xml" | "markdown" | "svg" | "vue" | "svelte" => "<!-- %s -->",
+        "css" | "scss" | "less" => "/* %s */",
+        "tex" | "plaintex" | "matlab" | "erlang" => "% %s",
+        "lisp" | "scheme" | "clojure" | "fennel" | "asm" | "ini" => "; %s",
+        _ => "",
+    }
+}

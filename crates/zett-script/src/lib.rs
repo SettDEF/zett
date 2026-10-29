@@ -136,6 +136,9 @@ const NVIM_MODULES: &[(&str, &str)] = &[
     ("uri", include_str!("nvim/uri.lua")),
     ("version", include_str!("nvim/version.lua")),
     ("secure", include_str!("nvim/secure.lua")),
+    ("filetype", include_str!("nvim/filetype.lua")),
+    ("filetype.detect", include_str!("nvim/filetype/detect.lua")),
+    ("filetype.options", include_str!("nvim/filetype/options.lua")),
 ];
 const NVIM_SHARED: &str = include_str!("nvim/shared.lua");
 /// Vimscript, translated to Lua on vim.lua (:let, :if, :function, init.vim, .vim files).
@@ -158,6 +161,14 @@ pub fn keys(s: &str) -> Vec<String> {
             if let Some(end) = rest.find('>') {
                 let inner = &rest[..end];
                 if !inner.is_empty() && !inner.contains('<') && !inner.contains(' ') {
+                    // <Plug>name: one key no keyboard has, its name up to the next < (plugins' internal mappings)
+                    if inner.eq_ignore_ascii_case("plug") {
+                        for _ in 0..=end { chars.next(); }
+                        let mut name = String::new();
+                        while let Some(&n) = chars.peek() { if n == '<' || n == ' ' { break } name.push(n); chars.next(); }
+                        out.push(format!("<Plug>{name}"));
+                        continue;
+                    }
                     out.push(normalize(&format!("<{inner}>")));
                     for _ in 0..=end {
                         chars.next();
@@ -318,8 +329,8 @@ impl Engine {
                 for k, v in pairs(fake) do
                     if rawget(real, k) == nil then rawset(real, k, v) end
                 end
-                for _, k in ipairs({ "iter", "func", "uri", "version", "secure" }) do
-                    if k == "version" or rawget(real, k) == nil then rawset(real, k, require("vim." .. k)) end
+                for _, k in ipairs({ "iter", "func", "uri", "version", "secure", "filetype" }) do
+                    if k == "version" or k == "filetype" or rawget(real, k) == nil then rawset(real, k, require("vim." .. k)) end
                 end
                 "#,
             )
@@ -595,7 +606,7 @@ impl Engine {
 
     pub fn feed(&mut self, mode: &str, typed: &[String]) -> Feed {
         // the host types `<CR>`, maps say `<Enter>`: one spelling for both
-        let typed: Vec<String> = typed.iter().map(|t| if t.starts_with('<') && t.len() > 2 { normalize(t) } else { t.clone() }).collect();
+        let typed: Vec<String> = typed.iter().map(|t| if t.starts_with('<') && t.len() > 2 && !t.starts_with("<Plug>") { normalize(t) } else { t.clone() }).collect();
         let typed = typed.as_slice();
         let (exact, pending) = {
             let st = self.st.borrow();
@@ -624,6 +635,19 @@ impl Engine {
             return Feed::Ran(self.run_map(mode, i));
         }
         Feed::None
+    }
+
+    /// The mapping whose keys are exactly `typed`, run even though longer ones start with them: the keys
+    /// after it matched no longer mapping (Vim then takes the shorter one and goes on with the rest).
+    pub fn feed_exact(&mut self, mode: &str, typed: &[String]) -> Option<Vec<Effect>> {
+        let typed: Vec<String> = typed.iter().map(|t| if t.starts_with('<') && t.len() > 2 && !t.starts_with("<Plug>") { normalize(t) } else { t.clone() }).collect();
+        let i = {
+            let st = self.st.borrow();
+            let leader = st.leader.clone();
+            let maps = st.maps.get(mode)?;
+            maps.iter().position(|m| m.keys.iter().map(|t| if t == "<leader>" { leader.clone() } else { t.clone() }).collect::<Vec<_>>() == typed)?
+        };
+        Some(self.run_map(mode, i))
     }
 
     /// What keys would do, without doing it (C-h k): Some((command, its description)) for a

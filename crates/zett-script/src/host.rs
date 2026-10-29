@@ -72,6 +72,13 @@ pub(crate) struct Host {
     pub cmdline: Option<(String, usize)>,
     /// each window's first line shown (0-based), in the order of wins
     pub tops: Vec<usize>,
+    /// the current buffer's own settings (filetype, commentstring …): vim.bo / vim.o read them first
+    pub locals: std::collections::HashMap<String, String>,
+    /// a plugin watches keys (vim.on_key): the editor tells Lua each one
+    pub on_key: bool,
+    /// keys waiting to be read by getchar (a test, or keys typed ahead), then the source that waits for one
+    pub pending_keys: std::collections::VecDeque<String>,
+    pub key_source: Option<Box<dyn FnMut() -> Option<String>>>,
     pub hist: Vec<String>,
     /// a g waiting for its second g
     pub g: bool,
@@ -238,6 +245,11 @@ impl Engine {
     /// The first line each window shows (line("w0"), winline, screenpos).
     pub fn set_tops(&mut self, tops: Vec<usize>) {
         self.st.borrow_mut().host.tops = tops;
+    }
+
+    /// The current buffer's own settings, for vim.bo (as `:setlocal` and the file type set them).
+    pub fn set_locals(&mut self, locals: std::collections::HashMap<String, String>) {
+        self.st.borrow_mut().host.locals = locals;
     }
 
     /// The quickfix list in use (getqflist), given when it changed.
@@ -770,6 +782,24 @@ impl Engine {
         })?;
         z.set("job", job)?;
         crate::wasm::register(lua, &z)?;
+        // getkey(): the next key (as zett names them: "a", "<Esc>", "<C-x>"), from the keys waiting, else waited
+        // for (getchar); nil when there is none to wait for
+        let st = self.st.clone();
+        z.set("getkey", lua.create_function(move |_, ()| {
+            let queued = st.borrow_mut().host.pending_keys.pop_front();
+            if queued.is_some() { return Ok(queued) }
+            let src = st.borrow_mut().host.key_source.take();
+            let Some(mut src) = src else { return Ok(None) };
+            let k = src();
+            st.borrow_mut().host.key_source = Some(src);
+            Ok(k)
+        })?)?;
+        // on_key_watch(on): someone uses vim.on_key, so the editor sends each key to vim._zett_on_key
+        let st = self.st.clone();
+        z.set("on_key_watch", lua.create_function(move |_, on: bool| { st.borrow_mut().host.on_key = on; Ok(()) })?)?;
+        // local_opt(name): the current buffer's own value of a setting, nil when it has none
+        let st = self.st.clone();
+        z.set("local_opt", lua.create_function(move |_, name: String| Ok(st.borrow().host.locals.get(&name).cloned()))?)?;
         // feed_keys(keys, remap): keys typed in after this Lua returns, in the mode the editor is in (an expr
         // mapping's result, nvim_feedkeys); remap false: they skip the mappings
         let st = self.st.clone();
@@ -1398,5 +1428,27 @@ impl mlua::UserData for VimRe {
             let s = String::from_utf8_lossy(&s.as_bytes()).into_owned();
             Ok(match r.0.find_at(&s, from.unwrap_or(0).min(s.len())) { Some((a, b)) => (Some(a), Some(b)), None => (None, None) })
         });
+    }
+}
+
+impl crate::Engine {
+    /// A plugin listens to keys (vim.on_key).
+    pub fn wants_keys(&self) -> bool {
+        self.st.borrow().host.on_key
+    }
+}
+
+impl crate::Engine {
+    /// Where getchar waits for a key (the editor: the terminal), when none are queued.
+    pub fn set_key_source(&mut self, f: Box<dyn FnMut() -> Option<String>>) {
+        self.st.borrow_mut().host.key_source = Some(f);
+    }
+    /// Keys getchar reads first (tests; keys typed ahead).
+    pub fn queue_keys(&mut self, keys: Vec<String>) {
+        self.st.borrow_mut().host.pending_keys = keys.into();
+    }
+    /// How many queued keys are still unread.
+    pub fn queued_keys(&self) -> usize {
+        self.st.borrow().host.pending_keys.len()
     }
 }

@@ -724,6 +724,17 @@ pub fn run_with(paths: Vec<PathBuf>, start: Vec<String>) -> std::io::Result<()> 
     }
     let _ = zett_edit::vim::CLIPBOARD.set((clip_get, clip_set));
     let mut app = App::new(paths);
+    // getchar in a plugin (nvim-surround's "which pair?", flash's jump label): the next key from the terminal
+    app.engine.set_key_source(Box::new(|| loop {
+        match event::read() {
+            Ok(Event::Key(k)) if k.kind != event::KeyEventKind::Release => {
+                let t = token(&k);
+                if !t.is_empty() { return Some(t) }
+            }
+            Ok(_) => continue,
+            Err(_) => return None,
+        }
+    }));
     for c in &start {
         app.command(c);
     }

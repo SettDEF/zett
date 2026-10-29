@@ -932,9 +932,13 @@ mod plugin_trial {
             let name = std::path::Path::new(d).file_name().unwrap().to_string_lossy().to_string();
             app.command(&format!("lua zett.plug({name:?}, {{ dir = {d:?} }})"));
         }
+        // startup as the editor does it: the plugins' plugin/ files, then VimEnter
+        app.load_runtime_plugins();
+        app.fire_autocmds("vimenter", None);
         let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 30)).unwrap();
         let mut step = |app: &mut crate::App| {
             for _ in 0..6 {
+                app.sync_profile();
                 let fx = app.with_lua(|e| e.run_timers());
                 app.after_lua(fx);
                 term.draw(|f| app.draw(f)).unwrap();
@@ -971,8 +975,15 @@ mod plugin_trial {
                 } else {
                     (KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE), c.len_utf8())
                 };
+                // the keys after this one wait for getchar (a plugin asking for a key mid-mapping)
+                let ahead: Vec<String> = { let mut v = Vec::new(); let mut r = &rest[n..]; while let Some(c) = r.chars().next() { if c == '<' && r.contains('>') { let e = r.find('>').unwrap(); v.push(r[..=e].to_string()); r = &r[e + 1..]; } else { v.push(c.to_string()); r = &r[c.len_utf8()..]; } } v };
+                let before = ahead.len();
+                app.engine.queue_keys(ahead);
                 app.key(ev);
+                let used = before - app.engine.queued_keys();
+                app.engine.queue_keys(Vec::new());
                 rest = &rest[n..];
+                for _ in 0..used { if let Some(c) = rest.chars().next() { let w = if c == '<' && rest.contains('>') { rest.find('>').unwrap() + 1 } else { c.len_utf8() }; rest = &rest[w..]; } }
                 step(&mut app);
             }
             eprintln!("keys {keys:?} → msg {:?}", app.msg.as_ref().map(|m| &m.0));
