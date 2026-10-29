@@ -936,7 +936,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             if (app.shotEngine.startsWith("corekeep:")) { const p = app.shotEngine.slice(9).split(","); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { const d = fileView.codeDoc; d.click(0, 0, false, false); for (const ch of "kept ") d.key(0, ch, 0); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); Qt.callLater(() => { const list = win.unsavedList(); win.openFile({ path: app.dir + "/" + p[0], rel: p[0] }); Qt.callLater(() => { console.log("zett-probe: corekeep away " + list.length + " back [" + d.lineText(0) + "] dirty " + d.dirty); grabLater.start() }) }) }); return }
             if (app.shotEngine.startsWith("corenote:")) { const f = app.shotEngine.slice(9); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.codeDoc.click(2, 4, false, false); Qt.callLater(() => { win.noteAboutCode(); noteT2.start() }) }); return }
             if (app.shotEngine.startsWith("corebig:")) { const t0 = Date.now(); win.openFile({ path: app.dir + "/" + app.shotEngine.slice(8), rel: app.shotEngine.slice(8) }); Qt.callLater(() => { const t1 = Date.now(); const d = fileView.codeDoc; d.click(99990, 0, false, false); for (const ch of "// end") d.key(0, ch, 0); const t2 = Date.now(); for (const ch of " more") d.key(0, ch, 0); console.log("zett-probe: corebig open " + (t1 - t0) + " ms, lines " + d.lines + ", first typing at the end " + (t2 - t1) + " ms, five more keys " + (Date.now() - t2) + " ms"); grabLater.start() }); return }
-            if (app.shotEngine.startsWith("corelsp:")) { const p = app.shotEngine.split(":"); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); claudeShot.interval = 20000; coreLspT.spec = p; coreLspT.start(); return }
+            if (app.shotEngine.startsWith("corelsp:")) { const p = app.shotEngine.split(":"); win.openFile({ path: app.dir + "/" + p[1], rel: p[1] }); claudeShot.interval = 20000; fileChangedT.watch(app.dir + "/" + p[1]); coreLspT.spec = p; coreLspT.start(); return }
             // market:QUERY: the marketplace popup searched for QUERY
             if (app.shotEngine.startsWith("market:")) { marketplace.show(); Qt.callLater(() => { marketplace.searchFor(app.shotEngine.slice(7)); console.log("zett-probe: market " + marketplace.info[0] + " " + JSON.stringify(marketplace.rows.slice(0, 3).map(r => r.repo))); grabLater.start() }); return }
             if (app.shotEngine === "explorer") { win.sideMode = "files"; grabLater.start(); return }
@@ -954,6 +954,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
                 if (app.shotEngine.startsWith("fileside:")) win.sideFile = app.dir + "/" + (app.shotEngine.split(":")[2] ?? "")
                 if (app.shotEngine.startsWith("filelsp:")) fileView.testLsp(app.shotEngine.split(":").slice(2).join(":"))
                 if (app.shotEngine.includes(":act:")) claudeShot.interval = 20000   // the server takes its time to report the problem first
+                if (app.shotEngine.includes(":act:") || app.shotEngine.includes(":rename:")) fileChangedT.watch(app.dir + "/" + app.shotEngine.split(":")[1])
                 if (app.shotEngine.startsWith("filediff:")) Qt.callLater(() => { fileView.showDiff = true; console.log("zett-probe: diff " + fileView.diffRows.length) })
                 if (app.shotEngine.startsWith("filemulti:")) Qt.callLater(() => fileView.testMulti())
                 if (app.shotEngine.startsWith("filesticky:")) stickyT.start()
@@ -1046,7 +1047,12 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
     focus: true
     Keys.onPressed: (e) => { if (win.engineKey(e, null)) e.accepted = true }
     Timer { id: grabLater; interval: 700; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })  }
-    Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }  // the panel polls cui first
+    Timer { id: claudeShot; interval: 4000; onTriggered: rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() }) }
+    // a check that changes the file through the server (code action, rename): done as soon as the file on disk
+    // changes, claudeShot (20 s) the most it waits
+    Timer { id: fileChangedT; property string was: ""; property string path: ""; interval: 250; repeat: true
+        function watch(p) { path = p; was = app.readFile(p); start() }
+        onTriggered: if (path && app.readFile(path) !== was) { stop(); claudeShot.stop(); Qt.callLater(() => rootRow.grabToImage(r => { r.saveToFile(app.shot); Qt.quit() })) } }  // the panel polls cui first
     Timer { id: probT; interval: 1500; onTriggered: { console.log("zett-probe: problems " + JSON.stringify(win.problems.map(p => p.path.replace(app.dir + "/", "") + ":" + (p.line + 1) + " " + p.message))); claudeShot.start() } }
     Timer { id: noteT2; interval: 1500; onTriggered: { const t = win.pages.map(p => p.title).filter(x => x.includes("›")); console.log("zett-probe: corenote pages " + JSON.stringify(t) + " notes " + JSON.stringify(win.notesFor(win.filePath)) + " side " + win.sidePage); grabLater.start() } }
     Timer { id: coreT; interval: 600; onTriggered: { const d = fileView.codeDoc; d.click(1, 4, false, false); d.click(2, 4, false, true); d.key(0, "x", 0); d.key(0x5a, "", 0x04000000); d.key(0, "y", 0); d.toggleFold(0); console.log("zett-probe: core rows " + d.rows + " lines " + d.lines + " fold " + d.foldAt(0) + " cursors " + d.cursors); d.save(); grabLater.start() } }

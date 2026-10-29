@@ -6,9 +6,9 @@
 set -uo pipefail
 BIN=${1:-${CARGO_TARGET_DIR:-$(dirname "$0")/../target}/release/zett}
 W=$(mktemp -d /tmp/zett-gui-check.XXXXXX)
-OUT=$W/.out
+OUT=$W.out
 mkdir -p "$OUT"
-trap 'rm -rf "$W"' EXIT
+trap 'rm -rf "$W" "$W.c" "$W.out"' EXIT
 pass=0 fail=0
 
 # the workspace: a page with code, a Rust file, a C file with two errors, a template, a git repository
@@ -27,18 +27,42 @@ mkdir -p "$W/templates"; printf '# Meeting\n' > "$W/templates/Meeting.md"
 git -C "$W" init -q && git -C "$W" add -A && git -C "$W" -c user.email=c@c -c user.name=c commit -qm init
 echo '// changed' >> "$W/main.rs"
 
-# NAME ENGINE [CHECK]: run one hook; CHECK is a shell test run afterwards
+# NAME ENGINE [CHECK]: run one hook; CHECK is a shell test run afterwards. Every check runs in its own copy of the
+# workspace (and its own state folder), up to GUI_JOBS (the cores) at once; the results are printed in order at the end
+GUI_JOBS=${GUI_JOBS:-$(nproc)}
+NAMES=()
 check() {
     local name=$1 engine=$2 test=${3:-true}
-    local png=$OUT/$name.png log=$OUT/$name.log
-    ZETT_DIR=$W QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 ZETT_SHOT=$png ZETT_SHOT_ENGINE=$engine timeout 40 nice -n 19 "$BIN" --gui check.md > "$log" 2>&1
-    local code=$?
-    local why=""
-    [ $code -eq 0 ] || why="exit $code"
-    [ -s "$png" ] || why="${why:+$why, }no picture"
-    grep -qE "TypeError|ReferenceError|is not a function|Cannot read property" "$log" && why="${why:+$why, }$(grep -m1 -oE "(TypeError|ReferenceError)[^\n]{0,80}" "$log")"
-    eval "$test" || why="${why:+$why, }check failed: $test"
-    if [ -z "$why" ]; then pass=$((pass + 1)); printf '  ok    %s\n' "$name"; else fail=$((fail + 1)); printf '  FAIL  %s: %s\n' "$name" "$why"; fi
+    NAMES+=("$name")
+    while [ "$(jobs -rp | wc -l)" -ge "$GUI_JOBS" ]; do wait -n; done
+    (
+        local WC=$W.c/$name png=$OUT/$name.png log=$OUT/$name.log
+        mkdir -p "$W.c" && cp -a "$W" "$WC"
+        # a program for the debugger, built in this copy (its debug info names this copy's source)
+        case $engine in coredebug:*) gcc -g -O0 -o "$WC/dbg" "$WC/dbg.c" ;; esac
+        local t0=$(date +%s%N)
+        ZETT_DIR=$WC XDG_STATE_HOME=$WC/.state QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 ZETT_SHOT=$png ZETT_SHOT_ENGINE=$engine timeout 40 "$BIN" --gui check.md > "$log" 2>&1
+        local code=$?
+        local why=""
+        [ $code -eq 0 ] || why="exit $code"
+        [ -s "$png" ] || why="${why:+$why, }no picture"
+        grep -qE "TypeError|ReferenceError|is not a function|Cannot read property" "$log" && why="${why:+$why, }$(grep -m1 -oE "(TypeError|ReferenceError)[^\n]{0,80}" "$log")"
+        # the check reads this check's own copy of the workspace
+        test=${test//"$W/"/"$WC/"}
+        eval "$test" || why="${why:+$why, }check failed: $test"
+        local ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+        if [ -z "$why" ]; then echo "  ok    $name"; else echo "  FAIL  $name: $why"; fi > "$OUT/$name.result"
+        echo "$ms $name" >> "$OUT/times"
+    ) &
+}
+# every check's result, in the order they were started
+finish_checks() {
+    wait
+    for n in "${NAMES[@]}"; do
+        local r; r=$(cat "$OUT/$n.result" 2>/dev/null || echo "  FAIL  $n: no result")
+        echo "$r"
+        case $r in "  ok"*) pass=$((pass + 1)) ;; *) fail=$((fail + 1)) ;; esac
+    done
 }
 
 echo "zett --gui check ($BIN)"
@@ -100,5 +124,7 @@ if command -v clangd >/dev/null; then check symbols filelsp:bad.c:symbols "grep 
 if command -v clangd >/dev/null; then check signature filelsp:sig.c:sig:2:12 "grep -q 'signature add(int a, int b).*\\[int b\\]' \"\$OUT/signature.log\""; check actions filelsp:fix.c:act:2:4 "grep -q 'int x = 1;' '$W/fix.c'"; fi
 if command -v clangd >/dev/null; then check coreaction corelsp:fix2.c:act:2:4 "grep -q 'int x = 1;' '$W/fix2.c'"; check corerename corelsp:bad2.c:rename:1:8:count "grep -q 'int count' '$W/bad2.c' && grep -q 'return count' '$W/bad2.c'"; fi
 if command -v clangd >/dev/null; then check problems fileproblems:bad.c; else echo "  skip  problems (no clangd)"; fi
+finish_checks
 echo "$pass passed, $fail failed  (pictures: $OUT, kept only on failure)"
+[ -n "${GUI_TIMES:-}" ] && sort -rn "$OUT/times" | head -8
 if [ $fail -gt 0 ]; then trap - EXIT; echo "workspace kept: $W"; exit 1; fi
