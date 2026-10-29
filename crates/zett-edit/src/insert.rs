@@ -29,6 +29,25 @@ impl Editor {
             }
             return;
         }
+        // CTRL-G u: a new undo step from here; CTRL-G U: the next Left/Right stays in this one (plugins send
+        // both around the keys they type); CTRL-G j / k: down / up to where typing started
+        if std::mem::take(&mut self.vim.ctrl_g) {
+            match k.code {
+                Code::Char('u') if !k.ctrl => { self.close(); self.begin(); }
+                Code::Char('j' | 'k') if !k.ctrl => {
+                    let col = self.vim.insert_start.saturating_sub(self.line_start(self.buf.to_pos(self.vim.insert_start.min(self.buf.len_chars())).line));
+                    let l = self.cur_line();
+                    let to = if k.code == Code::Char('j') { (l + 1).min(self.buf.len_lines() - 1) } else { l.saturating_sub(1) };
+                    self.cursor = (self.line_start(to) + col).min(self.line_end(to));
+                }
+                _ => {}
+            }
+            return;
+        }
+        if k.code == Code::Char('g') && k.ctrl && !k.alt {
+            self.vim.ctrl_g = true;
+            return;
+        }
         // 'digraph': {char1} <BS> {char2}; any other key forgets char1
         let dg = (self.vim.dg_last.take(), self.vim.dg_bs.take());
         match k.code {

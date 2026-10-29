@@ -912,3 +912,92 @@ mod glob_health_tests {
         assert!(text.iter().any(|l| l.contains("✔ ok all good")) && text.iter().any(|l| l.contains("→ update it")), "{text:?}");
     }
 }
+
+#[cfg(test)]
+mod plugin_trial {
+    // ZETT_TRY_PLUGS=dir,dir  ZETT_TRY_LUA=setup code  ZETT_TRY_CMDS=ex;;ex  ZETT_TRY_KEYS=keys  ZETT_TRY_TEXT=buffer
+    // cargo test -p zett-tui try_plugins -- --ignored --nocapture: errors and the screen, to see what a plugin needs
+    #[test]
+    #[ignore]
+    fn try_plugins() {
+        let env = |k: &str| std::env::var(k).unwrap_or_default();
+        // its own data folder: zett.plug links plugins there, never into the real one
+        let data = std::env::temp_dir().join(format!("zett-try-data-{}", std::process::id()));
+        std::fs::create_dir_all(&data).unwrap();
+        unsafe { std::env::set_var("XDG_DATA_HOME", &data) }
+        let mut app = crate::App::new(Vec::new());
+        let text = env("ZETT_TRY_TEXT");
+        if !text.is_empty() { app.docs[app.cur].ed = zett_edit::Editor::from_str(&text.replace("\\n", "\n")); }
+        for d in env("ZETT_TRY_PLUGS").split(',').filter(|s| !s.is_empty()) {
+            let name = std::path::Path::new(d).file_name().unwrap().to_string_lossy().to_string();
+            app.command(&format!("lua zett.plug({name:?}, {{ dir = {d:?} }})"));
+        }
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 30)).unwrap();
+        let mut step = |app: &mut crate::App| {
+            for _ in 0..6 {
+                let fx = app.with_lua(|e| e.run_timers());
+                app.after_lua(fx);
+                term.draw(|f| app.draw(f)).unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(30));
+            }
+        };
+        step(&mut app);
+        let lua = env("ZETT_TRY_LUA");
+        if !lua.is_empty() { app.command(&format!("lua {lua}")); eprintln!("after setup msg: {:?}", app.msg.as_ref().map(|m| &m.0)); }
+        step(&mut app);
+        for c in env("ZETT_TRY_CMDS").split(";;").filter(|s| !s.is_empty()) {
+            app.command(c);
+            eprintln!("cmd {c:?} → msg {:?}", app.msg.as_ref().map(|m| &m.0));
+            step(&mut app);
+        }
+        let keys = env("ZETT_TRY_KEYS");
+        if !keys.is_empty() {
+            use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+            let mut rest = keys.as_str();
+            while let Some(c) = rest.chars().next() {
+                let (ev, n) = if c == '<' && rest.contains('>') {
+                    let end = rest.find('>').unwrap();
+                    let name = &rest[1..end];
+                    let ev = match name {
+                        "Esc" => KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+                        "CR" => KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                        "Space" => KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+                        "Tab" => KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+                        "BS" => KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+                        n if n.starts_with("C-") => KeyEvent::new(KeyCode::Char(n.chars().nth(2).unwrap_or('x')), KeyModifiers::CONTROL),
+                        _ => KeyEvent::new(KeyCode::Char('<'), KeyModifiers::NONE),
+                    };
+                    (ev, end + 1)
+                } else {
+                    (KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE), c.len_utf8())
+                };
+                app.key(ev);
+                rest = &rest[n..];
+                step(&mut app);
+            }
+            eprintln!("keys {keys:?} → msg {:?}", app.msg.as_ref().map(|m| &m.0));
+        }
+        let errors = app.with_lua(|e| std::mem::take(&mut e.errors));
+        for e in &errors { eprintln!("ERROR {e}"); }
+        eprintln!("TEXT {:?}", app.docs[app.cur].ed.text());
+        let b = term.backend().buffer();
+        let rows: Vec<String> = (0..b.area.height).map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol().to_string()).collect::<String>().trim_end().to_string()).collect();
+        eprintln!("SCREEN\n{}", rows.join("\n"));
+    }
+}
+
+#[cfg(test)]
+mod expr_map_tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    // what nvim-autopairs does: an expr insert mapping returning the pair, <C-g>U<Left> back between them
+    #[test]
+    fn expr_insert_mappings_type_what_they_return() {
+        let mut app = crate::App::new(Vec::new());
+        app.docs[app.cur].ed = zett_edit::Editor::from_str("");
+        app.command(r#"lua vim.keymap.set("i", "(", function() return "()<C-g>U<Left>" end, { expr = true })"#);
+        app.command(r#"lua vim.api.nvim_buf_set_keymap(0, "i", "[", "", { expr = true, noremap = true, callback = function() return "[]<C-g>U<Left>" end })"#);
+        for c in "ia(b[c".chars() { app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)); }
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.docs[app.cur].ed.text(), "a(b[c])");
+    }
+}

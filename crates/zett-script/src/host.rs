@@ -770,6 +770,13 @@ impl Engine {
         })?;
         z.set("job", job)?;
         crate::wasm::register(lua, &z)?;
+        // feed_keys(keys, remap): keys typed in after this Lua returns, in the mode the editor is in (an expr
+        // mapping's result, nvim_feedkeys); remap false: they skip the mappings
+        let st = self.st.clone();
+        z.set("feed_keys", lua.create_function(move |_, (keys, remap): (String, Option<bool>)| {
+            st.borrow_mut().effects.push(Effect::Keys(keys, remap.unwrap_or(false)));
+            Ok(())
+        })?)?;
         // vimregex(pattern, icase): a Vim pattern compiled (zett_edit's engine) → userdata with :find(text, from) → s, e (bytes, e
         // past the end); vim.regex builds match_str / match_line on it
         z.set("vimregex", lua.create_function(|_, (p, icase): (String, Option<bool>)| {

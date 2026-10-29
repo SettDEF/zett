@@ -67,6 +67,8 @@ pub(crate) struct VimState {
     pub last_spell: Option<(String, String)>,
     /// insert mode CTRL-K: waiting for the first character (Some(None)) or the second (Some(Some(a)))
     pub digraph: Option<Option<char>>,
+    /// insert mode CTRL-G: waiting for its second key (u: an undo break, U: the next move keeps the undo step)
+    pub ctrl_g: bool,
     /// 'digraph': the character just typed, and the one a <BS> took back ({char1} <BS> {char2})
     pub dg_last: Option<char>,
     pub dg_bs: Option<char>,

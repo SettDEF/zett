@@ -469,6 +469,15 @@ vim.keymap = {}
 function vim.keymap.set(modes, lhs, rhs, opts)
   opts = opts or {}
   if type(modes) == "string" then modes = { modes } end
+  -- expr: the function gives keys to type (autopairs, completion, snippets); they go in as typed, remapped
+  -- only with remap = true, as in Neovim
+  if opts.expr and type(rhs) == "function" then
+    local f = rhs
+    rhs = function()
+      local keys = f()
+      if type(keys) == "string" and keys ~= "" then z.feed_keys(keys, opts.remap == true) end
+    end
+  end
   for _, m in ipairs(modes) do
     if type(rhs) == "function" then
       local zm = zett_mode[m]
@@ -682,7 +691,8 @@ api.nvim_create_namespace = function(name)
 end
 api.nvim_get_namespaces = function() return vim._ns or {} end
 api.nvim_replace_termcodes = function(s, _, _, _) return s end
-api.nvim_feedkeys = function(keys, _, _) ex("normal " .. keys) end
+-- nvim_feedkeys: typed in the mode the editor is in ("n" in mode: no mappings)
+api.nvim_feedkeys = function(keys, mode, _) if keys ~= "" then z.feed_keys(keys, not tostring(mode or "m"):find("n")) end end
 api.nvim_input = function(keys) ex("normal " .. keys) return #keys end
 api.nvim_get_mode = function() return { mode = vim.fn.mode(), blocking = false } end
 api.nvim_eval = function(e) return vim._vimscript and vim._vimscript.eval(e) or nil end
