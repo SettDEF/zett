@@ -101,6 +101,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "lendFile"]
         fn lend_file(self: Pin<&mut Zett>, path: &QString, text: &QString, line: i32, col: i32);
+        /// plugins' marks on the lent file as JSON {seq, marks: [...]}, "" when unchanged since `since` (cheap to poll)
+        #[qinvokable]
+        #[cxx_name = "pluginMarks"]
+        fn plugin_marks(self: Pin<&mut Zett>, since: i32) -> QString;
         /// Lua changed the lent file: its whole new text and the cursor
         #[qsignal]
         #[cxx_name = "lentChanged"]
@@ -1144,6 +1148,17 @@ impl qobject::Zett {
     fn lend_file(self: Pin<&mut Self>, path: &QString, text: &QString, line: i32, col: i32) {
         let p = path.to_string();
         self.rust_mut().get_mut().lent = (!p.is_empty()).then(|| (p, text.to_string(), line.max(0) as usize, col.max(0) as usize));
+    }
+
+    fn plugin_marks(self: Pin<&mut Self>, since: i32) -> QString {
+        let mut r = self.rust_mut();
+        let r = r.as_mut().get_mut();
+        if r.lent.is_none() { return QString::from("") }
+        let Some(e) = r.engine.as_mut() else { return QString::from("") };
+        let seq: i32 = e.eval("return vim._marks_seq()").map(|v| v.0.trim().parse().unwrap_or(0)).unwrap_or(0);
+        if seq == since { return QString::from("") }
+        let marks = e.eval("return vim._zett_marks_json(1)").map(|v| v.0).unwrap_or_else(|_| "[]".into());
+        QString::from(&format!("{{\"seq\":{seq},\"marks\":{marks}}}"))
     }
 
     fn keep_unsaved(&self, path: &QString, text: &QString) {

@@ -98,6 +98,8 @@ check corewords corewords:core5.rs "grep -q 'corewords \\[\"let\"\\] \\[\"main\"
 check corecomp corecomp:core5.rs "grep -q 'corecomp focus true completing true items \\[\"let\"' \"\$OUT/corecomp.log\""
 check corekept corekept:lines.rs "grep -q 'corekept offered true text \\[kept after a crash\\] dirty true' \"\$OUT/corekept.log\""
 check corelend corelend:lines.rs "grep -q 'corelend \\[from lua 3\\] dirty true' \"\$OUT/corelend.log\""
+check coremarks coremarks:core.rs "grep -q 'coremarks .*\"virt\":\[{\"text\":\"from a plugin\".*\"sign\":\"+\"' \"\$OUT/coremarks.log\""
+check coreevents coreevents:core.rs "grep -q 'coreevents FileType:rust BufEnter:rust BufWritePost:rust' \"\$OUT/coreevents.log\""
 # YouCompleteMe's engine, when ycmd is built in the data folder: gfi finds getFileInfo (fuzzy)
 if ls ~/.local/share/zett/ycmd/ycm_core* >/dev/null 2>&1; then
     printf 'function getFileInfo(path) {}\nconst gitFolderInfo = 1\n' > "$W/y.js"

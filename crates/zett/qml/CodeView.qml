@@ -142,6 +142,40 @@ Rectangle {
     function copy(cut) { const s = doc.selectedText(); if (!s) return; clip.text = s; clip.selectAll(); clip.copy(); if (cut) doc.key(0x01000007, "", 0) }
     function paste() { clip.text = ""; clip.paste(); if (clip.text) doc.insert(clip.text) }
 
+    // plugins' marks on this file (extmarks: signs, a line's tint, highlighted ranges, text after the line), by line;
+    // fetched only when they change
+    property var pmarks: ({})
+    // a highlight group's colour: its own when the scheme gave one, else the theme's for the common ones
+    function groupColour(colour, group, bg) {
+        if (colour) return colour
+        const g = group ?? ""
+        if (/Add|Added|Ok|Hint/.test(g)) return "#5fb98a"
+        if (/Delete|Removed|Error/.test(g)) return cv.t.removed
+        if (/Change|Changed|Info/.test(g)) return "#5b9bd5"
+        if (/Warn|Todo/.test(g)) return "#d8a54a"
+        if (/Comment|NonText|Conceal/.test(g)) return cv.t.faint
+        return bg ? "" : cv.t.accent
+    }
+    property int pmSeq: -1
+    Timer {
+        interval: 300; repeat: true; running: !!cv.fv && cv.file.length > 0
+        onTriggered: {
+            const s = cv.app.pluginMarks(cv.pmSeq)
+            if (!s) return
+            let o; try { o = JSON.parse(s) } catch (e) { return }
+            cv.pmSeq = o.seq
+            const by = {}
+            for (const m of (Array.isArray(o.marks) ? o.marks : [])) {
+                const at = (by[m.row] = by[m.row] ?? { ranges: [], virt: [] })
+                if (m.sign) { at.sign = m.sign.trim(); at.signFg = cv.groupColour(m.sign_fg, m.sign_group) }
+                if (m.line || m.line_group) { const c = cv.groupColour(m.line, m.line_group, true); if (c) at.line = c }
+                if (m.virt) at.virt = at.virt.concat(m.virt.map(v => ({ text: v.text, fg: cv.groupColour(v.fg, v.group) })))
+                if (m.end_col >= 0 && m.end_row === m.row && (m.hl_group || m.hl)) { const c = cv.groupColour(m.hl && m.hl.bg, m.hl_group, true); if (c) at.ranges.push([m.col, m.end_col, c]) }
+            }
+            cv.pmarks = by
+        }
+    }
+
     // git blame of the line the cursor rests on (after a pause): who, when, the commit's summary
     property int blameLine: -1
     property string blameText: ""
@@ -228,6 +262,18 @@ Rectangle {
             Rectangle { visible: parent.git.length > 0; x: 2; anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: parent.git === "added" ? "#5fb98a" : parent.git === "changed" ? "#5b9bd5" : cv.t.removed }
             readonly property int sev: { if (!cv.fv) return 9; let s = 9; for (const d of cv.fv.diags) if (d.line === line && d.severity < s) s = d.severity; return s }
             Rectangle { visible: parent.sev <= 2; x: 12; anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; color: parent.sev === 1 ? cv.t.removed : "#d8a54a" }
+            // a plugin's mark on this line: its sign where the fold chevron goes (when there is none), its line tint
+            readonly property var pm: cv.pmarks[line] ?? null
+            Rectangle { visible: !!(parent.pm && parent.pm.line); x: cv.gutter; width: parent.width - cv.gutter; height: parent.height; color: Qt.alpha(parent.pm && parent.pm.line ? parent.pm.line : "transparent", 0.35); z: -1 }
+            Repeater { model: parent.pm ? parent.pm.ranges : []
+                delegate: Rectangle { required property var modelData; x: cv.gutter + 12 + modelData[0] * cv.cw; width: Math.max(1, modelData[1] - modelData[0]) * cv.cw; height: parent.height; color: Qt.alpha(modelData[2], 0.45); z: -1 } }
+            Text {
+                visible: !!(parent.pm && parent.pm.sign) && parent.fold === 0
+                x: 44; width: 16; height: parent.height; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter
+                text: parent.pm && parent.pm.sign ? parent.pm.sign : ""
+                color: parent.pm && parent.pm.signFg ? parent.pm.signFg : cv.t.accent
+                font.family: cv.t.mono; font.pixelSize: 12
+            }
             // fold: a chevron for a line that opens a block, "⋯" after one folded
             Text {
                 visible: parent.fold > 0
@@ -252,6 +298,13 @@ Rectangle {
                 width: 30; height: 16; radius: 8; color: Qt.alpha(cv.t.accent, 0.18)
                 Text { anchors.centerIn: parent; text: "⋯"; color: cv.t.accent; font.pixelSize: 12 }
                 TapHandler { onTapped: doc.toggleFold(parent.parent.line) }
+            }
+            // a plugin's text after the line (virt_text), in its colours
+            Row {
+                visible: !!(parent.pm && parent.pm.virt.length)
+                x: code.x + code.implicitWidth + 16; height: parent.height; spacing: 0
+                Repeater { model: parent.parent.pm ? parent.parent.pm.virt : []
+                    delegate: Text { required property var modelData; height: parent.height; verticalAlignment: Text.AlignVCenter; text: modelData.text; color: modelData.fg || cv.t.faint; font.family: cv.t.mono; font.pixelSize: 12 } }
             }
             // blame, faint after the text of the line the cursor rests on
             Text {

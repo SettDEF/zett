@@ -2431,6 +2431,31 @@ api.nvim_create_autocmd = function(events, o)
   end
   return id
 end
+-- for the window (zett --gui), which has no autocmd table of its own: the autocmds made through vim.api for `event`
+-- run here, for `file` (patterns as file globs: "*", "*.lua", a path)
+function vim._zett_fire(event, file)
+  file = file or ""
+  local name = vim.fn.fnamemodify(file, ":t")
+  local ft = vim.bo.filetype
+  local args = { event = event, file = file, match = event == "FileType" and ft or file, buf = vim.api.nvim_get_current_buf() }
+  for i = #made_au, 1, -1 do
+    local a = made_au[i]
+    if a and a.event:lower() == event:lower() then
+      local p = a.pattern or "*"
+      local fits = p == "*" or (event == "FileType" and p == ft)
+      if not fits and p ~= "" then
+        local lp = "^" .. p:gsub("[%.%+%-%^%$%(%)%%]", "%%%0"):gsub("%*", ".*"):gsub("%?", ".") .. "$"
+        fits = name:match(lp) ~= nil or file:match(lp) ~= nil
+      end
+      if fits then
+        if a.once then table.remove(made_au, i) end
+        if type(a.callback) == "function" then pcall(a.callback, args)
+        elseif a.command ~= "" then pcall(vim.cmd, a.command) end
+      end
+    end
+  end
+end
+
 api.nvim_del_autocmd = function(id)
   for i = #made_au, 1, -1 do if made_au[i].id == id then table.remove(made_au, i) end end
   return del_au(id)
@@ -4985,4 +5010,34 @@ do
     local ok, err = zett.ycm.install()
     vim.notify(ok and "building ycmd in the background…" or ("YcmInstall: " .. err))
   end, { desc = "Build YouCompleteMe's engine (ycmd) for completion" })
+end
+
+-- for the window (zett --gui): buffer b's extmarks as JSON, colours resolved (#rrggbb, "" none): what it draws
+-- (signs by the numbers, a line's background, highlighted ranges, text after the line)
+function vim._zett_marks_json(b)
+  local cache = {}
+  local function colours(g)
+    if not g or g == "" then return { fg = "", bg = "" } end
+    if cache[g] then return cache[g] end
+    local ok, h = pcall(vim.api.nvim_get_hl, 0, { name = g, link = false })
+    h = ok and h or {}
+    local function hex(v) return type(v) == "number" and string.format("#%06x", v) or "" end
+    cache[g] = { fg = hex(h.fg), bg = hex(h.bg) }
+    return cache[g]
+  end
+  local out = {}
+  for _, m in ipairs(vim.api.nvim_buf_get_extmarks(b, -1, 0, -1, { details = true })) do
+    local d = m[4] or {}
+    local vt = {}
+    for _, c in ipairs(d.virt_text or {}) do
+      local g = type(c[2]) == "table" and c[2][#c[2]] or c[2]
+      vt[#vt + 1] = { text = tostring(c[1] or ""), fg = colours(g).fg, group = g }
+    end
+    out[#out + 1] = {
+      row = m[2], col = m[3], end_row = d.end_row or m[2], end_col = d.end_col or -1,
+      hl = d.hl_group and colours(d.hl_group) or nil, hl_group = d.hl_group, line = d.line_hl_group and colours(d.line_hl_group).bg or nil, line_group = d.line_hl_group,
+      sign = d.sign_text, sign_fg = d.sign_text and colours(d.sign_hl_group).fg or nil, sign_group = d.sign_hl_group, virt = #vt > 0 and vt or nil,
+    }
+  end
+  return vim.json.encode(out)
 end

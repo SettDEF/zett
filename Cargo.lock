@@ -3022,6 +3022,7 @@ dependencies = [
  "zett-edit",
  "zett-lsp",
  "zett-script",
+ "zett-ycm",
 ]
 
 [[package]]

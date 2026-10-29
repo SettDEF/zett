@@ -40,7 +40,7 @@ ColumnLayout {
             // the same tidying as the classic editor: trailing spaces, a final newline (Settings > Editor)
             if (!auto && (win.prefs.trimOnSave ?? true)) codeView.doc.replaceAll("[ \\t]+$", "", JSON.stringify({ regex: true, multiline: true, case: true }))
             if (!auto && (win.prefs.finalNewline ?? true)) { const n = codeView.doc.lines, last = codeView.doc.lineText(n - 1); if (last.length) codeView.doc.applyEdits(JSON.stringify([[n - 1, last.length, n - 1, last.length, "\n"]])) }
-            if (codeView.doc.save()) { note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0) } else note = "Could not save"; noteT.restart(); return }
+            if (codeView.doc.save()) { note = "Saved"; loadGit(); if (lsp) app.lspAsk("save", win.filePath, 0, 0); fv.fire(["BufWritePost"]) } else note = "Could not save"; noteT.restart(); return }
         if (!auto && (win.prefs.trimOnSave ?? true)) {
             let s = ed.text.replace(/[ \t]+$/gm, "")
             if ((win.prefs.finalNewline ?? true) && s.length && !s.endsWith("\n")) s += "\n"
@@ -107,12 +107,20 @@ ColumnLayout {
     function wordStart(pos) { let s = pos; while (s > 0 && /[\w$]/.test(ed.text[s - 1])) s--; return s }
     function ask(kind, pos) { if (!lsp) return; const [l, c] = lineCol(pos); app.lspAsk(kind, win.filePath, l, c) }
     onVisibleChanged: if (visible) { openLsp(); loadGit() }
-    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit(); fv.checkKept(); lendT.restart() } }
+    Connections { target: fv.win; function onFilePathChanged() { fv.diags = []; fv.comps = []; fv.openLsp(); fv.loadGit(); fv.checkKept(); Qt.callLater(() => fv.fire(["BufReadPost", "FileType", "BufEnter"])) } }
     // the open file lent to Lua as its current buffer (plugins' commands and maps act on it): kept current a
     // moment after each change; what Lua changes comes back here
+    // the events plugins wait for, fired with the file lent (its file type set first, as Neovim's detection does)
+    function fire(events) {
+        if (!fv.newCore || !fv.win.filePath) return
+        fv.lendNow()
+        const p = JSON.stringify(fv.win.filePath), list = events.map(e => JSON.stringify(e)).join(", ")
+        fv.app.evalLua(`local ft = vim.filetype and vim.filetype.match({ filename = ${p} }) or "" if ft ~= "" and vim.bo.filetype ~= ft then vim.bo.filetype = ft end for _, ev in ipairs({ ${list} }) do vim._zett_fire(ev, ${p}) end`)
+    }
+    Timer { id: changedT; interval: 400; onTriggered: fv.fire(["TextChanged"]) }
     function lendNow() { const c = codeView.carets[0] ?? [0, 0]; fv.app.lendFile(fv.newCore && fv.win.filePath ? fv.win.filePath : "", fv.newCore ? codeView.doc.text() : "", c[0], c[1]) }
     Timer { id: lendT; interval: 150; onTriggered: fv.lendNow() }
-    Connections { target: codeView.doc; function onVersionChanged() { lendT.restart() } }
+    Connections { target: codeView.doc; function onVersionChanged() { lendT.restart(); changedT.restart() } }
     Connections { target: fv.app; function onLentChanged(text, line, col) { if (!fv.newCore || !fv.win.filePath) return; codeView.doc.restore(text); codeView.doc.click(line, col, false, false) } }
     // unsaved changes a zett that did not end well kept for this file: offered back (Restore / Drop)
     property var kept: null
