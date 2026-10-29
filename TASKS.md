@@ -393,7 +393,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 4. [x] (2026-10-28: the drawer's Terminal tab: a shell in a pty on zash's engine, alacritty_terminal, its colours from tinct; drawn by zett as rich-text rows; keys, paste (Ctrl+Shift+V), wheel scrollback, resize; still to do: mouse selection, zash's graphics/effects) A real zash in the panel (zash as a library zett draws)
 5. [ ] Debugging (DAP): breakpoints in the gutter, variables, call stack, debug console
 6. [ ] (2026-10-29: blame of the cursor line, Keep current/incoming/both on conflicts, branch list + new branch, Stage/Discard per change; left: side-by-side diff, single lines inside a change) Git: blame per line, side-by-side diff, merge conflicts, branches, stage single lines
-7. [ ] Speed budgets enforced: open < 100 ms, typing latency < 8 ms, checked by gui-check
+7. [x] (2026-10-29: gui-check corebig fails over budget; measured 38-54 ms open of 100,000 lines, 1-3 ms a key) Speed budgets enforced: open < 100 ms, typing latency < 8 ms, checked by gui-check
 8. [ ] Extensions: Lua + WASM plugins, a small store
 
 ## Terminal zett: floats
