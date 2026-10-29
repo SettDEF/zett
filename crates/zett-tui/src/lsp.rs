@@ -232,7 +232,12 @@ pub(crate) struct Comp {
     pub incomplete: bool,
     /// the item whose documentation was asked for (completionItem/resolve)
     pub resolving: Option<usize>,
+    /// from ycmd: its own ranking, matched fuzzily
+    pub ycm: bool,
 }
+
+// the list being made comes from ycmd (its fuzzy matches kept by the filter)
+thread_local! { static YCM_NEXT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 
 fn ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
@@ -247,7 +252,9 @@ impl App {
             self.comp = None;
             return;
         }
-        if !self.docs[self.cur].lsp || self.docs[self.cur].ed.mode() != Mode::Insert {
+        // a language server, or ycmd (YouCompleteMe's engine) for any file
+        let ycm = zett_ycm::available() && self.docs[self.cur].abs_path().is_some();
+        if !(self.docs[self.cur].lsp || ycm) || self.docs[self.cur].ed.mode() != Mode::Insert {
             self.comp = None;
             self.comp_due = None;
             return;
@@ -315,6 +322,12 @@ impl App {
         if self.docs[self.cur].ed.mode() != Mode::Insert {
             return;
         }
+        // a word being typed: ycmd, its fuzzy and ranked words (asked again with each key), as YouCompleteMe does;
+        // after a trigger (`.`, `::`) the language server's
+        if self.comp_trig.is_none() && zett_ycm::available() && self.docs[self.cur].abs_path().is_some() {
+            self.comp_from_ycmd();
+            return;
+        }
         self.edit_at = Instant::now() - Duration::from_secs(1);
         self.lsp_sync();
         let Some((path, line, col)) = self.lsp_pos() else { return };
@@ -323,6 +336,30 @@ impl App {
         if let Some(c) = self.client_for(self.cur) {
             c.completion(&path, line, col, trig);
         }
+    }
+
+    /// ycmd's completions at the cursor, as a server's would come (filtered fuzzily, asked again as you type).
+    fn comp_from_ycmd(&mut self) {
+        let d = &self.docs[self.cur];
+        let Some(path) = d.abs_path().map(|p| p.display().to_string()) else { return };
+        let c = d.ed.cursor();
+        let line_text = d.ed.buf.line(c.line);
+        let col: usize = line_text.chars().take(c.col).map(char::len_utf8).sum();
+        let text = d.ed.text();
+        let state = doom::state_dir().join("ycmd");
+        let got = zett_ycm::with(&state, |y| y.complete(&path, &text, c.line, col));
+        let Some(Ok((_, found))) = got else { return };
+        let typed: String = line_text.chars().take(c.col).collect::<String>().chars().rev().take_while(|ch| ident(*ch)).collect::<String>().chars().rev().collect();
+        let items: Vec<zett_lsp::Item> = found.into_iter().filter(|i| i.text != typed).take(60).enumerate().map(|(n, i)| zett_lsp::Item {
+            label: i.text.clone(), insert: i.text.clone(), filter: i.text, sort: format!("{n:04}"),
+            detail: if i.kind == "[ID]" || i.kind.is_empty() { "ycm".into() } else if i.menu.is_empty() { i.kind.to_lowercase() } else { i.menu },
+            kind: 1, ..Default::default()
+        }).collect();
+        self.comp_doc = self.cur;
+        let line = c.line;
+        YCM_NEXT.with(|n| n.set(true));
+        self.comp_arrived(line, items, true);
+        YCM_NEXT.with(|n| n.set(false));
     }
 
     pub(crate) fn comp_arrived(&mut self, line: usize, items: Vec<zett_lsp::Item>, incomplete: bool) {
@@ -350,7 +387,7 @@ impl App {
             }
         }
         let keep = self.comp.as_ref().and_then(|c| c.shown.get(c.sel).map(|&i| c.items[i].label.clone()));
-        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start, keyword: None, incomplete, resolving: None });
+        self.comp = Some(Comp { items, shown: Vec::new(), sel: 0, line, start, keyword: None, incomplete, resolving: None, ycm: YCM_NEXT.with(|n| n.get()) });
         self.comp_filter();
         // asked again while typing: the same item stays chosen
         if let (Some(label), Some(comp)) = (keep, self.comp.as_mut()) {
@@ -362,7 +399,7 @@ impl App {
 
     fn comp_filter(&mut self) {
         // matching starts the word (as Neovim); completeopt=fuzzy matches anywhere too
-        let fuzzy_on = self.setting(self.cur, "completeopt").split(',').any(|o| o.trim() == "fuzzy");
+        let fuzzy_on = self.setting(self.cur, "completeopt").split(',').any(|o| o.trim() == "fuzzy") || self.comp.as_ref().is_some_and(|c| c.ycm);
         let d = &self.docs[self.cur];
         let c = d.ed.cursor();
         let Some(comp) = self.comp.as_mut() else { return };

@@ -416,7 +416,7 @@ Rules: our rounded look (no sharp edges, no stripes), theme roles only, headless
 ## YouCompleteMe (ycmd) in zett (2026-10-29)
 - [x] ycmd built in ~/.local/share/zett/ycmd (python3 build.py); zett-ycm speaks its HTTP protocol (HMAC), stops it with zett
 - [x] the window's completion: ycmd's fuzzy, ranked items first (gfi → getFileInfo), then keywords, other files, snippets
-- [ ] the terminal zett's completion through ycmd too
+- [x] the terminal zett too: words typed → ycmd (auto menu with no server, fuzzy filter), after . :: → the server (as YCM)
 - [ ] semantic completers (clangd is passed; rust-analyzer, tsserver need ycmd's settings), signature help from ycmd
 - [ ] ask ycmd off the UI thread (now a request per key, 5–80 ms)
 - [ ] install/update ycmd from the marketplace or Settings instead of by hand

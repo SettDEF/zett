@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 zett-core = { workspace = true, features = ["fs"] }
+zett-ycm.workspace = true
 zett-edit.workspace = true
 zett-script.workspace = true
 zett-lsp = { path = "../zett-lsp" }

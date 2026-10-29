@@ -143,11 +143,11 @@ impl App {
         let opt = |f: &str| opts.split(',').any(|s| s.trim() == f);
         let items: Vec<zett_lsp::Item> = items.into_iter().enumerate().map(|(n, (insert, label, detail))| zett_lsp::Item { insert, label, detail, kind: 1, sort: format!("{n:06}"), ..Default::default() }).collect();
         if items.len() == 1 && !opt("menuone") {
-            self.comp = Some(Comp { shown: vec![0], items, sel: 0, line, start, keyword: Some(typed), incomplete: false, resolving: None });
+            self.comp = Some(Comp { shown: vec![0], items, sel: 0, line, start, keyword: Some(typed), incomplete: false, resolving: None, ycm: false });
             return self.comp_accept();
         }
         let shown = (0..items.len()).collect();
-        self.comp = Some(Comp { items, shown, sel: 0, line, start, keyword: Some(typed), incomplete: false, resolving: None });
+        self.comp = Some(Comp { items, shown, sel: 0, line, start, keyword: Some(typed), incomplete: false, resolving: None, ycm: false });
         if !opt("noinsert") && !opt("noselect") {
             self.comp_put();
         }

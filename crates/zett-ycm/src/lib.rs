@@ -242,3 +242,9 @@ mod live {
         assert!(!items.iter().any(|i| i.text == "unrelated"));
     }
 }
+
+/// ycmd is built here (looked up once per process).
+pub fn available() -> bool {
+    static AT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AT.get_or_init(|| find_dir().is_some())
+}

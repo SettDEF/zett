@@ -433,13 +433,12 @@ mod tests {
         let (a, b) = (dir.join("a.txt"), dir.join("b.txt"));
         std::fs::write(&a, "a1\na2\na3\n").unwrap();
         std::fs::write(&b, "b1\nb2\n").unwrap();
-        let keep = std::env::current_dir().unwrap();
+        // no :cd here: the working folder is the whole test process's (other tests run beside this one)
         let mut app = crate::App::new(vec![a.clone()]);
-        app.command(&format!("cd {}", dir.display()));
         app.command("vsplit");
         app.command(&format!("e {}", b.display()));
         app.goto_line(2);
-        app.command("mksession");
+        app.command(&format!("mksession {}", dir.join("Session.vim").display()));
         let text = std::fs::read_to_string(dir.join("Session.vim")).unwrap();
         assert!(text.contains("vsplit") && text.contains("b.txt") && text.contains("a.txt"), "{text}");
         let mut fresh = crate::App::new(Vec::new());
@@ -448,7 +447,6 @@ mod tests {
         assert_eq!(shown.len(), 2, "{shown:?}");
         assert!(fresh.docs[fresh.cur].name.ends_with("b.txt"), "the focus back on b: {}", fresh.docs[fresh.cur].name);
         assert_eq!(fresh.docs[fresh.cur].ed.cursor().line, 1, "on its line");
-        let _ = std::env::set_current_dir(&keep);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1024,5 +1022,39 @@ mod expr_map_tests {
         for c in "ia(b[c".chars() { app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)); }
         app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.docs[app.cur].ed.text(), "a(b[c])");
+    }
+}
+
+#[cfg(test)]
+mod ycmd_tests {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    // the terminal's completion from ycmd (built in the data folder), with no language server: gfi → getFileInfo.
+    // Sets XDG_STATE_HOME itself: run alone (--ignored)
+    #[test]
+    #[ignore]
+    fn ycmd_fills_the_menu_without_a_server() {
+        assert!(zett_ycm::available(), "ycmd built in ~/.local/share/zett/ycmd");
+        let dir = std::env::temp_dir().join(format!("zett-ycmd-tui-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        unsafe { std::env::set_var("XDG_STATE_HOME", dir.join("state")) }
+        let f = dir.join("y.lua");
+        std::fs::write(&f, "local function getFileInfo(path) end\nlocal gitFolderInfo = 1\nlocal unrelated = 2\n").unwrap();
+        let mut app = crate::App::new(vec![f.clone()]);
+        // ycmd started and ready before typing (the first use only starts it)
+        let state = crate::doom::state_dir().join("ycmd");
+        let t = std::time::Instant::now();
+        while zett_ycm::with(&state, |_| ()).is_none() { assert!(t.elapsed().as_secs() < 30); std::thread::sleep(std::time::Duration::from_millis(100)) }
+        app.command("normal! G");
+        app.command("startinsert!");
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        for c in "gfi".chars() { app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)); }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        app.comp_tick();
+        let comp = app.comp.as_ref().expect("a menu");
+        let shown: Vec<String> = comp.shown.iter().map(|&i| comp.items[i].label.clone()).collect();
+        eprintln!("menu {shown:?} (mode {:?})", app.docs[app.cur].ed.mode());
+        assert_eq!(shown.first().map(String::as_str), Some("getFileInfo"), "{shown:?}");
+        assert!(shown.contains(&"gitFolderInfo".to_string()) && !shown.contains(&"unrelated".to_string()), "{shown:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
