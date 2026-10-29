@@ -10,6 +10,7 @@ Runs in zett and in Neovim.
 - under the shown entry, one row per hunk (`L<line> <function or heading> −removed +added`): `Enter` on it jumps the file to that line, `r` restores just that hunk to the entry's text
 - boxes (the default): each change in the file and each entry in the panel in a box with rounded corners; `style = "plain"` for lines only
 - removed code keeps its language colours (in zett; in Neovim it is plain red for now)
+- under the entries, `Removed`: code an older version had that a later one (or the buffer) lost, newest first; `Enter` on a row opens it in a float where `y` copies it, `/` filters the list by a word
 - `:TrailClear` takes the marks off the file
 
 ```lua
@@ -18,4 +19,4 @@ require("trail").setup({ side = "right", width = 36, commits = 50, saves = 100, 
 
 Saves are kept in `stdpath("state")/trail/`, one folder per file, the newest 100 per file.
 
-Next: a list of removed code you can search, scrubbing through time.
+Next: scrubbing through time.

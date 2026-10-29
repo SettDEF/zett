@@ -5,7 +5,7 @@ local M = {}
 M.config = { side = "right", width = 36, commits = 50, saves = 100, style = "boxes" }
 
 local ns = vim.api.nvim_create_namespace("trail")
-local state = { panel_buf = nil, panel_win = nil, file_buf = nil, path = nil, entries = {}, shown = nil, rows = {}, hunks = {}, hunk_rows = {} }
+local state = { panel_buf = nil, panel_win = nil, file_buf = nil, path = nil, entries = {}, shown = nil, rows = {}, hunks = {}, hunk_rows = {}, removed = {}, removed_rows = {}, removed_filter = nil }
 
 -- ── where saves are kept: one folder per file, a snapshot per save ──
 local function hash(s)
@@ -96,14 +96,20 @@ local function stat(old, new)
   return add, del
 end
 
--- the function or heading a hunk sits under: the closest line at or above `line` that names one
+-- the function or heading a line names, or nil
 local name_pats = { "^%s*local%s+function%s+([%w_.:]+)", "^%s*function%s+([%w_.:]+)", "^%s*fn%s+([%w_]+)", "^%s*def%s+([%w_]+)", "^#+%s+(.+)" }
+local function pat_name(line)
+  for _, p in ipairs(name_pats) do
+    local n = line:match(p)
+    if n then return n end
+  end
+end
+
+-- the function or heading a hunk sits under: the closest line at or above `line` that names one
 local function near(lines, line)
   for l = math.min(line, #lines), 1, -1 do
-    for _, p in ipairs(name_pats) do
-      local n = lines[l]:match(p)
-      if n then return n end
-    end
+    local n = pat_name(lines[l])
+    if n then return n end
   end
   return "top"
 end
@@ -115,6 +121,50 @@ local function ago(t)
   if d < 86400 then return os.date("%H:%M", t) end
   if d < 172800 then return "yesterday" end
   return os.date("%b %d", t)
+end
+
+-- ── removed code: blocks an older version had that a newer one (or the buffer) lost ──
+-- a block's name: its first function or heading line, else its first line
+local function block_name(lines)
+  for _, l in ipairs(lines) do
+    local n = pat_name(l)
+    if n then return n end
+  end
+  for _, l in ipairs(lines) do
+    local t = vim.trim(l)
+    if t ~= "" then return vim.fn.strcharpart(t, 0, 30) end
+  end
+  return "(blank)"
+end
+
+-- blocks removed going from each entry to the next newer one, newest first, each text once
+-- (the newer entry is where it went; its time is the removal's)
+local function removed_blocks(entries, cur)
+  local out, seen = {}, {}
+  for i = 2, #entries do
+    local old, newer = entries[i].cached or "", entries[i - 1].cached or ""
+    local old_lines = vim.split(old, "\n", { plain = true })
+    for _, h in ipairs(vim.diff(old, newer, { result_type = "indices" }) or {}) do
+      local sa, ca = h[1], h[2]
+      if ca > 0 then
+        local lines = vim.list_slice(old_lines, sa, sa + ca - 1)
+        while #lines > 0 and vim.trim(lines[#lines]) == "" do table.remove(lines) end
+        while #lines > 0 and vim.trim(lines[1]) == "" do table.remove(lines, 1) end
+        local text = table.concat(lines, "\n")
+        if text:find("%S") and not seen[text] and not cur:find(text, 1, true) then
+          seen[text] = true
+          out[#out + 1] = { text = text, name = block_name(lines), time = entries[i - 1].time }
+        end
+      end
+    end
+  end
+  return out
+end
+
+-- the search: case-insensitive unless the word has a capital
+local function contains(text, q)
+  if q:find("%u") then return text:find(q, 1, true) ~= nil end
+  return text:lower():find(q:lower(), 1, true) ~= nil
 end
 
 local function timeline(path, b)
@@ -250,14 +300,16 @@ function M.render()
   local boxes = M.config.style == "boxes"
   local lines = { "Trail: " .. vim.fn.fnamemodify(state.path or "", ":t"), "" }
   local hls = {} -- row → { group, from byte, to byte } pieces
-  local function add(text, row_hls, entry, hunk)
+  local function add(text, row_hls, entry, hunk, rem)
     lines[#lines + 1] = text
     hls[#lines] = row_hls
     if entry then state.rows[#lines] = entry end
     if hunk then state.hunk_rows[#lines] = hunk end
+    if rem then state.removed_rows[#lines] = rem end
   end
   state.rows = {}
   state.hunk_rows = {}
+  state.removed_rows = {}
   local cw = M.config.width - 6
   for i, e in ipairs(state.entries) do
     local head, sub = entry_text(e)
@@ -288,10 +340,30 @@ function M.render()
     end
   end
   if #state.entries == 0 then lines[#lines + 1] = "  no saves or commits yet" end
+  -- the removed code: newest first, the search filters it, 15 rows
+  lines[#lines + 1] = ""
+  local head = "Removed" .. (state.removed_filter and (" (" .. state.removed_filter .. ")") or "")
+  add(head, { { "Title", 0, #head } })
+  local shown_rem = {}
+  for _, r in ipairs(state.removed) do
+    if not state.removed_filter or contains(r.text, state.removed_filter) then shown_rem[#shown_rem + 1] = r end
+  end
+  for i = 1, math.min(15, #shown_rem) do
+    local r = shown_rem[i]
+    local when = ago(r.time)
+    local name = fit(r.name, M.config.width - 4 - vim.fn.strdisplaywidth(when))
+    local s = "  " .. name .. "  " .. when
+    add(s, { { "DiffDelete", 2, 2 + #name }, { "Comment", #s - #when, #s } }, nil, nil, r)
+  end
+  if #shown_rem == 0 then
+    local none = state.removed_filter and "  no match" or "  none"
+    add(none, { { "Comment", 0, #none } })
+  end
   lines[#lines + 1] = ""
   local help = #lines + 1
   lines[help] = "⏎ show · r restore"
   lines[help + 1] = "m look · x clear · q close"
+  lines[help + 2] = "/ search removed"
   vim.bo[pb].modifiable = true
   vim.api.nvim_buf_set_lines(pb, 0, -1, false, lines)
   vim.bo[pb].modifiable = false
@@ -307,9 +379,43 @@ function M.render()
   end
 end
 
+-- ── the preview of a removed block: a float with the block, y yanks it ──
+function M.preview(rem)
+  local lines = vim.split(rem.text, "\n", { plain = true })
+  local width = math.max(20, math.floor(vim.o.columns * 0.7))
+  local height = math.max(1, math.min(#lines, math.floor(vim.o.lines * 0.6)))
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].modifiable = false
+  if state.file_buf and vim.api.nvim_buf_is_valid(state.file_buf) then vim.bo[buf].filetype = vim.bo[state.file_buf].filetype end
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor", width = width, height = height,
+    row = math.floor((vim.o.lines - height) / 2), col = math.floor((vim.o.columns - width) / 2),
+    style = "minimal", border = "rounded", title = " " .. rem.name .. " ", title_pos = "center",
+  })
+  local function close() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end end
+  vim.keymap.set("n", "q", close, { buffer = buf, nowait = true, desc = "Trail: close the block" })
+  vim.keymap.set("n", "<Esc>", close, { buffer = buf, nowait = true, desc = "Trail: close the block" })
+  vim.keymap.set("n", "y", function()
+    vim.fn.setreg("+", lines, "l")
+    vim.fn.setreg('"', lines, "l")
+    vim.notify("copied")
+  end, { buffer = buf, nowait = true, desc = "Trail: copy the block" })
+  return win
+end
+
+-- `/` in the panel: the Removed rows containing the word ("" shows all)
+function M.search_removed(q)
+  state.removed_filter = q ~= "" and q or nil
+  M.render()
+end
+
 function M.refresh()
   if not state.path then return end
   state.entries = timeline(state.path, state.file_buf)
+  local b = state.file_buf
+  state.removed = (b and vim.api.nvim_buf_is_valid(b)) and removed_blocks(state.entries, buf_text(b)) or {}
   local shown = state.shown
   if shown and state.entries[shown] then M.show(shown) else M.clear() M.render() end
 end
@@ -332,10 +438,14 @@ local function setup_panel(pb)
   local function enter()
     local row = at_cursor()
     if state.hunk_rows[row] then return jump(state.hunk_rows[row].hunk) end
+    if state.removed_rows[row] then return M.preview(state.removed_rows[row]) end
     if state.rows[row] then M.show(state.rows[row]) end
   end
   map("<CR>", enter, "Trail: show the change, or jump to a hunk")
   map("p", enter, "Trail: show the change, or jump to a hunk")
+  map("/", function()
+    vim.ui.input({ prompt = "Removed code containing: " }, function(q) if q then M.search_removed(q) end end)
+  end, "Trail: search the removed code")
   map("x", function() M.clear() M.render() end, "Trail: clear the marks")
   map("r", function()
     local hk = state.hunk_rows[at_cursor()]
