@@ -1066,3 +1066,6 @@ map("<C-x><C-j>", "dired")
 z.command("customize", function() z.ui("settings") end, { desc = "The settings in a popup: search, switch, edit values" })
 alias("customize-variable", "customize")
 alias("customize-group", "customize")
+
+-- the processes as a buffer (proced.rs)
+z.command("proced", function() z.ui("proced") end, { desc = "The processes, busiest first: m marks, x twice sends SIGTERM, s sorts, g reads again" })

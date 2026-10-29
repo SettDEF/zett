@@ -512,6 +512,7 @@ impl App {
             "rec" | "recover" => self.recover_cmd(bang),
             "MarkdownView" | "Mdv" => self.md_toggle(),
             "Settings" => self.settings_open(),
+            "Proced" => self.proced_open(),
             "Dired" => { let d = (!arg.trim().is_empty()).then(|| self.root.join(arg.trim())); self.open_dired(d) }
             "ene" | "enew" => {
                     self.doom_ui("newBuffer", "");

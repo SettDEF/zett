@@ -53,6 +53,7 @@ mod viewer;
 mod mdview;
 mod dired;
 mod settings_ui;
+mod proced;
 use minibuf::{fuzzy, Cand, Minibuf, Placement};
 use doom::{project_of, Pick, WTree, Win};
 
@@ -487,6 +488,8 @@ struct App {
     pub(crate) dired: std::collections::HashMap<String, dired::Dired>,
     /// the settings popup when open (settings_ui.rs)
     pub(crate) settings_ui: Option<settings_ui::SettingsUi>,
+    /// the process list (proced.rs) while its buffer is open
+    pub(crate) proced: Option<proced::Proced>,
     /// the dashboard shows (no file yet) and its chosen button
     dash: bool,
     dash_sel: usize,
@@ -875,6 +878,7 @@ impl App {
             md_sent: Default::default(),
             dired: Default::default(),
             settings_ui: None,
+            proced: None,
             dash: false,
             dash_sel: 0,
             last_doc: None,
@@ -1123,6 +1127,7 @@ impl App {
             self.watch_buffer();
             self.watch_config();
             self.recover_tick();
+            self.proced_tick();
             if self.engine.next_timer().is_some_and(|t| t <= Instant::now()) {
                 let fx = self.with_lua(|e| e.run_timers());
                 self.after_lua(fx);
