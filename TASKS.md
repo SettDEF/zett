@@ -111,8 +111,9 @@ F. special views (2026-10-29, viewer.rs)
   pictures; zash draws headings large, code in panels, tables as cards, pictures inline; e / Enter / q back at that line
 - [x] dired / wdired (dired.rs, C-x d, C-x C-j, :Dired): a folder as names to edit, :w renames (through temporary names:
   swaps work), a line taken out goes to the trash only with :w!, Enter opens, - the folder above
-- [x] proced (proced.rs, M-x proced, :Proced): processes busiest first, new every 2 s; m / u / U marks, x twice sends
-  SIGTERM (marked, or the one under the cursor), s sorts (CPU, memory, pid), g, Enter the whole command, q
+- [x] proced (proced.rs, M-x proced, :Proced): Vitals' view when installed (vitals top: CPU, GPU, MB, W per app; vitals why
+  in the header; f freeze / thaw, l limit (background preset), L free), ps otherwise; read off the editor's thread every
+  2 s; m / u / U marks, x twice sends SIGTERM, s sorts, g, Enter the whole command line, q
 - [x] the settings popup (settings_ui.rs): search, switch, edit, mouse, a running description; kept in settings.lua
 - [ ] hexl (hex view/edit), eww (a text web browser)
 A. editing (zett-edit textops.rs, pure, tested)

@@ -3035,6 +3035,7 @@ dependencies = [
  "libloading",
  "pulldown-cmark",
  "ratatui",
+ "serde_json",
  "streaming-iterator",
  "syntect",
  "tree-sitter",
