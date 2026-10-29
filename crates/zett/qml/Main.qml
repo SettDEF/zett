@@ -275,7 +275,7 @@ ApplicationWindow {
     function openZash() { app.runShell(-1, 'setsid -f "$HOME/.local/bin/zash" >/dev/null 2>&1') }
     function toggleDrawer() { if ((prefs.terminal ?? "panel") === "zash") { openZash(); return } drawerShown = !drawerShown; if (drawerShown) Qt.callLater(drawer.focusInput) }
     // "today" (the start screen) or "page"; headless shots open on the page unless they ask for today
-    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "welcome" ? "welcome" : app.shotEngine === "settings" || app.shotEngine === "settings:Extensions" ? "settings" : app.shotEngine.startsWith("search:") ? "search" : "page") : (prefs.start === "page" ? "page" : prefs.start === "today" ? "today" : "welcome")   // editor first: the Welcome page
+    property string view: app.shot.length > 0 ? (app.shotEngine === "today" ? "today" : app.shotEngine === "welcome" ? "welcome" : app.shotEngine === "settings" || app.shotEngine.startsWith("settings:Extensions") ? "settings" : app.shotEngine.startsWith("search:") ? "search" : "page") : (prefs.start === "page" ? "page" : prefs.start === "today" ? "today" : "welcome")   // editor first: the Welcome page
     // ── hooks from init.lua: zett.gui = { status = {...}, sidebar = {...}, palette = {...} } ──
     //   status:  strings, or functions returning a string or {text, icon} (read every 5 s)
     //   sidebar: { title = "Links", items = { {label=, icon=, cmd=} } }   (cmd: a command or `lua …`)

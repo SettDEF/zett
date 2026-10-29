@@ -127,7 +127,7 @@ Item {
         { cat: "Advanced", key: "", label: "Commands", hint: "everything zett can do, with its key", type: "action", actions: [["terminal", "Palette  Ctrl ⇧ P", () => win.openPalette()]] }
     ]
     readonly property var cats: [["Editor", "edit_note"], ["Appearance", "palette"], ["Window", "dashboard"], ["Advanced", "tune"], ["Keyboard Shortcuts", "keyboard"], ["Extensions", "extension"], ["Snippets", "data_object"]]
-    property string cat: app.shotEngine === "settings:Extensions" ? "Extensions" : ""   // "" = all (a test can open one)
+    property string cat: app.shotEngine.startsWith("settings:Extensions") ? "Extensions" : ""   // "" = all (a test can open one)
     property bool jsonView: false
     function valueOf(x) { return win.prefs[x.key] ?? x.def }
     function changed(x) { return x.key !== "" && win.prefs[x.key] !== undefined && win.prefs[x.key] !== x.def }
@@ -190,7 +190,7 @@ Item {
             id: search
             anchors { left: sIc.right; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 12 }
             color: t.text; font.family: t.sans; font.pixelSize: 14; clip: true
-            Text { visible: !search.text; text: "Search settings"; color: t.faint; font: search.font }
+            Text { visible: !search.text; text: s.cat === "Extensions" && s.marketInfo[0] ? `Search ${s.marketInfo[0].toLocaleString()} plugins` : "Search settings"; color: t.faint; font: search.font }
         }
     }
 
@@ -329,8 +329,30 @@ Item {
         const call = e.installed ? "remove" : "install"
         let r; try { r = JSON.parse(JSON.parse(app.evalLua(`vim.json.encode({ zett.store.${call}(${JSON.stringify(e.name)}) })`)).result) } catch (x) { r = [false, String(x)] }
         storeNote = `${e.name} ${r[0] ? (e.installed ? "removed" : "installed") : "failed"}${r[1] ? ": " + r[1] : ""}`
-        storeRev++
+        storeRev++; marketSearch()
     }
+    // the marketplace (zett.store.search over store.nvim's database): the search box above searches it on this page
+    property int marketRev: 0
+    property var marketRows: []
+    readonly property var marketInfo: { marketRev; if (s.cat !== "Extensions") return [0, 0]; try { return JSON.parse(JSON.parse(app.evalLua("vim.json.encode({ zett.store.market_info() })")).result) } catch (e) { return [0, 0] } }
+    function marketSearch() {
+        if (s.cat !== "Extensions" || !marketInfo[0]) { marketRows = []; return }
+        let r = []; try { r = JSON.parse(JSON.parse(app.evalLua(`vim.json.encode((zett.store.search(${JSON.stringify(search.text)}, 40)))`)).result) } catch (e) {}
+        marketRows = Array.isArray(r) ? r : []
+    }
+    function marketUpdate() {
+        storeNote = "Downloading the plugin list (about 4 MB)…"
+        Qt.callLater(() => {
+            let r; try { r = JSON.parse(JSON.parse(app.evalLua("vim.json.encode({ zett.store.update() })")).result) } catch (x) { r = [false, String(x)] }
+            storeNote = r[0] ? `Plugin list updated: ${r[1]}` : `Could not update the plugin list: ${r[1]}`
+            marketRev++; marketSearch()
+        })
+    }
+    Timer { id: marketT; interval: 150; onTriggered: s.marketSearch() }
+    // the check settings:Extensions:QUERY types QUERY into the search
+    Component.onCompleted: if (app.shotEngine.startsWith("settings:Extensions:")) { search.text = app.shotEngine.slice(20); Qt.callLater(() => { s.marketSearch(); console.log("zett-probe: market " + s.marketInfo[0] + " " + JSON.stringify(s.marketRows.slice(0, 3).map(r => r.repo))) }) }
+    Connections { target: search; function onTextChanged() { if (s.cat === "Extensions") marketT.restart() } }
+    onCatChanged: if (cat === "Extensions") marketT.restart()
     // ── Extensions (init.lua hooks) and Snippets (snippets.json): lists of what is there, the file to change them ──
     readonly property var extRows: s.cat === "Extensions" ? [].concat(win.hooks.palette.map(h => ({ a: h.name, b: "palette" + (h.keys ? "  ·  " + h.keys : "") })), win.hooks.sidebar.map(h => ({ a: h.name ?? h.label ?? "sidebar item", b: "sidebar" })), win.hooks.status.map(h => ({ a: h.text ?? h.name ?? "status item", b: "status bar" }))) : s.cat === "Snippets" ? Object.keys(win.snippets).map(k => ({ a: k, b: win.snippets[k].split("\n")[0] })) : []
     ColumnLayout {
@@ -362,6 +384,36 @@ Item {
             }
         }
         Text { visible: s.cat === "Extensions" && s.storeNote.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; text: s.storeNote; color: t.accent; font.family: t.sans; font.pixelSize: 12 }
+        // the marketplace: store.nvim's database, searched by the box above, most stars first
+        Item { visible: s.cat === "Extensions"; implicitHeight: 8; Layout.fillWidth: true }
+        RowLayout {
+            visible: s.cat === "Extensions"; Layout.fillWidth: true; spacing: 10
+            Text { text: "MARKETPLACE"; color: t.faint; font.family: t.sans; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+            Text { Layout.fillWidth: true; text: s.marketInfo[0] ? `${s.marketInfo[0].toLocaleString()} Neovim plugins · list from ${new Date(s.marketInfo[1] * 1000).toLocaleDateString()}` : "store.nvim's list of 7000+ Neovim plugins, not downloaded yet"; elide: Text.ElideRight; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+            Button1 { icon: s.marketInfo[0] ? "refresh" : "download"; label: s.marketInfo[0] ? "Update list" : "Download list"; onClicked: s.marketUpdate() }
+        }
+        Repeater {
+            model: s.cat === "Extensions" ? s.marketRows : []
+            delegate: Rectangle {
+                required property var modelData
+                Layout.fillWidth: true; implicitHeight: 52; radius: 14; color: t.card
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 14; rightMargin: 10 }
+                    spacing: 10
+                    Text { text: "extension"; color: t.accent; font.family: t.icons; font.pixelSize: 20 }
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: 1
+                        RowLayout { spacing: 8
+                            Text { text: modelData.repo; color: t.text; font.family: t.sans; font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.maximumWidth: 320 }
+                            Text { text: "★ " + modelData.stars.toLocaleString(); color: t.dim; font.family: t.mono; font.pixelSize: 11 } }
+                        Text { Layout.fillWidth: true; text: modelData.desc; elide: Text.ElideRight; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                    }
+                    Text { visible: modelData.installed && !modelData.managed; text: "In your config"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
+                    Button1 { visible: !modelData.installed || modelData.managed; icon: modelData.installed ? "delete" : "download"; label: modelData.installed ? "Remove" : "Install"; onClicked: s.storeDo(modelData) }
+                }
+            }
+        }
+        Text { visible: s.cat === "Extensions" && s.marketInfo[0] > 0 && !s.marketRows.length; text: "No plugin matches “" + search.text + "”"; color: t.faint; font.family: t.sans; font.pixelSize: 12 }
         Item { visible: s.cat === "Extensions"; implicitHeight: 12; Layout.fillWidth: true }
         Text { Layout.fillWidth: true; wrapMode: Text.Wrap; color: t.faint; font.family: t.sans; font.pixelSize: 12
             text: s.cat === "Extensions" ? "Lua hooks from init.lua: zett.gui.palette, zett.gui.sidebar, zett.gui.status" : "snippets.json: {\"prefix\": \"body\"}; type the prefix in code, then Tab (-e = where the cursor lands)" }

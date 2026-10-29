@@ -4024,7 +4024,80 @@ function zett.store.list()
   end
   return out
 end
-local function find(name) for _, e in ipairs(zett.store.catalog) do if e.name == name then return e end end end
+
+-- ── the marketplace: store.nvim's database of Neovim plugins (7000+, from GitHub), searched here ──
+-- downloaded once into the cache folder (zett.store.update() fetches it again), slimmed to what zett shows
+zett.store.market_url = "https://github.com/alex-popov-tech/store.nvim.crawler/releases/latest/download/db_minified.json"
+local function market_file() return vim.fn.stdpath("cache") .. "/zett/market.json" end
+local market
+local function load_market()
+  if market then return market end
+  local f = io.open(market_file(), "rb")
+  if not f then return nil end
+  local ok, d = pcall(vim.json.decode, f:read("*a"))
+  f:close()
+  market = ok and type(d) == "table" and d or nil
+  return market
+end
+-- fetch the list (a few MB): true, or false and why
+function zett.store.update()
+  local raw = market_file() .. ".download"
+  vim.fn.mkdir(vim.fn.fnamemodify(raw, ":h"), "p")
+  local r = vim.system({ "curl", "-sfL", "--max-time", "60", "-o", raw, zett.store.market_url }):wait()
+  if r.code ~= 0 then os.remove(raw) return false, "download failed (curl " .. r.code .. ")" end
+  local f = io.open(raw, "rb")
+  local ok, d = pcall(vim.json.decode, f and f:read("*a") or "")
+  if f then f:close() end
+  os.remove(raw)
+  if not ok or type(d) ~= "table" or type(d.items) ~= "table" then return false, "the list could not be read" end
+  local slim = {}
+  for _, e in ipairs(d.items) do
+    if e.full_name then
+      slim[#slim + 1] = { repo = e.full_name, name = e.name, desc = e.description or "", tags = e.tags or {}, stars = e.stars and e.stars.curr or 0, updated = (e.updated_at or ""):sub(1, 10) }
+    end
+  end
+  table.sort(slim, function(a, b) return a.stars > b.stars end)
+  local out = io.open(market_file(), "wb")
+  if not out then return false, "cannot write " .. market_file() end
+  out:write(vim.json.encode({ fetched = os.time(), items = slim }))
+  out:close()
+  market = nil
+  return true, #slim .. " plugins"
+end
+-- how many plugins the list has, and when it was fetched (0, nil: not yet)
+function zett.store.market_info()
+  local m = load_market()
+  if not m then return 0, nil end
+  return #m.items, m.fetched
+end
+-- the plugins matching every word of `query` (name, repo, description, tags), most stars first
+function zett.store.search(query, limit)
+  local m = load_market()
+  if not m then return {}, "no plugin list yet: zett.store.update() (Settings > Extensions: Update list)" end
+  local words = {}
+  for w in (query or ""):lower():gmatch("%S+") do words[#words + 1] = w end
+  local lines = store_lines()
+  local out = {}
+  for _, e in ipairs(m.items) do
+    local hay = (e.repo .. " " .. e.desc .. " " .. table.concat(e.tags, " ")):lower()
+    local fits = true
+    for _, w in ipairs(words) do if not hay:find(w, 1, true) then fits = false break end end
+    if fits then
+      local managed = false
+      for _, l in ipairs(lines) do if l:find(e.repo, 1, true) then managed = true break end end
+      out[#out + 1] = { name = e.repo, repo = e.repo, kind = "lua", desc = e.desc, stars = e.stars, tags = e.tags, updated = e.updated, managed = managed,
+        installed = managed or vim.fn.isdirectory(vim.fn.stdpath("data") .. "/site/pack/plug/start/" .. e.name) == 1 }
+      if #out >= (limit or 50) then break end
+    end
+  end
+  return out
+end
+-- by name (the curated list), else a marketplace plugin by its repo ("author/name")
+local function find(name)
+  for _, e in ipairs(zett.store.catalog) do if e.name == name then return e end end
+  local m = load_market()
+  for _, e in ipairs(m and m.items or {}) do if e.repo == name then return { name = e.repo, repo = e.repo, kind = "lua" } end end
+end
 function zett.store.install(name)
   local e = find(name)
   if not e then return false, "no " .. name .. " in the store" end
@@ -4062,8 +4135,13 @@ function zett.store.remove(name)
   vim.fn.writefile(vim.tbl_filter(function(l) return not l:find(e.repo, 1, true) end, store_lines()), store_file())
   return true, "gone after a restart"
 end
-vim.api.nvim_create_user_command("ZettStore", function()
+vim.api.nvim_create_user_command("ZettStore", function(a)
+  -- :ZettStore QUERY: the marketplace (fetched the first time); bare: the curated list
   local items = zett.store.list()
+  if a.args ~= "" then
+    if zett.store.market_info() == 0 then local ok, err = zett.store.update() if not ok then return vim.notify("ZettStore: " .. err, vim.log.levels.ERROR) end end
+    items = vim.tbl_map(function(e) e.desc = ("★%d %s"):format(e.stars, e.desc) return e end, (zett.store.search(a.args, 60)))
+  end
   vim.ui.select(items, {
     prompt = "Extensions (✓ installed: choosing one removes it)",
     format_item = function(e) return ("%s %-14s %-4s %s%s"):format(e.installed and "✓" or "·", e.name, e.kind, e.desc, e.installed and not e.managed and "  (in your config)" or "") end,
@@ -4073,7 +4151,7 @@ vim.api.nvim_create_user_command("ZettStore", function()
     if e.installed then ok, msg = zett.store.remove(e.name) else ok, msg = zett.store.install(e.name) end
     vim.notify(("%s %s%s"):format(e.name, ok and (e.installed and "removed" or "installed") or "failed", msg and (": " .. msg) or ""), ok and vim.log.levels.INFO or vim.log.levels.ERROR)
   end)
-end, { desc = "Extensions: install and remove (Lua and WASM plugins)" })
+end, { desc = "Extensions: install and remove (Lua and WASM plugins)", nargs = "?" })
 
 -- vim.base64 (C in Neovim): RFC 4648 with padding
 if not rawget(vim, "base64") then
