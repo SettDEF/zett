@@ -1,6 +1,7 @@
 //! The settings as a popup (:Settings, :options, SPC h s, customize): every setting with its value and what it does,
 //! zett's own first, then Neovim's. Typing filters; ↑ ↓ move; Space or Enter turns a switch, Enter edits a number
-//! or a text in place (Enter sets it, Esc leaves it); Esc closes. A change is :set's: at once, for this session.
+//! or a text in place (Enter sets it, Esc leaves it); Esc closes. A change is :set's at once, and kept for the next
+//! start in the config folder's settings.lua (loaded after init.lua; init.lua itself is never written).
 use super::*;
 use crate::settings::Kind;
 
@@ -40,8 +41,9 @@ impl App {
                 KeyCode::Enter => {
                     let v = ui.editing.take().unwrap_or_default();
                     if let Some(s) = shown.get(ui.sel) {
-                        let line = format!("set {}={}", s.name, v.replace(' ', "\\ "));
-                        self.command(&line);
+                        let set = format!("{}={}", s.name, v.replace(' ', "\\ "));
+                        self.command(&format!("set {set}"));
+                        self.settings_keep(s.name, &set);
                     }
                 }
                 _ => {}
@@ -64,7 +66,9 @@ impl App {
                 let Some(s) = shown.get(ui.sel).copied() else { return true };
                 if matches!(s.kind, Kind::Bool) {
                     let on = self.flag(self.cur, s.name);
-                    self.command(&format!("set {}{}", if on { "no" } else { "" }, s.name));
+                    let set = format!("{}{}", if on { "no" } else { "" }, s.name);
+                    self.command(&format!("set {set}"));
+                    self.settings_keep(s.name, &set);
                 } else if k.code == KeyCode::Enter {
                     let now = self.setting(self.cur, s.name);
                     if let Some(ui) = self.settings_ui.as_mut() { ui.editing = Some(now) }
@@ -144,7 +148,7 @@ impl App {
             lines.push(if chosen { l.style(hl("CursorLine")) } else { l });
         }
         f.render_widget(Paragraph::new(lines), list);
-        let help = if editing.is_some() { " Enter sets it · Esc leaves it" } else { " ↑↓ choose · Space/Enter switch · Enter edits a value · Esc closes · bold: changed" };
+        let help = if editing.is_some() { " Enter sets it · Esc leaves it" } else { " ↑↓ choose · Space/Enter switch · Enter edits a value · Esc closes · bold: changed · kept in settings.lua" };
         f.render_widget(Paragraph::new(Line::from(Span::styled(help, hl("Comment")))), Rect { y: inner.y + inner.height - 1, height: 1, ..inner });
     }
 }
@@ -179,5 +183,47 @@ mod tests {
         assert_eq!(app.setting(app.cur, "scrolloff"), "7");
         app.key(key(KeyCode::Esc));
         assert!(app.settings_ui.is_none(), "Esc closes");
+    }
+}
+
+/// settings.lua with one setting set to `value` (its line replaced, or added), the others kept: one
+/// `vim.cmd("set …")` line per setting the popup changed.
+pub(crate) fn settings_file_with(old: &str, name: &str, set: &str) -> String {
+    const HEAD: &str = "-- written by zett's settings popup (:Settings); init.lua runs before this file\n";
+    let mine = format!("vim.cmd({:?}) -- {name}", format!("set {set}"));
+    let mut lines: Vec<String> = old.lines().filter(|l| !l.starts_with("-- written by")).map(str::to_string).collect();
+    match lines.iter().position(|l| l.ends_with(&format!(" -- {name}"))) {
+        Some(i) => lines[i] = mine,
+        None => lines.push(mine),
+    }
+    format!("{HEAD}{}\n", lines.join("\n"))
+}
+
+impl App {
+    /// A change in the popup kept for the next start: settings.lua in the config folder (never in tests).
+    fn settings_keep(&mut self, name: &str, set: &str) {
+        if cfg!(test) {
+            return;
+        }
+        let f = zett_script::config_dir().join("settings.lua");
+        let old = std::fs::read_to_string(&f).unwrap_or_default();
+        let _ = std::fs::create_dir_all(zett_script::config_dir());
+        if let Err(e) = std::fs::write(&f, settings_file_with(&old, name, set)) {
+            self.say(format!("{}: {e}", f.display()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod file_tests {
+    #[test]
+    fn the_file_keeps_one_line_per_setting() {
+        let a = super::settings_file_with("", "scrolloff", "scrolloff=7");
+        let b = super::settings_file_with(&a, "wrap", "nowrap");
+        let c = super::settings_file_with(&b, "scrolloff", "scrolloff=3");
+        assert_eq!(c.lines().filter(|l| l.contains("scrolloff")).count(), 1);
+        assert!(c.contains("vim.cmd(\"set scrolloff=3\") -- scrolloff") && c.contains("set nowrap"));
+        assert!(c.starts_with("-- written by"), "{c}");
+        assert_eq!(c.matches("-- written by").count(), 1);
     }
 }

@@ -396,6 +396,10 @@ impl Engine {
             }
             self.exec_named(&code, "init.lua", "init.lua");
         }
+        // what the settings popup set (settings.lua, written by it): after init.lua, so its choices stand
+        if let Ok(code) = std::fs::read_to_string(dir.join("settings.lua")) {
+            self.exec_named(&code, "settings.lua", "settings.lua");
+        }
         // a Vim user's init.vim (Vimscript, vimscript.lua), after init.lua as Neovim reads only one
         let vimrc = dir.join("init.vim");
         if vimrc.is_file() {
