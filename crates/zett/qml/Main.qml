@@ -52,8 +52,8 @@ ApplicationWindow {
     function applyKeys() { if (prefs.keys) app.evalLua(`zett.opt.keys = "${prefs.keys}"`) }
 
     // ── colours from tinct (same file the shell and the other apps read) ──
-    // read again every second (a cheap file read; set only when it changed): a new theme shows at once
-    Timer { interval: 1000; repeat: true; running: !app.shot.length; onTriggered: app.reloadTheme() }
+    // the colours file checked every 200 ms (its time only; read when it changed): a new theme shows at once
+    Timer { interval: 200; repeat: true; running: !app.shot.length; onTriggered: app.reloadTheme() }
     QtObject {
         id: t
         readonly property var c: { try { return JSON.parse(app.theme) } catch (e) { return {} } }

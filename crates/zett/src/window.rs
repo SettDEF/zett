@@ -309,6 +309,8 @@ use zett_core::folder::Folder;
 use zett_core::{markdown, BlockId, Kind};
 
 pub struct ZettRust {
+    /// the colours file's time when last read (reload_theme)
+    theme_stamp: Option<std::time::SystemTime>,
     folder: Option<Folder>,
     /// the code file open in the window, lent to Lua as its current buffer around each script run: (path, text, line, col)
     lent: Option<(String, String, usize, usize)>,
@@ -360,6 +362,7 @@ impl Default for ZettRust {
             blocks: QString::default(),
             title: QString::default(),
             theme: QString::from(&theme_json()),
+            theme_stamp: None,
             dir: QString::from(&dir.display().to_string()),
             current: -1,
             shot: QString::from(&std::env::var("ZETT_SHOT").unwrap_or_default()),
@@ -1193,7 +1196,14 @@ impl qobject::Zett {
         QString::from(&office_pdf(std::path::Path::new(&path.to_string())).map(|p| p.display().to_string()).unwrap_or_default())
     }
 
-    fn reload_theme(self: Pin<&mut Self>) {
+    fn reload_theme(mut self: Pin<&mut Self>) {
+        // the file's time first (a stat, every 200 ms): read only when it changed
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
+        let stamp = std::fs::metadata(home.join(".local/state/quickshell/user/generated/colors.json")).and_then(|m| m.modified()).ok();
+        if stamp.is_some() && stamp == self.theme_stamp {
+            return;
+        }
+        self.as_mut().rust_mut().theme_stamp = stamp;
         let now = QString::from(&theme_json());
         if &now != self.theme() {
             self.set_theme(now);
