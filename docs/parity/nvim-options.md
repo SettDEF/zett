@@ -23,7 +23,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `backspace` | bs | string | global | `indent,eol,start` | how backspace works at start of line |  |
 | ✓ | `backup` | bk | boolean | global | `false` | keep backup file after overwriting a file |  |
 | ✓ | `backupcopy` | bkc | string | buf | `auto` | make backup as a copy, don't rename the file |  |
-| ✓ | `backupdir` | bdir | string | global | `.,/home/caesar/.local/state/nvim/backup//` | list of directories for the backup file |  |
+| ✓ | `backupdir` | bdir | string | global | `.,~/.local/state/nvim/backup//` | list of directories for the backup file |  |
 | ✓ | `backupext` | bex | string | global | `~` | extension used for the backup file |  |
 | ✓ | `backupskip` | bsk | string | global | `/tmp/*` | no backup for files that match these patterns |  |
 | ✓ | `belloff` | bo | string | global | `all` | do not ring the bell for these reasons |  |
@@ -81,7 +81,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | — | `diffexpr` | dex | string | global | `` | expression used to obtain a diff file | zett diffs with its own engine, not an external diff program |
 | ✓ | `diffopt` | dip | string | global | `internal,filler,closeoff,indent-heuristic,inline:char,linematch:40` | options for using diff mode |  |
 | ✓ | `digraph` | dg | boolean | global | `false` | enable the entering of digraphs in Insert mode |  |
-| — | `directory` | dir | string | global | `/home/caesar/.local/state/nvim/swap//` | list of directory names for the swap file | no swap files: every change is kept in the undo history on disk (time travel) |
+| — | `directory` | dir | string | global | `~/.local/state/nvim/swap//` | list of directory names for the swap file | no swap files: every change is kept in the undo history on disk (time travel) |
 | ✓ | `display` | dy | string | global | `lastline` | list of flags for how to display text |  |
 | ✓ | `eadirection` | ead | string | global | `both` | in which direction 'equalalways' works |  |
 | ✓ | `edcompatible` | ed | boolean | global | `false` |  |  |
@@ -217,7 +217,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `omnifunc` | ofu | string | buf | `` | function for filetype-specific completion |  |
 | ✓ | `opendevice` | odev | boolean | global | `false` | allow reading/writing devices on MS-Windows |  |
 | ✓ | `operatorfunc` | opfunc | string | global | `` | function to be called for \|g@\| operator |  |
-| ✓ | `packpath` | pp | string | global | `/etc/xdg/nvim,/home/caesar/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,/home/caesar/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for packages |  |
+| ✓ | `packpath` | pp | string | global | `/etc/xdg/nvim,~/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,~/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,~/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,~/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for packages |  |
 | ✓ | `paragraphs` | para | string | global | `IPLPPPQPP TPHPLIPpLpItpplpipbp` | nroff macros that separate paragraphs |  |
 | ✓ | `paste` |  | boolean | global | `false` |  |  |
 | — | `pastetoggle` | pt | string | global | `` |  | the terminal tells a paste from typing (bracketed paste), so there is no paste mode to toggle |
@@ -248,7 +248,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | — | `rightleftcmd` | rlc | string | win | `search` | commands for which editing works right-to-left | right-to-left (Arabic, Hebrew) editing is not in zett: the terminal orders and shapes the text |
 | ✓ | `ruler` | ru | boolean | global | `true` | show cursor line and column in the status line |  |
 | ✓ | `rulerformat` | ruf | string | global | `` | custom format for the ruler |  |
-| ✓ | `runtimepath` | rtp | string | global | `/etc/xdg/nvim,/home/caesar/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,/home/caesar/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,/home/caesar/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,/home/caesar/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for runtime files |  |
+| ✓ | `runtimepath` | rtp | string | global | `/etc/xdg/nvim,~/.local/share/flatpak/exports/share/nvim/site,/var/lib/flatpak/exports/share/nvim/site,/usr/local/share/nvim/site,/usr/share/nvim/site,~/.nix-profile/share/nvim/site,/nix/var/nix/profiles/default/share/nvim/site,/usr/share/nvim/runtime,/usr/lib/nvim,/nix/var/nix/profiles/default/share/nvim/site/after,~/.nix-profile/share/nvim/site/after,/usr/share/nvim/site/after,/usr/local/share/nvim/site/after,/var/lib/flatpak/exports/share/nvim/site/after,~/.local/share/flatpak/exports/share/nvim/site/after,/etc/xdg/nvim/after` | list of directories used for runtime files |  |
 | ✓ | `scroll` | scr | number | win | `0` | lines to scroll with CTRL-U and CTRL-D |  |
 | — | `scrollback` | scbk | number | buf | `-1` |  | terminal buffers: zett's terminals are zeit panes |
 | ✓ | `scrollbind` | scb | boolean | win | `false` | scroll in window as other windows scroll |  |
@@ -337,7 +337,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | — | `ttimeout` |  | boolean | global | `true` | time out on mappings | the terminal's key sequences arrive whole (crossterm reads them), so there is no wait for the rest |
 | — | `ttimeoutlen` | ttm | number | global | `50` | time out time for key codes in milliseconds | the terminal's key sequences arrive whole (crossterm reads them), so there is no wait for the rest |
 | ✓ | `ttyfast` | tf | boolean | global | `true` |  |  |
-| ✓ | `undodir` | udir | string | global | `/home/caesar/.local/state/nvim/undo//` | where to store undo files |  |
+| ✓ | `undodir` | udir | string | global | `~/.local/state/nvim/undo//` | where to store undo files |  |
 | ✓ | `undofile` | udf | boolean | buf | `false` | save undo information in a file |  |
 | ✓ | `undolevels` | ul | number | buf | `1000` | maximum number of changes that can be undone |  |
 | ✓ | `undoreload` | ur | number | global | `10000` | max nr of lines to save for undo on a buffer reload |  |
@@ -347,7 +347,7 @@ Generated 2026-10-29 by scripts/parity.sh from NVIM v0.12.6, GNU Emacs 31.1 and 
 | ✓ | `vartabstop` | vts | string | buf | `` | a list of number of columns between tab stops |  |
 | ✓ | `verbose` | vbs | number | global | `0` | give informative messages |  |
 | ✓ | `verbosefile` | vfile | string | global | `` | file to write messages in |  |
-| ✓ | `viewdir` | vdir | string | global | `/home/caesar/.local/state/nvim/view//` | directory where to store files with :mkview |  |
+| ✓ | `viewdir` | vdir | string | global | `~/.local/state/nvim/view//` | directory where to store files with :mkview |  |
 | ✓ | `viewoptions` | vop | string | global | `folds,cursor,curdir` | specifies what to save for :mkview |  |
 | ✓ | `virtualedit` | ve | string | win | `` | when to use virtual editing |  |
 | ✓ | `visualbell` | vb | boolean | global | `false` | use visual bell instead of beeping |  |

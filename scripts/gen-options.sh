@@ -29,4 +29,5 @@ out=crates/zett-tui/src/nvim_options.rs
     done < "$tmp/opts.tsv"
     echo "];"
 } > "$out"
+sed -i "s|$HOME/|~/|g" "$out"   # defaults name this machine's home: written as ~
 echo "$(grep -c 'Setting {' "$out") options → $out"
