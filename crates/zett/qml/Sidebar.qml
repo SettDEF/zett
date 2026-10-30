@@ -325,7 +325,13 @@ Rectangle {
         readonly property var openEditors: win.tabs.map(i => ({ page: i })).concat(win.fileTabs.map(p => ({ file: p })))
         readonly property var recent: (win.prefs.recentFiles ?? []).filter(p => !win.fileTabs.includes(p) && p.startsWith(app.dir + "/")).slice(0, 6)
         readonly property var allTodos: { if (win.sideMode === "files") return []; win.pages.length; try { return JSON.parse(app.todos()).slice(0, 8) } catch (e) { return [] } }
-        readonly property var lastPages: win.pages.map((p, i) => ({ p, i })).filter(o => o.i !== app.current).sort((a, b) => (b.p.modified ?? 0) - (a.p.modified ?? 0)).slice(0, 5)
+        // the pages opened last (newest first), then, for the rest, the ones changed last
+        readonly property var lastPages: {
+            const opened = win.prefs.recentPages ?? []
+            const rank = o => { const r = opened.indexOf(o.p.path); return r < 0 ? 1e9 : r }
+            return win.pages.map((p, i) => ({ p, i })).filter(o => o.i !== app.current)
+                .sort((a, b) => (rank(a) - rank(b)) || ((b.p.modified ?? 0) - (a.p.modified ?? 0))).slice(0, 5)
+        }
         SectionHead { visible: parent.allTodos.length > 0; label: "TO DO"; count: parent.allTodos.length; open: side.todoOpen; onToggled: side.todoOpen = !side.todoOpen }
         Repeater {
             model: side.todoOpen ? parent.allTodos : []

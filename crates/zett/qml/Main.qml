@@ -498,7 +498,13 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         tabs = tabs.filter(x => x !== i)
         if (i === app.current && tabs.length) win.openPage(tabs[Math.min(at, tabs.length - 1)])
     }
-    Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page" } }
+    // the pages opened, newest first (by path; the sidebar's RECENT): kept across starts
+    function rememberPage(i) {
+        const p = (win.pages[i] ?? {}).path
+        if (!p || app.shot.length) return
+        win.setPref("recentPages", [p].concat((win.prefs.recentPages ?? []).filter(x => x !== p)).slice(0, 20))
+    }
+    Connections { target: app; function onCurrentChanged() { win.addTab(app.current); win.view = "page"; win.rememberPage(app.current) } }
     Component.onCompleted: { addTab(app.current); refreshSide(); applyKeys(); readHooks(); if (!app.shot.length && !(prefs.recentFolders ?? []).includes(app.dir)) setPref("recentFolders", [app.dir].concat(prefs.recentFolders ?? []).slice(0, 10)) }
     Shortcut { sequence: "Ctrl+W"; onActivated: win.view === "file" ? win.closeFileTab(win.filePath) : win.closeTab(app.current) }
     Shortcut { sequence: "Ctrl+Tab"; onActivated: if (win.tabs.length > 1) win.openPage(win.tabs[(win.tabs.indexOf(app.current) + 1) % win.tabs.length]) }
