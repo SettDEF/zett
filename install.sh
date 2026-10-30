@@ -21,6 +21,7 @@ if command -v rsvg-convert >/dev/null; then
         rsvg-convert -w $s -h $s packaging/zett.svg -o "$icons/${s}x${s}/apps/zett.png"
     done
 fi
+mkdir -p "$HOME/.local/share/applications"
 sed "s|^Exec=zett|Exec=$HOME/.local/bin/zett|" packaging/zett.desktop > "$HOME/.local/share/applications/zett.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 say "installed: 'zett' (the editor, in the terminal), 'zett --gui' (the window), 'zett --help'"
