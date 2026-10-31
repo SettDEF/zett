@@ -354,7 +354,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
         const pi = win.pages.findIndex(p => p.path === x.path)
         if (pi >= 0) { win.openPage(pi); return }
         filePath = x.path
-        if (x.path.endsWith(".canvas")) { canvasView.load(x.path); view = "canvas" } else if (/\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf)$/i.test(x.path)) { docView.load(x.path); view = "doc" } else { fileText = app.readFile(x.path); view = "file" }
+        if (x.path.endsWith(".canvas")) { canvasView.load(x.path); view = "canvas" } else if (/\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf)$/i.test(x.path)) { if (docView.load(x.path)) view = "doc" } else { fileText = app.readFile(x.path); view = "file" }
         if (!fileTabs.includes(x.path)) fileTabs = fileTabs.concat([x.path])
         if (!app.shot.length) setPref("lastFile", x.path)
         if (!app.shot.length) setPref("recentFiles", [x.path].concat((prefs.recentFiles ?? []).filter(p => p !== x.path)).slice(0, 12))
@@ -966,7 +966,7 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             // coreevents:FILE: a plugin's autocmds fire in the window (file type set, BufEnter on open, BufWritePost on save)
             if (app.shotEngine.startsWith("coreevents:")) { const f = app.shotEngine.slice(11); app.evalLua("vim.g.ev = '' vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWritePost', 'FileType' }, { callback = function(a) vim.g.ev = vim.g.ev .. a.event .. ':' .. vim.bo.filetype .. ' ' end })"); win.openFile({ path: app.dir + "/" + f, rel: f }); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 400 }", win); t2.triggered.connect(() => { fileView.write(); console.log("zett-probe: coreevents " + JSON.parse(app.evalLua("vim.g.ev")).result); grabLater.start() }); t2.start(); return }
             // doc:FILE:WORD: a document opened and searched: its pages and the matches
-            if (app.shotEngine.startsWith("doc:")) { const [f, w] = app.shotEngine.slice(4).split(":"); win.openFile({ path: app.dir + "/" + f, rel: f }); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 1500 }", win); t2.triggered.connect(() => { docView.query = w; const t3 = Qt.createQmlObject("import QtQuick; Timer { interval: 1200 }", win); t3.triggered.connect(() => { console.log("zett-probe: doc view " + win.view + " pages " + docView.pages + " matches " + docView.matches + " note [" + docView.note + "]"); grabLater.start() }); t3.start() }); t2.start(); return }
+            if (app.shotEngine.startsWith("doc:")) { const [f, w] = app.shotEngine.slice(4).split(":"); win.openFile({ path: app.dir + "/" + f, rel: f }); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 1500 }", win); t2.triggered.connect(() => { docView.item.query = w; const t3 = Qt.createQmlObject("import QtQuick; Timer { interval: 1200 }", win); t3.triggered.connect(() => { console.log("zett-probe: doc view " + win.view + " pages " + docView.item.pages + " matches " + docView.item.matches + " note [" + docView.item.note + "]"); grabLater.start() }); t3.start() }); t2.start(); return }
             // canvas:FILE: a .canvas opened: its cards, links and a live file card
             if (app.shotEngine.startsWith("canvas:")) { const f = app.shotEngine.slice(7); win.openFile({ path: app.dir + "/" + f, rel: f }); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 500 }", win); t2.triggered.connect(() => { console.log("zett-probe: canvas view " + win.view + " cards " + canvasView.nodes.length + " live " + (canvasView.live["core.rs"] ?? "").split("\n")[0]); grabLater.start() }); t2.start(); return }
             if (app.shotEngine.startsWith("coremarks:")) { const f = app.shotEngine.slice(10); win.openFile({ path: app.dir + "/" + f, rel: f }); Qt.callLater(() => { fileView.lendNow(); app.evalLua("local ns = vim.api.nvim_create_namespace('t') vim.api.nvim_buf_set_extmark(0, ns, 0, 0, { sign_text = '+', sign_hl_group = 'DiffAdd', line_hl_group = 'DiffAdd', virt_text = { { 'from a plugin', 'Comment' } } })"); const t2 = Qt.createQmlObject("import QtQuick; Timer { interval: 700 }", win); t2.triggered.connect(() => { console.log("zett-probe: coremarks " + JSON.stringify(fileView.codeView.pmarks[0] ?? null)); grabLater.start() }); t2.start() }); return }
@@ -1149,7 +1149,21 @@ return vim.json.encode({ status = st, sidebar = sb, palette = pl })`
             // ───────── a file from the tree, read-only and highlighted ─────────
             FileView { id: fileView; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
-            DocView { id: docView; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
+            // Documents need QtQuick.Pdf (qt6-webengine), which not every machine has: a DocView here
+            // made the whole window fail to load (no window, the error only in the journal). Loaded
+            // instead, so without it only documents go to the system's viewer.
+            Loader {
+                id: docView
+                visible: status === Loader.Ready && win.view === "doc"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Component.onCompleted: setSource("DocView.qml", { win: ApplicationWindow.window, t: ApplicationWindow.window.theme, app: ApplicationWindow.window.engine })
+                function load(p) {
+                    if (item) { item.load(p); return true; }
+                    Qt.openUrlExternally("file://" + p);
+                    return false;
+                }
+            }
             CanvasView { id: canvasView; win: ApplicationWindow.window; t: ApplicationWindow.window.theme; app: ApplicationWindow.window.engine }
 
             // ───────── Today: the start screen ─────────
